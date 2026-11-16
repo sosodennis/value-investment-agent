@@ -20,6 +20,7 @@ from ..calculator import (
 from ..contracts import (
     ArtifactReferenceV1,
     CanonicalFactV1,
+    CallerApprovalEnvelopeV1,
     CalculationArtifactV1,
     CalculationEvidenceV1,
     CalculationTraceV1,
@@ -56,6 +57,7 @@ from ..mapping_input_storage import (
 )
 from ..facts import (
     CanonicalFactRepository,
+    CanonicalMappingV1,
     canonical_fact_digest,
     resolve_canonical_facts,
     verify_accounting_role_evidence,
@@ -140,6 +142,45 @@ from ..valuation_release_inputs import (
 from ..conditional_reinvestment_release import (
     valuation_release_conditional_reinvestment,
 )
+
+
+@dataclass(frozen=True)
+class PreparedValuationOperation:
+    """Owner-created preparation consumed within its original execution budget."""
+
+    preparation: AutomaticValuationPreparationV1
+    _application: FundamentalApplication = dataclass_field(repr=False)
+    _preparation_digest: str = dataclass_field(repr=False)
+    _deadline_at: datetime = dataclass_field(repr=False)
+
+    def calculate(
+        self,
+        approval: CallerApprovalEnvelopeV1,
+        *,
+        correlation_id: str,
+    ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        guard_execution_deadline(self._deadline_at)
+        if sha256_digest(self.preparation) != self._preparation_digest:
+            raise ServiceError(
+                "PREPARED_VALUATION_CHANGED",
+                "prepared valuation changed during the operation",
+                status_code=409,
+                retryable=False,
+            )
+        value = self.preparation.input
+        if self.preparation.status != "prepared" or value is None:
+            raise ServiceError(
+                "VALUATION_INPUT_NOT_PREPARED",
+                "the operation has no prepared calculation input",
+                status_code=422,
+                retryable=False,
+            )
+        return self._application._calculate_valuation(
+            value.model_copy(update={"caller_approval": approval}),
+            correlation_id=correlation_id,
+            deadline_at=self._deadline_at,
+            preparation=self.preparation,
+        )
 
 
 class UncertaintyRequestV1(ValuationInputV1):
@@ -1268,6 +1309,39 @@ class FundamentalApplication:
             facts=facts,
         )
 
+    def _current_release_mappings(
+        self, manifest: DataReleaseManifestV1
+    ) -> tuple[CanonicalMappingV1, ...] | None:
+        mapping_reader = getattr(self.metadata_store, "get_mapping", None)
+        if not callable(mapping_reader):
+            if self.require_metadata:
+                raise ServiceError(
+                    "DATA_RELEASE_MAPPING_UNAVAILABLE",
+                    "release mapping metadata is unavailable",
+                    status_code=503,
+                    retryable=True,
+                )
+            return None
+        try:
+            mappings = tuple(
+                mapping_reader(ref.mapping_id) for ref in manifest.mapping_refs
+            )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
+        if any(
+            mapping.decision_id != ref.mapping_id
+            or sha256_digest(mapping) != ref.mapping_digest
+            or mapping.status != "approved"
+            for mapping, ref in zip(mappings, manifest.mapping_refs, strict=True)
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_MAPPING_MISMATCH",
+                "a canonical mapping differs from the pinned release",
+                status_code=409,
+                retryable=False,
+            )
+        return mappings
+
     def read_valuation_evidence(
         self, request: ValuationEvidenceReadRequestV1
     ) -> ValuationEvidenceReadResponseV1:
@@ -1325,27 +1399,8 @@ class FundamentalApplication:
             else QualityStatus.PROVISIONAL
         )
         mapping_version = None
-        mapping_reader = getattr(self.metadata_store, "get_mapping", None)
-        if callable(mapping_reader):
-            assert manifest is not None
-            try:
-                mappings = tuple(
-                    mapping_reader(ref.mapping_id) for ref in manifest.mapping_refs
-                )
-            except SnapshotError as error:
-                raise _snapshot_error(error) from error
-            if any(
-                mapping.decision_id != ref.mapping_id
-                or sha256_digest(mapping) != ref.mapping_digest
-                or mapping.status != "approved"
-                for mapping, ref in zip(mappings, manifest.mapping_refs, strict=True)
-            ):
-                raise ServiceError(
-                    "DATA_RELEASE_MAPPING_MISMATCH",
-                    "a canonical mapping differs from the pinned release",
-                    status_code=409,
-                    retryable=False,
-                )
+        mappings = self._current_release_mappings(manifest)
+        if mappings is not None:
             versions = {mapping.mapping_version for mapping in mappings}
             mapping_by_id = {mapping.decision_id: mapping for mapping in mappings}
             if len(versions) != 1 or any(
@@ -1371,13 +1426,6 @@ class FundamentalApplication:
                     )
                 except SnapshotError as error:
                     raise _snapshot_error(error) from error
-        elif self.require_metadata:
-            raise ServiceError(
-                "DATA_RELEASE_MAPPING_UNAVAILABLE",
-                "release mapping metadata is unavailable",
-                status_code=503,
-                retryable=True,
-            )
         return ValuationEvidenceReadResponseV1(
             contract_version="fundamental.v1",
             snapshot_id=snapshot.snapshot_id,
@@ -1572,6 +1620,20 @@ class FundamentalApplication:
         )
         guard_execution_deadline(deadline_at)
         return preparation
+
+    def prepare_valuation_operation(
+        self,
+        request: ValuationEvidenceReadRequestV1,
+        *,
+        deadline_at: datetime,
+    ) -> PreparedValuationOperation:
+        preparation = self.prepare_valuation(request, deadline_at=deadline_at)
+        return PreparedValuationOperation(
+            preparation=preparation,
+            _application=self,
+            _preparation_digest=sha256_digest(preparation),
+            _deadline_at=deadline_at,
+        )
 
     def apply_manual_override(
         self, request: ManualValuationOverrideRequestV1
@@ -1931,6 +1993,18 @@ class FundamentalApplication:
         correlation_id: str,
         deadline_at: datetime | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        return self._calculate_valuation(
+            value, correlation_id=correlation_id, deadline_at=deadline_at
+        )
+
+    def _calculate_valuation(
+        self,
+        value: ValuationInputV1,
+        *,
+        correlation_id: str,
+        deadline_at: datetime | None = None,
+        preparation: AutomaticValuationPreparationV1 | None = None,
+    ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
         if value.policy_id is None:
@@ -1942,7 +2016,11 @@ class FundamentalApplication:
             )
         resolved, resolution = self._resolve_policy(value)
         return self._calculate_resolved(
-            resolved, resolution, correlation_id=correlation_id, deadline_at=deadline_at
+            resolved,
+            resolution,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+            preparation=preparation,
         )
 
     def calculate_with_policy(
@@ -1959,7 +2037,11 @@ class FundamentalApplication:
         )
 
     def _is_released_conditional_input(
-        self, value: ValuationInputV1, *, deadline_at: datetime | None = None
+        self,
+        value: ValuationInputV1,
+        *,
+        deadline_at: datetime | None = None,
+        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> bool:
         manifest = self._data_release_manifest(
             value.valuation_context.data_release_manifest_digest
@@ -1989,16 +2071,18 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             )
-        expected = self.prepare_valuation(
-            ValuationEvidenceReadRequestV1(
-                contract_version="fundamental.v1",
-                snapshot_id=value.valuation_context.data_snapshot_id,
-                data_release_manifest_digest=manifest.manifest_digest,
-                model_id=value.model_id,
-            ),
-            policy_id=value.policy_id,
-            deadline_at=deadline_at,
-        )
+        expected = preparation
+        if expected is None:
+            expected = self.prepare_valuation(
+                ValuationEvidenceReadRequestV1(
+                    contract_version="fundamental.v1",
+                    snapshot_id=value.valuation_context.data_snapshot_id,
+                    data_release_manifest_digest=manifest.manifest_digest,
+                    model_id=value.model_id,
+                ),
+                policy_id=value.policy_id,
+                deadline_at=deadline_at,
+            )
         if expected.input is not None:
             resolved, _ = self._resolve_policy(expected.input)
         else:
@@ -2023,6 +2107,7 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
+        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         if resolution.input_digest != resolved.input_digest:
@@ -2048,9 +2133,12 @@ class FundamentalApplication:
                     error.code, str(error), status_code=422, retryable=False
                 ) from error
         self._verify_fact_references(resolved)
+        if preparation is not None and manifest is not None:
+            self._release_snapshot_facts(manifest, snapshot)
+            self._current_release_mappings(manifest)
         guard_execution_deadline(deadline_at)
         released_conditional = self._is_released_conditional_input(
-            resolved, deadline_at=deadline_at
+            resolved, deadline_at=deadline_at, preparation=preparation
         )
         guard_execution_deadline(deadline_at)
         if released_conditional and resolved.caller_approval is None:

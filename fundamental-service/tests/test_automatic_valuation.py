@@ -168,7 +168,7 @@ def test_refusal_is_retained_and_never_enters_calculator(
     def forbidden(*args, **kwargs):
         raise AssertionError("refused policy entered calculator")
 
-    monkeypatch.setattr(FundamentalApplication, "calculate_valuation", forbidden)
+    monkeypatch.setattr(FundamentalApplication, "_calculate_resolved", forbidden)
     response = _execute(client, request | request_updates)
     assert response.status_code == 200, response.text
     result = response.json()["result"]
@@ -220,7 +220,7 @@ def test_corrupted_decision_refuses_reuse_before_calculator(tmp_path, monkeypatc
     def forbidden(*args, **kwargs):
         raise AssertionError("corrupted decision entered calculator")
 
-    monkeypatch.setattr(FundamentalApplication, "calculate_valuation", forbidden)
+    monkeypatch.setattr(FundamentalApplication, "_calculate_resolved", forbidden)
     repeated = _execute(client, request)
     assert repeated.status_code == 422, repeated.text
     assert repeated.json()["error"]["code"] == "ARTIFACT_BYTES_UNAVAILABLE"

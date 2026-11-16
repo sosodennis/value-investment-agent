@@ -203,9 +203,10 @@ class AutomaticValuationExecutor:
                 status_code=403,
                 retryable=False,
             )
-        preparation = application.prepare_valuation(
+        operation = application.prepare_valuation_operation(
             request.preparation, deadline_at=deadline_at
         )
+        preparation = operation.preparation
         guard_execution_deadline(deadline_at)
         issues = automatic_approval_issues(
             policy,
@@ -271,10 +272,9 @@ class AutomaticValuationExecutor:
             caller_id=caller_id,
             decided_at=datetime.now(UTC),
         )
-        calculation = application.calculate_valuation(
-            value.model_copy(update={"caller_approval": approval}),
+        calculation = operation.calculate(
+            approval,
             correlation_id=f"automatic-valuation:{value.input_digest}",
-            deadline_at=deadline_at,
         )
         guard_execution_deadline(deadline_at)
         execution = AutomaticValuationExecutionEvidenceV1(
