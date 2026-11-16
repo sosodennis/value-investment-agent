@@ -1,6 +1,7 @@
 """Automatic preparation reads the facts retained by its exact acquisitions."""
 
 import json
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -14,8 +15,11 @@ from fundamental_service.metadata import (
     PostgresMetadataStore,
     PostgresSnapshotRepository,
 )
-from fundamental_service.preparation_runner import SourcePreparationRunner
-from fundamental_service.serialization import canonical_bytes
+from fundamental_service.preparation_runner import (
+    SourcePreparationEvidenceV1,
+    SourcePreparationRunner,
+)
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
 from test_automatic_source_acquisition import acquisition_case, acquire
 from test_automatic_source_preparation import automatic_plan
@@ -155,6 +159,113 @@ def test_fact_selection_validates_each_acquisition_once_and_rechecks_next_read(
     with pytest.raises(SnapshotError) as error:
         case.runner._plan_facts(case.plan, case.snapshot)
     assert error.value.code == "FACT_NOT_FOUND"
+
+
+def test_history_and_flow_publication_consume_prepared_stage_output(
+    plan_facts_case, monkeypatch
+):
+    case = plan_facts_case
+    expected_history = case.runner._assess_history_requirements(
+        case.plan, case.snapshot
+    )
+    evidence = SourcePreparationEvidenceV1(
+        source_revision=case.plan.source_revision,
+        plan_digest=case.plan.digest,
+        status="blocked",
+        snapshot_id=case.snapshot.snapshot_id,
+        snapshot_manifest_digest=case.snapshot.manifest_digest,
+        issue_codes=("DATA_RELEASE_REQUIRED",),
+    )
+    expected = case.runner._persist(case.plan, evidence)
+    prepared = case.runner._prepare_plan_facts(case.plan, case.snapshot)
+
+    def repeated_selection(*args, **kwargs):
+        pytest.fail("the next stage must consume its checked mappings and facts")
+
+    monkeypatch.setattr(case.runner, "_plan_mappings", repeated_selection)
+    monkeypatch.setattr(case.runner, "_plan_facts", repeated_selection)
+    assert (
+        case.runner._assess_history_requirements(
+            case.plan, case.snapshot, prepared_facts=prepared
+        )
+        == expected_history
+    )
+    reused = case.runner._persist(case.plan, evidence, prepared_facts=prepared)
+    assert reused.artifact == expected.artifact and not reused.wrote
+
+
+@pytest.mark.parametrize("changed_scope", ("plan", "snapshot"))
+def test_prepared_stage_output_refuses_a_different_plan_or_snapshot(
+    plan_facts_case, changed_scope
+):
+    case = plan_facts_case
+    prepared = case.runner._prepare_plan_facts(case.plan, case.snapshot)
+    plan, snapshot = case.plan, case.snapshot
+    if changed_scope == "plan":
+        plan = plan.model_copy(update={"release_profile_id": "another-profile"})
+    else:
+        snapshot = snapshot.model_copy(update={"manifest_digest": "f" * 64})
+    with pytest.raises(ValueError, match="exact plan and snapshot"):
+        case.runner._assess_history_requirements(
+            plan, snapshot, prepared_facts=prepared
+        )
+
+
+def test_flow_publication_reselects_facts_after_resolved_snapshot_changes(
+    plan_facts_case, monkeypatch
+):
+    case = plan_facts_case
+    prepared = case.runner._prepare_plan_facts(case.plan, case.snapshot)
+    payload = case.snapshot.model_dump(exclude={"manifest_digest", "snapshot_id"})
+    payload["captured_at"] += timedelta(seconds=1)
+    replacement = type(case.snapshot)(
+        **payload,
+        snapshot_id=case.snapshot.snapshot_id + "-replacement",
+        manifest_digest=sha256_digest(payload),
+    )
+    monkeypatch.setattr(
+        case.runner._application,
+        "snapshot",
+        {
+            case.snapshot.snapshot_id: case.snapshot,
+            replacement.snapshot_id: replacement,
+        }.__getitem__,
+    )
+    evidence = SourcePreparationEvidenceV1(
+        source_revision=case.plan.source_revision,
+        plan_digest=case.plan.digest,
+        status="release_required",
+        snapshot_id=replacement.snapshot_id,
+        snapshot_manifest_digest=replacement.manifest_digest,
+        issue_codes=("DATA_RELEASE_REQUIRED",),
+    )
+    expected = case.runner._persist(case.plan, evidence)
+    select = case.runner._plan_facts
+    selected_snapshots = []
+
+    def observed(plan, snapshot, **kwargs):
+        selected_snapshots.append(snapshot.manifest_digest)
+        return select(plan, snapshot, **kwargs)
+
+    monkeypatch.setattr(case.runner, "_plan_facts", observed)
+    reused = case.runner._persist(case.plan, evidence, prepared_facts=prepared)
+    assert selected_snapshots == [replacement.manifest_digest]
+    assert reused.artifact == expected.artifact and not reused.wrote
+
+
+@pytest.mark.parametrize("failure", ("missing", "corrupt"))
+def test_new_preparation_rechecks_facts_after_prior_stage_succeeded(
+    plan_facts_case, failure
+):
+    case = plan_facts_case
+    prepared = case.runner._prepare_plan_facts(case.plan, case.snapshot)
+    selected_id = prepared.facts[0].fact_id
+    case.change_payload(
+        selected_id, None if failure == "missing" else {"fact_id": selected_id}
+    )
+    with pytest.raises(SnapshotError) as error:
+        case.runner._prepare_plan_facts(case.plan, case.snapshot)
+    assert error.value.code in {"FACT_NOT_FOUND", "METADATA_CORRUPT"}
 
 
 @pytest.mark.parametrize("failure", ("missing", "corrupt"))

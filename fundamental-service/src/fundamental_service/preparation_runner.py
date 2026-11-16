@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import os
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Protocol
@@ -346,6 +347,23 @@ _EVIDENCE_MISS_CODES = frozenset(
         "SNAPSHOT_NOT_FOUND",
     }
 )
+
+
+@dataclass(frozen=True)
+class _PreparedPlanFacts:
+    plan_digest: str
+    snapshot_manifest_digest: str
+    mapping_groups: tuple[tuple[SecMappingReferenceV1, ...], ...]
+    facts: tuple[CanonicalFactV1, ...]
+
+    def require_scope(
+        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+    ) -> None:
+        if (
+            self.plan_digest != plan.digest
+            or self.snapshot_manifest_digest != snapshot.manifest_digest
+        ):
+            raise ValueError("prepared facts differ from the exact plan and snapshot")
 
 
 class SourcePreparationRunner:
@@ -881,7 +899,11 @@ class SourcePreparationRunner:
         return self._artifacts.put_with_receipt(artifact_id, evidence, (plan.digest,))
 
     def _persist(
-        self, plan: SourcePreparationPlan, evidence: SourcePreparationEvidenceV1
+        self,
+        plan: SourcePreparationPlan,
+        evidence: SourcePreparationEvidenceV1,
+        *,
+        prepared_facts: _PreparedPlanFacts | None = None,
     ) -> ArtifactPublicationV1:
         assembly_failed = (
             evidence.status == "blocked"
@@ -945,10 +967,20 @@ class SourcePreparationRunner:
                 or plan.conditional_reinvestment_recipe is not None
             )
         ):
-            groups = self._plan_mappings(plan)
-            if groups is not None:
-                binding_snapshot = self._application.snapshot(evidence.snapshot_id)
-                binding_facts = self._plan_facts(plan, binding_snapshot, groups=groups)
+            binding_snapshot = self._application.snapshot(evidence.snapshot_id)
+            if (
+                prepared_facts is not None
+                and prepared_facts.snapshot_manifest_digest
+                == binding_snapshot.manifest_digest
+            ):
+                prepared_facts.require_scope(plan, binding_snapshot)
+                binding_facts = prepared_facts.facts
+            else:
+                groups = self._plan_mappings(plan)
+                if groups is not None:
+                    binding_facts = self._plan_facts(
+                        plan, binding_snapshot, groups=groups
+                    )
         binding_ref = None
         if (
             plan.valuation_working_capital_recipe is not None
@@ -1320,6 +1352,27 @@ class SourcePreparationRunner:
             in mappings
         )
 
+    def _prepare_plan_facts(
+        self,
+        plan: SourcePreparationPlan,
+        snapshot: SourceSnapshotV1,
+        *,
+        groups: tuple[tuple[SecMappingReferenceV1, ...], ...] | None = None,
+    ) -> _PreparedPlanFacts:
+        if groups is None:
+            groups = self._plan_mappings(plan)
+        if groups is None:
+            raise SnapshotError(
+                "HISTORY_MAPPING_EVIDENCE_UNAVAILABLE",
+                "history assessment requires retained plan mappings",
+            )
+        return _PreparedPlanFacts(
+            plan_digest=plan.digest,
+            snapshot_manifest_digest=snapshot.manifest_digest,
+            mapping_groups=groups,
+            facts=self._plan_facts(plan, snapshot, groups=groups),
+        )
+
     def _bind_working_capital(
         self,
         plan: SourcePreparationPlan,
@@ -1337,9 +1390,17 @@ class SourcePreparationRunner:
         )
 
     def _assess_history_requirements(
-        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+        self,
+        plan: SourcePreparationPlan,
+        snapshot: SourceSnapshotV1,
+        *,
+        prepared_facts: _PreparedPlanFacts | None = None,
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        facts = self._plan_facts(plan, snapshot)
+        if prepared_facts is None:
+            facts = self._plan_facts(plan, snapshot)
+        else:
+            prepared_facts.require_scope(plan, snapshot)
+            facts = prepared_facts.facts
         capital = self._bind_conditional_capital(plan, snapshot, facts=facts)
         if capital is not None and capital.issue_codes:
             return capital.issue_codes, capital.missing_evidence
@@ -1502,18 +1563,15 @@ class SourcePreparationRunner:
         snapshot: SourceSnapshotV1,
         outcomes: tuple[SourceAcquisitionOutcomeV1, ...],
         admissions: tuple[PublicSourceAdmissionEvidenceV1, ...],
+        *,
+        prepared_facts: _PreparedPlanFacts,
     ) -> tuple[
         DataReleaseCandidatePublishRequestV1 | None, ArtifactRefV1, tuple[str, ...]
     ]:
         assert self._automatic_release is not None
         assert self._automatic_release_policy is not None
-        groups = self._plan_mappings(plan)
-        if groups is None:
-            raise DataReleaseError(
-                "AUTOMATIC_PREPARATION_MAPPING_EVIDENCE_MISSING",
-                "release assembly requires retained automatic source mappings",
-            )
-        facts = self._plan_facts(plan, snapshot, groups=groups)
+        prepared_facts.require_scope(plan, snapshot)
+        groups, facts = prepared_facts.mapping_groups, prepared_facts.facts
         working = self._bind_working_capital(plan, snapshot, facts=facts)
         capital = self._bind_conditional_capital(plan, snapshot, facts=facts)
         forward = self._bind_conditional_reinvestment(plan, snapshot, facts=facts)
@@ -1734,6 +1792,7 @@ class SourcePreparationRunner:
             )
         deployment_ref = None
         automatic_release_ref = None
+        prepared_facts = None
         if (
             plan.issuer_market_policy is not None
             and self._issuer_market_preparation is None
@@ -1829,6 +1888,7 @@ class SourcePreparationRunner:
                     public_source_cutoff=plan.public_source_cutoff,
                     source_admission_outcomes=admission_outcomes,
                 ),
+                prepared_facts=prepared_facts,
             )
         resolution = self._resolve(plan)
         if resolution is None and not (
@@ -1885,6 +1945,7 @@ class SourcePreparationRunner:
                         ),
                         source_outcomes=outcomes,
                     ),
+                    prepared_facts=prepared_facts,
                 )
             try:
                 snapshot = snapshots[0]
@@ -1908,7 +1969,10 @@ class SourcePreparationRunner:
                     or plan.conditional_capital_recipe is not None
                     or plan.conditional_reinvestment_recipe is not None
                 ):
-                    issues, missing = self._assess_history_requirements(plan, snapshot)
+                    prepared_facts = self._prepare_plan_facts(plan, snapshot)
+                    issues, missing = self._assess_history_requirements(
+                        plan, snapshot, prepared_facts=prepared_facts
+                    )
                     if issues:
                         return self._persist(
                             plan,
@@ -1925,6 +1989,7 @@ class SourcePreparationRunner:
                                 missing_evidence=missing,
                                 source_outcomes=outcomes,
                             ),
+                            prepared_facts=prepared_facts,
                         )
             except ServiceError as error:
                 if error.retryable or error.status_code != 422:
@@ -1941,6 +2006,7 @@ class SourcePreparationRunner:
                         issue_codes=(error.code,),
                         source_outcomes=outcomes,
                     ),
+                    prepared_facts=prepared_facts,
                 )
             except SnapshotError as error:
                 if error.retryable:
@@ -1957,6 +2023,7 @@ class SourcePreparationRunner:
                         issue_codes=(error.code,),
                         source_outcomes=outcomes,
                     ),
+                    prepared_facts=prepared_facts,
                 )
             if candidate is not None and snapshot.snapshot_id not in {
                 item.snapshot_id for item in candidate.manifest.snapshot_refs
@@ -1982,6 +2049,7 @@ class SourcePreparationRunner:
                         issue_codes=("DATA_RELEASE_REQUIRED",),
                         source_outcomes=outcomes,
                     ),
+                    prepared_facts=prepared_facts,
                 )
         if outcomes:
             # Recover provenance even if activation succeeds before the flow report.
@@ -1989,9 +2057,23 @@ class SourcePreparationRunner:
         if self._automatic_release is not None and resolution is None:
             assert isinstance(plan, AutomaticSourcePreparationPlanV1)
             try:
+                if prepared_facts is None:
+                    groups = self._plan_mappings(plan)
+                    if groups is None:
+                        raise DataReleaseError(
+                            "AUTOMATIC_PREPARATION_MAPPING_EVIDENCE_MISSING",
+                            "release assembly requires retained automatic source mappings",
+                        )
+                    prepared_facts = self._prepare_plan_facts(
+                        plan, snapshot, groups=groups
+                    )
                 candidate, automatic_release_ref, release_issues = (
                     self._automatic_candidate(
-                        plan, snapshot, outcomes, admission_outcomes
+                        plan,
+                        snapshot,
+                        outcomes,
+                        admission_outcomes,
+                        prepared_facts=prepared_facts,
                     )
                 )
             except (
@@ -2047,6 +2129,7 @@ class SourcePreparationRunner:
                         source_admission_outcomes=admission_outcomes,
                         automatic_release_ref=automatic_release_ref,
                     ),
+                    prepared_facts=prepared_facts,
                 )
             # Successful provenance is retained by the stored signed verification.
             # Serving an already active release must produce the same flow artifact.
@@ -2095,6 +2178,7 @@ class SourcePreparationRunner:
                         issue_codes=market_issues,
                         source_outcomes=outcomes,
                     ),
+                    prepared_facts=prepared_facts,
                 )
         if candidate is not None:
             if market_policy_authorization is not None:
@@ -2130,6 +2214,7 @@ class SourcePreparationRunner:
                             automatic_release_ref=automatic_release_ref,
                             source_outcomes=outcomes,
                         ),
+                        prepared_facts=prepared_facts,
                     )
                 deployment_ref = ArtifactRefV1(
                     artifact_id=publication.artifact.artifact_id,
@@ -2181,6 +2266,7 @@ class SourcePreparationRunner:
                         issue_codes=("SOURCE_ADMISSION_RELEASE_MISMATCH",),
                         source_outcomes=outcomes,
                     ),
+                    prepared_facts=prepared_facts,
                 )
         snapshot_digest = self._application.snapshot(
             resolution.snapshot_id
@@ -2214,6 +2300,7 @@ class SourcePreparationRunner:
                     issue_codes=(error.code,),
                     source_outcomes=outcomes,
                 ),
+                prepared_facts=prepared_facts,
             )
         if preparation.status != "prepared" or preparation.input is None:
             return self._persist(
@@ -2235,6 +2322,7 @@ class SourcePreparationRunner:
                     source_outcomes=outcomes,
                     preparation=preparation,
                 ),
+                prepared_facts=prepared_facts,
             )
         if approval is None:
             return self._persist(
@@ -2254,6 +2342,7 @@ class SourcePreparationRunner:
                     source_outcomes=outcomes,
                     preparation=preparation,
                 ),
+                prepared_facts=prepared_facts,
             )
         if approval.input_digest != preparation.input.input_digest:
             raise ValueError("caller approval is bound to a different valuation input")
@@ -2276,6 +2365,7 @@ class SourcePreparationRunner:
                     source_outcomes=outcomes,
                     preparation=preparation,
                 ),
+                prepared_facts=prepared_facts,
             )
         calculation = self._application.calculate_valuation(
             preparation.input.model_copy(update={"caller_approval": approval}),
@@ -2316,6 +2406,7 @@ class SourcePreparationRunner:
                 preparation=preparation,
                 calculation=calculation,
             ),
+            prepared_facts=prepared_facts,
         )
 
 

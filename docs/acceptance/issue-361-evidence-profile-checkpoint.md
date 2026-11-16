@@ -150,6 +150,26 @@ reuse requires bounded ownership and separate measurements.
 Keep independent verifier scopes, exact source/profile/policy binding and
 existing semantic input/signature identities.
 
+## Prepared fact stage output
+
+The next preparation increment retains selected mapping groups and canonical
+facts in one private, frozen operation-local value. History assessment,
+automatic candidate assembly and flow persistence consume that value when
+available, checking its exact plan and snapshot digests. It holds selected
+facts rather than parser reports; it adds no process-wide cache, serialized
+validation flag or new input identity. A new operation reads the owning stores
+again. Independent release verification still reloads and validates its own
+evidence. If concurrent activation changes the resolved snapshot, persistence
+selects facts afresh rather than using the prior snapshot's tuple. Bytes,
+report, fact-index and concurrent-work reuse remain separate
+work pending measurement.
+
+Focused filesystem/PostgreSQL checks compare the persisted artifact and
+`wrote=false` reuse with fresh selection, reject changed plan/snapshot scopes,
+and reject missing or corrupt facts on the next preparation. Full-flow timing
+must be measured on the new installed commit; the timings above describe
+82a1a559 only.
+
 Full reports, commands, instrumentation identities, profiles, inventories and
 review receipts remain outside Git under
 `.audit/issue-361-current-issuer-service/0322bd1d-*`. Qualified quote/source-use,

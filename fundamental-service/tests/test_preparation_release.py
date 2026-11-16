@@ -611,7 +611,10 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
     monkeypatch.setattr(runner, "_plan_mappings", lambda _: (original.mappings,))
     calls = []
 
-    def compiled(plan_arg, snapshot, outcomes, admissions):
+    def compiled(plan_arg, snapshot, outcomes, admissions, *, prepared_facts):
+        prepared_facts.require_scope(plan_arg, snapshot)
+        assert prepared_facts.mapping_groups == (original.mappings,)
+        assert prepared_facts.facts
         assert runner._retained_outcomes(plan_arg) == outcomes
         calls.append(plan_arg.digest)
         publication = fixture.artifacts.put_with_receipt(
