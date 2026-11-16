@@ -733,3 +733,22 @@ output digest `e284eadb38ccece9d08ea2b73b703fdbd5cd360432928c50f8db1403ab44a330`
 The increment also updates old market-source test ports to accept propagated
 deadlines and supply metadata, correcting failures exposed by broader CI.
 Installed source and real numerical acceptance are the next checks.
+
+## Remaining retained-evidence fixture ports
+
+Broader CI exposed industry-capital fixtures publishing bytes without the media
+types declared by their release references, and quote corruption readers lacking
+the current metadata port. The fixtures now publish exact media types and expose
+metadata matching the selected reference; byte corruption, noncanonical JSON and
+changed terms still fail their existing owner checks. Production validation is
+unchanged by this increment.
+
+112 focused PostgreSQL-backed mapping, source-binding, evidence-validity,
+industry-capital and quote cases pass with zero skips. Types, whole-package Ruff,
+changed-file format, both architecture guards and diff checks pass. The temporary
+database was removed. The final receipt is outside Git at
+`.audit/issue-361-current-issuer-service/fixture-metadata-final-checks-receipt.json`,
+input digest `5b82e3c1a3f22163ed216208591fc9ff4a0c344904512d61418c9641bdff20b7`,
+output digest `5c675a95ca748b336d282fed9474ebe6ac38b56073dd50cc7182c42b58b81df0`.
+The earlier format failure is retained separately. These checks do not establish
+new-runtime M1, numerical M2 or recovery M3 acceptance.

@@ -314,10 +314,19 @@ def test_quote_admission_rejects_changed_retained_artifacts(tmp_path, change, co
     role = QUOTE_TERMS_ROLE if change == "terms" else QUOTE_ADMISSION_ROLE
     ref = next(r for r in fixture.manifest.artifact_refs if r.role == role)
     raw = fixture.artifacts.read(ref.artifact_id) + b"\n"
+
+    def metadata(artifact_id):
+        retained = fixture.artifacts.get(artifact_id)
+        current = next(
+            r for r in fixture.manifest.artifact_refs if r.artifact_id == artifact_id
+        )
+        return retained.model_copy(update={"content_hash": current.content_hash})
+
     reader = SimpleNamespace(
+        get=metadata,
         read=lambda name: raw
         if name == ref.artifact_id
-        else fixture.artifacts.read(name)
+        else fixture.artifacts.read(name),
     )
     if change == "noncanonical":
         _manifest(

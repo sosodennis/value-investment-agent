@@ -54,7 +54,9 @@ def bound(fixture):
     for item, result in zip(inputs, admissions, strict=True):
         manifest, artifacts, _, _ = _packet(manifest, result=result, inputs=item)
         for name, raw in artifacts.data.items():
-            fixture.artifacts.put_bytes_with_receipt(name, raw)
+            fixture.artifacts.put_bytes_with_receipt(
+                name, raw, media_type=artifacts.get(name).media_type
+            )
     plan = capital_plan(
         fixture.snapshot.valuation_timestamp, fixture.snapshot.identity.issuer_id
     )
@@ -68,7 +70,9 @@ def bound(fixture):
         media_type="application/json",
         role=MARKET_REFERENCE_PLAN_ROLE,
     )
-    fixture.artifacts.put_bytes_with_receipt(ref.artifact_id, raw)
+    fixture.artifacts.put_bytes_with_receipt(
+        ref.artifact_id, raw, media_type=ref.media_type
+    )
     payload = manifest.model_dump(exclude={"manifest_digest"})
     payload["artifact_refs"] = (*manifest.artifact_refs, ref)
     manifest = DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
