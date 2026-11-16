@@ -1,0 +1,10 @@
+{
+  "services": {
+    "fundamental-service": {
+      "environment": {
+        "FUNDAMENTAL_SOURCE_USE_POLICY_FILE": "/app/src/fundamental_service/resources/personal-local-source-use-v1.json",
+        "FUNDAMENTAL_SOURCE_USE_POLICY_DIGEST": "a7ff57184cd22632a91a119dee78e414b6db5a12e3b941df190efa82cb4bb6ea"
+      }
+    }
+  }
+}
