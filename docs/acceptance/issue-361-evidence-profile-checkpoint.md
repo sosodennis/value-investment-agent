@@ -362,3 +362,50 @@ acceptance and whole-PR review remain outstanding. Git-external receipts:
 `e63f7073-report-resolution-work-comparison-receipt.json`. Comparison input/output:
 `527ce8f9d1cc1355827fe3a4ab0496b1e481955e27c92b23a391f586c853995b` /
 `ec7c55cbf4f47cb0b8dd3db8c65faabf32486f36bb9f363ded0c5993bb057e1a`.
+
+## Installed real company/date continuation reaches preparation
+
+At installed implementation `465ad865ecfa73e3dd719f2c7f82ab5a4bbe8cdc`,
+the first MSFT company/date run exceeded the unchanged 900-second deadline
+(901.98 seconds including shutdown). A second ordinary invocation with the
+identical input digest completed in 566.91 seconds and returned
+`approval_required`. Discovery, original preparation, source-plan compilation
+and current-source selection reported `wrote=false`; the completed source
+preparation was newly written. This demonstrates continuation through trusted
+release and the formal composer, not a cold-run timing improvement or complete
+M1/M2 acceptance.
+
+Fixed requested timestamp: `2026-11-16T07:13:40.766090Z`. The existing current
+capture policy selected effective valuation cutoff
+`2026-11-16T07:18:50.589199Z`, preserving later capture availability rather than
+claiming those sources were known at the requested timestamp. The input digest
+for both CLI invocations is
+`4d5832958bec0154928eb2100c7ea5728b541e113f251b0deb92bab748806726`;
+the successful continuation receipt output is
+`00e1c3f70ff3abde969bf804d042a5f72efd3a1784e1edd68a2dc6cc506ab9d3`.
+
+The signed candidate, canary and preparation were each retrieved through the
+installed authenticated artifact API with HTTP 200 and exact content hash;
+unauthenticated requests returned 401. Preparation artifact content digest:
+`bb7cb949a5c4366a48f91dd69c14f97fec30a340a323c6c71e887e968c808700`.
+Release manifest:
+`88e84f1aa6be856c047ca1ba33ab90f6d88ccfb733ca674ef7bbb827ff86d1ca`.
+The exact valuation input is
+`fbc1649ec9f1281aee5ab2782b0f5b04d69fadbea6f94d8f010e3d7398f490a9`;
+preparation digest is
+`40ced07dfaf09e47af60e154a4fbeee1d4b9ae6941e4c026e030ca656b78a267`.
+
+This input contains three explicit, uncalibrated capital and forward
+reinvestment what-if scenarios. Unknowns remain recorded; zero scenario values
+are hypotheses, not observed absence. Quality is provisional and the history
+threshold remains null. No caller approval or numerical calculation is claimed.
+The user subsequently requested automatic approval as the future default;
+AGENTS.md now records that direction, including exact-input, authenticated caller
+and versioned-policy evidence requirements. That documentation change does not
+implement automatic approval or convert the user's direction into a human
+approval of this prepared input.
+
+Complete evidence and the exact-input review bundle remain Git-external under
+`.audit/issue-361-current-issuer-service/465ad865-*`. All M1/M2/M3 completion
+boxes remain open. CI run `43838059735` passed twelve executed jobs; the release
+gate was skipped and is not counted as passed.
