@@ -513,7 +513,33 @@ class SourcePreparationRunner:
                 status_code=409,
                 retryable=False,
             )
-        return resolution if self._matches_release(plan, snapshot, manifest) else None
+        if not self._matches_release(plan, snapshot, manifest):
+            return None
+        if (
+            self._automatic_release is not None
+            and plan.issuer_market_policy is not None
+        ):
+            refs = tuple(
+                ref
+                for ref in manifest.artifact_refs
+                if ref.role == "issuer-market-preparation-v1"
+            )
+            if len(refs) != 1:
+                return None
+            market = read_preparation_release_artifact(
+                self._application.artifact_store,
+                refs[0],
+                IssuerMarketPreparationEvidenceV1,
+            )
+            if (
+                market.request != plan.issuer_market_policy
+                or market.snapshot_id != snapshot.snapshot_id
+                or market.snapshot_manifest_digest != snapshot.manifest_digest
+                or market.issue_codes
+                or any(ref not in manifest.artifact_refs for ref in market.release_refs)
+            ):
+                return None
+        return resolution
 
     def _matches_release_mappings(
         self,

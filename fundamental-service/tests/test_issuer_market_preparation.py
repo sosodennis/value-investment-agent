@@ -669,6 +669,93 @@ def test_prepared_release_refs_work_with_the_existing_deployment_policy_verifier
     )
 
 
+@pytest.mark.parametrize(
+    "change", ("none", "missing", "revision", "incomplete", "corrupt")
+)
+def test_automatic_release_reuse_requires_the_exact_prepared_market_request(
+    tmp_path, monkeypatch, change
+):
+    f = _fixture(tmp_path)
+    first = f.plan.ingestions[0]
+    proposal = market_request(
+        first.valuation_timestamp,
+        issuer_id=first.identity.issuer_id,
+        accession=first.filing.accession_number,
+    )
+    original = replace(
+        sec_submission(
+            cik=first.identity.issuer_id, accession=first.filing.accession_number
+        ),
+        captured_at=first.valuation_timestamp,
+    )
+    stage = IssuerMarketPreparation(
+        classification_provider=SecSubmissionClassificationProvider(),
+        classification_sources=SimpleNamespace(
+            retained_sources=lambda request, snapshot: (original,)
+        ),
+        country_provider=SecStateCountryCrosswalk(),
+        industry_provider=SecSicDamodaranIndustryCrosswalk(),
+        artifacts=f.artifacts,
+    )
+    market, _ = stage.execute(
+        proposal, snapshot=f.snapshot, admissions=_admissions(first.valuation_timestamp)
+    )
+    assert not market.issue_codes
+    refs = market.release_refs
+    if change == "missing":
+        refs = ()
+    elif change == "incomplete":
+        refs = tuple(ref for ref in refs if ref.role == market.protocol)
+    payload = f.manifest.model_dump(exclude={"manifest_digest"})
+    payload["artifact_refs"] = (*f.manifest.artifact_refs, *refs)
+    manifest = DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
+    resolution = f.application.resolve_snapshot(f.plan.resolution_request())
+    resolution = resolution.model_copy(
+        update={"data_release_manifest_digest": manifest.manifest_digest}
+    )
+    application = SimpleNamespace(
+        resolve_snapshot=lambda request: resolution,
+        snapshot=f.application.snapshot,
+        fact_repository=f.facts,
+        artifact_store=f.artifacts,
+    )
+    runner = SourcePreparationRunner(
+        application=application,
+        metadata=SimpleNamespace(
+            get_data_release_manifest=lambda digest: manifest,
+            get_mapping=f.metadata.get_mapping,
+        ),
+        acquisition=None,
+        artifacts=f.artifacts,
+        canary=None,
+        issuer_market_preparation=stage,
+        automatic_release=SimpleNamespace(),
+        automatic_release_policy=SimpleNamespace(),
+    )
+    if change == "revision":
+        proposal = proposal.model_copy(update={"source_revision": "2" * 40})
+    plan = SOURCE_PREPARATION_PLAN.validate_python(
+        {
+            **f.plan.model_dump(),
+            "source_revision": proposal.source_revision,
+            "issuer_market_policy": proposal,
+        }
+    )
+    if change == "corrupt":
+        read = f.artifacts.read
+
+        def corrupt(artifact_id):
+            return b"{}" if artifact_id == refs[-1].artifact_id else read(artifact_id)
+
+        monkeypatch.setattr(f.artifacts, "read", corrupt)
+        with pytest.raises((ValueError, RuntimeError)):
+            runner._resolve(plan)
+    elif change == "none":
+        assert runner._resolve(plan) == resolution
+    else:
+        assert runner._resolve(plan) is None
+
+
 def test_postgres_repeat_reopen_and_empty_store_restore_reuse_market_evidence(
     tmp_path, recovery_databases
 ):

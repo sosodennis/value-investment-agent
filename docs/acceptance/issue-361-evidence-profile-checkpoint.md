@@ -546,3 +546,47 @@ cwd, covers actual CLI import/help. All 42 caller/issuer tests pass, zero skips;
 Ruff, changed-source types, service architecture and diff checks pass. Raw
 `7ec988be-automatic-caller-*`, preflight and failed issuer artifacts remain in
 the ignored audit folder. Numerical acceptance still has not occurred.
+
+## Automatic active-release market compatibility
+
+Exact `7407b82e` passed 142 related cases, zero skips, types, lint, both
+architecture guards, configuration reference and diff checks. All 174 installed
+Python files matched that commit. Its SEC-enabled company/date source-only run
+completed in 793.50 seconds within the existing 900-second deadline, but retained
+`ISSUER_MARKET_PREPARATION_RELEASE_MISMATCH`; no composer input or calculation
+was produced. Preparation artifact `62b05aa363cd4f5643e501cc7fb3d90202c737db856765df01b30b26b640f1e2`
+was retrieved through authenticated GET200 with exact bytes; unsigned GET401.
+All five source/compiler stages were automatic, without a caller-supplied plan.
+
+The active release contained the same history snapshot but the old compiled
+market request. Active-release reuse checked accounting and recipe compatibility
+without checking the market request; the later reference invariant correctly
+refused. Diagnosis digest:
+`bde7ed5a900a9d0c4fba6ae41fd034a183cbd4c53858690a7ef8e27a726cb977`.
+
+Automatic release reuse now reads the retained market evidence through the
+existing hash/metadata validator and requires its exact request, snapshot and
+complete release references. Incompatible evidence makes the active release
+ineligible for reuse and leaves the existing assembly/canary/signing path to
+publish a new release. Corrupt evidence still refuses; explicit-candidate checks
+are unchanged. Old releases and the failed source report are retained.
+
+The focused regression first demonstrated four incorrect reuse/corruption
+outcomes and one compatible reuse. The corrected WIP passes 297 related cases
+with isolated PostgreSQL, zero skips; the temporary database was removed. Types,
+Ruff/format, both architecture guards and diff checks pass. WIP receipt
+input/output digests:
+`e9e2c5a96debe7984e5ddd9e5b64126f3f4c462d92a7fd9cef23ab9505a97dd4` /
+`ece11243e5050873b9b481fca49e4876c828dfc9c00c869813a46c1e60f97b05`.
+Independent bounded static review found no confirmed actionable findings; it
+did not run tests or certify the whole PR or real flow. Exact committed-source
+checks, deployment and real release/numerical acceptance remain next.
+
+At `7407b82e`, the existing independent Service calculator gate actually ran:
+21 cases, ten positive and eleven refusal/degraded, zero findings. Its report
+digest is `834108cc99333ea7c1d5471757838cc145e624a9043e269495cfcb224e9616a8`.
+This engineering cohort does not establish real numerical acceptance. CI run
+43851750615 passed all twelve executed jobs; its legacy release gate was skipped
+and is not a pass. Applicable release-gate integration remains outstanding.
+M1/M2/M3 remain incomplete, threshold null and PR370 draft. Detailed receipts,
+failed-before logs and original bytes remain in the ignored audit directory.
