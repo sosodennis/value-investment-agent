@@ -284,3 +284,37 @@ maintainability reviews of the four changed code/test files found no actionable
 findings; this is bounded static coverage, not whole-PR review. Full receipts
 and reviewed file hashes remain Git-external as `wip-http-execution-receipt.json`
 and `http-execution-independent-review.json` in that audit directory.
+
+## Restrict mapping sorts to relevant candidates
+
+The evaluator now skips its generic observation loop when an existing
+specialized selector owns the representation. Direct mappings filter the exact
+source concept before the existing stable SHA256 sort. Alternative concepts
+are similarly filtered before sorting, with every eligible same-period peer
+still checked for conflict. No period, unit, dimension, precision or conflict
+validator was removed. Relevant rejected candidates retain their original
+reasons and ordering; full original/source checks still precede selection.
+
+A read-only differential experiment evaluated 55 retained real MSFT mapping
+inputs with five interleaved baseline/candidate samples. All complete decision
+payloads matched after binding both experiment versions to the same policy
+digest solely for comparison; nothing was signed or published. Across those
+55 evaluations, evaluator-module fact sort inputs fell from 105,552 to 338 and
+fact digest calls from 106,290 to 1,076. Observed Python report iteration fell
+from 459,408 to 429,756, so substantial repeated traversal remains.
+
+The sum of evaluator intervals has a median of 30.44 seconds before and
+27.01 seconds after (five samples each, ranges 30.02–31.23 and 26.98–27.29).
+Resolution, source loading, discovery, parser, release and persistence are
+excluded. One shared host/process was used; cumulative process high-water RSS
+was 907,821,056 bytes. This establishes reduced local sorting work and semantic
+equivalence for those inputs, not successful full-flow timing or a per-mode
+memory comparison. Serialized evidence and source checks remain the dominant
+unresolved costs. Normal new policy/source identities and deterministic replay
+must be verified separately on the committed candidate.
+
+Raw comparisons remain outside Git as
+`e2eb5d52-mapping-candidates-five-pairs-receipt.json` in the audit directory.
+Input/output digests are
+`5366567bd261eed8e33bddd98ae261650a8d5761ad1e5ab1cc76a71c9850b6da` /
+`054bafb357fe2191b755c6f7ec401999774e86f3f7c8871fbd66ecf24af3c263`.

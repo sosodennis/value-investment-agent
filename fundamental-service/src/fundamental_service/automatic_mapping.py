@@ -849,20 +849,27 @@ def evaluate_automatic_mapping(
             )
             for fact, reason in revenue.rejected
         )
-    for fact in sorted(original.report.facts, key=sha256_digest):
-        if (
-            disclosed
-            or depreciation
-            or capital_expenditure
-            or registered_revenue
-            or investment_assets
-            or noncontrolling_equity
-            or liability_residual
-            or option_cost
-            or standard
-            or fact.concept != proposal.source_concept
-        ):
-            continue
+    specialized = (
+        disclosed
+        or depreciation
+        or capital_expenditure
+        or registered_revenue
+        or investment_assets
+        or noncontrolling_equity
+        or liability_residual
+        or option_cost
+        or standard
+    )
+    candidates = (
+        ()
+        if specialized
+        else tuple(
+            fact
+            for fact in original.report.facts
+            if fact.concept == proposal.source_concept
+        )
+    )
+    for fact in sorted(candidates, key=sha256_digest):
         if fact.instant in classified_instants:
             rejected.append(
                 MappingObservationRejectionV1(
@@ -897,12 +904,13 @@ def evaluate_automatic_mapping(
         key = (fact.period_start, fact.period_end, fact.instant)
         periods.setdefault(key, set()).add(Decimal(fact.value))
     if rule is not None and len(rule.concepts) > 1:
-        for fact in sorted(original.report.facts, key=sha256_digest):
-            if (
-                fact.concept not in rule.concepts
-                or fact.concept == proposal.source_concept
-                or _observation_rejection(fact, request, rule) is not None
-            ):
+        alternatives = (
+            fact
+            for fact in original.report.facts
+            if fact.concept in rule.concepts and fact.concept != proposal.source_concept
+        )
+        for fact in sorted(alternatives, key=sha256_digest):
+            if _observation_rejection(fact, request, rule) is not None:
                 continue
             key = (fact.period_start, fact.period_end, fact.instant)
             if key in periods and Decimal(fact.value) not in periods[key]:
