@@ -1,0 +1,356 @@
+{
+  "acceptance": {
+    "complete_market_policy_admitted": false,
+    "full_numerical_flow": false,
+    "independent_review_complete": false,
+    "real_quote_admitted": false,
+    "supported_history_threshold": null
+  },
+  "artifact_policy": "Generated provider bytes, fixtures, logs and content-addressed reports stay in ignored .audit, outside Git. No WIP history or unrelated resource is removed.",
+  "changes": [
+    "QuoteSourceProviderPort and immutable selection metadata exclude the expected quote price.",
+    "Provider-independent dispatch requires exactly one source/profile match, exact retained bytes and full reproduced-quote equality.",
+    "Nasdaq adapter uses the existing transcription policy; default source parsing does not authorize source use.",
+    "Service, preparation CLI and release canary receive configured providers at composition; alternate-provider tests use the existing composer."
+  ],
+  "engineering": {
+    "additional_checks": {
+      "acceptance_tools": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "-q",
+          "scripts/tests/test_acceptance_service_preflight.py",
+          "scripts/tests/test_validate_acceptance_manifest.py",
+          "scripts/tests/test_validate_compose_inputs.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "ea1b7372c26ea88990fe40308a4d9a4aa97cc8a3a1bcb50917b723912031f282",
+        "result": "......................                                                   [100%]\n22 passed in 0.95s\n"
+      },
+      "commit_check": {
+        "command": [
+          "git",
+          "show",
+          "--check",
+          "--oneline",
+          "HEAD"
+        ],
+        "exit_code": 0,
+        "output_sha256": "fa93da7409a848c734acc5d61f7c68d254526fe54403a77bd14bff8222f82dd3",
+        "result": "9c796b5b Refs #361 Inject quote providers through serving and release checks\n"
+      },
+      "policy": {
+        "command": [
+          "python3",
+          "scripts/validate_issue_acceptance_policy.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "744b5f0e1cc857dad28a3e6c8e0432aa1871e3815a6b4dd9989997e654746296",
+        "result": "acceptance policy: PASS not applicable branch=unknown\n"
+      },
+      "ruff_all": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+        "result": "All checks passed!\n"
+      }
+    },
+    "commands": {
+      "architecture": {
+        "command": [
+          "python3",
+          "scripts/architecture_guard.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+      },
+      "diff": {
+        "command": [
+          "git",
+          "diff",
+          "--check",
+          "origin/main"
+        ],
+        "exit_code": 0,
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "focused": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "-q",
+          "fundamental-service/tests/test_quote_sources.py",
+          "fundamental-service/tests/test_equity_award_evidence.py",
+          "fundamental-service/tests/test_preparation_runner.py",
+          "fundamental-service/tests/test_release_runner.py",
+          "fundamental-service/tests/test_issuer_operating_release.py",
+          "fundamental-service/tests/test_architecture_guard.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "8c4826f1cc03dbd069bf66df8bc95da5a819296d471a8f4045e01f7ec7499781"
+      },
+      "format": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "format",
+          "--check",
+          "fundamental-service/src/fundamental_service/app.py",
+          "fundamental-service/src/fundamental_service/application/service.py",
+          "fundamental-service/src/fundamental_service/equity_award_evidence.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py",
+          "fundamental-service/src/fundamental_service/quote_providers.py",
+          "fundamental-service/src/fundamental_service/quote_sources.py",
+          "fundamental-service/src/fundamental_service/release_runner.py",
+          "fundamental-service/tests/quote_provider_fixtures.py",
+          "fundamental-service/tests/test_equity_award_evidence.py",
+          "fundamental-service/tests/test_preparation_runner.py",
+          "fundamental-service/tests/test_quote_sources.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "75b7030be9d7de96bf4e76e79b1f03f14af8899d169fd8d79564d59167d1ab80"
+      },
+      "mypy": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "--with",
+          "mypy==1.19.1",
+          "mypy",
+          "--no-incremental",
+          "--follow-imports=silent",
+          "--ignore-missing-imports",
+          "fundamental-service/src/fundamental_service/app.py",
+          "fundamental-service/src/fundamental_service/application/service.py",
+          "fundamental-service/src/fundamental_service/equity_award_evidence.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py",
+          "fundamental-service/src/fundamental_service/quote_providers.py",
+          "fundamental-service/src/fundamental_service/quote_sources.py",
+          "fundamental-service/src/fundamental_service/release_runner.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "050c52a2b0c61e8b681ef5c485e0bc03340b8d55148e0acef27d744c8be42033"
+      },
+      "ruff": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service/src/fundamental_service/app.py",
+          "fundamental-service/src/fundamental_service/application/service.py",
+          "fundamental-service/src/fundamental_service/equity_award_evidence.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py",
+          "fundamental-service/src/fundamental_service/quote_providers.py",
+          "fundamental-service/src/fundamental_service/quote_sources.py",
+          "fundamental-service/src/fundamental_service/release_runner.py",
+          "fundamental-service/tests/quote_provider_fixtures.py",
+          "fundamental-service/tests/test_equity_award_evidence.py",
+          "fundamental-service/tests/test_preparation_runner.py",
+          "fundamental-service/tests/test_quote_sources.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      "service_postgres": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "fundamental-service/tests",
+          "-ra"
+        ],
+        "exit_code": 0,
+        "output_sha256": "18cd90d7a9643440b7d91b0b15b211ab54da5934b7d52ee79958dd66254a580f"
+      }
+    },
+    "input_digest": "26a9ad3d7bcbc256c99e4c7fe6a68316150443484b337a18f0e0e9543e88a794",
+    "output_digest": "3aa330f463a125a17c4495a36beb9fc1e1228b65facadc31ab112748a7761ef4",
+    "results": {
+      "acceptance_tools": "22 passed",
+      "architecture_guard": "passed, no boundary violations",
+      "diff_check": "passed against origin/main",
+      "focused": "117 passed",
+      "format": "11 changed Python files passed",
+      "issue_policy": "acceptance policy: PASS issue=361 status=WIP manifest_commit=e7593db21b4ab32872971720f5105e26d2456a93 head=9c796b5bcd96b73913f5ec92568ac443452c623a",
+      "mypy": "7 changed source files passed",
+      "ruff": "passed for changed files and entire Fundamental package",
+      "service_postgres": "1517 passed, 11 optional-resource skips, 1 intentional duplicate-ZIP warning"
+    }
+  },
+  "failed_attempts_retained": [
+    {
+      "cause": "Docker inspection had a null Compose label; corrected helper to emit JSON arrays directly. No service-source change or replay occurred.",
+      "classification": "audit-harness-baseline-json-decode",
+      "exact_commit": "9c796b5bcd96b73913f5ec92568ac443452c623a",
+      "exit_code": 1
+    },
+    {
+      "cause": "A helper in /tmp did not inherit /app on sys.path. Set explicit PYTHONPATH=/app for the helper; normal service startup already works. No valuation artifact was published.",
+      "classification": "audit-harness-script-import-path",
+      "exact_commit": "9c796b5bcd96b73913f5ec92568ac443452c623a",
+      "exit_code": 1
+    }
+  ],
+  "implementation_commit": "9c796b5bcd96b73913f5ec92568ac443452c623a",
+  "input_digest": "d46ae720bdd6612f8ba3acd542bffcbb4f27ce0d91bc9928075a341b094ea317",
+  "inputs": {
+    "additional_checks_input_digest": "404f90d2e57e69cfb1b0af62286cb7d0ea78dbe3d607bf2d3ff58f51fcd63f94",
+    "engineering_input_digest": "26a9ad3d7bcbc256c99e4c7fe6a68316150443484b337a18f0e0e9543e88a794",
+    "exact_commit": "9c796b5bcd96b73913f5ec92568ac443452c623a",
+    "image_input_digest": "04a06eae1cdc27a522f8800be524c84d4e4a95e8814378f452d6766ed35cb6af",
+    "issue": 361,
+    "runtime_lock_sha256": "98335af7aa12ea08b8089c871fd87c8d670477f55dbc205661a6f261554347bc"
+  },
+  "installed_image": {
+    "baseline_container_count": 42,
+    "cleanup": "none; own existing provider project retained for further work",
+    "compose": {
+      "config_hash": "b8aad112c7ed085a96f21281211419f8ec08423bb1ff150252608560ddb48cfe",
+      "env_files": [],
+      "files": [
+        "compose/verification/docker-compose.issue280-operations.yml"
+      ],
+      "ports": {
+        "fundamental_postgres": 18684,
+        "fundamental_service": 18683
+      },
+      "project": "value-investment-agent-361-macro-providers"
+    },
+    "first_inventory_digest": "1ef1ebf7bb47e0d07229ee3412812b890f973f91a4d9ab16246f824a8a6834da",
+    "image_id": "sha256:9a061009206744225e318dbd077421a10f3452eb9f4853784de06a59bf07cd19",
+    "input_digest": "04a06eae1cdc27a522f8800be524c84d4e4a95e8814378f452d6766ed35cb6af",
+    "installed_source_count": 76,
+    "installed_source_manifest_digest": "e4abf4b4b3f4e363d40f19ca20ece958e212dfd2a57b49e08c7f60490eb36088",
+    "network": "value-investment-agent-361-macro-providers_default",
+    "new_files_after_restart": 0,
+    "new_files_first": 3,
+    "new_files_second": 0,
+    "output_digest": "319dd2979c76166d06fd9a35cf4279602f696891c63d5a7da27f8183f42d4269",
+    "readyz": {
+      "capabilities": {
+        "identity_resolution_configured": false
+      },
+      "contract_version": "internal.v1",
+      "status": "ready"
+    },
+    "replays": [
+      {
+        "artifact_id": "quote-provider-7d1de8238d85057103d5943cae8390d04791cd17e6cb5affc3a8ad7880cf5ea4",
+        "exact_commit": "9c796b5bcd96b73913f5ec92568ac443452c623a",
+        "failure_codes": [
+          "DILUTION_QUOTE_SOURCE_PROFILE_UNSUPPORTED",
+          "DILUTION_QUOTE_SOURCE_PROFILE_AMBIGUOUS",
+          "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH"
+        ],
+        "input_digest": "7d1de8238d85057103d5943cae8390d04791cd17e6cb5affc3a8ad7880cf5ea4",
+        "output_digest": "2d861d199f45189950d6fec17feac2778efdcb21e3d6ccc4a93b978ccb0a91ea",
+        "provider_calls": 0,
+        "wrote": true
+      },
+      {
+        "artifact_id": "quote-provider-7d1de8238d85057103d5943cae8390d04791cd17e6cb5affc3a8ad7880cf5ea4",
+        "exact_commit": "9c796b5bcd96b73913f5ec92568ac443452c623a",
+        "failure_codes": [
+          "DILUTION_QUOTE_SOURCE_PROFILE_UNSUPPORTED",
+          "DILUTION_QUOTE_SOURCE_PROFILE_AMBIGUOUS",
+          "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH"
+        ],
+        "input_digest": "7d1de8238d85057103d5943cae8390d04791cd17e6cb5affc3a8ad7880cf5ea4",
+        "output_digest": "2d861d199f45189950d6fec17feac2778efdcb21e3d6ccc4a93b978ccb0a91ea",
+        "provider_calls": 0,
+        "wrote": false
+      },
+      {
+        "artifact_id": "quote-provider-7d1de8238d85057103d5943cae8390d04791cd17e6cb5affc3a8ad7880cf5ea4",
+        "exact_commit": "9c796b5bcd96b73913f5ec92568ac443452c623a",
+        "failure_codes": [
+          "DILUTION_QUOTE_SOURCE_PROFILE_UNSUPPORTED",
+          "DILUTION_QUOTE_SOURCE_PROFILE_AMBIGUOUS",
+          "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH"
+        ],
+        "input_digest": "7d1de8238d85057103d5943cae8390d04791cd17e6cb5affc3a8ad7880cf5ea4",
+        "output_digest": "2d861d199f45189950d6fec17feac2778efdcb21e3d6ccc4a93b978ccb0a91ea",
+        "provider_calls": 0,
+        "wrote": false
+      }
+    ],
+    "report_sha256": "450bfd98b4ff10496b9a4dacf0c95e57e0281f2b62cba49ee02d308974615695",
+    "restart_inventory_digest": "1ef1ebf7bb47e0d07229ee3412812b890f973f91a4d9ab16246f824a8a6834da",
+    "runtime": {
+      "arelle": "2.47.4",
+      "pydantic": "2.14.2",
+      "python": "3.12.16"
+    },
+    "second_inventory_digest": "1ef1ebf7bb47e0d07229ee3412812b890f973f91a4d9ab16246f824a8a6834da",
+    "unrelated_container_changes": {},
+    "volumes": [
+      "value-investment-agent-361-macro-providers_fundamental-postgres-data",
+      "value-investment-agent-361-macro-providers_fundamental-service-data"
+    ]
+  },
+  "issue": 361,
+  "next_step": "Continue provider-backed market inputs and deterministic automatic policy admission in Fundamental Service; retain all unsupported cases and the null threshold.",
+  "output_digest": "81376c39a95a84c63a563f2232c15261b14f6d8a9a28f68ecbb85d51bc4ffd0c",
+  "outputs": {
+    "additional_checks_output_digest": "3edd456c20165ff8edf9f8ba08022fcf7b457f379125c46dad9e65b05fabb76e",
+    "engineering_output_digest": "3aa330f463a125a17c4495a36beb9fc1e1228b65facadc31ab112748a7761ef4",
+    "exact_commit": "9c796b5bcd96b73913f5ec92568ac443452c623a",
+    "full_numerical_flow": false,
+    "image_output_digest": "319dd2979c76166d06fd9a35cf4279602f696891c63d5a7da27f8183f42d4269",
+    "issue": 361,
+    "policy": {
+      "command": [
+        "python3",
+        "scripts/validate_issue_acceptance_policy.py"
+      ],
+      "environment": {
+        "GITHUB_HEAD_REF": "codex/issue-361-replay-evidence",
+        "GITHUB_SHA": "9c796b5bcd96b73913f5ec92568ac443452c623a"
+      },
+      "exit_code": 0,
+      "output_sha256": "945c7ab69c8ae3db953e9d4a4418c8f9a2d74b1d8ed4f788791928219963ebe7",
+      "result": "acceptance policy: PASS issue=361 status=WIP manifest_commit=e7593db21b4ab32872971720f5105e26d2456a93 head=9c796b5bcd96b73913f5ec92568ac443452c623a"
+    },
+    "supported_history_threshold": null
+  },
+  "remaining": [
+    "Treasury and Damodaran ERP/beta provider adapters, issuer classification and source-use/dated evidence.",
+    "Marginal or contracted debt-benchmark policy, issuer tax and capital-weight evidence, bounded terminal-growth policy.",
+    "Complete real accounting/capital/non-operating and equity-award scope (#381/#394).",
+    "Trusted complete release, authentic exact-input caller approval, real numerical 19-gate repeat/restart/restore.",
+    "Independent PR review, CI, merge/main verification and cleanup only after completed acceptance."
+  ],
+  "status": "partial-provider-abstraction-increment"
+}

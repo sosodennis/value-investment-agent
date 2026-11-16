@@ -1,0 +1,390 @@
+{
+  "policy_version": "personal-noncommercial-local-source-use-v1",
+  "rules": [
+    {
+      "basis": "Current aggregate NIPA data is captured from the maintained official BEA workbook. Its use begins at actual capture time; capture does not establish earlier availability or confer historical-vintage status.",
+      "metric_id": "us.nominal_gdp",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us.nominal_gdp",
+      "provider_id": "bea-nipa-current",
+      "required_notices": [
+        "Source: U.S. Bureau of Economic Analysis, current NIPA table 1.1.5. Derived calculations are by value-investment-agent; no BEA endorsement is implied."
+      ],
+      "rule_id": "bea-current-nominal-gdp-capture-v1",
+      "source_id": "bea-nipa-current",
+      "source_version": "bea-current-nipa-gdp-capture-v1",
+      "terms": [
+        {
+          "content_scope": {
+            "attribute": "about",
+            "protocol": "exact-html-element-v1",
+            "tag": "article",
+            "value": "/help/guidelines-for-citing-bea"
+          },
+          "content_sha256": "fa84365aa8063550b72f95fd50735201d26bd736fe7e13ee4da8cfd8a2bc721c",
+          "uri": "https://www.bea.gov/help/guidelines-for-citing-bea"
+        },
+        {
+          "content_sha256": "be9a8a2918c3f674506e80087565ce9f5479ea358394313daf02e3aa0a1491ba",
+          "uri": "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm"
+        }
+      ],
+      "terms_reference": "https://www.bea.gov/help/guidelines-for-citing-bea"
+    },
+    {
+      "basis": "17 U.S.C. 105(a) excludes U.S. Government works from U.S. copyright; this profile covers BEA's own public aggregate GDP table and release. Preserve citations and do not imply BEA endorsement. This is not blanket permission for third-party content on government sites.",
+      "metric_id": "us.nominal_gdp",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us.nominal_gdp",
+      "provider_id": "bea-nipa",
+      "required_notices": [
+        "Source: U.S. Bureau of Economic Analysis, NIPA table 1.1.5 and the cited GDP release. Derived calculations are by value-investment-agent; no BEA endorsement is implied."
+      ],
+      "rule_id": "bea-nominal-gdp-bea-gdp-release",
+      "source_id": "bea-gdp-release",
+      "source_version": "bea-nipa-gdp-vintage-v1",
+      "terms": [
+        {
+          "content_scope": {
+            "attribute": "about",
+            "protocol": "exact-html-element-v1",
+            "tag": "article",
+            "value": "/help/guidelines-for-citing-bea"
+          },
+          "content_sha256": "fa84365aa8063550b72f95fd50735201d26bd736fe7e13ee4da8cfd8a2bc721c",
+          "uri": "https://www.bea.gov/help/guidelines-for-citing-bea"
+        },
+        {
+          "content_sha256": "be9a8a2918c3f674506e80087565ce9f5479ea358394313daf02e3aa0a1491ba",
+          "uri": "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm"
+        }
+      ],
+      "terms_reference": "https://www.bea.gov/help/guidelines-for-citing-bea"
+    },
+    {
+      "basis": "17 U.S.C. 105(a) excludes U.S. Government works from U.S. copyright; this profile covers BEA's own public aggregate GDP table and release. Preserve citations and do not imply BEA endorsement. This is not blanket permission for third-party content on government sites.",
+      "metric_id": "us.nominal_gdp",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us.nominal_gdp",
+      "provider_id": "bea-nipa",
+      "required_notices": [
+        "Source: U.S. Bureau of Economic Analysis, NIPA table 1.1.5 and the cited GDP release. Derived calculations are by value-investment-agent; no BEA endorsement is implied."
+      ],
+      "rule_id": "bea-nominal-gdp-bea-nipa-archive",
+      "source_id": "bea-nipa-archive",
+      "source_version": "bea-nipa-gdp-vintage-v1",
+      "terms": [
+        {
+          "content_scope": {
+            "attribute": "about",
+            "protocol": "exact-html-element-v1",
+            "tag": "article",
+            "value": "/help/guidelines-for-citing-bea"
+          },
+          "content_sha256": "fa84365aa8063550b72f95fd50735201d26bd736fe7e13ee4da8cfd8a2bc721c",
+          "uri": "https://www.bea.gov/help/guidelines-for-citing-bea"
+        },
+        {
+          "content_sha256": "be9a8a2918c3f674506e80087565ce9f5479ea358394313daf02e3aa0a1491ba",
+          "uri": "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm"
+        }
+      ],
+      "terms_reference": "https://www.bea.gov/help/guidelines-for-citing-bea"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "country.equity_risk_premium",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "countries",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-country.equity_risk_premium",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-country-erp-tax-xlsx-v1",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "country.equity_risk_premium",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "countries",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-country.equity_risk_premium-v2",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-country-erp-tax-xlsx-v2",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "country.tax_rate",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "countries",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-country.tax_rate",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-country-erp-tax-xlsx-v1",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "country.tax_rate",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "countries",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-country.tax_rate-v2",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-country-erp-tax-xlsx-v2",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "industry.debt_weight",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us-companies",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-industry.debt_weight",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-us-industry-capital-xls-v1",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "industry.equity_beta",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us-companies",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-industry.equity_beta",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-us-industry-capital-xls-v1",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "industry.equity_weight",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us-companies",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-industry.equity_weight",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-us-industry-capital-xls-v1",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "industry.pre_tax_cost_of_debt",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us-companies",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-industry.pre_tax_cost_of_debt",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-us-industry-capital-xls-v1",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher shares processed data with 'no strings attached'; the bounded parser reproduces only public industry/country aggregates. No underlying company dataset or full-table redistribution is authorized here.",
+      "metric_id": "industry.unlevered_beta",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us-companies",
+      "provider_id": "damodaran-public-aggregates",
+      "required_notices": [
+        "Public processed aggregate reference: Aswath Damodaran, NYU Stern; https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html. Underlying company-level commercial data is excluded."
+      ],
+      "rule_id": "damodaran-industry.unlevered_beta",
+      "source_id": "damodaran-reference",
+      "source_version": "damodaran-us-unlevered-beta-xls-v1",
+      "terms": [
+        {
+          "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+          "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+        }
+      ],
+      "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
+    },
+    {
+      "basis": "Publisher's Permissible Use permits automated access, download, storage and business use with its Conditions and Reference Rates notice. No endorsement, exclusive reference-rate naming claim or CME Term SOFR use.",
+      "metric_id": "us.sofr_overnight",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us.sofr_overnight",
+      "provider_id": "new-york-fed",
+      "required_notices": [
+        "© Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org.",
+        "The Secured Overnight Financing Rate (SOFR) is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of SOFR by value-investment-agent, does not sanction or endorse any particular republication, and has no liability for your use.",
+        "value-investment-agent is not affiliated with the New York Fed. Derived calculations and modifications are by value-investment-agent."
+      ],
+      "rule_id": "new-york-fed-overnight-sofr",
+      "source_id": "new-york-fed-sofr",
+      "source_version": "new-york-fed-markets-api-sofr-v1",
+      "terms": [
+        {
+          "content_sha256": "8338801341327ba9c5066f463c8196032a6a6107a87db4a70c7590859daa67f8",
+          "uri": "https://www.newyorkfed.org/privacy/termsofuse"
+        }
+      ],
+      "terms_reference": "https://www.newyorkfed.org/privacy/termsofuse"
+    },
+    {
+      "basis": "17 U.S.C. 105(a), restricted to Treasury's own public par-yield observations. The legacy fiscaldata terms URL is not the permission basis; this grant excludes third-party site content.",
+      "metric_id": "us.treasury_par_yield_10y",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "us.treasury_par_yield_10y",
+      "provider_id": "us-treasury",
+      "required_notices": [
+        "Source: U.S. Department of the Treasury, daily Treasury par yield curve. Derived calculations are by value-investment-agent; no Treasury endorsement is implied."
+      ],
+      "rule_id": "treasury-par-yield-10y",
+      "source_id": "treasury-yields",
+      "source_version": "treasury-par-yield-xml-10y-v1",
+      "terms": [
+        {
+          "content_sha256": "be9a8a2918c3f674506e80087565ce9f5479ea358394313daf02e3aa0a1491ba",
+          "uri": "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm"
+        }
+      ],
+      "terms_reference": "https://fiscaldata.treasury.gov/terms-of-use/"
+    },
+    {
+      "basis": "The workspace owner expressly instructed creation of a policy for their own personal, noncommercial local research on 2026-11-16. This records the owner's deployment-use decision only. It does not assert permission from Yahoo or its data providers. The retained complete Yahoo terms section includes the express-prior-permission restriction on automated collection; no separate Yahoo authorization has been supplied or verified. The source-use matcher checks configured identity, intended use and retained terms content; a successful match is not independent proof of external source rights. Do not report this operator policy as satisfying #361 provider-rights acceptance or as caller approval.",
+      "metric_id": "common_share.price",
+      "permitted_uses": [
+        "valuation_preparation",
+        "derived_valuation_display"
+      ],
+      "population": "common-share",
+      "provider_id": "yahoo-chart-daily-close",
+      "required_notices": [
+        "Yahoo Finance quote data; personal, noncommercial research on the owner's local machine only.",
+        "No public API, service to third parties, raw-data redistribution or commercial use is authorized by this local deployment decision.",
+        "This is an operator-use decision, not a Yahoo grant or a representation that provider authorization for automated collection has been verified."
+      ],
+      "rule_id": "yahoo-personal-noncommercial-local-research-v1",
+      "source_id": "yahoo-chart-daily-close",
+      "source_version": "yahoo-us-equity-latest-completed-daily-close-capture-v1",
+      "terms": [
+        {
+          "content_scope": {
+            "attribute": "id",
+            "protocol": "exact-html-element-v1",
+            "tag": "section",
+            "value": "node-content"
+          },
+          "content_sha256": "f6ff1ebb920c22b867fe4f126218677682d06958be30f5f1bbb6db1eceddca2b",
+          "uri": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+        }
+      ],
+      "terms_reference": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+    }
+  ]
+}

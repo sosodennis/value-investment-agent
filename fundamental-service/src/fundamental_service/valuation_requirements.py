@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from itertools import combinations
 
 from pydantic import Field, model_validator
 
@@ -18,6 +19,26 @@ from .contracts import (
     StrictModel,
 )
 from .serialization import sha256_digest
+from .equity_dilution import AWARD_FACT_FIELDS
+from .award_disclosures import AWARD_DISCLOSURE_FIELDS, AWARD_DISCLOSURE_POLICY
+from .conditional_capital_contracts import (
+    CONDITIONAL_CAPITAL_POLICY,
+    UNRESOLVED_CAPITAL_FIELDS,
+)
+from .conditional_capital_balances import (
+    CAPITAL_BALANCE_HYPOTHESES,
+    CAPITAL_BALANCE_ROLES,
+    CapitalBalanceRole,
+)
+from .conditional_reinvestment_contracts import (
+    CONDITIONAL_REINVESTMENT_POLICY,
+    REINVESTMENT_CORE_FIELDS,
+)
+from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
+from .working_capital import (
+    WORKING_CAPITAL_EXCLUSION_FIELDS,
+    WORKING_CAPITAL_INPUT_POLICY,
+)
 
 
 class ValuationRequirementsProfileV1(StrictModel):
@@ -27,9 +48,10 @@ class ValuationRequirementsProfileV1(StrictModel):
     profile_version: str = Field(min_length=1)
     model_id: InitialModelId
     annual_duration_fields: tuple[str, ...] = Field(min_length=1)
-    annual_instant_fields: tuple[str, ...] = Field(min_length=1)
+    annual_instant_fields: tuple[str, ...]
     point_in_time_fact_fields: tuple[str, ...] = ()
     market_policy_input_roles: tuple[str, ...] = ()
+    supporting_fact_fields: tuple[str, ...] = ()
     history_window_years: int = Field(default=5, ge=1)
     candidate_minimum_complete_years: int = Field(default=3, ge=1)
     supported_history_threshold: int | None = Field(default=None, ge=1)
@@ -43,6 +65,7 @@ class ValuationRequirementsProfileV1(StrictModel):
             self.annual_instant_fields,
             self.point_in_time_fact_fields,
             self.market_policy_input_roles,
+            self.supporting_fact_fields,
         )
         if any(len(values) != len(set(values)) for values in groups):
             raise ValueError("requirements profile fields must be unique")
@@ -91,20 +114,25 @@ def select_released_facts(
     facts: Iterable[CanonicalFactV1],
     *,
     profile: ValuationRequirementsProfileV1,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     valuation_timestamp: datetime,
+    additional_fact_ids: tuple[str, ...] = (),
 ) -> ReleasedFactSelectionV1:
     """Select every eligible candidate for the profile without caller mappings."""
 
+    require_operating_source_profile(snapshot, profile)
     source_hashes = {record.content_hash for record in snapshot.source_records}
     required_fields = profile.required_fact_fields
     selected: list[CanonicalFactV1] = []
     rejected: list[str] = []
     for fact in facts:
         if (
-            fact.normalized_field not in required_fields
-            or fact.issuer_id != snapshot.identity.issuer_id
-            or fact.security_id not in {None, snapshot.identity.security_id}
+            (
+                fact.normalized_field
+                not in (*required_fields, *profile.supporting_fact_fields)
+                and fact.fact_id not in additional_fact_ids
+            )
+            or not fact_matches_operating_identity(fact, snapshot)
             or fact.source.content_hash not in source_hashes
             or fact.available_at > valuation_timestamp
             or next(
@@ -143,15 +171,29 @@ def select_released_facts(
     )
 
 
+def require_operating_source_profile(
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
+    profile: ValuationRequirementsProfileV1,
+) -> None:
+    if isinstance(snapshot, IssuerOperatingSourceV1) and profile not in (
+        operating_forecast_requirements_profile(profile.model_id),
+        composite_working_capital_requirements_profile(profile.model_id),
+    ):
+        raise ValueError("issuer-only evidence requires the exact operating profile")
+
+
 _ANNUAL_DURATION_FIELDS = (
     "revenue",
-    "cost_of_revenue",
     "operating_income",
     "income_before_tax",
     "income_tax_expense",
-    "net_income",
     "depreciation_and_amortization",
     "capital_expenditure",
+)
+
+_ANNUAL_DIAGNOSTIC_FIELDS = (
+    "cost_of_revenue",
+    "net_income",
     "operating_lease_cost",
     "finance_lease_cost",
     "stock_based_compensation",
@@ -170,6 +212,7 @@ _ANNUAL_INSTANT_FIELDS = (
 
 _POINT_IN_TIME_FACT_FIELDS = (
     "cash_and_equivalents",
+    "non_operating_assets",
     "current_interest_bearing_debt",
     "long_term_interest_bearing_debt",
     "current_operating_lease_liabilities",
@@ -180,7 +223,6 @@ _POINT_IN_TIME_FACT_FIELDS = (
     "noncontrolling_interests",
     "convertible_instruments",
     "common_shares_outstanding",
-    "dilutive_instruments",
     "other_share_classes",
 )
 
@@ -196,22 +238,24 @@ _MARKET_POLICY_INPUT_ROLES = (
 
 _PROFILES = {
     "fcff_dcf": ValuationRequirementsProfileV1(
-        profile_id="fcff-valuation-requirements-v1",
-        profile_version="fcff-valuation-requirements-v1",
+        profile_id="fcff-valuation-requirements-v4",
+        profile_version="fcff-valuation-requirements-v4",
         model_id="fcff_dcf",
         annual_duration_fields=_ANNUAL_DURATION_FIELDS,
         annual_instant_fields=_ANNUAL_INSTANT_FIELDS,
         point_in_time_fact_fields=_POINT_IN_TIME_FACT_FIELDS,
         market_policy_input_roles=_MARKET_POLICY_INPUT_ROLES,
+        supporting_fact_fields=(*AWARD_FACT_FIELDS, *_ANNUAL_DIAGNOSTIC_FIELDS),
     ),
     "transition_fcff_dcf": ValuationRequirementsProfileV1(
-        profile_id="transition-fcff-valuation-requirements-v1",
-        profile_version="transition-fcff-valuation-requirements-v1",
+        profile_id="transition-fcff-valuation-requirements-v4",
+        profile_version="transition-fcff-valuation-requirements-v4",
         model_id="transition_fcff_dcf",
         annual_duration_fields=_ANNUAL_DURATION_FIELDS,
         annual_instant_fields=_ANNUAL_INSTANT_FIELDS,
         point_in_time_fact_fields=_POINT_IN_TIME_FACT_FIELDS,
         market_policy_input_roles=_MARKET_POLICY_INPUT_ROLES,
+        supporting_fact_fields=(*AWARD_FACT_FIELDS, *_ANNUAL_DIAGNOSTIC_FIELDS),
         transition_filing_evidence_required=True,
     ),
 }
@@ -232,10 +276,231 @@ def valuation_requirements_profile(
         ) from error
 
 
+def operating_forecast_requirements_profile(
+    model_id: str,
+) -> ValuationRequirementsProfileV1:
+    """Evidence dependencies of operating targets, without valuation claims."""
+
+    valuation = valuation_requirements_profile(model_id)
+    return ValuationRequirementsProfileV1(
+        profile_id=f"{model_id}-operating-forecast-requirements-v1",
+        profile_version="operating-forecast-requirements-v1",
+        model_id=valuation.model_id,
+        annual_duration_fields=(
+            "revenue",
+            "operating_income",
+            "income_before_tax",
+            "income_tax_expense",
+            "capital_expenditure",
+            "depreciation_and_amortization",
+        ),
+        annual_instant_fields=valuation.annual_instant_fields,
+        history_window_years=valuation.history_window_years,
+        candidate_minimum_complete_years=valuation.candidate_minimum_complete_years,
+        transition_filing_evidence_required=valuation.transition_filing_evidence_required,
+    )
+
+
+def composite_working_capital_requirements_profile(
+    model_id: str,
+    *,
+    operating_only: bool = True,
+) -> ValuationRequirementsProfileV1:
+    """Explicit alternate input policy; never reinterpret an existing release."""
+
+    exact = (
+        operating_forecast_requirements_profile(model_id)
+        if operating_only
+        else valuation_requirements_profile(model_id)
+    )
+    return ValuationRequirementsProfileV1.model_validate(
+        {
+            **exact.model_dump(),
+            "profile_id": f"{exact.profile_id}-{WORKING_CAPITAL_INPUT_POLICY}",
+            "profile_version": WORKING_CAPITAL_INPUT_POLICY,
+            "annual_instant_fields": ("current_assets", "current_liabilities"),
+        }
+    )
+
+
+def conditional_capital_requirements_profile(
+    model_id: str,
+    *,
+    composite_inputs: bool = False,
+    hypothetical_balance_fields: tuple[CapitalBalanceRole, ...] = (),
+) -> ValuationRequirementsProfileV1:
+    """Require observed balances while retaining unresolved claims as evidence."""
+
+    if hypothetical_balance_fields != tuple(
+        sorted(set(hypothetical_balance_fields))
+    ) or not set(hypothetical_balance_fields) <= set(CAPITAL_BALANCE_ROLES):
+        raise ValueError("hypothetical balances require canonical supported roles")
+    unknowns = (*UNRESOLVED_CAPITAL_FIELDS, *hypothetical_balance_fields)
+    capital_version = (
+        f"{CAPITAL_BALANCE_HYPOTHESES}-{'-'.join(hypothetical_balance_fields)}"
+        if hypothetical_balance_fields
+        else CONDITIONAL_CAPITAL_POLICY
+    )
+    version = f"{capital_version}-{AWARD_DISCLOSURE_POLICY}"
+    exact = (
+        composite_working_capital_requirements_profile(model_id, operating_only=False)
+        if composite_inputs
+        else valuation_requirements_profile(model_id)
+    )
+    return ValuationRequirementsProfileV1.model_validate(
+        exact.model_dump()
+        | {
+            "profile_id": f"{exact.profile_id}-{version}",
+            "profile_version": version,
+            "point_in_time_fact_fields": tuple(
+                field
+                for field in exact.point_in_time_fact_fields
+                if field not in unknowns
+            ),
+            "supporting_fact_fields": (
+                *exact.supporting_fact_fields,
+                *AWARD_DISCLOSURE_FIELDS,
+                *unknowns,
+            ),
+        }
+    )
+
+
+def source_preparation_requirements_profile(
+    model_id: str,
+    *,
+    composite_inputs: bool = False,
+    conditional_capital: bool = False,
+    conditional_reinvestment: bool = False,
+    hypothetical_balance_fields: tuple[CapitalBalanceRole, ...] = (),
+) -> ValuationRequirementsProfileV1:
+    """Acquire optional exclusion roles while retaining every unsupported role."""
+
+    if hypothetical_balance_fields and not conditional_capital:
+        raise ValueError("hypothetical balances require a conditional capital policy")
+    if conditional_reinvestment:
+        if composite_inputs:
+            raise ValueError(
+                "forward reinvestment excludes historical composite inputs"
+            )
+        return conditional_reinvestment_requirements_profile(
+            model_id,
+            conditional_capital=conditional_capital,
+            hypothetical_balance_fields=hypothetical_balance_fields,
+        )
+    if not composite_inputs and not conditional_capital:
+        return valuation_requirements_profile(model_id)
+    profile = (
+        conditional_capital_requirements_profile(
+            model_id,
+            composite_inputs=composite_inputs,
+            hypothetical_balance_fields=hypothetical_balance_fields,
+        )
+        if conditional_capital
+        else composite_working_capital_requirements_profile(
+            model_id, operating_only=False
+        )
+    )
+    return ValuationRequirementsProfileV1.model_validate(
+        profile.model_dump()
+        | {
+            "profile_id": f"{profile.profile_id}-source-requirements-v1"
+            if conditional_capital
+            else f"{model_id}-composite-source-requirements-v1",
+            "profile_version": "conditional-capital-source-requirements-v1"
+            if conditional_capital
+            else "composite-source-requirements-v1",
+            "supporting_fact_fields": tuple(
+                sorted(
+                    set(profile.supporting_fact_fields)
+                    | (
+                        (
+                            set(WORKING_CAPITAL_EXCLUSION_FIELDS)
+                            if composite_inputs
+                            else set()
+                        )
+                        - set(profile.required_fact_fields)
+                    )
+                )
+            ),
+        }
+    )
+
+
+def conditional_reinvestment_requirements_profile(
+    model_id: str,
+    *,
+    conditional_capital: bool = False,
+    hypothetical_balance_fields: tuple[CapitalBalanceRole, ...] = (),
+) -> ValuationRequirementsProfileV1:
+    """Keep observed capital requirements; retain unknown historical roles as support."""
+
+    if hypothetical_balance_fields and not conditional_capital:
+        raise ValueError("hypothetical balances require a conditional capital policy")
+    exact = (
+        conditional_capital_requirements_profile(
+            model_id, hypothetical_balance_fields=hypothetical_balance_fields
+        )
+        if conditional_capital
+        else valuation_requirements_profile(model_id)
+    )
+    removed = (set(exact.annual_duration_fields) - set(REINVESTMENT_CORE_FIELDS)) | set(
+        exact.annual_instant_fields
+    )
+    return ValuationRequirementsProfileV1.model_validate(
+        exact.model_dump()
+        | {
+            "profile_id": f"{exact.profile_id}-{CONDITIONAL_REINVESTMENT_POLICY}",
+            "profile_version": CONDITIONAL_REINVESTMENT_POLICY,
+            "annual_duration_fields": REINVESTMENT_CORE_FIELDS,
+            "annual_instant_fields": (),
+            "supporting_fact_fields": tuple(
+                sorted(set(exact.supporting_fact_fields) | removed)
+            ),
+        }
+    )
+
+
+def automatic_source_requirements_profile(
+    model_id: str, requirements_digest: str
+) -> ValuationRequirementsProfileV1:
+    """Resolve a digest against the service-owned source profiles only."""
+
+    scopes = tuple(
+        combination
+        for size in range(len(CAPITAL_BALANCE_ROLES) + 1)
+        for combination in combinations(CAPITAL_BALANCE_ROLES, size)
+    )
+    for composite_inputs, conditional_reinvestment in (
+        (False, False),
+        (True, False),
+        (False, True),
+    ):
+        for conditional_capital, scope in (
+            (False, ()),
+            *((True, scope) for scope in scopes),
+        ):
+            profile = source_preparation_requirements_profile(
+                model_id,
+                composite_inputs=composite_inputs,
+                conditional_capital=conditional_capital,
+                conditional_reinvestment=conditional_reinvestment,
+                hypothetical_balance_fields=scope,
+            )
+            if profile.digest == requirements_digest:
+                return profile
+    raise ValueError("automatic acquisition requires exact service model requirements")
+
+
 __all__ = [
     "ReleasedFactSelectionV1",
     "UnsupportedValuationModel",
     "ValuationRequirementsProfileV1",
+    "operating_forecast_requirements_profile",
+    "composite_working_capital_requirements_profile",
+    "conditional_reinvestment_requirements_profile",
     "select_released_facts",
     "valuation_requirements_profile",
+    "source_preparation_requirements_profile",
+    "automatic_source_requirements_profile",
 ]

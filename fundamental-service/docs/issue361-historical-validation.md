@@ -1,0 +1,131 @@
+# Historical SEC validation for issue 361
+
+## Original 2012 taxonomy configuration
+
+The separately selected `sec-efm-us-dqc-v3.6.2-gaap2012-config-v1` profile uses
+the same unchanged eleven official hooks and whole-taxonomy traversal described
+below. It accepts exactly `http://fasb.org/us-gaap/2012-01-31` and the existing
+historical DEI bounds. It does not extend the 2013 profile or accept mixed
+taxonomies. Its version and completion marker use `gaap2012` rather than
+`gaap2013`; profile identity binds its own config digest.
+
+The [complete original FASB 2012 archive](https://xbrl.fasb.org/us-gaap/2012/us-gaap-2012-01-31.zip)
+has SHA-256 `4f4d3298fe03f6a703d981fd2aeebb033916c936b7d73490c8d5b9c4c50b2da8`.
+Building its entire standard DTS offline produces all 22 axis configurations,
+canonical SHA-256
+`ad6459e7d296a73e411be5a20ccad94e5bd99e5f0a1eba9847b34c66ff634ca0`.
+Pass `--taxonomy-year 2012` and this archive to the builder command below.
+The default remains 2013; no deployment or request default changes. Each year
+rejects the other year's archive. A changed config cannot hide behind a completed
+build receipt; existing artifact bytes are verified before reuse.
+
+With `ISSUE371_EVIDENCE_ROOT` configured, the source tests cover original
+NEWMARKET accession `0001282637-13-000003`: all 1,965 facts remain identical,
+the old profile's refusal is retained, and a synthetic invalid standard member
+still blocks with the original DQC error severity. They also exercise the 2013
+case below. A successful parse does not approve a mapping, original acquisition
+receipt, accounting scope, release or threshold. In particular,
+`PaymentsToAcquireProductiveAssets` includes software/intangibles under the
+official taxonomy and cannot become PPE capex merely because parsing succeeds.
+
+## Original 2013 taxonomy configuration
+
+The opt-in `sec-efm-us-dqc-v3.6.2-gaap2013-config-v1` profile addresses
+[#371's observed DQC1 generic-config fallback](https://github.com/sosodennis/value-investment-agent/issues/371#issuecomment-6842819513).
+It accepts exactly `http://fasb.org/us-gaap/2013-01-31` with the existing
+historical DEI bounds. This is a project configuration adaptation of the pinned
+official v3.6.2 hooks, not a new upstream release or a compliance opinion.
+The package bytes and all eleven hooks remain unchanged. The completion marker
+is `dqc-v3.6.2-gaap2013-config-v1-all-eleven-modules-returned`; its
+`dqc_version` is `v3.6.2-gaap2013-config-v1`.
+
+Official DQC1 `_create_config` uses `_tr_mem` over the entire standard taxonomy
+to construct each axis's allowed members. The shipped selector has configs for
+2014–2017 but sends 2013 to the generic config. The original FASB 2013 taxonomy
+includes `EstimateOfFairValueFairValueDisclosureMember` and
+`NettingAndCollateralMember` under `FairValueByFairValueHierarchyLevelAxis`;
+the 2014 taxonomy removes them. Rebuilding all 22 axis configurations from the
+official 2014 DTS exactly matches the shipped 2014 configuration. Rebuilding
+2013 using that same official traversal produces canonical SHA-256
+`baf022187417e3d5f8d579942323d9d77e848d4f14909cccdecc43c4f81007a2`.
+No filing-specific allowed-member list or pre-effective severity override exists.
+
+The offline builder reads the [official FASB archive](https://xbrl.fasb.org/us-gaap/2013/us-gaap-2013-01-31.zip),
+SHA-256 `18ac2f2dd8c66578edeafc114e61dd3013297ecd5a2f35737e4f34e80f6a54bf`,
+the pinned official v3 source tree, and an existing complete offline cache:
+
+```sh
+python -m fundamental_service.historical_dqc_config \
+  --taxonomy-archive /external/evidence/us-gaap-2013.zip \
+  --official-root /external/evidence/historical-v3 \
+  --taxonomy-cache /external/evidence/taxonomy-cache \
+  --output-dir /external/evidence/config-artifacts \
+  --implementation-commit <exact-40-character-commit>
+```
+
+The existing locked, fsynced ArtifactStore publishes config and build receipt
+using temporary files and atomic rename. Identical source/cache/runtime/commit
+inputs reuse both artifacts with `wrote=false`, `generated=false` and unchanged
+bytes/mtimes. All captures and generated artifacts remain outside Git. Set
+`ArelleValidationProfileV1.historical_dqc_axis_config` to the published config
+artifact. This path is accepted only for the new profile; its profile digest
+binds the fixed config hash instead of the host filename. Existing profile
+serialization and digests remain byte-for-byte unchanged.
+
+Before execution, missing config fails `VALIDATION_RESOURCES_UNAVAILABLE` and
+changed bytes fail `VALIDATION_RESOURCE_HASH_MISMATCH`. The adapter rechecks the
+hash and routes only DQC1's config selector during that hook, restoring it on
+success or failure. Other rules, messages and original severity are untouched.
+Unknown/mixed namespaces and partial rule completion still fail closed. No
+service/deployment default is switched. Passing parser compatibility supplies
+no mapping review, signer authority, financial classification or threshold.
+
+Set `ISSUE371_EVIDENCE_ROOT` to the external #376 evidence root and run
+`pytest fundamental-service/tests/test_historical_dqc_config.py -q` for the real
+NEWMARKET original/invalid-member checks. Without the captured official assets,
+these source tests explicitly skip. The old profile must retain all 48 original
+DQC1 errors; the new profile must retain all 2,508 facts and complete eleven
+hooks. A synthetic invalid standard member must still emit DQC1 error severity.
+
+EDGAR 26.3 diagnostic adapter `dqc-0090-bound-diagnostics-v1` uses Arelle's
+`Logging.Message.Parameters` hook for rules `DQC.US.0090.9374` and `.9375`.
+The pinned official EDGAR branch binds the correct reconciliation facts but
+formats context/unit from an unrelated earlier loop variable. The adapter binds
+those two diagnostic parameters to the unique referenced US GAAP sum fact.
+It preserves rule execution, numeric parameters, warning codes, severity and
+message templates. Missing or ambiguous bindings fail closed. No upstream
+package bytes change. The adapter file hash is retained in validation evidence
+and therefore the parser replay digest; new results remain distinct from older
+reports. It supplies no mapping, financial policy, release or caller approval.
+The real fail-before source and strict fresh replay evidence are tracked in
+[#406](https://github.com/sosodennis/value-investment-agent/issues/406).
+
+The opt-in `sec-efm-us-dqc-v1.0.0-historical` profile runs strict all-years EFM and the unchanged official DQC v1 Python hooks. It is a compatibility candidate until complete conformance and the actual cohort acceptance pass. It does not approve mappings, market policies, releases or a history threshold.
+
+Official source: [DataQualityCommittee/dqc_us_rules at 266946cdecddf37c3d7d43b258eecb945a2daed3](https://github.com/DataQualityCommittee/dqc_us_rules/tree/266946cdecddf37c3d7d43b258eecb945a2daed3). Use the 15 original files under `dqc_us_rules/`, including CSV/JSON resources. Exclude download receipts and Python bytecode. The directory hash must be `771ac2f5630e01e646a68b6730f6b4ae78e38e2e80db4a3b36608faf7dfd2301`, computed by the existing parser directory-hash algorithm. The profile rejects any other source hash before execution. License and acquisition evidence are retained in the issue's official-assets package.
+
+The package lists US GAAP namespaces 2012–2015 and DEI 2009, 2011–2014. These literal namespace dates define coverage. A filing year alone cannot establish compatibility. Mixed or unsupported namespaces fail closed. All six official validation functions must return in fixed order; one logged finding does not establish completion. The adapter restores its log observer even when a rule raises. It records the rule's original severity before EDGAR changes it. Parser and integrity evidence retain both `severity` and `rule_severity`; an error in either blocks ingestion.
+
+The separate opt-in `sec-efm-us-dqc-v3.6.2-historical` candidate uses the unchanged [official v3.6.2 source](https://github.com/DataQualityCommittee/dqc_us_rules/tree/cafb54391c1d21e4c219bc3d491b855a9b877cb6), commit `cafb54391c1d21e4c219bc3d491b855a9b877cb6`. Its 37 Python/CSV/JSON package files have directory hash `84a53e0c4e6e6f9300644978e4ce4884f8d34243a735434f3b36a841c3a28aaa`. Keep the upstream license and package bytes intact, including `_pkg_meta.py`, whose upstream version text is 3.6.0 despite the v3.6.2 Git tag. The profile identity uses the tag, immutable commit and exact package digest.
+
+The v3.6.2 package explicitly lists US GAAP 2012–2017 and the same DEI namespaces. Its eleven hooks must all return in their declared order. Its completion marker and acquisition-profile digest differ from v1; a six-hook v1 marker cannot certify v3.6.2. Package loading isolates roots so Python's module cache cannot substitute one version for another. Neither profile accepts GAAP 2011 or 2018. Selecting this candidate does not assert conformance, historical identity, mapping approval or release readiness. Require the official 6,586-variation suite, retained failures, an unchanged repeat and fixed-cohort acceptance before making any compatibility claim. The 23-case external observer probe is only diagnostic evidence.
+
+This addresses three distinct causes: EDGAR disables the separate DQC plugin, its built-in DQCRT excludes pre-2020 US GAAP, and its severity releveler demotes DQC errors. The [SEC-maintained EDGAR README](https://github.com/Arelle/EDGAR#xule--dqcrt-rules) describes the plugin integration. Engineering web research supplied no valuation or threshold labels.
+
+Deployment requires the existing pinned Arelle/EFM/XULE resources plus `FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR` and `FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256`. Both optional historical settings must be supplied together. The modern profile remains available and never consumes the historical package. A historical request without the package fails `VALIDATION_RESOURCES_UNAVAILABLE`; changed bytes fail `VALIDATION_RESOURCE_HASH_MISMATCH`. The complete profile digest participates in the existing acquisition key, so modern and historical captures cannot alias.
+
+For issue-owned Docker diagnostics, add `compose/verification/docker-compose.issue361-history-replay.yml` after the two existing verification files, retaining the unique #361 project, ports, network and volumes. Its filing-year declarations are request bounds, not taxonomy certification. Mount original source/cache/package directories read-only. The diagnostic filing lacks complete original acquisition receipts and must not be promoted to a canonical release.
+
+Configured tests read these paths: `ISSUE361_HISTORICAL_DQC_DIR`, `ISSUE361_HISTORICAL_XML`, `ISSUE361_EDGAR_PLUGIN_DIR`, `ISSUE361_XULE_PLUGIN_DIR`, `ISSUE361_DQC_RULESET_PATH`, `ISSUE361_TAXONOMY_CACHE_DIR`. Run `pytest fundamental-service/tests/test_historical_dqc.py -q` from the issue worktree. The captured XML is CIK 0001539778, accession 0001477932-16-007985; it has 327 facts and an actual negative-PPE error. Expected behavior is completed validation with blocked ingestion, not a successful release. Two worker executions must return identical replay digests and zero network attempts.
+
+Set `ISSUE361_HISTORICAL_DQC_V3_DIR` to the separate v3.6.2 package to run that same source test through the new owner profile. Use an independently pinned complete offline cache. Missing optional fixture settings cause a skip and must be reported as such; a skipped test is not source acceptance. Keep the original v1 package and cache immutable while its diagnostic batches are running.
+
+The fixed-original research executor moved to [#376](https://github.com/sosodennis/value-investment-agent/issues/376); its source and restore digests are retained in the [research archive reference](../../docs/acceptance/issue-361-research-archive.json). That executor defaults to the existing v1 profile. Pass `--validation-profile sec-efm-us-dqc-v3.6.2-historical` explicitly for a separately pinned v3.6.2 diagnostic. Its immutable profile digest, package digest, cache digest, executor hash and exact source/runtime pins participate in each input identity. Changing a profile starts a distinct diagnostic and cannot be reported as an unchanged repeat of v1. Reuse matching retained raw SEC receipts; validation still runs for the new profile. Neither diagnostic publishes canonical snapshots.
+
+Acquisition uses the captured SEC `isInlineXBRL` flag to distinguish standalone XML from inline HTML. A declared non-inline filing must have one original indexed XML instance with a matching indexed schema; missing, ambiguous, duplicate or unsafe entries fail `XBRL_ENTRYPOINT_UNRESOLVED`. A declared inline filing retains its HTML entrypoint and cannot fall back to standalone XML. Missing inline metadata preserves the declared primary document and still requires its indexed schema. The captured submissions and index remain provenance, and the selected instance passes the existing accession-matched archive/member byte-integrity and EFM/DQC gates. Entrypoint selection does not approve any mapping or make a failed filing releasable.
+
+The original sample's direct XML has LF line endings (249778 bytes), while the official archive member has CRLF (250838 bytes). `sec-edgar-xbrl-xml10-line-ends-v1` reconstructs the exact original archive bytes only when the direct response matches its indexed size and replacing archive CRLF pairs with LF reproduces every direct byte. It requires an explicit XML 1.0 declaration, the XBRL instance root, an `.xml` filename, no DTD and no CR in the direct representation. HTML, XML 1.1, other namespaces and any additional byte change remain rejected. [XML 1.0 section 2.11](https://www.w3.org/TR/REC-xml/#sec-line-ends) requires processors to normalize CRLF to LF before parsing. This engineering reference supplies no valuation evidence.
+
+Both original representations, the accession index and ZIP retain separate hashes. The rule digest binds their hashes, accession, filename, indexed size and count of inserted CR bytes. `removed_ranges` is empty because this rule inserts bytes. The parser receives exact original archive bytes and the existing normalized/archive semantic comparison and EFM/DQC gates still apply. The original negative-PPE finding must continue to block canonical publication.
+
+The research proposal signer and its documentation also moved to #376; their source digests are in the research archive reference. They seal proposals as unapproved and sign completed independent reviews. Product releases use the existing `data_releases.sign_mapping_review_evidence` contract, with a distinct author/reviewer and configured trusted reviewer key. Runtime compatibility or a generated signature cannot substitute for the actual review.

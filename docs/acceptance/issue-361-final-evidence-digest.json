@@ -1,0 +1,184 @@
+{
+  "protocol": "issue-361-final-evidence-digest-v1",
+  "issue": 361,
+  "exact_commit": "89b71d082a3bae618231753c6536cadd8de6aeee",
+  "checkpoint_commit": "626cef48",
+  "branch": "codex/issue-361-replay-evidence",
+  "input_digest": "79df732b94cf51007204ba6c8ca33e6c9e6f4cb7df3ed90e06d060778f1f352b",
+  "provider_ports": [
+    {
+      "name": "MacroSeriesProviderPort",
+      "module": "fundamental_service.macro_series",
+      "purpose": "reproduce immutable macro vintages from retained bytes"
+    },
+    {
+      "name": "MarketReferenceProviderPort",
+      "module": "fundamental_service.market_reference",
+      "purpose": "reproduce normalized reference tables from retained bytes"
+    },
+    {
+      "name": "QuoteSourceProviderPort",
+      "module": "fundamental_service.quote_providers",
+      "purpose": "reproduce point-in-time issuer quotes from retained bytes"
+    },
+    {
+      "name": "PublicSourceCaptureProfilePort",
+      "module": "fundamental_service.source_capture",
+      "purpose": "validate source requests and resolve availability from captured responses"
+    }
+  ],
+  "composition_boundary": {
+    "composition": [
+      "fundamental_service.app",
+      "fundamental_service.free_source_policy",
+      "fundamental_service.public_source_catalog"
+    ],
+    "consumer_layers": [
+      "fundamental_service.application.service",
+      "fundamental_service.release_runner",
+      "fundamental_service.source_admission_evidence"
+    ],
+    "policy_rule": "Providers normalize retained source evidence; selection and valuation policy consume typed vintages and the existing #352 composer. No provider owns a valuation formula or persistence."
+  },
+  "verification": {
+    "focused_provider_tests": {
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--extra",
+        "dev",
+        "--project",
+        "fundamental-service",
+        "pytest",
+        "-q",
+        "fundamental-service/tests/test_macro_series.py",
+        "fundamental-service/tests/test_market_reference.py",
+        "fundamental-service/tests/test_quote_sources.py",
+        "fundamental-service/tests/test_public_source.py",
+        "fundamental-service/tests/test_industry_capital_source.py"
+      ],
+      "exit_code": 0,
+      "passed": 146,
+      "stdout_sha256": "6ff7f7dffa02d57ac90159ef985c3256a59424a08fccdd5671dfd5ad56de941a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "architecture": {
+      "command": [
+        "python3",
+        "scripts/architecture_guard.py",
+        "--exceptions-dir",
+        "scripts/architecture_guard_exceptions"
+      ],
+      "exit_code": 0,
+      "stdout_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ruff": {
+      "command": [
+        "uvx",
+        "--from",
+        "ruff==0.14.10",
+        "ruff",
+        "check",
+        "fundamental-service/src/fundamental_service/macro_series.py",
+        "fundamental-service/src/fundamental_service/market_reference.py",
+        "fundamental-service/src/fundamental_service/quote_providers.py",
+        "fundamental-service/src/fundamental_service/source_capture.py",
+        "fundamental-service/src/fundamental_service/public_source_catalog.py",
+        "fundamental-service/src/fundamental_service/industry_capital.py",
+        "fundamental-service/tests/test_macro_series.py",
+        "fundamental-service/tests/test_market_reference.py",
+        "fundamental-service/tests/test_quote_sources.py",
+        "fundamental-service/tests/test_public_source.py",
+        "fundamental-service/tests/test_industry_capital_source.py"
+      ],
+      "exit_code": 0,
+      "stdout_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "format": {
+      "command": [
+        "uvx",
+        "--from",
+        "ruff==0.14.10",
+        "ruff",
+        "format",
+        "--check",
+        "fundamental-service/src/fundamental_service/macro_series.py",
+        "fundamental-service/src/fundamental_service/market_reference.py",
+        "fundamental-service/src/fundamental_service/quote_providers.py",
+        "fundamental-service/src/fundamental_service/source_capture.py",
+        "fundamental-service/src/fundamental_service/public_source_catalog.py",
+        "fundamental-service/src/fundamental_service/industry_capital.py",
+        "fundamental-service/tests/test_macro_series.py",
+        "fundamental-service/tests/test_market_reference.py",
+        "fundamental-service/tests/test_quote_sources.py",
+        "fundamental-service/tests/test_public_source.py",
+        "fundamental-service/tests/test_industry_capital_source.py"
+      ],
+      "exit_code": 0,
+      "stdout_sha256": "75b7030be9d7de96bf4e76e79b1f03f14af8899d169fd8d79564d59167d1ab80",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "diff": {
+      "command": ["git", "diff", "--check", "origin/main"],
+      "exit_code": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "full_service_regression": {
+      "tested_commit": "f52933472f09da8b4d45b14ada60895dcf8b37a7",
+      "passed": 1943,
+      "optional_skips": 11,
+      "expected_duplicate_zip_warnings": 1,
+      "input_digest": "d9c1db6eedc3c4952d9fe2fe8e0db81479862236ebde0b82dc0f04af803b15de",
+      "output_digest": "d5fae2442435caeec6e392384624ef7e367de8eb41795740837cd7b3fae6e840"
+    },
+    "pull_request_ci": {
+      "number": 370,
+      "head_sha": "89b71d082a3bae618231753c6536cadd8de6aeee",
+      "run": 43262314076,
+      "conclusion": "success",
+      "executed_jobs": 12,
+      "release_gate": "skipped"
+    }
+  },
+  "evidence_status": {
+    "verified": [
+      "Provider ports are injectable and the focused provider contract suite passes.",
+      "Source capture profiles resolve availability from captured responses and reject caller-supplied timestamps.",
+      "Existing #352 forecast/composer ownership remains unchanged.",
+      "Current-head local architecture, lint, format and diff checks pass."
+    ],
+    "provisional": [
+      "Industry beta, debt cost and capital weights are source-bound reference assumptions, not issuer observations.",
+      "Synthetic source/release replays prove substitution and refusal behavior, not a complete real issuer valuation."
+    ],
+    "abstain": [
+      "Lawful dated quote and complete issuer accounting/award evidence are not admitted.",
+      "No trusted complete release or authentic exact-input caller approval is available.",
+      "No numerical full-flow result is published."
+    ],
+    "underpowered": [
+      "The retained conditional study has one independent issuer, zero exact study cases, 625 conditional comparisons and 625 transition refusals.",
+      "The evidence does not support a versioned supported_history_threshold."
+    ],
+    "supported_history_threshold": null
+  },
+  "independent_review": {
+    "status": "unavailable",
+    "review_count": 0,
+    "review_decision": null,
+    "pr_is_draft": true,
+    "reason": "PR #370 has no independent GitHub review; CI success is not a substitute for review."
+  },
+  "full_numerical_flow": false,
+  "status": "PARTIAL_SOURCE_ADMISSION_ONLY",
+  "next_step": [
+    "Admit complete issuer/period accounting and award evidence plus a lawful dated market policy.",
+    "Obtain a trusted release and exact-input caller approval, then run real numerical repeat/concurrency/restart/restore acceptance.",
+    "Obtain independent review, merge PR #370, verify the merge SHA on main, and only then close #361 and clean issue-owned resources."
+  ],
+  "content_digest": "3b27c9c777ee8854d50ff1cb00ce10900ee883d20083edba6a13189958a686c4"
+}

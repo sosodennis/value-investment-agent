@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import multiprocessing
 import os
 import time
@@ -21,6 +22,7 @@ from sqlalchemy.exc import DBAPIError
 
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
+    CandidateRejectionV1,
     CanonicalFactV1,
     FiscalPeriodSelectorV1,
     IdentityV1,
@@ -47,7 +49,7 @@ from fundamental_service.data_releases import (
     sign_data_release_verification,
     sign_mapping_review_evidence,
 )
-from fundamental_service.facts import CanonicalMappingV1
+from fundamental_service.facts import CanonicalMappingV1, canonical_fact_digest
 from fundamental_service.metadata import (
     SCHEMA_VERSION,
     PostgresArtifactStore,
@@ -234,6 +236,7 @@ def _test_sec_acquisition_settings(request: SecIngestionRequestV1) -> SimpleName
         edgar_plugin_sha256="a" * 64,
         xule_plugin_sha256="b" * 64,
         dqc_ruleset_sha256="d" * 64,
+        dqc_ruleset_catalog=None,
     )
 
 
@@ -386,8 +389,10 @@ def _cross_process_ingestion_contenders(
         correlation_id: str,
         deadline_at: datetime,
         validation_profile,
+        prepared_filing=None,
     ) -> SecIngestionResponseV1:
         _ = deadline_at
+        assert prepared_filing is None
         if (
             _runtime_acquisition_payload(acquisition_request, use_case.settings)
             != key_payload
@@ -419,6 +424,14 @@ def _cross_process_ingestion_contenders(
             snapshot,
             correlation_id=correlation_id,
         )
+        deadline = time.monotonic() + 30
+        while (
+            metadata._runner.run(_coalescing_probe_attempts(metadata, table, run_id))
+            < 50
+        ):
+            if time.monotonic() >= deadline:
+                raise TimeoutError("not all HTTP requests reached PostgreSQL")
+            time.sleep(0.01)
         metadata.publish_sec_ingestion(
             acquisition_key=acquisition_key,
             acquisition_payload=key_payload,
@@ -428,14 +441,6 @@ def _cross_process_ingestion_contenders(
             caller_principal=caller_principal,
             organization_id=organization_id,
         )
-        deadline = time.monotonic() + 30
-        while (
-            metadata._runner.run(_coalescing_probe_attempts(metadata, table, run_id))
-            < 50
-        ):
-            if time.monotonic() >= deadline:
-                raise TimeoutError("not all HTTP requests reached PostgreSQL")
-            time.sleep(0.01)
         return result
 
     use_case._acquire_and_publish = acquire_and_publish
@@ -648,6 +653,10 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
     metadata.publish_data_release_candidate(manifest, verification)
     metadata.publish_data_release_candidate(manifest, verification)
     assert metadata.get_data_release_manifest(manifest.manifest_digest) == manifest
+    assert (
+        metadata.get_data_release_verification(manifest.manifest_digest) == verification
+    )
+    assert metadata.get_data_release_verification("0" * 64) is None
     command = _activation_command(manifest)
 
     active = metadata.compare_and_swap_data_release(command)
@@ -713,6 +722,71 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
         assert old_version_reader.get_active_data_release(manifest.profile_id) == active
     finally:
         old_version_reader.close()
+
+
+@pytest.mark.parametrize(
+    "fault,code",
+    (
+        ("signature", "DATA_RELEASE_VERIFICATION_SIGNATURE_INVALID"),
+        ("row_digest", "DATA_RELEASE_VERIFICATION_MISMATCH"),
+        ("manifest", "DATA_RELEASE_VERIFICATION_MISMATCH"),
+        ("closure", "DATA_RELEASE_VERIFICATION_SIGNATURE_INVALID"),
+        ("mapping_signature", "DATA_RELEASE_MAPPING_REVIEW_SIGNATURE_INVALID"),
+    ),
+)
+def test_retained_release_verification_requires_current_trust(
+    metadata: PostgresMetadataStore, fault: str, code: str
+):
+    manifest, verification = _data_release_candidate(uuid4().hex)
+    metadata.publish_data_release_candidate(manifest, verification)
+    payload = verification.model_dump(mode="json")
+    row_digest = verification.verification_digest
+    if fault == "signature":
+        payload["signature"] = "0" * 128
+    elif fault == "row_digest":
+        row_digest = "0" * 64
+    else:
+        unsigned = verification.model_dump(
+            mode="python", exclude={"signature", "verification_digest"}
+        )
+        if fault == "manifest":
+            unsigned["manifest_digest"] = "0" * 64
+        elif fault == "closure":
+            unsigned["evidence_refs"] = (
+                verification.evidence_refs[0].model_copy(
+                    update={"artifact_id": "substituted-verification-evidence"}
+                ),
+            )
+        else:
+            review = verification.mapping_reviews[0].model_copy(
+                update={"signature": "0" * 128}
+            )
+            unsigned["mapping_reviews"] = (review,)
+        changed = sign_data_release_verification(unsigned, RELEASE_TEST_RUNNER_KEY)
+        payload = changed.model_dump(mode="json")
+        row_digest = changed.verification_digest
+        if fault == "closure":
+            payload["signature"] = verification.signature
+
+    async def corrupt() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE fundamental.data_release_verifications "
+                    "SET payload=CAST(:payload AS jsonb), verification_digest=:digest "
+                    "WHERE manifest_digest=:manifest"
+                ),
+                {
+                    "payload": json.dumps(payload),
+                    "digest": row_digest,
+                    "manifest": manifest.manifest_digest,
+                },
+            )
+
+    metadata._runner.run(corrupt())
+    with pytest.raises(DataReleaseError) as error:
+        metadata.get_data_release_verification(manifest.manifest_digest)
+    assert error.value.code == code
 
 
 def test_data_release_candidate_is_not_persisted_without_trust_roots():
@@ -1025,8 +1099,8 @@ def test_versioned_releases_and_mappings_are_durable_and_immutable(
     request = make_valuation()
     policy_payload = {
         "contract_version": "fundamental.v1",
-        "policy_id": "policy-postgres-v1",
-        "policy_version": "policy-postgres-v1",
+        "policy_id": f"policy-postgres-{model.model_version}",
+        "policy_version": f"policy-postgres-{model.model_version}",
         "profile_id": "us-gaap-public-v1",
         "model_id": model.model_id,
         "model_version": model.model_version,
@@ -1085,19 +1159,141 @@ def test_artifact_publication_is_concurrent_and_hash_verified(
     artifacts = PostgresArtifactStore(metadata, content)
     artifact_id = f"artifact-{uuid4().hex}"
 
-    def publish() -> str:
-        return artifacts.put(artifact_id, {"value": "immutable"}).content_hash
+    def publish():
+        return artifacts.put_with_receipt(artifact_id, {"value": "immutable"})
 
     with ThreadPoolExecutor(max_workers=6) as executor:
-        hashes = tuple(executor.map(lambda _: publish(), range(12)))
-    assert set(hashes) == {hashes[0]}
+        receipts = tuple(executor.map(lambda _: publish(), range(12)))
+    assert sum(receipt.wrote for receipt in receipts) == 1
+    assert len({receipt.artifact.content_hash for receipt in receipts}) == 1
     assert artifacts.read(artifact_id) == b'{"value":"immutable"}'
 
     record = artifacts.get(artifact_id)
     path = content._filesystem._path(record.content_hash, record.media_type)
+    original_mtime = path.stat().st_mtime_ns
+    restarted = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=False)
+    restarted.start()
+    try:
+        restarted_artifacts = PostgresArtifactStore(
+            restarted, PostgresContentStore(tmp_path / "content", restarted)
+        )
+        repeated = restarted_artifacts.put_with_receipt(
+            artifact_id, {"value": "immutable"}
+        )
+        assert repeated.artifact == record
+        assert repeated.wrote is False
+        assert path.stat().st_mtime_ns == original_mtime
+    finally:
+        restarted.close()
+
+    with pytest.raises(SnapshotError) as conflict:
+        artifacts.put_with_receipt(
+            artifact_id, {"value": "immutable"}, dependency_hashes=("f" * 64,)
+        )
+    assert conflict.value.code == "ARTIFACT_ID_REUSED"
+    assert path.stat().st_mtime_ns == original_mtime
+
     path.write_bytes(b"tampered")
     with pytest.raises(SnapshotError, match="verification"):
         artifacts.read(artifact_id)
+    with pytest.raises(SnapshotError):
+        publish()
+    assert path.read_bytes() == b"tampered"
+
+
+@pytest.mark.parametrize("fault", ("status", "dependency", "missing"))
+def test_retained_artifact_operation_rejects_metadata_changes(
+    metadata: PostgresMetadataStore, tmp_path: Path, fault: str
+):
+    from fundamental_service.artifact_evidence import read_retained_artifact
+    from fundamental_service.data_releases import ArtifactRefV1
+
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(f"batch-{uuid4().hex}", {"retained": True})
+    ref = ArtifactRefV1(
+        artifact_id=record.artifact_id,
+        content_hash=record.content_hash,
+        media_type=record.media_type,
+        role="retained-test",
+    )
+
+    async def change() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            query = (
+                "DELETE FROM fundamental.artifact_references WHERE artifact_id=:id"
+                if fault == "missing"
+                else "UPDATE fundamental.artifact_references "
+                + (
+                    "SET status='invalidated' "
+                    if fault == "status"
+                    else "SET dependency_hashes=CAST(:dependencies AS jsonb) "
+                )
+                + "WHERE artifact_id=:id"
+            )
+            await connection.execute(
+                text(query),
+                {"id": record.artifact_id, "dependencies": json.dumps(["f" * 64])},
+            )
+
+    with pytest.raises(DataReleaseError) as error:
+        with artifacts.retained_read_operation((record.artifact_id,)) as reader:
+            assert read_retained_artifact(reader, ref) == b'{"retained":true}'
+            metadata._runner.run(change())
+    assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    with pytest.raises(RuntimeError, match="ended"):
+        reader.read(record.artifact_id)
+
+
+def test_retained_artifact_operation_rechecks_bytes_and_indirect_records(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    first = artifacts.put(f"batch-{uuid4().hex}", {"first": True})
+    indirect = artifacts.put(f"batch-{uuid4().hex}", {"indirect": True})
+    with artifacts.retained_read_operation((first.artifact_id,)) as reader:
+        assert reader.get(first.artifact_id) == first
+        assert reader.read(indirect.artifact_id) == b'{"indirect":true}'
+    path = content._filesystem._path(indirect.content_hash, indirect.media_type)
+    path.write_bytes(b"corrupt")
+    with pytest.raises(SnapshotError, match="verification"):
+        with artifacts.retained_read_operation((first.artifact_id,)) as reader:
+            reader.read(indirect.artifact_id)
+
+
+@pytest.mark.parametrize("failure_at", ("entry", "exit", "body"))
+def test_retained_artifact_operation_preserves_failure_reasons(
+    metadata: PostgresMetadataStore, tmp_path: Path, monkeypatch, failure_at: str
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(f"batch-{uuid4().hex}", {"retained": True})
+    original = metadata.retained_artifact_records
+    calls = []
+
+    def unavailable(ids):
+        calls.append(ids)
+        if failure_at == "entry" or len(calls) == 2:
+            raise TimeoutError("controlled metadata failure")
+        return original(ids)
+
+    monkeypatch.setattr(metadata, "retained_artifact_records", unavailable)
+    expected = SnapshotError if failure_at == "body" else DataReleaseError
+    with pytest.raises(expected) as error:
+        with artifacts.retained_read_operation((record.artifact_id,)) as reader:
+            if failure_at == "body":
+                raise SnapshotError("SOURCE_HASH_MISMATCH", "controlled byte failure")
+            assert reader.read(record.artifact_id) == b'{"retained":true}'
+    assert error.value.code == (
+        "SOURCE_HASH_MISMATCH"
+        if failure_at == "body"
+        else "DATA_RELEASE_ARTIFACT_UNAVAILABLE"
+    )
+    if failure_at == "body":
+        assert len(calls) == 1
 
 
 def test_distinct_sec_acquisition_keys_hold_independent_postgres_locks(
@@ -1212,6 +1408,92 @@ def test_sec_ingestion_publish_rolls_back_snapshot_and_facts_then_recovers(
         )
         == result
     )
+
+
+@pytest.mark.parametrize("transactional", [False, True])
+@pytest.mark.parametrize("mutation", ["value", "source"])
+def test_fact_publication_reuses_source_identity_across_selection_views(
+    metadata, transactional, mutation
+):
+    suffix = uuid4().hex
+    snapshot = _snapshot(suffix)
+    fact = _fact_for_snapshot(snapshot, f"fact-{suffix}").model_copy(
+        update={
+            "point_in_time_policy": "sec-public-pit-v1",
+            "selection_reason": "first PIT selection",
+            "rejected_candidate_reasons": (
+                CandidateRejectionV1(candidate_id="later", reason="not available"),
+            ),
+        }
+    )
+    metadata.publish_fact(fact)
+    second_view = fact.model_copy(
+        update={
+            "selection_reason": "another valid PIT selection",
+            "rejected_candidate_reasons": (),
+        }
+    )
+
+    def publish(value):
+        if transactional:
+            result = _sec_ingestion_result(
+                snapshot, correlation_id=suffix, canonical_fact_ids=(value.fact_id,)
+            )
+            metadata.publish_sec_ingestion(
+                acquisition_key=sha256_digest({"fact": value.model_dump(mode="json")}),
+                acquisition_payload={"suffix": suffix},
+                snapshot=snapshot,
+                facts=(value,),
+                result=result,
+                caller_principal="test-caller",
+                organization_id="test-org",
+            )
+        else:
+            metadata.publish_fact(value)
+
+    publish(second_view)
+    publish(second_view)
+    assert metadata.get_fact(fact.fact_id) == fact
+    assert canonical_fact_digest(fact) == canonical_fact_digest(second_view)
+    with pytest.raises(SnapshotError) as error:
+        publish(
+            second_view.model_copy(
+                update={"value": Decimal(101)}
+                if mutation == "value"
+                else {
+                    "source": fact.source.model_copy(update={"content_hash": "e" * 64})
+                }
+            )
+        )
+    assert error.value.code == (
+        "INGESTION_FACT_SOURCE_MISMATCH"
+        if transactional and mutation == "source"
+        else "METADATA_IMMUTABLE"
+    )
+    assert metadata.get_fact(fact.fact_id) == fact
+
+
+def test_concurrent_fact_selection_views_publish_one_canonical_row(metadata):
+    suffix = uuid4().hex
+    fact = _fact_for_snapshot(_snapshot(suffix), f"fact-{suffix}")
+    barrier = Barrier(2)
+
+    def publish(reason):
+        view = fact.model_copy(
+            update={
+                "selection_reason": reason,
+                "point_in_time_policy": "sec-public-pit-v1",
+            }
+        )
+        barrier.wait(timeout=5)
+        metadata.publish_fact(view)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tuple(pool.map(publish, ("first view", "second view")))
+    retained = metadata.get_fact(fact.fact_id)
+    assert retained.selection_reason in {"first view", "second view"}
+    assert canonical_fact_digest(retained) == canonical_fact_digest(fact)
+    assert sum(value.fact_id == fact.fact_id for value in metadata.list_facts()) == 1
 
 
 def test_unauthorized_sec_ingestion_is_rejected_and_audited_in_postgres(

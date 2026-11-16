@@ -151,13 +151,25 @@ class ArtifactRecordV1(BaseModel):
     @field_validator("dependency_hashes", mode="before")
     @classmethod
     def validate_hashes(cls, value: object) -> tuple[str, ...]:
-        values = tuple(value or ())
+        raw_values = value or ()
+        if not isinstance(raw_values, (tuple, list)):
+            raise ValueError("dependency_hashes must be a sequence")
+        values = tuple(raw_values)
         if any(
-            len(item) != 64 or any(char not in "0123456789abcdef" for char in item)
+            not isinstance(item, str)
+            or len(item) != 64
+            or any(char not in "0123456789abcdef" for char in item)
             for item in values
         ):
             raise ValueError("dependency_hashes must contain SHA-256 digests")
         return tuple(sorted(set(values)))
+
+
+class ArtifactPublicationV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    artifact: ArtifactRecordV1
+    wrote: bool
 
 
 class ArtifactStore:
@@ -249,15 +261,68 @@ class ArtifactStore:
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
     ) -> ArtifactRecordV1:
+        return self.put_with_receipt(
+            artifact_id,
+            value,
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        ).artifact
+
+    def put_with_receipt(
+        self,
+        artifact_id: str,
+        value: object,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/json",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
+        return self.put_bytes_with_receipt(
+            artifact_id,
+            canonical_bytes(value),
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        )
+
+    def put_bytes_with_receipt(
+        self,
+        artifact_id: str,
+        payload: bytes,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/octet-stream",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
         if not artifact_id:
             raise SnapshotError("ARTIFACT_ID_INVALID", "artifact_id is required")
-        payload = canonical_bytes(value)
         content_hash = hashlib.sha256(payload).hexdigest()
         path = self._artifact_path(content_hash, media_type)
         with self._lock:
             with self._exclusive_record_lock():
                 self._repair_partial_tail_unlocked()
                 self._read_records_unlocked()
+                previous = self._records.get(artifact_id)
+                if previous is not None:
+                    expected = ArtifactRecordV1(
+                        artifact_id=artifact_id,
+                        content_hash=content_hash,
+                        dependency_hashes=dependency_hashes,
+                        media_type=media_type,
+                        retention=retention,
+                    )
+                    if previous != expected:
+                        raise SnapshotError(
+                            "ARTIFACT_ID_REUSED",
+                            "artifact IDs are immutable; publish a new generation",
+                        )
+                    if not path.is_file() or path.read_bytes() != payload:
+                        raise SnapshotError(
+                            "ARTIFACT_BYTES_UNAVAILABLE",
+                            "published artifact bytes failed verification",
+                        )
+                    return ArtifactPublicationV1(artifact=previous, wrote=False)
                 if path.exists() and path.read_bytes() != payload:
                     raise SnapshotError(
                         "ARTIFACT_HASH_MISMATCH",
@@ -276,17 +341,6 @@ class ArtifactStore:
                     finally:
                         if os.path.exists(temporary_name):
                             os.unlink(temporary_name)
-                previous = self._records.get(artifact_id)
-                if previous is not None:
-                    if (
-                        previous.status != "valid"
-                        or previous.content_hash != content_hash
-                    ):
-                        raise SnapshotError(
-                            "ARTIFACT_ID_REUSED",
-                            "artifact IDs are immutable; publish a new generation",
-                        )
-                    return previous
                 record = ArtifactRecordV1(
                     artifact_id=artifact_id,
                     content_hash=content_hash,
@@ -296,7 +350,7 @@ class ArtifactStore:
                 )
                 self._append_record_unlocked(record)
                 self._records[artifact_id] = record
-                return record
+                return ArtifactPublicationV1(artifact=record, wrote=True)
 
     def get(self, artifact_id: str) -> ArtifactRecordV1:
         with self._lock:
@@ -1123,7 +1177,7 @@ def replay_manifest(
                 changed_dependency="snapshot",
             )
         released_artifacts.append(released)
-    released = next(
+    matching_artifact = next(
         (
             candidate
             for candidate in released_artifacts
@@ -1131,7 +1185,7 @@ def replay_manifest(
         ),
         None,
     )
-    if released is None:
+    if matching_artifact is None:
         return ReplayReportV1(
             contract_version="fundamental.v1",
             status="mismatch",
@@ -1140,18 +1194,18 @@ def replay_manifest(
             first_difference="manifest.artifact_hashes",
             changed_dependency="artifact_store",
         )
-    if released != expected:
+    if matching_artifact != expected:
         return ReplayReportV1(
             contract_version="fundamental.v1",
             status="mismatch",
             expected_result_hash=expected.result_hash,
-            actual_result_hash=released.result_hash,
+            actual_result_hash=matching_artifact.result_hash,
             expected_input_digest=expected.input_digest,
-            actual_input_digest=released.input_digest,
-            first_difference=_first_difference(expected, released)[0],
+            actual_input_digest=matching_artifact.input_digest,
+            first_difference=_first_difference(expected, matching_artifact)[0],
             changed_dependency="artifact_store",
         )
-    return replay_calculation(request, released)
+    return replay_calculation(request, matching_artifact)
 
 
 def replay_calculation(

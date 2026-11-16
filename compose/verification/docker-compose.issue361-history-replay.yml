@@ -1,0 +1,14 @@
+services:
+  fundamental-service:
+    environment:
+      FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR: /run/fundamental/history/dqc_us_rules
+      FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256: 771ac2f5630e01e646a68b6730f6b4ae78e38e2e80db4a3b36608faf7dfd2301
+      FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR: /run/fundamental/history/taxonomy-cache
+      FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256: ${FUNDAMENTAL_SEC_HISTORY_TAXONOMY_CACHE_SHA256:?set the pinned historical taxonomy cache hash}
+      FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID: sec-historical-dqc-v1-diagnostic
+      FUNDAMENTAL_SEC_TAXONOMY_VERSION: us-gaap-2012-2015-dqc-v1-candidate
+      FUNDAMENTAL_SEC_SUPPORTED_FILING_YEARS: "2016,2017"
+    volumes:
+      - ${FUNDAMENTAL_SEC_HISTORICAL_DQC_HOST_DIR:?set the official historical DQC package directory}:/run/fundamental/history/dqc_us_rules:ro
+      - ${FUNDAMENTAL_SEC_HISTORY_TAXONOMY_CACHE_HOST_DIR:?set the captured historical taxonomy directory}:/run/fundamental/history/taxonomy-cache:ro
+      - ${FUNDAMENTAL_SEC_HISTORY_DIAGNOSTIC_FILING_HOST_DIR:?set the captured diagnostic filing directory}:/run/fundamental/history/diagnostic-filing:ro

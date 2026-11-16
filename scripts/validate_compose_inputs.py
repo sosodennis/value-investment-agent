@@ -67,12 +67,17 @@ def validate(
     compose_files: list[Path],
     require_paths: bool,
     require_sec_user_agent: bool,
+    env_files: list[Path] | None = None,
 ) -> list[str]:
     errors: list[str] = []
-    if env_file is not None and not env_file.is_file():
-        return [f"{label}: env file does not exist: {env_file}"]
+    paths = env_files if env_files is not None else ([env_file] if env_file else [])
+    for path in paths:
+        if not path.is_file():
+            return [f"{label}: env file does not exist: {path}"]
 
-    file_values = _read_env_file(env_file) if env_file is not None else {}
+    file_values: dict[str, str] = {}
+    for path in paths:
+        file_values.update(_read_env_file(path))
     referenced, required = _compose_variables(compose_files)
 
     for name in sorted(referenced & file_values.keys() & os.environ.keys()):
@@ -81,7 +86,7 @@ def validate(
                 f"{label}: shell environment overrides {name}; unset the shell value "
                 "or update the recorded env file"
             )
-    if env_file is not None:
+    if paths:
         shell_only = (referenced & os.environ.keys()) - file_values.keys()
         for name in sorted(shell_only):
             errors.append(

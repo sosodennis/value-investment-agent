@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 import zlib
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Literal, Protocol
@@ -26,6 +26,8 @@ from .contracts import (
     SecCapturedSourceEvidenceV1,
     SecIngestionRejectionEvidenceV1,
     SecIntegrityEvidenceV1,
+    SecInlineDocumentIntegrityV1,
+    SecIdentityBasis,
     Severity,
     SourceRole,
 )
@@ -35,11 +37,30 @@ from .facts import (
     FactSelection,
     select_fact_groups,
 )
+from .regulatory_validation import (
+    bind_dqc_filing_context,
+    require_sec_validation_evidence,
+)
+from .dqc_applicability import DqcFilingContextV1, dqc_applicability_policy_digest
+from .issuer_identity import (
+    ORIGINAL_IDENTITY_CONCEPTS,
+    IdentityResolutionError,
+    validate_original_filing_identity,
+)
+from .ingestion_mapping import IngestionMappingResolverPort, ValidatedOriginalV1
+from .inline_xbrl import (
+    InlineDocumentInputV1,
+    InlineDocumentSetError,
+    InlineDocumentSetInputV1,
+    archive_inline_document_names,
+    select_inline_document_set,
+)
+from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
 from .replay import ArtifactRecordV1
 from .sec_integrity import assess_filing_response, extract_referenced_graphics
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
-from .sec_source import SecEdgarSourceAdapter, sec_source_register
-from .serialization import sha256_digest
+from .sec_source import SecSourceCapturePort, sec_source_register
+from .serialization import canonical_bytes, sha256_digest
 from .snapshots import (
     CapturedSource,
     ContentAddressedStore,
@@ -58,15 +79,32 @@ _MAX_SEC_XBRL_RESOURCE_BYTES = 12_000_000
 _MAX_SEC_XBRL_SELECTED_BYTES = 48_000_000
 
 
-def _read_sec_xbrl_archive(
-    content: bytes, *, primary_document: str, dts_filenames: tuple[str, ...]
+def read_sec_xbrl_archive(
+    content: bytes,
+    *,
+    primary_document: str,
+    dts_filenames: tuple[str, ...],
+    inline_documents: tuple[str, ...] = (),
 ) -> dict[str, bytes]:
     """Read only bounded, index-selected root members without extracting paths."""
     if len(content) > _MAX_SEC_XBRL_ARCHIVE_BYTES:
         raise SnapshotError(
             "INGESTION_BUDGET_EXCEEDED", "SEC XBRL archive exceeds the byte limit"
         )
-    required = (primary_document, *dts_filenames)
+    if inline_documents and (
+        primary_document not in inline_documents
+        or inline_documents != tuple(sorted(set(inline_documents)))
+        or any(
+            Path(name).suffix.lower() not in {".htm", ".html", ".xhtml"}
+            for name in inline_documents
+        )
+    ):
+        raise SnapshotError("SOURCE_PAYLOAD_INVALID", "invalid inline member selection")
+    required = (
+        primary_document,
+        *dts_filenames,
+        *(name for name in inline_documents if name != primary_document),
+    )
     if len(set(required)) != len(required):
         raise SnapshotError(
             "SOURCE_PAYLOAD_INVALID", "SEC XBRL member selection contains duplicates"
@@ -121,7 +159,7 @@ def _read_sec_xbrl_archive(
                 info = selected_infos[filename]
                 file_limit = (
                     _MAX_SEC_XBRL_PRIMARY_BYTES
-                    if filename == primary_document
+                    if filename == primary_document or filename in inline_documents
                     else _MAX_SEC_XBRL_RESOURCE_BYTES
                 )
                 if info.file_size > file_limit:
@@ -158,6 +196,25 @@ def _read_sec_xbrl_archive(
         ) from error
 
 
+def _stage_filing_graphics(
+    roots: tuple[Path, Path],
+    *,
+    html_content: bytes,
+    archive_content: bytes,
+    primary_document: str,
+) -> None:
+    graphics = extract_referenced_graphics(
+        html_content=html_content,
+        archive_content=archive_content,
+        primary_document=primary_document,
+    )
+    for relative_path, content in graphics:
+        for root in roots:
+            resource = root / relative_path
+            resource.parent.mkdir(parents=True, exist_ok=True)
+            resource.write_bytes(content)
+
+
 class IngestionAuditStore(Protocol):
     def put(
         self,
@@ -171,6 +228,20 @@ class IngestionAuditStore(Protocol):
 
 
 @dataclass(frozen=True)
+class ValidatedSecFiling:
+    """Strictly validated original evidence; no identity or snapshot is assumed."""
+
+    source: CapturedSource
+    archive_source: CapturedSource
+    index_source: CapturedSource
+    dts_sources: tuple[CapturedSource, ...]
+    captured_sources: tuple[SecCapturedSourceEvidenceV1, ...]
+    parser_report: ArelleParseReportV1
+    integrity_evidence: SecIntegrityEvidenceV1
+    inline_sources: tuple[CapturedSource, ...] = ()
+
+
+@dataclass(frozen=True)
 class SecIngestionResult:
     snapshot: SourceSnapshotV1
     parser_report: ArelleParseReportV1
@@ -179,6 +250,8 @@ class SecIngestionResult:
     facts: tuple[CanonicalFactV1, ...] = ()
     missing_fields: tuple[str, ...] = ()
     issues: tuple[IssueV1, ...] = ()
+    identity_evidence_ref: str | None = None
+    mapping_evidence_ref: str | None = None
 
 
 class SecIngestionService:
@@ -187,7 +260,7 @@ class SecIngestionService:
     def __init__(
         self,
         *,
-        source_adapter: SecEdgarSourceAdapter,
+        source_adapter: SecSourceCapturePort,
         content_store: ContentAddressedStore,
         snapshot_repository: SnapshotRepository,
         audit_store: IngestionAuditStore,
@@ -201,35 +274,34 @@ class SecIngestionService:
             content_store, snapshot_repository, sec_source_register()
         )
 
-    def prepare_filing(
+    def validate_filing(
         self,
         *,
-        identity: IdentityV1,
         cik: str,
         accession_number: str,
         primary_document: str,
         filing_archive_filename: str | None = None,
         filed_at: datetime,
+        filing_date: date | None = None,
         captured_at: datetime,
-        valuation_timestamp: datetime,
-        fiscal_period_selector: FiscalPeriodSelectorV1 | None = None,
-        parser_version: str,
-        policy_version: str,
         taxonomy_manifest_id: str | None,
         taxonomy_version: str,
-        acquisition_key: str | None = None,
         taxonomy_cache_dir: Path,
-        mappings: tuple[CanonicalMappingV1, ...],
         reference_sources: tuple[CapturedSource, ...] = (),
+        submission_source: CapturedSource | None = None,
         accepted_at: datetime | None = None,
         deadline_at: datetime | None = None,
         dts_filenames: tuple[str, ...] = (),
+        inline_documents: tuple[str, ...] = (),
         profile: ArelleValidationProfileV1 | None = None,
+        source_adapter: SecSourceCapturePort | None = None,
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
         amendment_scope: str | None = None,
-    ) -> SecIngestionResult:
+    ) -> ValidatedSecFiling:
+        """Validate original bytes and regulatory evidence before identity/publication."""
+        adapter = source_adapter or self.source_adapter
         if profile is None:
             raise SnapshotError(
                 "VALIDATION_PROFILE_REQUIRED",
@@ -245,6 +317,26 @@ class SecIngestionService:
                 "SEC_VALIDATION_REQUIRED",
                 "SEC ingestion requires the pinned sec-efm-dqc profile",
             )
+        if submission_source is not None:
+            submission_uri = (
+                f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
+                f"{accession_number.replace('-', '')}/{accession_number}.txt"
+            )
+            if (
+                submission_source.source_id != "sec-filing-submission"
+                or submission_source.role is not SourceRole.FILING
+                or submission_source.uri != submission_uri
+                or submission_source.accession_number != accession_number
+                or submission_source.form != form
+                or submission_source.is_amendment != is_amendment
+                or submission_source.available_at != (accepted_at or filed_at)
+                or submission_source.filed_at != filed_at
+                or not 200 <= submission_source.http_status < 300
+            ):
+                raise SnapshotError(
+                    "SEC_SUBMISSION_SOURCE_MISMATCH",
+                    "full-submission source is not bound to the selected filing",
+                )
         index_source = next(
             (
                 item
@@ -254,7 +346,7 @@ class SecIngestionService:
             None,
         )
         if index_source is None:
-            index_source = self.source_adapter.capture_filing_index(
+            index_source = adapter.capture_filing_index(
                 cik=cik,
                 accession_number=accession_number,
                 filed_at=accepted_at or filed_at,
@@ -273,7 +365,7 @@ class SecIngestionService:
                 is_amendment=is_amendment,
                 amendment_scope="unknown" if is_amendment else amendment_scope,
             )
-        archive_source = self.source_adapter.capture_filing_archive(
+        archive_source = adapter.capture_filing_archive(
             cik=cik,
             accession_number=accession_number,
             filename=filing_archive_filename,
@@ -285,7 +377,7 @@ class SecIngestionService:
             amendment_scope=amendment_scope,
             deadline_at=deadline_at,
         )
-        source = self.source_adapter.capture_filing(
+        source = adapter.capture_filing(
             cik=cik,
             accession_number=accession_number,
             primary_document=primary_document,
@@ -298,11 +390,62 @@ class SecIngestionService:
             accepted_at=accepted_at,
             deadline_at=deadline_at,
         )
-        members = _read_sec_xbrl_archive(
+        if Path(primary_document).suffix.lower() in {".htm", ".html", ".xhtml"}:
+            try:
+                archive_inline = archive_inline_document_names(archive_source.content)
+            except InlineDocumentSetError as error:
+                raise SnapshotError(
+                    "XBRL_DOCUMENT_SET_UNRESOLVED", str(error)
+                ) from error
+            expected_inline = archive_inline if len(archive_inline) > 1 else ()
+            if expected_inline != inline_documents:
+                raise SnapshotError(
+                    "XBRL_DOCUMENT_SET_UNRESOLVED",
+                    "inline selection differs from complete archive inventory",
+                )
+        members = read_sec_xbrl_archive(
             archive_source.content,
             primary_document=primary_document,
             dts_filenames=dts_filenames,
+            inline_documents=inline_documents,
         )
+        inline_sources: tuple[CapturedSource, ...] = ()
+        if inline_documents:
+            try:
+                selected, _ = select_inline_document_set(
+                    submission_source.content if submission_source is not None else b"",
+                    index_source.content,
+                    primary_document,
+                )
+            except InlineDocumentSetError as error:
+                raise SnapshotError(
+                    "XBRL_DOCUMENT_SET_UNRESOLVED", str(error)
+                ) from error
+            if selected != inline_documents:
+                raise SnapshotError(
+                    "XBRL_DOCUMENT_SET_UNRESOLVED",
+                    "inline member selection is incomplete",
+                )
+            inline_sources = tuple(
+                replace(
+                    adapter.capture_filing(
+                        cik=cik,
+                        accession_number=accession_number,
+                        primary_document=filename,
+                        filed_at=filed_at,
+                        captured_at=captured_at,
+                        form=form,
+                        is_amendment=is_amendment,
+                        amends_accession=amends_accession,
+                        amendment_scope=amendment_scope,
+                        accepted_at=accepted_at,
+                        deadline_at=deadline_at,
+                    ),
+                    source_id="sec-inline-document",
+                )
+                for filename in inline_documents
+                if filename != primary_document
+            )
         dts_sources = tuple(
             replace(
                 archive_source,
@@ -315,7 +458,14 @@ class SecIngestionService:
             )
             for filename in dts_filenames
         )
-        evidence_sources = (index_source, source, archive_source, *dts_sources)
+        evidence_sources = (
+            index_source,
+            source,
+            archive_source,
+            *((submission_source,) if submission_source is not None else ()),
+            *dts_sources,
+            *inline_sources,
+        )
         captured_sources = tuple(
             SecCapturedSourceEvidenceV1(
                 source_id=item.source_id,
@@ -346,6 +496,49 @@ class SecIngestionService:
             raw_response=source,
             archive_index=index_source,
             archive=archive_source,
+            submission_source=submission_source,
+        )
+        inline_assessments = (
+            tuple(
+                (
+                    item,
+                    assess_filing_response(
+                        raw_response=item,
+                        archive_index=index_source,
+                        archive=archive_source,
+                        submission_source=submission_source,
+                    ),
+                )
+                for item in (source, *inline_sources)
+            )
+            if inline_documents
+            else ()
+        )
+        inline_integrity = tuple(
+            SecInlineDocumentIntegrityV1(
+                submission_content_hash=item_assessment.submission_content_hash,
+                document=InlineDocumentInputV1(
+                    filename=item_assessment.archive_member_name,
+                    content_hash=item_assessment.normalized_content_hash,
+                ),
+                declared_primary_size=item_assessment.declared_primary_size,
+                raw_content_hash=item_assessment.raw_content_hash,
+                raw_received_size=item.received_size
+                if item.received_size is not None
+                else len(item.content),
+                raw_response_headers=item.response_headers,
+                declared_response_size=item.declared_size,
+                archive_member_hash=item_assessment.archive_member_hash,
+                archive_member_size=len(item_assessment.archive_member),
+                integrity_relation=item_assessment.relation,
+                normalization_policy_id=item_assessment.normalization_policy_id,
+                normalization_rule_signature=item_assessment.normalization_rule_signature,
+                normalization_reason=item_assessment.normalization_reason,
+                removed_ranges=item_assessment.removed_ranges,
+            )
+            for item, item_assessment in sorted(
+                inline_assessments, key=lambda pair: pair[1].archive_member_name
+            )
         )
         normalized_hash = self.content_store.put(
             assessment.normalized_content, media_type=source.media_type
@@ -367,18 +560,67 @@ class SecIngestionService:
             archive_path = archive_root / primary_document
             normalized_path.write_bytes(assessment.normalized_content)
             archive_path.write_bytes(assessment.archive_member)
+            _stage_filing_graphics(
+                (normalized_root, archive_root),
+                html_content=assessment.normalized_content,
+                archive_content=archive_source.content,
+                primary_document=primary_document,
+            )
             for filename in dts_filenames:
                 (normalized_root / filename).write_bytes(members[filename])
                 (archive_root / filename).write_bytes(members[filename])
+            parser_input_hash = normalized_hash
+            if inline_integrity:
+                manifest = InlineDocumentSetInputV1(
+                    documents=tuple(d.document for d in inline_integrity)
+                )
+                for item, item_assessment in inline_assessments:
+                    filename = item_assessment.archive_member_name
+                    (normalized_root / filename).write_bytes(
+                        item_assessment.normalized_content
+                    )
+                    (archive_root / filename).write_bytes(
+                        item_assessment.archive_member
+                    )
+                    self.content_store.put(
+                        item_assessment.normalized_content, media_type=item.media_type
+                    )
+                    self.content_store.put(
+                        item_assessment.archive_member, media_type=item.media_type
+                    )
+                    _stage_filing_graphics(
+                        (normalized_root, archive_root),
+                        html_content=item_assessment.normalized_content,
+                        archive_content=archive_source.content,
+                        primary_document=filename,
+                    )
+                normalized_path = normalized_root / "input.ixds.json"
+                archive_path = archive_root / "input.ixds.json"
+                raw_manifest = canonical_bytes(manifest)
+                normalized_path.write_bytes(raw_manifest)
+                archive_path.write_bytes(raw_manifest)
+                parser_input_hash = self.content_store.put(
+                    raw_manifest, media_type="application/json"
+                )
             report = parse_filing_offline(
                 normalized_path,
                 profile=profile,
                 taxonomy_version=taxonomy_version,
                 taxonomy_cache_dir=taxonomy_cache_dir,
-                source_content_hash=normalized_hash,
+                source_content_hash=parser_input_hash,
                 deadline_at=deadline_at,
             )
-            self._require_validation_evidence(report)
+            require_sec_validation_evidence(report)
+            if filing_date is not None and profile.dqc_applicability_digest is not None:
+                report = bind_dqc_filing_context(
+                    report,
+                    DqcFilingContextV1(
+                        issuer_id=cik,
+                        accession_number=accession_number,
+                        filing_date=filing_date,
+                        policy_digest=dqc_applicability_policy_digest(),
+                    ),
+                )
             archive_report = report
             if assessment.relation == "normalized":
                 archive_report = parse_filing_offline(
@@ -386,10 +628,16 @@ class SecIngestionService:
                     profile=profile,
                     taxonomy_version=taxonomy_version,
                     taxonomy_cache_dir=taxonomy_cache_dir,
-                    source_content_hash=archive_member_hash,
+                    source_content_hash=parser_input_hash
+                    if inline_integrity
+                    else archive_member_hash,
                     deadline_at=deadline_at,
                 )
-                self._require_validation_evidence(archive_report)
+                require_sec_validation_evidence(archive_report)
+                if report.dqc_filing_context is not None:
+                    archive_report = bind_dqc_filing_context(
+                        archive_report, report.dqc_filing_context
+                    )
                 if fact_semantic_digest(report) != fact_semantic_digest(
                     archive_report
                 ) or self._finding_signature(report) != self._finding_signature(
@@ -411,11 +659,13 @@ class SecIngestionService:
             )
         integrity_evidence = SecIntegrityEvidenceV1(
             accession_number=accession_number,
+            submission_content_hash=assessment.submission_content_hash,
+            dqc_filing_context=report.dqc_filing_context,
             primary_document_uri=source.uri,
             captured_at=source.captured_at or captured_at,
             archive_index_uri=index_source.uri,
             archive_index_hash=assessment.archive_index_hash,
-            declared_primary_size=int(assessment.archive_index_entry["size"]),
+            declared_primary_size=assessment.declared_primary_size,
             raw_response_headers=source.response_headers,
             raw_received_size=(
                 source.received_size
@@ -446,6 +696,7 @@ class SecIngestionService:
             archive_fact_count=len(archive_report.facts),
             archive_fact_digest=archive_fact_digest,
             parser_input_hash=report.source_content_hash or "",
+            inline_documents=inline_integrity,
             validation_profile_digest=report.validation_profile_digest,
             validation_engines=report.validation_engines,
             validation_evidence=report.validation_evidence,
@@ -456,10 +707,15 @@ class SecIngestionService:
             dqc_version=profile.dqc_version,
             xule_version=profile.xule_version,
             findings=tuple(
-                ArelleFindingEvidenceV1(
-                    code=finding.code,
-                    severity=finding.severity,
-                    blocks=finding.code in blocking_codes,
+                ArelleFindingEvidenceV1.model_validate(
+                    {
+                        "code": finding.code,
+                        "severity": finding.severity,
+                        "blocks": finding.code in blocking_codes,
+                        "rule_severity": finding.rule_severity,
+                        "rule_effective_date": finding.rule_effective_date,
+                        "rule_applicability": report.finding_applicability(finding),
+                    }
                 )
                 for finding in report.findings
             ),
@@ -505,10 +761,207 @@ class SecIngestionService:
         if not report.facts:
             raise SnapshotError("PARSER_FACTS_MISSING", "Arelle produced no XBRL facts")
 
+        return ValidatedSecFiling(
+            source=source,
+            archive_source=archive_source,
+            index_source=index_source,
+            dts_sources=dts_sources,
+            captured_sources=captured_sources,
+            parser_report=report,
+            integrity_evidence=integrity_evidence,
+            inline_sources=inline_sources,
+        )
+
+    def prepare_filing(
+        self,
+        *,
+        identity: IdentityV1,
+        cik: str,
+        accession_number: str,
+        primary_document: str,
+        filing_archive_filename: str | None = None,
+        filed_at: datetime,
+        filing_date: date | None = None,
+        captured_at: datetime,
+        valuation_timestamp: datetime,
+        fiscal_period_selector: FiscalPeriodSelectorV1 | None = None,
+        parser_version: str,
+        policy_version: str,
+        taxonomy_manifest_id: str | None,
+        taxonomy_version: str,
+        acquisition_key: str | None = None,
+        taxonomy_cache_dir: Path,
+        mappings: tuple[CanonicalMappingV1, ...],
+        mapping_resolver: IngestionMappingResolverPort | None = None,
+        reference_sources: tuple[CapturedSource, ...] = (),
+        additional_issues: tuple[IssueV1, ...] = (),
+        submission_source: CapturedSource | None = None,
+        accepted_at: datetime | None = None,
+        deadline_at: datetime | None = None,
+        dts_filenames: tuple[str, ...] = (),
+        inline_documents: tuple[str, ...] = (),
+        profile: ArelleValidationProfileV1 | None = None,
+        source_adapter: SecSourceCapturePort | None = None,
+        form: str = "10-K",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        identity_basis: SecIdentityBasis = "current-sec-ticker-v1",
+        identity_ticker: str | None = None,
+    ) -> SecIngestionResult:
+        if mapping_resolver is not None and (
+            mappings or identity_basis != "original-filing-dei-v1"
+        ):
+            raise SnapshotError(
+                "MAPPING_RESOLUTION_MODE_INVALID",
+                "automatic mapping requires original identity without manual mappings",
+            )
+        if identity_basis == "original-filing-dei-v1" and (
+            form != "10-K" or is_amendment or not identity_ticker or accepted_at is None
+        ):
+            raise SnapshotError(
+                "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+                "original identity requires a pinned original 10-K, acceptance and ticker",
+            )
+        validated = self.validate_filing(
+            cik=cik,
+            accession_number=accession_number,
+            primary_document=primary_document,
+            filing_archive_filename=filing_archive_filename,
+            filed_at=filed_at,
+            filing_date=filing_date,
+            captured_at=captured_at,
+            taxonomy_manifest_id=taxonomy_manifest_id,
+            taxonomy_version=taxonomy_version,
+            taxonomy_cache_dir=taxonomy_cache_dir,
+            reference_sources=reference_sources,
+            submission_source=submission_source,
+            accepted_at=accepted_at,
+            deadline_at=deadline_at,
+            dts_filenames=dts_filenames,
+            inline_documents=inline_documents,
+            profile=profile,
+            source_adapter=source_adapter,
+            form=form,
+            is_amendment=is_amendment,
+            amends_accession=amends_accession,
+            amendment_scope=amendment_scope,
+        )
+        source = validated.source
+        archive_source = validated.archive_source
+        index_source = validated.index_source
+        dts_sources = validated.dts_sources
+        inline_sources = validated.inline_sources
+        captured_sources = validated.captured_sources
+        report = validated.parser_report
+        integrity_evidence = validated.integrity_evidence
+        taxonomy_hash = integrity_evidence.taxonomy_manifest_hash
+        normalized_hash = integrity_evidence.normalized_content_hash
+
+        identity_evidence_ref = None
+        if identity_basis == "original-filing-dei-v1":
+            identity_failure = None
+            try:
+                validate_original_filing_identity(
+                    identity,
+                    cik=cik,
+                    ticker=identity_ticker or "",
+                    accepted_at=accepted_at or filed_at,
+                    facts=report.facts,
+                )
+            except IdentityResolutionError as error:
+                identity_failure = error
+            identity_evidence = {
+                "schema_version": "sec-original-identity-evidence.v1",
+                "identity_basis": identity_basis,
+                "identity": identity,
+                "cik": cik,
+                "ticker": identity_ticker,
+                "accession_number": accession_number,
+                "available_at": accepted_at,
+                "source_hash": integrity_evidence.raw_content_hash,
+                "parser_input_hash": report.source_content_hash,
+                "validation_profile_digest": report.validation_profile_digest,
+                "parser_replay_digest": report.replay_digest(),
+                "facts": tuple(
+                    sorted(
+                        (
+                            f
+                            for f in report.facts
+                            if f.concept in ORIGINAL_IDENTITY_CONCEPTS
+                        ),
+                        key=sha256_digest,
+                    )
+                ),
+                "outcome": "refused" if identity_failure else "matched",
+                "error_code": identity_failure.code if identity_failure else None,
+                "reason": str(identity_failure) if identity_failure else None,
+                "current_ticker_or_survival_data_used": False,
+            }
+            record = self.audit_store.put(
+                f"sec-original-identity-{sha256_digest(identity_evidence)}",
+                identity_evidence,
+                (
+                    integrity_evidence.raw_content_hash,
+                    normalized_hash,
+                    report.validation_profile_digest,
+                ),
+                retention="evidence",
+            )
+            identity_evidence_ref = record.artifact_id
+            if identity_failure:
+                raise SnapshotError(
+                    identity_failure.code,
+                    str(identity_failure),
+                    evidence_ref=identity_evidence_ref,
+                ) from identity_failure
+
+        mapping_evidence_ref = None
+        mapping_issues: tuple[IssueV1, ...] = ()
+        mapping_missing: tuple[str, ...] = ()
+        if mapping_resolver is not None:
+            original = evaluate_original_issuer(
+                report,
+                source=OriginalOperatingSourceV1(
+                    cik=cik,
+                    accession_number=accession_number,
+                    uri=source.uri,
+                    content_hash=integrity_evidence.raw_content_hash,
+                    parser_input_hash=report.source_content_hash or "",
+                    form=form,
+                    is_amendment=is_amendment,
+                    available_at=accepted_at or filed_at,
+                    captured_at=source.captured_at or captured_at,
+                    http_status=source.http_status,
+                ),
+                decision_at=valuation_timestamp,
+            )
+            resolved = mapping_resolver.resolve(
+                ValidatedOriginalV1(
+                    identity=identity,
+                    original=original,
+                    integrity=integrity_evidence,
+                    captured_sources=captured_sources,
+                    primary_media_type=source.media_type,
+                )
+            )
+            mappings = resolved.mappings
+            mapping_evidence_ref = resolved.evidence_ref
+            mapping_issues = resolved.issues
+            mapping_missing = resolved.missing_fields
+
         other_sources = tuple(
             item for item in reference_sources if item.source_id != "sec-filing-index"
         )
-        sources = (*other_sources, index_source, source, archive_source, *dts_sources)
+        sources = (
+            *other_sources,
+            index_source,
+            source,
+            archive_source,
+            *((submission_source,) if submission_source is not None else ()),
+            *dts_sources,
+            *inline_sources,
+        )
         snapshot = self.builder.prepare(
             identity=identity,
             valuation_timestamp=valuation_timestamp,
@@ -519,8 +972,9 @@ class SecIngestionService:
             sources=sources,
             taxonomy_manifest_id=taxonomy_manifest_id or taxonomy_hash,
             acquisition_key=acquisition_key,
-            validation_profile_id=profile.profile_id,
+            validation_profile_id=report.validation_profile.profile_id,
             validation_profile_digest=report.validation_profile_digest,
+            additional_issues=additional_issues,
             sec_integrity_evidence=integrity_evidence,
         )
         source_record = next(
@@ -529,10 +983,21 @@ class SecIngestionService:
             if record.source_id == "sec-filing"
         )
         all_facts: list[CanonicalFactV1] = []
-        missing_fields: list[str] = []
-        issues: list[IssueV1] = []
+        missing_fields: list[str] = list(mapping_missing)
+        issues: list[IssueV1] = list(mapping_issues)
         first_selection = FactSelection(None, (), ())
         for index, mapping in enumerate(mappings):
+            if mapping.accounting_rules is not None:
+                for rule in mapping.accounting_rules.periods:
+                    if rule.disposition in {"unknown", "unsupported"}:
+                        issues.append(
+                            IssueV1(
+                                code=f"ACCOUNTING_ROLE_{rule.disposition.upper()}",
+                                severity=Severity.ERROR,
+                                message=f"{rule.period.period_end.isoformat()}: {rule.rationale}",
+                                field=mapping.normalized_field,
+                            )
+                        )
             candidates = parsed_facts_to_candidates(
                 report,
                 source=source_record,
@@ -571,9 +1036,6 @@ class SecIngestionService:
                             "quality": quality,
                             "mapping_decision_id": mapping.decision_id,
                             "mapping_confidence": mapping.confidence,
-                            "issue_codes": tuple(
-                                sorted({issue.code for issue in issues})
-                            ),
                         }
                     )
                 )
@@ -594,6 +1056,8 @@ class SecIngestionService:
             facts=tuple(all_facts),
             missing_fields=tuple(sorted(set(missing_fields))),
             issues=tuple(issues),
+            identity_evidence_ref=identity_evidence_ref,
+            mapping_evidence_ref=mapping_evidence_ref,
         )
 
     def ingest_filing(
@@ -746,18 +1210,12 @@ class SecIngestionService:
             archive_member_path = archive_root / primary_document
             normalized_path.write_bytes(assessment.normalized_content)
             archive_member_path.write_bytes(assessment.archive_member)
-            graphics = extract_referenced_graphics(
+            _stage_filing_graphics(
+                (normalized_root, archive_root),
                 html_content=assessment.normalized_content,
                 archive_content=archive_source.content,
                 primary_document=primary_document,
             )
-            for relative_path, content in graphics:
-                normalized_resource = normalized_root / relative_path
-                archive_resource = archive_root / relative_path
-                normalized_resource.parent.mkdir(parents=True, exist_ok=True)
-                archive_resource.parent.mkdir(parents=True, exist_ok=True)
-                normalized_resource.write_bytes(content)
-                archive_resource.write_bytes(content)
             for resource in dts_sources:
                 filename = Path(resource.uri).name
                 (normalized_root / filename).write_bytes(resource.content)
@@ -769,7 +1227,7 @@ class SecIngestionService:
                 taxonomy_cache_dir=taxonomy_cache_dir,
                 source_content_hash=normalized_hash,
             )
-            self._require_validation_evidence(parser_report)
+            require_sec_validation_evidence(parser_report)
             archive_report = parser_report
             if assessment.relation == "normalized":
                 archive_report = parse_filing_offline(
@@ -779,7 +1237,7 @@ class SecIngestionService:
                     taxonomy_cache_dir=taxonomy_cache_dir,
                     source_content_hash=archive_member_hash,
                 )
-                self._require_validation_evidence(archive_report)
+                require_sec_validation_evidence(archive_report)
                 if fact_semantic_digest(parser_report) != fact_semantic_digest(
                     archive_report
                 ) or self._finding_signature(parser_report) != self._finding_signature(
@@ -794,10 +1252,14 @@ class SecIngestionService:
         archive_fact_digest = fact_semantic_digest(archive_report)
         blocking_codes = set(parser_report.blocking_finding_codes())
         finding_evidence = tuple(
-            ArelleFindingEvidenceV1(
-                code=item.code,
-                severity=item.severity,
-                blocks=item.code in blocking_codes,
+            ArelleFindingEvidenceV1.model_validate(
+                {
+                    "code": item.code,
+                    "severity": item.severity,
+                    "blocks": item.code in blocking_codes,
+                    "rule_severity": item.rule_severity,
+                    "rule_effective_date": item.rule_effective_date,
+                }
             )
             for item in parser_report.findings
         )
@@ -814,7 +1276,7 @@ class SecIngestionService:
             captured_at=source.captured_at or captured_at,
             archive_index_uri=index_source.uri,
             archive_index_hash=assessment.archive_index_hash,
-            declared_primary_size=int(assessment.archive_index_entry["size"]),
+            declared_primary_size=assessment.declared_primary_size,
             raw_response_headers=source.response_headers,
             raw_received_size=source.received_size or len(source.content),
             raw_content_hash=assessment.raw_content_hash,
@@ -948,37 +1410,19 @@ class SecIngestionService:
     @staticmethod
     def _finding_signature(
         report: ArelleParseReportV1,
-    ) -> tuple[tuple[str, str, bool], ...]:
+    ) -> tuple[tuple[str, str, str, str, bool], ...]:
         blocking = set(report.blocking_finding_codes())
         return tuple(
             sorted(
-                (item.code, item.severity, item.code in blocking)
+                (
+                    item.code,
+                    item.severity,
+                    item.rule_severity or "",
+                    item.rule_effective_date.isoformat()
+                    if item.rule_effective_date
+                    else "",
+                    item.code in blocking,
+                )
                 for item in report.findings
             )
         )
-
-    @staticmethod
-    def _require_validation_evidence(report: ArelleParseReportV1) -> None:
-        if report.validation_profile.validation_mode != "sec-efm-dqc":
-            raise SnapshotError(
-                "SEC_VALIDATION_REQUIRED",
-                "SEC parser report was not produced by sec-efm-dqc",
-            )
-        if not {"sec-efm", "dqc-us"}.issubset(report.validation_engines):
-            raise SnapshotError(
-                "VALIDATION_EVIDENCE_MISSING",
-                "SEC parser report lacks EFM/DQC engine evidence",
-            )
-        if not {
-            "strict-sec-efm-profile-selected",
-            "dqc-dqcrt-checks-completed",
-        }.issubset(report.validation_evidence):
-            raise SnapshotError(
-                "VALIDATION_EVIDENCE_MISSING",
-                "SEC parser report lacks EFM/DQC completion evidence",
-            )
-        if report.network_attempt_count != 0:
-            raise SnapshotError(
-                "OFFLINE_NETWORK_ATTEMPT",
-                "SEC parser report records a network attempt",
-            )

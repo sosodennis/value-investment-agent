@@ -60,12 +60,17 @@ The **Neuro-Symbolic Valuation Engine** employs a hierarchical multi-agent syste
     *   Flags hallucinations or data inconsistencies.
 *   **Output**: `AuditOutput` (Pass/Fail with messages).
 
-### **6. Human-in-the-Loop (Approval)**
+### **6. Policy-Based Automatic Approval**
 
-**Role**: Final Sign-off
+**Role**: Authorize the exact calculation input
 
 *   **Trigger**: Before the deterministic calculation runs.
-*   **Action**: The user reviews the resolved ticker, selected model, extracted parameters, and audit results. The process pauses until explicit approval is granted.
+*   **Default path**: Use an authenticated automated caller governed by a deployment-authorized, versioned approval policy. Eligible inputs proceed without per-valuation human confirmation.
+*   **Decision scope**: Evaluate the resolved security, valuation date, model, exact parameters, source-use permissions, provenance, audit results and treatment of unknowns against that policy. Explicit scenarios and estimates retain their assumptions, limitations and quality classification.
+*   **Evidence**: Bind each approval or refusal to the exact input digest, caller identity, policy identity/version and decision evidence. Revalidate that binding before calculation; changed inputs require a new decision.
+*   **Failure behavior**: Missing authorization, failed checks or inputs outside the supported policy scope retain explicit refusal reasons and do not run the calculator. Agents and UI must not fabricate approval or bypass the owning service.
+*   **Human decisions**: Require human review only when explicitly selected by deployment policy or the user. A human approval must remain distinguishable from an automatic policy decision.
+*   **Implementation status**: Fundamental Service provides a deployment-configured automatic caller endpoint that recomposes and binds the exact input before execution. The company/date CLI invokes it when the deployment configures automatic approval. Real runtime acceptance remains outstanding; existing explicit caller contracts remain enforced on other paths. Documentation alone grants no runtime authorization.
 
 ### **7. The Engine (Calculator Node)**
 
@@ -92,10 +97,10 @@ graph TD
         Executor --> Auditor[Auditor<br/>(The Compliance Officer)]
     end
 
-    Auditor --> Approval{Human Approval}
+    Auditor --> Approval{Versioned Approval Policy}
 
     Approval -->|Approved| Calc[Calculator<br/>(The Engine)]
-    Approval -->|Rejected| End([End])
+    Approval -->|Refused or Unsupported| End([End])
 
     subgraph "Symbolic (Deterministic)"
         Calc

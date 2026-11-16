@@ -1,0 +1,281 @@
+{
+  "changes": [
+    "Expose --current in the company/CIK entrypoint; capture configured public sources before freezing the effective valuation timestamp.",
+    "Bind typed selection/publication receipts and the resulting preparation artifact to the effective source-plan digest; preserve the compiled template reference and full selection lineage.",
+    "Retain failed current selections, refuse mismatched templates/receipts, reuse captures/publications, and preserve fixed historical cutoffs."
+  ],
+  "failed_harnesses": [
+    "Strict models rejected JSON-shaped Python values at the CLI join; corrected the boundary to parse canonical JSON using model_validate_json."
+  ],
+  "issue": 361,
+  "owner": "Fundamental Service current selection and issuer preparation owners",
+  "protocol": "issue-361-current-entrypoint-checkpoint-v1",
+  "pull_request": 370,
+  "scope": "Owner and CLI contract increment only; installed SEC-enabled real issuer acceptance, M1/M2/M3 delivery and threshold approval remain incomplete.",
+  "verification": {
+    "implementation_commit": "5cc3a325669d9489bd9e136080ad07e7e46a840b",
+    "input_digest": "a94339f358f1d06e31edb120199a104b2d0ebfa8a07a7f3ebfdc4c1cc8f1d853",
+    "inputs": {
+      "commands": [
+        [
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+          "-B",
+          "-m",
+          "pytest",
+          "fundamental-service/tests/test_current_preparation.py",
+          "fundamental-service/tests/test_issuer_preparation_runner.py",
+          "fundamental-service/tests/test_preparation_runner.py",
+          "fundamental-service/tests/test_original_source_plan.py",
+          "-q",
+          "-rs",
+          "-p",
+          "no:cacheprovider",
+          "--tb=short"
+        ],
+        [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service/src",
+          "fundamental-service/tests"
+        ],
+        [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "format",
+          "--check",
+          "fundamental-service/src/fundamental_service/current_preparation.py",
+          "fundamental-service/src/fundamental_service/issuer_preparation_runner.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py",
+          "fundamental-service/tests/test_current_preparation.py",
+          "fundamental-service/tests/test_issuer_preparation_runner.py"
+        ],
+        [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "--with",
+          "mypy==1.19.1",
+          "mypy",
+          "--no-incremental",
+          "--follow-imports=silent",
+          "--ignore-missing-imports",
+          "fundamental-service/src/fundamental_service/current_preparation.py",
+          "fundamental-service/src/fundamental_service/issuer_preparation_runner.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py"
+        ],
+        [
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+          "-B",
+          "scripts/architecture_guard.py"
+        ],
+        [
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+          "-B",
+          "-m",
+          "fundamental_service.architecture_guard"
+        ],
+        [
+          "git",
+          "diff",
+          "--check",
+          "HEAD^",
+          "HEAD"
+        ],
+        [
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+          "-B",
+          "-m",
+          "fundamental_service.issuer_preparation_runner",
+          "--help"
+        ]
+      ],
+      "exact_commit": "5cc3a325669d9489bd9e136080ad07e7e46a840b",
+      "files": {
+        "fundamental-service/README.md": "b1612d0c937bb3c0b3a7e83db3ebbb70f866ca366cd195d40f73d08559bb43b9",
+        "fundamental-service/src/fundamental_service/current_preparation.py": "5df8d52d192de8a42f998e8820fdc45c2c7045cda6dc76606ad181e4b13ddebd",
+        "fundamental-service/src/fundamental_service/issuer_preparation_runner.py": "12ecda46bd30d21bad62b207e13ffabcb6a94bcac2a3aaaa23d4df31a5aa39c6",
+        "fundamental-service/src/fundamental_service/preparation_runner.py": "982bf9c910ab3c3d0ab040dce271f470f1d2be59e37c25cbaf1878bf15b7ef0d",
+        "fundamental-service/tests/test_current_preparation.py": "647deb6e97f7c212680e06239c33745b80701065f1bbeb5b1325f698a71352a4",
+        "fundamental-service/tests/test_issuer_preparation_runner.py": "04bf981a4f04ea79a6d8371d096e77d12716c5c4191b232cc04eba4c6b11ef8b",
+        "fundamental-service/tests/test_original_source_plan.py": "4346c0d53bfbbf820f5a4745606ab937cfd9b810d27b4f323e64ab62332dec96",
+        "fundamental-service/tests/test_preparation_runner.py": "9567e34cd2302bde1f8d027129c0b0ff58b4befc3ce6a4154cdc2e7ede40e29c",
+        "fundamental-service/uv.lock": "229bc76c75019d54df8c1cba240839bacf01e56d7493f4bc615e058c4e5f6f11"
+      },
+      "runtime": {
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2",
+        "pytest": "9.2.0",
+        "python": "3.11.15",
+        "pythonhashseed": "0"
+      }
+    },
+    "issue": 361,
+    "limitations": [
+      "Synthetic current-cutoff/CLI owner evidence; no installed SEC-enabled real issuer acceptance",
+      "6 PostgreSQL tests skipped without isolated test database",
+      "M1/M2/M3 remain incomplete; threshold remains null"
+    ],
+    "next_step": "Build an isolated SEC-enabled runtime and exercise the generated issuer/date market plan with retained real sources",
+    "output_digest": "df4a24b7a9c1e37a50dde8c8ca5df0311a300010661e0ef652a848bb1034ca52",
+    "outputs": {
+      "checks": [
+        {
+          "command": [
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+            "-B",
+            "-m",
+            "pytest",
+            "fundamental-service/tests/test_current_preparation.py",
+            "fundamental-service/tests/test_issuer_preparation_runner.py",
+            "fundamental-service/tests/test_preparation_runner.py",
+            "fundamental-service/tests/test_original_source_plan.py",
+            "-q",
+            "-rs",
+            "-p",
+            "no:cacheprovider",
+            "--tb=short"
+          ],
+          "exit_code": 0,
+          "input_digest": "6797a7d42b99b5f5d0710e18f1decef833021d81e3a0619044db18dce175db4b",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-entrypoint/5cc3a325669d9489bd9e136080ad07e7e46a840b/968ae42f1e1958e16cf91a72fc9fad0f4a1b63f23fcec2cd10a55dca383f22d3.log",
+          "log_sha256": "968ae42f1e1958e16cf91a72fc9fad0f4a1b63f23fcec2cd10a55dca383f22d3",
+          "output_digest": "a5bcac6782f39929b2c34358ad1d7783419df067d6fbe60235fc87e416cd940a"
+        },
+        {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "check",
+            "fundamental-service/src",
+            "fundamental-service/tests"
+          ],
+          "exit_code": 0,
+          "input_digest": "2eb9b5208d3ef0e9b5c8b7e3129d2f1b785c0420b0b63d54574a2cccd010ac49",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-entrypoint/5cc3a325669d9489bd9e136080ad07e7e46a840b/82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18.log",
+          "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+          "output_digest": "d9d010dc02bdaa3a1598b5a009e35fa0c47bab9cf41dbeba0285581621ace9af"
+        },
+        {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "format",
+            "--check",
+            "fundamental-service/src/fundamental_service/current_preparation.py",
+            "fundamental-service/src/fundamental_service/issuer_preparation_runner.py",
+            "fundamental-service/src/fundamental_service/preparation_runner.py",
+            "fundamental-service/tests/test_current_preparation.py",
+            "fundamental-service/tests/test_issuer_preparation_runner.py"
+          ],
+          "exit_code": 0,
+          "input_digest": "e3f157edac8a60a815730c798995fd837b271aec3535de45573fcee1e00f4097",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-entrypoint/5cc3a325669d9489bd9e136080ad07e7e46a840b/f114d83b30c5c657ee43a847a45bafccaea255d82673feb87c26d252c61e29c1.log",
+          "log_sha256": "f114d83b30c5c657ee43a847a45bafccaea255d82673feb87c26d252c61e29c1",
+          "output_digest": "3f3a39945abdf13eff1ac7c58d9bf85636066e5f09fed054cd718000d70a26f4"
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--project",
+            "fundamental-service",
+            "--with",
+            "mypy==1.19.1",
+            "mypy",
+            "--no-incremental",
+            "--follow-imports=silent",
+            "--ignore-missing-imports",
+            "fundamental-service/src/fundamental_service/current_preparation.py",
+            "fundamental-service/src/fundamental_service/issuer_preparation_runner.py",
+            "fundamental-service/src/fundamental_service/preparation_runner.py"
+          ],
+          "exit_code": 0,
+          "input_digest": "4e5d5c5f1bd23d162de760a64ee1aa71096cc160d0ed27b66703f86a1876c220",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-entrypoint/5cc3a325669d9489bd9e136080ad07e7e46a840b/8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8.log",
+          "log_sha256": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
+          "output_digest": "05b5a4b8a04ec50b6e1c498708b8a3faa7930fe91d1fc53f20ea0f37fc8859ba"
+        },
+        {
+          "command": [
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+            "-B",
+            "scripts/architecture_guard.py"
+          ],
+          "exit_code": 0,
+          "input_digest": "676e4c1ba1c87c1d0a339d52d18107a1b7a0e97bb4700a09124249241541356d",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-entrypoint/5cc3a325669d9489bd9e136080ad07e7e46a840b/6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9.log",
+          "log_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9",
+          "output_digest": "86d15f261f2513214b816a21a95477de45689b8150b1c7500b34830d906352ad"
+        },
+        {
+          "command": [
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+            "-B",
+            "-m",
+            "fundamental_service.architecture_guard"
+          ],
+          "exit_code": 0,
+          "input_digest": "6467ca207dae08f08d9e12ac3b7beddf2e9528ebca93dee6c4c2e3d7b32c31d0",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-entrypoint/5cc3a325669d9489bd9e136080ad07e7e46a840b/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "output_digest": "84d954bc02eceeb6108edd2ccbb085568b8aa2e43e2c27ff42247a4255bb46ab"
+        },
+        {
+          "command": [
+            "git",
+            "diff",
+            "--check",
+            "HEAD^",
+            "HEAD"
+          ],
+          "exit_code": 0,
+          "input_digest": "4e0e4d5b0a986ab646c3e80c8bc1271f690c0f75d5abef972eb6766040721972",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-entrypoint/5cc3a325669d9489bd9e136080ad07e7e46a840b/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "output_digest": "84d954bc02eceeb6108edd2ccbb085568b8aa2e43e2c27ff42247a4255bb46ab"
+        },
+        {
+          "command": [
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+            "-B",
+            "-m",
+            "fundamental_service.issuer_preparation_runner",
+            "--help"
+          ],
+          "exit_code": 0,
+          "input_digest": "a536b0c670cc6c6f8ce6ccba262c0c9d9e66cd2baa4f22606dd31b8914337aae",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-entrypoint/5cc3a325669d9489bd9e136080ad07e7e46a840b/0134e19830fef932e074257663eaa3e65355164d5e84b1807044f6afed58a5eb.log",
+          "log_sha256": "0134e19830fef932e074257663eaa3e65355164d5e84b1807044f6afed58a5eb",
+          "output_digest": "d0629a82bef37b63d95eee9959951624c366761c823411a3757aea6183d85609"
+        }
+      ],
+      "replay": {
+        "all_existing_files_unchanged": true,
+        "effective_plan_digest": "ea6c0126d110e236d07f319c5797dc0f9f7117791c3beddc7b9c78d434c44f56",
+        "effective_valuation_at": "2026-03-01T00:00:00+00:00",
+        "exact_commit": "5cc3a325669d9489bd9e136080ad07e7e46a840b",
+        "input_digest": "a3e44150b3ea6fe05d24304680fac42b7ce577a65bbabad1b358ac866b1aebfc",
+        "output_digest": "e422ad5f34e7f26417b8504eb6d90806c8edaafbea75d3d32affbf912009b077",
+        "preparation_output_digest": "866b339627fae4cdae975390f2d84765ca8ddb5e6b7f0d62280ba6c78632c552",
+        "real_numerical_acceptance": false,
+        "repeat_preparation_wrote": false,
+        "repeat_selection_wrote": false,
+        "requested_at": "2026-02-28T23:59:58+00:00",
+        "synthetic": true,
+        "zero_extra_downloads": true
+      }
+    }
+  }
+}

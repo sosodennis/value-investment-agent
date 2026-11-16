@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from fundamental_service.calculator import calculate
+from fundamental_service.contracts import QualityStatus
 from fundamental_service.verification import (
     VerificationRefusal,
     compare_artifact,
@@ -19,6 +20,27 @@ from fundamental_service.verification import (
 from fundamental_service.verification_gate import run_release_gate
 
 FIXTURE = Path(__file__).parent / "fixtures" / "verification" / "golden_cohort.json"
+
+
+def test_provisional_arithmetic_requires_explicit_scope_and_keeps_quality():
+    manifest, cases = load_cohort_manifest(FIXTURE)
+    positive = next(case for case in cases if case.kind == "positive")
+    request = request_for_case(manifest, positive)
+    request = request.model_copy(
+        update={
+            "quality": request.quality.model_copy(
+                update={"status": QualityStatus.PROVISIONAL}
+            )
+        }
+    ).with_digest()
+    with pytest.raises(VerificationRefusal) as caught:
+        independent_calculate(request)
+    assert caught.value.code == "QUALITY_NOT_VERIFIED"
+
+    reference = independent_calculate(request, scope="conditional-arithmetic-v1")
+
+    assert compare_artifact(reference, calculate(request, allow_provisional=True)) == ()
+    assert request.quality.status is QualityStatus.PROVISIONAL
 
 
 def test_independent_challenger_does_not_import_production_calculator():

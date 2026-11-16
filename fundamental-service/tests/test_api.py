@@ -3,7 +3,7 @@ import hashlib
 import json
 import socket
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -59,7 +59,7 @@ from fundamental_service.policies import (
 )
 from fundamental_service.replay import ArtifactStore, replay_calculation
 from fundamental_service.serialization import sha256_digest
-from fundamental_service.snapshots import FilesystemContentStore
+from fundamental_service.snapshots import FilesystemContentStore, SnapshotError
 from fundamental_service.source_acquisition import SecIdentityResolutionUseCase
 from fundamental_service.testsupport import (
     TEST_SERVICE_TOKEN,
@@ -103,12 +103,15 @@ class _SnapshotRepository:
                 SimpleNamespace(
                     content_hash="a" * 64,
                     available_at=datetime(2025, 1, 1, tzinfo=UTC),
+                    is_amendment=False,
+                    amendment_scope=None,
                 ),
             ),
             manifest_digest="b" * 64,
             policy_version="source-policy-v1",
             coverage_status=QualityStatus.VERIFIED,
             issues=(),
+            sec_integrity_evidence=None,
         )
 
     def get(self, snapshot_id: str):
@@ -133,6 +136,12 @@ class _ReleaseSnapshotRepository(_ResolvingSnapshotRepository):
     def __init__(self, *snapshots):
         self.snapshots = snapshots
         self.snapshot = snapshots[0]
+
+    def get(self, snapshot_id: str):
+        for snapshot in self.snapshots:
+            if snapshot.snapshot_id == snapshot_id:
+                return snapshot
+        raise SnapshotError("SNAPSHOT_NOT_FOUND", "test snapshot is unavailable")
 
     def find(self, *, identity, valuation_timestamp):
         return tuple(
@@ -218,11 +227,22 @@ class _CanonicalFactRepository(_FactRepository):
         return _canonical_fact(fact_id, "revenue")
 
 
-def _release_manifest_for(snapshot, facts):
+def _release_manifest_for(snapshot, facts, *, artifacts=None):
+    contents = {
+        "taxonomy-v1": (b"synthetic taxonomy", "application/zip"),
+        "quality-v1": (b'{"synthetic_quality":true}', "application/json"),
+        "release-api-evidence": (
+            b'{"synthetic_verification":true}',
+            "application/json",
+        ),
+    }
+    if artifacts is not None:
+        for name, (raw, media_type) in contents.items():
+            artifacts.put_bytes_with_receipt(name, raw, media_type=media_type)
     fact_refs = tuple(
         FactRefV1(
             fact_id=fact.fact_id,
-            fact_digest=sha256_digest(fact.model_dump(mode="json")),
+            fact_digest=canonical_fact_digest(fact),
         )
         for fact in facts
     )
@@ -243,7 +263,7 @@ def _release_manifest_for(snapshot, facts):
         "taxonomy_refs": (
             ArtifactRefV1(
                 artifact_id="taxonomy-v1",
-                content_hash="d" * 64,
+                content_hash=hashlib.sha256(contents["taxonomy-v1"][0]).hexdigest(),
                 media_type="application/zip",
                 role="taxonomy",
             ),
@@ -254,7 +274,7 @@ def _release_manifest_for(snapshot, facts):
         "artifact_refs": (
             ArtifactRefV1(
                 artifact_id="quality-v1",
-                content_hash="f" * 64,
+                content_hash=hashlib.sha256(contents["quality-v1"][0]).hexdigest(),
                 media_type="application/json",
                 role="quality-evidence",
             ),
@@ -280,7 +300,9 @@ def _release_verification_for(
         "evidence_refs": (
             ArtifactRefV1(
                 artifact_id="release-api-evidence",
-                content_hash="3" * 64,
+                content_hash=hashlib.sha256(
+                    b'{"synthetic_verification":true}'
+                ).hexdigest(),
                 media_type="application/json",
                 role="verification-evidence",
             ),
@@ -324,6 +346,10 @@ class _DataReleaseMetadata:
     ) -> DataReleaseManifestV1 | None:
         candidate = self.candidates.get(manifest_digest)
         return None if candidate is None else candidate[0]
+
+    def get_data_release_verification(self, manifest_digest):
+        candidate = self.candidates.get(manifest_digest)
+        return None if candidate is None else candidate[1]
 
     def compare_and_swap_data_release(
         self, command: DataReleaseActivationCommandV1
@@ -379,7 +405,7 @@ def _policy_with_assumptions(assumptions) -> PolicyRecordV1:
         "policy_version": "fcff-policy-version-1",
         "profile_id": "us-gaap-public-v1",
         "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v1",
+        "model_version": "fcff_dcf-v2",
         "assumptions": assumptions,
         "source_refs": ("public-policy-fixture",),
         "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
@@ -444,6 +470,7 @@ def test_snapshot_resolution_returns_service_owned_snapshot_and_fact_refs():
         taxonomy_manifest_id="taxonomy-v1",
         policy_version="policy-v1",
         source_records=(),
+        sec_integrity_evidence=None,
     )
     client = TestClient(
         create_app(
@@ -483,6 +510,7 @@ def test_snapshot_resolution_returns_immutable_snapshot_timestamp():
         taxonomy_manifest_id="taxonomy-v1",
         policy_version="policy-v1",
         source_records=(),
+        sec_integrity_evidence=None,
     )
     client = TestClient(
         create_app(
@@ -548,13 +576,13 @@ def test_policy_read_returns_exact_version_and_unknown_policy_is_not_found():
     client = TestClient(create_app())
     response = client.request(
         "GET",
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v3",
         headers=auth_headers(),
         json=make_internal_envelope({}),
     )
     assert response.status_code == 200
-    assert response.json()["result"]["policy_id"] == "fcff_dcf-us-gaap-public-v1"
-    assert response.json()["result"]["policy_version"] == "fcff_dcf-v1-quality-v1"
+    assert response.json()["result"]["policy_id"] == "fcff_dcf-us-gaap-public-v3"
+    assert response.json()["result"]["policy_version"] == "fcff_dcf-v2-quality-v2"
     operation = client.app.openapi()["paths"]["/v1/policies/{policy_id}"]["get"]
     assert "requestBody" in operation
     assert "PolicyRecordV1" in str(operation["responses"]["200"])
@@ -738,7 +766,7 @@ def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stabl
 
     unsupported = base.model_dump(mode="json")
     unsupported["assumptions"] = {"terminal_growth": "0.02"}
-    unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+    unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v3"
     incomplete_validation = client.post(
         "/v1/valuation/validate-with-policy",
         headers=auth_headers(),
@@ -906,7 +934,7 @@ def test_rejected_caller_approval_never_executes_calculation():
     payload["caller_approval"] = {
         "input_digest": valuation.input_digest,
         "decision": "rejected",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
@@ -919,6 +947,60 @@ def test_rejected_caller_approval_never_executes_calculation():
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "CALLER_APPROVAL_REJECTED"
+
+
+@pytest.mark.parametrize(
+    "route,method",
+    [
+        ("calculate", "calculate_valuation"),
+        ("calculate-with-policy", "calculate_with_policy"),
+        ("uncertainty", "uncertainty_valuation"),
+    ],
+)
+@pytest.mark.parametrize("decision", ["approved", "rejected"])
+@pytest.mark.parametrize("invalid", ["caller", "future"])
+def test_calculation_rejects_unbound_approval_before_application_execution(
+    monkeypatch, route, method, decision, invalid
+):
+    reached = []
+
+    def execute(*args, **kwargs):
+        reached.append(method)
+        raise AssertionError("invalid approval reached calculation")
+
+    monkeypatch.setattr(FundamentalApplication, method, execute)
+    valuation = _bind_initial_policy(make_valuation())
+    if route == "uncertainty":
+        valuation = _with_uncertainty_digest(valuation.model_dump(mode="json"))
+    payload = valuation.model_dump(mode="json")
+    payload["caller_approval"] = {
+        "input_digest": valuation.input_digest,
+        "decision": decision,
+        "caller_id": "someone-else" if invalid == "caller" else "subject-test",
+        "decided_at": (
+            datetime.now(UTC) + timedelta(days=1)
+            if invalid == "future"
+            else datetime.now(UTC)
+        ).isoformat(),
+    }
+    response = TestClient(create_app()).post(
+        f"/v1/valuation/{route}",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["error"] == {
+        "code": "CALLER_APPROVAL_IDENTITY_MISMATCH"
+        if invalid == "caller"
+        else "CALLER_APPROVAL_NOT_YET_DECIDED",
+        "message": "caller approval must match the authenticated subject"
+        if invalid == "caller"
+        else "caller approval cannot be decided after receipt",
+        "retryable": False,
+        "retry_after_ms": None,
+    }
+    assert reached == []
 
 
 def test_policy_calculation_rejects_unsupported_model_family():
@@ -1023,7 +1105,7 @@ def test_policy_lookup_without_registry_is_retryable_unavailable():
 def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     client = TestClient(create_app())
     missing_context = client.get(
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v3",
         headers=auth_headers(),
     )
     assert missing_context.status_code == 400
@@ -1033,7 +1115,7 @@ def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     invalid_context["context"]["signature"] = "0" * 64
     response = client.request(
         "GET",
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v3",
         headers=auth_headers(),
         json=invalid_context,
     )
@@ -1188,7 +1270,7 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
     payload["caller_approval"] = {
         "input_digest": request.input_digest,
         "decision": "approved",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
@@ -1204,6 +1286,114 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
     assert result["base"]["input_digest"] != request.input_digest
     assert result["input_digest"] == request.input_digest
     assert result["valid_samples"] == 10
+
+
+def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
+    valuation = _bind_initial_policy(make_valuation())
+    payload = valuation.model_dump(mode="json")
+    payload["uncertainty"] = {
+        "mode": "scenarios",
+        "scenarios": [
+            {"name": "base", "assumptions": {}},
+            {
+                "name": "downside",
+                "assumptions": {
+                    "assumptions.capital_bridge.debt": "30",
+                    "assumptions.capital_bridge.diluted_shares": "100",
+                },
+            },
+            {
+                "name": "upside",
+                "assumptions": {
+                    "assumptions.capital_bridge.debt": "5",
+                    "assumptions.capital_bridge.diluted_shares": "125",
+                },
+            },
+        ],
+        "sensitivity": [
+            {
+                "path": "assumptions.capital_bridge.preferred_stock",
+                "values": ["0", "10"],
+            }
+        ],
+    }
+    payload.pop("input_digest")
+    validation = type(valuation).model_validate_json(json.dumps(payload)).with_digest()
+    payload = validation.model_dump(mode="json")
+    payload["caller_approval"] = {
+        "input_digest": validation.input_digest,
+        "decision": "approved",
+        "caller_id": "subject-test",
+        "decided_at": datetime.now(UTC).isoformat(),
+    }
+    client = TestClient(
+        create_app(
+            _SnapshotRepository(),
+            ArtifactStore(tmp_path / "artifacts"),
+            FilesystemContentStore(tmp_path / "content"),
+            fact_repository=_FactRepository(),
+        )
+    )
+    first = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert first.status_code == 200, first.text
+    result = first.json()["result"]
+    reference = next(
+        item
+        for item in result["artifact_references"]
+        if item["artifact_type"] == "uncertainty_evidence"
+    )
+    url = f"/v1/artifacts/{reference['artifact_id']}/content"
+    assert (
+        client.request("GET", url, json=make_internal_envelope({})).status_code == 401
+    )
+    saved = client.request(
+        "GET", url, headers=auth_headers(), json=make_internal_envelope({})
+    )
+    assert saved.status_code == 200, saved.text
+    evidence = UncertaintyEvidenceV1.model_validate_json(saved.content)
+    assert evidence.report.input_digest == validation.input_digest
+    assert (
+        evidence.request["uncertainty"]
+        == validation.model_dump(mode="json")["uncertainty"]
+    )
+    assert "caller_approval" not in evidence.request
+    assert len(evidence.report.scenario_results) == 3
+    assert tuple(
+        item.assumptions.capital_bridge.debt
+        for item in evidence.report.scenario_results
+    ) == (Decimal("5"), Decimal("30"), Decimal("5"))
+    repeated = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["result"]["result_hash"] == result["result_hash"]
+    assert (
+        repeated.json()["result"]["artifact_references"]
+        == result["artifact_references"]
+    )
+    payload["uncertainty"]["scenarios"][1]["assumptions"][
+        "assumptions.capital_bridge.debt"
+    ] = "31"
+    payload["input_digest"] = None
+    rejected = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["error"]["code"] == "invalid_request"
+    assert (
+        client.request(
+            "GET", url, headers=auth_headers(), json=make_internal_envelope({})
+        ).content
+        == saved.content
+    )
 
 
 def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval():
@@ -1254,7 +1444,7 @@ def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval
             "caller_approval": CallerApprovalEnvelopeV1(
                 input_digest=valuation.input_digest,
                 decision="approved",
-                caller_id="test-agent",
+                caller_id="subject-test",
                 decided_at=datetime.now(UTC),
             )
         }
@@ -1299,7 +1489,7 @@ def test_calculate_returns_version_bound_replayable_evidence():
             "caller_approval": CallerApprovalEnvelopeV1(
                 input_digest=validation.input_digest,
                 decision="approved",
-                caller_id="test-agent",
+                caller_id="subject-test",
                 decided_at=datetime.now(UTC),
             )
         }
@@ -1367,7 +1557,7 @@ def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
     payload["caller_approval"] = {
         "input_digest": request.input_digest,
         "decision": "approved",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
@@ -1458,6 +1648,13 @@ def test_runtime_injects_deployment_data_release_trust_roots(
     monkeypatch.setenv(
         "FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE", str(trust_roots_file)
     )
+    from fundamental_service.source_admission import SourceUsePolicyV1
+
+    source_use_policy = SourceUsePolicyV1(policy_version="synthetic-empty-catalog-v1")
+    source_use_file = tmp_path / "source-use-policy.json"
+    source_use_file.write_text(source_use_policy.model_dump_json())
+    monkeypatch.setenv("FUNDAMENTAL_SOURCE_USE_POLICY_FILE", str(source_use_file))
+    monkeypatch.setenv("FUNDAMENTAL_SOURCE_USE_POLICY_DIGEST", source_use_policy.digest)
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -1490,6 +1687,7 @@ def test_runtime_injects_deployment_data_release_trust_roots(
     roots = DataReleaseTrustRootsV1.from_file(trust_roots_file)
     assert captured["data_release_trust_roots"] == roots
     assert composed["metadata_store"] is not None
+    assert composed["source_use_policy"] == source_use_policy
 
 
 def test_snapshot_resolution_pins_only_active_release_facts():
@@ -1563,7 +1761,7 @@ def test_snapshot_resolution_pins_only_active_release_facts():
     )
     app = create_app(
         _ReleaseSnapshotRepository(decoy, snapshot),
-        fact_repository=_FactRepository(),
+        fact_repository=_CanonicalFactRepository(),
         metadata_store=metadata,
         config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
     )
@@ -1652,15 +1850,19 @@ def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(
 ):
     snapshot = _SnapshotRepository().snapshot
     fact = _canonical_fact("fact-revenue", "revenue")
-    manifest = _release_manifest_for(snapshot, (fact,))
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    manifest = _release_manifest_for(snapshot, (fact,), artifacts=artifacts)
     metadata = SimpleNamespace(
         get_data_release_manifest=lambda digest: (
             manifest if digest == manifest.manifest_digest else None
-        )
+        ),
+        get_data_release_verification=lambda digest: _release_verification_for(manifest)
+        if digest == manifest.manifest_digest
+        else None,
     )
     app = create_app(
         snapshot_repository=_SnapshotRepository(),
-        artifact_store=ArtifactStore(tmp_path / "artifacts"),
+        artifact_store=artifacts,
         content_store=FilesystemContentStore(tmp_path / "content"),
         fact_repository=_CanonicalFactRepository(),
         metadata_store=metadata,
@@ -1717,20 +1919,91 @@ def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(
     assert replay.dependency_versions["data_release"] == manifest.manifest_digest
 
 
+@pytest.mark.parametrize(
+    "role", ("taxonomy", "quality-evidence", "verification-evidence")
+)
+def test_direct_calculation_rejects_withdrawn_release_dependencies(tmp_path, role):
+    snapshot = _SnapshotRepository().snapshot
+    fact = _canonical_fact("fact-revenue", "revenue")
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    manifest = _release_manifest_for(snapshot, (fact,), artifacts=artifacts)
+    verification = _release_verification_for(manifest)
+    metadata = SimpleNamespace(
+        get_data_release_manifest=lambda digest: manifest
+        if digest == manifest.manifest_digest
+        else None,
+        get_data_release_verification=lambda digest: verification
+        if digest == manifest.manifest_digest
+        else None,
+    )
+    app = create_app(
+        snapshot_repository=_SnapshotRepository(),
+        artifact_store=artifacts,
+        fact_repository=_CanonicalFactRepository(),
+        metadata_store=metadata,
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+    )
+    valuation = make_valuation()
+    request = _bind_initial_policy(
+        valuation.model_copy(
+            update={
+                "historical_facts": (fact.fact_id,),
+                "valuation_context": valuation.valuation_context.model_copy(
+                    update={"data_release_manifest_digest": manifest.manifest_digest}
+                ),
+                "provenance": valuation.provenance.model_copy(
+                    update={"fact_ids": (fact.fact_id,)}
+                ),
+                "input_digest": None,
+            }
+        ).with_digest()
+    )
+    client = TestClient(app)
+
+    def execute():
+        return client.post(
+            "/v1/valuation/calculate",
+            headers=auth_headers(),
+            json=make_internal_envelope(request.model_dump(mode="json")),
+        )
+
+    first = execute()
+    assert first.status_code == 200, first.text
+    ref = next(
+        ref
+        for ref in (
+            *manifest.taxonomy_refs,
+            *manifest.artifact_refs,
+            *verification.evidence_refs,
+        )
+        if ref.role == role
+    )
+    retained = artifacts.read(ref.artifact_id)
+    artifacts.invalidate(ref.artifact_id)
+    assert artifacts.read(ref.artifact_id) == retained
+    response = execute()
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "ARTIFACT_EVIDENCE_INVALID"
+
+
 def test_valuation_evidence_read_uses_profile_roles_and_abstains_on_missing_facts(
     tmp_path: Path,
 ):
     snapshot = _SnapshotRepository().snapshot
     fact = _canonical_fact("fact-revenue", "revenue")
-    manifest = _release_manifest_for(snapshot, (fact,))
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    manifest = _release_manifest_for(snapshot, (fact,), artifacts=artifacts)
     metadata = SimpleNamespace(
         get_data_release_manifest=lambda digest: (
             manifest if digest == manifest.manifest_digest else None
-        )
+        ),
+        get_data_release_verification=lambda digest: _release_verification_for(manifest)
+        if digest == manifest.manifest_digest
+        else None,
     )
     app = create_app(
         snapshot_repository=_SnapshotRepository(),
-        artifact_store=ArtifactStore(tmp_path / "artifacts"),
+        artifact_store=artifacts,
         content_store=FilesystemContentStore(tmp_path / "content"),
         fact_repository=_CanonicalFactRepository(),
         metadata_store=metadata,
@@ -1756,7 +2029,7 @@ def test_valuation_evidence_read_uses_profile_roles_and_abstains_on_missing_fact
     assert result["facts"][0]["fact_id"] == fact.fact_id
     assert "cash_and_equivalents" in result["missing_fields"]
     assert "DATA_RELEASE_FIELDS_UNAVAILABLE" in result["issue_codes"]
-    assert result["profile_id"] == "fcff-valuation-requirements-v1"
+    assert result["profile_id"] == "fcff-valuation-requirements-v4"
 
     preparation = TestClient(app).post(
         "/v1/valuation/prepare",
@@ -1860,9 +2133,13 @@ def test_snapshot_resolution_cache_isolated_by_active_release_dependencies():
         )
     )
     fact_repository = SimpleNamespace(
+        get={
+            first_fact.fact_id: first_fact,
+            second_fact.fact_id: second_fact,
+        }.__getitem__,
         resolve=lambda *, snapshot, valuation_timestamp, required_fields: (
             facts_by_snapshot[snapshot.snapshot_id]
-        )
+        ),
     )
     app = create_app(
         _ReleaseSnapshotRepository(first_snapshot, second_snapshot),

@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import datetime
-from typing import Any
+from hashlib import sha256
+from typing import Any, overload
 
 from pydantic import model_validator
 
@@ -18,6 +19,8 @@ from ..calculator import (
 )
 from ..contracts import (
     ArtifactReferenceV1,
+    CanonicalFactV1,
+    CallerApprovalEnvelopeV1,
     CalculationArtifactV1,
     CalculationEvidenceV1,
     CalculationTraceV1,
@@ -26,6 +29,7 @@ from ..contracts import (
     FiscalPeriodSelectorV1,
     PolicyValuationInputV1,
     QualityStatus,
+    ResolvedFiscalPeriodV1,
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceSnapshotV1,
@@ -38,6 +42,7 @@ from ..contracts import (
 )
 from ..data_releases import (
     ActiveDataReleaseWithManifestV1,
+    ArtifactRefV1,
     DataReleaseActivationCommandV1,
     DataReleaseActivationRequestV1,
     DataReleaseCandidateReceiptV1,
@@ -46,14 +51,51 @@ from ..data_releases import (
     DataReleaseVerificationV1,
     ReleaseResolutionCacheKeyV1,
 )
-from ..facts import CanonicalFactRepository, canonical_fact_digest
+from ..artifact_evidence import (
+    EvidenceArtifactReader,
+    read_retained_artifact,
+    retained_artifact_operation,
+)
+from ..mapping_input_storage import (
+    mapping_input_report_dependency,
+    require_mapping_report_record,
+)
+from ..facts import (
+    CanonicalFactRepository,
+    CanonicalMappingV1,
+    canonical_fact_digest,
+    resolve_canonical_facts,
+    verify_accounting_role_evidence,
+)
+from ..equity_award_evidence import (
+    load_release_dilution_evidence,
+    load_release_conditional_quote,
+)
+from ..equity_dilution import DilutionError
+from ..quote_providers import QuoteSourceProviderPort
+from ..macro_series import MacroSeriesProviderPort
+from ..market_reference import MarketReferenceProviderPort
+from ..source_admission import SourceAdmissionV1, SourceUsePolicyV1
+from ..source_admission_evidence import load_release_source_admissions
+from ..market_source_selection import MarketSourceError, verify_observed_market_inputs
+from ..market_reference_evidence import load_release_market_reference_selection
+from ..automatic_market_policy_evidence import load_release_automatic_market_policy
+from ..market_reference_selection import (
+    IssuerMarketReferenceSelectionV1,
+    MarketReferenceSelectionError,
+)
+from ..terminal_growth import TerminalGrowthSelectionV1
+from ..terminal_growth_evidence import load_release_terminal_growth_selection
+from ..industry_capital import verify_industry_capital_policy
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
+from ..history_composition import verify_history_components
 from ..operations import (
     OperationalMetrics,
     OperationsConfig,
     ServiceError,
     guard_calculation_budget,
+    guard_execution_deadline,
 )
 from ..policies import (
     PolicyError,
@@ -69,7 +111,7 @@ from ..replay import (
     ReplayReportV1,
     replay_manifest,
 )
-from ..serialization import is_digest, sha256_digest
+from ..serialization import canonical_bytes, is_digest, sha256_digest
 from ..snapshots import (
     ContentAddressedStore,
     SnapshotError,
@@ -86,6 +128,8 @@ from ..uncertainty import (
     validate_uncertainty_controls,
 )
 from ..valuation_preparation import (
+    CONDITIONAL_FORECAST_COMPOSER_VERSION,
+    CONDITIONAL_REINVESTMENT_COMPOSER_VERSION,
     ApprovedMarketPolicyInputsV1,
     AutomaticValuationPreparationV1,
     ManualValuationOverrideRequestV1,
@@ -94,8 +138,54 @@ from ..valuation_preparation import (
 )
 from ..valuation_requirements import (
     select_released_facts,
-    valuation_requirements_profile,
 )
+from ..valuation_release_inputs import (
+    valuation_release_conditional_capital,
+    valuation_release_requirements,
+    valuation_release_working_capital_inputs,
+)
+from ..conditional_reinvestment_release import (
+    valuation_release_conditional_reinvestment,
+)
+
+
+@dataclass(frozen=True)
+class PreparedValuationOperation:
+    """Owner-created preparation consumed within its original execution budget."""
+
+    preparation: AutomaticValuationPreparationV1
+    _application: FundamentalApplication = dataclass_field(repr=False)
+    _preparation_digest: str = dataclass_field(repr=False)
+    _deadline_at: datetime = dataclass_field(repr=False)
+
+    def calculate(
+        self,
+        approval: CallerApprovalEnvelopeV1,
+        *,
+        correlation_id: str,
+    ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        guard_execution_deadline(self._deadline_at)
+        if sha256_digest(self.preparation) != self._preparation_digest:
+            raise ServiceError(
+                "PREPARED_VALUATION_CHANGED",
+                "prepared valuation changed during the operation",
+                status_code=409,
+                retryable=False,
+            )
+        value = self.preparation.input
+        if self.preparation.status != "prepared" or value is None:
+            raise ServiceError(
+                "VALUATION_INPUT_NOT_PREPARED",
+                "the operation has no prepared calculation input",
+                status_code=422,
+                retryable=False,
+            )
+        return self._application._calculate_valuation(
+            value.model_copy(update={"caller_approval": approval}),
+            correlation_id=correlation_id,
+            deadline_at=self._deadline_at,
+            preparation=self.preparation,
+        )
 
 
 class UncertaintyRequestV1(ValuationInputV1):
@@ -140,6 +230,10 @@ def _approved_market_policy(
     policy: PolicyRecordV1 | None,
     *,
     valuation_timestamp: datetime | None = None,
+    currency: str | None = None,
+    source_admissions: tuple[SourceAdmissionV1, ...] = (),
+    reference_selection: IssuerMarketReferenceSelectionV1 | None = None,
+    terminal_selection: TerminalGrowthSelectionV1 | None = None,
 ) -> ApprovedMarketPolicyInputsV1 | None:
     """Translate a complete released market policy into preparation evidence."""
 
@@ -150,8 +244,34 @@ def _approved_market_policy(
         item.available_at > valuation_timestamp for item in market_inputs.evidence
     ):
         return None
+    observed_traces: dict[str, TraceV1] = {}
+    try:
+        industry_traces = verify_industry_capital_policy(
+            market_inputs, reference_selection
+        )
+    except MarketReferenceSelectionError as error:
+        raise MarketSourceError(error.code, str(error)) from error
+    if any(item.method == "observed_source" for item in market_inputs.evidence):
+        if valuation_timestamp is None or currency is None:
+            raise MarketSourceError(
+                "MARKET_RATE_CONTEXT_MISSING",
+                "observed market inputs require valuation time and currency",
+            )
+        observed_traces = verify_observed_market_inputs(
+            market_inputs,
+            admissions=source_admissions,
+            valuation_at=valuation_timestamp,
+            currency=currency,
+            reference_selection=reference_selection,
+        )
 
     def trace_for(role: str) -> TraceV1:
+        if role == "terminal_growth" and terminal_selection is not None:
+            return terminal_selection.trace
+        if role in industry_traces:
+            return industry_traces[role]
+        if role in observed_traces:
+            return observed_traces[role]
         evidence = next(
             (item for item in market_inputs.evidence if item.role == role), None
         )
@@ -200,7 +320,10 @@ def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object
     """Fold transport wrappers into the canonical uncertainty group before decode."""
 
     data = dict(raw)
-    uncertainty = dict(data.get("uncertainty") or {})
+    raw_uncertainty = data.get("uncertainty")
+    if raw_uncertainty and not isinstance(raw_uncertainty, Mapping):
+        raise ValueError("uncertainty must be an object")
+    uncertainty = dict(raw_uncertainty) if isinstance(raw_uncertainty, Mapping) else {}
     monte_carlo = data.get("monte_carlo")
     if isinstance(monte_carlo, Mapping):
         monte_spec = monte_carlo.get("uncertainty")
@@ -219,6 +342,16 @@ def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object
 
 
 def _snapshot_error(error: SnapshotError) -> ServiceError:
+    if error.code in {
+        "ACCOUNTING_ROLE_MAPPING_MISMATCH",
+        "ACCOUNTING_ROLE_INTEGRITY_MISMATCH",
+    }:
+        return ServiceError(
+            error.code,
+            "accounting evidence conflicts with its released mapping or original",
+            status_code=409,
+            retryable=False,
+        )
     if error.code in {
         "SNAPSHOT_NOT_FOUND",
         "ARTIFACT_NOT_FOUND",
@@ -314,6 +447,10 @@ class FundamentalApplication:
     require_metadata: bool = False
     policy_registry: PolicyRegistry | None = None
     model_inventory: ModelInventory | None = None
+    quote_providers: tuple[QuoteSourceProviderPort, ...] = ()
+    macro_providers: tuple[MacroSeriesProviderPort, ...] = ()
+    reference_providers: tuple[MarketReferenceProviderPort, ...] = ()
+    source_use_policy: SourceUsePolicyV1 | None = None
     release_cache: CacheLifecycle = dataclass_field(
         default_factory=lambda: CacheLifecycle(max_entries=256),
         repr=False,
@@ -347,9 +484,7 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             )
-        snapshot = self.snapshot_repository.get(
-            value.valuation_context.data_snapshot_id
-        )
+        snapshot = self.snapshot(value.valuation_context.data_snapshot_id)
         source_hashes = {record.content_hash for record in snapshot.source_records}
         facts = []
         for fact_id in value.historical_facts:
@@ -387,6 +522,14 @@ class FundamentalApplication:
                 tuple(facts),
                 required_fields=(),
             )
+
+    @overload
+    def _data_release_manifest(self, manifest_digest: str) -> DataReleaseManifestV1: ...
+
+    @overload
+    def _data_release_manifest(
+        self, manifest_digest: str | None
+    ) -> DataReleaseManifestV1 | None: ...
 
     def _data_release_manifest(
         self, manifest_digest: str | None
@@ -448,6 +591,139 @@ class FundamentalApplication:
                 retryable=False,
             )
         return manifest
+
+    def _verify_current_release_artifacts(
+        self, manifest: DataReleaseManifestV1, *, deadline_at: datetime | None = None
+    ) -> None:
+        """Re-check every retained release dependency before serving valuation.
+
+        Canary validation establishes that a candidate was publishable. Serving
+        must also observe later invalidation or metadata substitution; otherwise
+        retained snapshot/fact rows could outlive the evidence that authorized
+        them. This boundary only reads the pinned bytes and current metadata. The
+        domain consumers below continue to validate their own evidence semantics.
+        """
+        if self.artifact_store is None:
+            raise ServiceError(
+                "ARTIFACT_UNAVAILABLE",
+                "release dependencies are unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        verification_reader = getattr(
+            self.metadata_store, "get_data_release_verification", None
+        )
+        if not callable(verification_reader):
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_UNAVAILABLE",
+                "release dependency verification is unavailable",
+            )
+        guard_execution_deadline(deadline_at)
+        try:
+            verification = verification_reader(manifest.manifest_digest)
+        except DataReleaseError:
+            raise
+        except Exception as error:  # pragma: no cover - adapter boundary
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_UNAVAILABLE",
+                "release dependency verification is unavailable",
+            ) from error
+        if (
+            not isinstance(verification, DataReleaseVerificationV1)
+            or verification.manifest_digest != manifest.manifest_digest
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_MISMATCH",
+                "release dependency verification differs from its manifest",
+            )
+        refs = [
+            *manifest.taxonomy_refs,
+            *manifest.artifact_refs,
+            *verification.evidence_refs,
+            *(
+                ref
+                for review in verification.mapping_reviews
+                for ref in review.evidence_refs
+            ),
+        ]
+        with retained_artifact_operation(
+            self.artifact_store, tuple(ref.artifact_id for ref in refs)
+        ) as artifacts:
+            self._verify_retained_release_artifacts(
+                artifacts, refs, deadline_at=deadline_at
+            )
+        guard_execution_deadline(deadline_at)
+
+    @staticmethod
+    def _verify_retained_release_artifacts(
+        artifacts: EvidenceArtifactReader,
+        refs: list[ArtifactRefV1],
+        *,
+        deadline_at: datetime | None = None,
+    ) -> None:
+        seen: dict[str, tuple[str, str]] = {}
+        report_dependencies: dict[str, tuple[str, ...]] = {}
+        expanded_inputs: set[str] = set()
+        for reference in refs:
+            guard_execution_deadline(deadline_at)
+            identity = (reference.content_hash, reference.media_type)
+            previous = seen.get(reference.artifact_id)
+            if previous is not None and previous != identity:
+                raise DataReleaseError(
+                    "DATA_RELEASE_ARTIFACT_REFERENCE_CONFLICT",
+                    "release references one artifact ID with different content",
+                )
+            mapping_input = reference.role in {
+                "automatic-mapping-input-v1",
+                "automatic-mapping-batch-input-v1",
+            }
+            try:
+                if (
+                    previous is not None
+                    and reference.artifact_id in report_dependencies
+                ):
+                    require_mapping_report_record(
+                        artifacts.get(reference.artifact_id),
+                        reference,
+                        report_dependencies[reference.artifact_id],
+                    )
+                if previous is not None and (
+                    not mapping_input or reference.artifact_id in expanded_inputs
+                ):
+                    continue
+                seen[reference.artifact_id] = identity
+                raw = read_retained_artifact(
+                    artifacts,
+                    reference,
+                    dependency_hashes=report_dependencies.get(reference.artifact_id),
+                )
+            except DataReleaseError:
+                raise
+            except Exception as error:  # pragma: no cover - adapter boundary
+                raise DataReleaseError(
+                    "DATA_RELEASE_ARTIFACT_UNAVAILABLE",
+                    f"release artifact {reference.artifact_id} is unavailable",
+                ) from error
+            if sha256(raw).hexdigest() != reference.content_hash:
+                raise DataReleaseError(
+                    "DATA_RELEASE_ARTIFACT_HASH_MISMATCH",
+                    f"release artifact {reference.artifact_id} failed hash verification",
+                )
+            if mapping_input:
+                expanded_inputs.add(reference.artifact_id)
+                dependency = mapping_input_report_dependency(raw)
+                if dependency is not None:
+                    report_ref, expected = dependency
+                    previous_dependencies = report_dependencies.setdefault(
+                        report_ref.artifact_id, expected
+                    )
+                    if previous_dependencies != expected:
+                        raise DataReleaseError(
+                            "MAPPING_ORIGINAL_ARTIFACT_MISMATCH",
+                            "shared mapping report has conflicting source dependencies",
+                        )
+                    refs.append(report_ref)
+        guard_execution_deadline(deadline_at)
 
     def publish_data_release_candidate(
         self, manifest: DataReleaseManifestV1, verification: DataReleaseVerificationV1
@@ -558,6 +834,51 @@ class FundamentalApplication:
             )
         return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
 
+    def _release_snapshot_facts(
+        self, manifest: DataReleaseManifestV1, snapshot: SourceSnapshotV1
+    ) -> tuple[CanonicalFactV1, ...]:
+        assert self.fact_repository is not None
+        declared_snapshot = next(
+            (
+                reference
+                for reference in manifest.snapshot_refs
+                if reference.snapshot_id == snapshot.snapshot_id
+            ),
+            None,
+        )
+        if (
+            declared_snapshot is None
+            or declared_snapshot.manifest_digest != snapshot.manifest_digest
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_SNAPSHOT_MISMATCH",
+                "the snapshot does not match the pinned data release",
+                status_code=409,
+                retryable=False,
+            )
+        facts = []
+        try:
+            for reference in declared_snapshot.facts:
+                fact = self.fact_repository.get(reference.fact_id)
+                if canonical_fact_digest(fact) != reference.fact_digest:
+                    raise ServiceError(
+                        "DATA_RELEASE_FACT_MISMATCH",
+                        "a canonical fact does not match the pinned data release",
+                        status_code=409,
+                        retryable=False,
+                    )
+                facts.append(fact)
+        except SnapshotError as error:
+            if error.code != "FACT_NOT_FOUND":
+                raise _snapshot_error(error) from error
+            raise ServiceError(
+                "FACT_NOT_FOUND",
+                "a release-declared canonical fact is unavailable",
+                status_code=404,
+                retryable=False,
+            ) from error
+        return tuple(facts)
+
     @staticmethod
     def _verify_release_snapshot_and_facts(
         manifest: DataReleaseManifestV1,
@@ -628,6 +949,8 @@ class FundamentalApplication:
                 model_version=value.model_version,
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
+                issuer_id=value.identity.issuer_id,
+                data_release_manifest_digest=value.valuation_context.data_release_manifest_digest,
             )
             if (
                 value.provenance.policy_version is not None
@@ -664,6 +987,8 @@ class FundamentalApplication:
                 model_version=value.model_version,
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
+                issuer_id=value.identity.issuer_id,
+                data_release_manifest_digest=value.valuation_context.data_release_manifest_digest,
             )
             return resolve_policy_overrides(request=value, policy=policy)
         except PolicyError as error:
@@ -705,6 +1030,7 @@ class FundamentalApplication:
                 quality_status = QualityStatus.PROVISIONAL
             issue_codes = (*issue_codes, "POLICY_NOT_PINNED_EXPLORATORY")
             missing_evidence = (*missing_evidence, "caller_pinned_policy_id")
+        assert value.input_digest is not None
         return ValidationResponseV1(
             contract_version="fundamental.v1",
             input=value,
@@ -943,7 +1269,9 @@ class FundamentalApplication:
                 retryable=True,
             )
         try:
-            return self.snapshot_repository.get(snapshot_id)
+            snapshot = self.snapshot_repository.get(snapshot_id)
+            verify_history_components(snapshot, self.snapshot_repository)
+            return snapshot
         except SnapshotError as error:
             self.metrics.increment("source_health_failures_total")
             raise _snapshot_error(error) from error
@@ -965,17 +1293,25 @@ class FundamentalApplication:
                 retryable=True,
             )
         snapshot = self.snapshot(request.snapshot_id)
-        try:
-            facts = self.fact_repository.resolve(
-                snapshot=snapshot,
-                valuation_timestamp=snapshot.valuation_timestamp,
-                required_fields=request.required_fields,
-            )
-        except SnapshotError as error:
-            raise _snapshot_error(error) from error
         release_manifest = self._data_release_manifest(
             request.data_release_manifest_digest
         )
+        try:
+            if release_manifest is None:
+                facts = self.fact_repository.resolve(
+                    snapshot=snapshot,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    required_fields=request.required_fields,
+                )
+            else:
+                facts = resolve_canonical_facts(
+                    self._release_snapshot_facts(release_manifest, snapshot),
+                    snapshot=snapshot,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    required_fields=request.required_fields,
+                )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
         if release_manifest is not None:
             self._verify_release_snapshot_and_facts(
                 release_manifest,
@@ -995,6 +1331,39 @@ class FundamentalApplication:
             facts=facts,
         )
 
+    def _current_release_mappings(
+        self, manifest: DataReleaseManifestV1
+    ) -> tuple[CanonicalMappingV1, ...] | None:
+        mapping_reader = getattr(self.metadata_store, "get_mapping", None)
+        if not callable(mapping_reader):
+            if self.require_metadata:
+                raise ServiceError(
+                    "DATA_RELEASE_MAPPING_UNAVAILABLE",
+                    "release mapping metadata is unavailable",
+                    status_code=503,
+                    retryable=True,
+                )
+            return None
+        try:
+            mappings = tuple(
+                mapping_reader(ref.mapping_id) for ref in manifest.mapping_refs
+            )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
+        if any(
+            mapping.decision_id != ref.mapping_id
+            or sha256_digest(mapping) != ref.mapping_digest
+            or mapping.status != "approved"
+            for mapping, ref in zip(mappings, manifest.mapping_refs, strict=True)
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_MAPPING_MISMATCH",
+                "a canonical mapping differs from the pinned release",
+                status_code=409,
+                retryable=False,
+            )
+        return mappings
+
     def read_valuation_evidence(
         self, request: ValuationEvidenceReadRequestV1
     ) -> ValuationEvidenceReadResponseV1:
@@ -1009,50 +1378,21 @@ class FundamentalApplication:
             )
         snapshot = self.snapshot(request.snapshot_id)
         manifest = self._data_release_manifest(request.data_release_manifest_digest)
-        profile = valuation_requirements_profile(request.model_id)
-        declared_snapshot = next(
-            (
-                reference
-                for reference in manifest.snapshot_refs
-                if reference.snapshot_id == snapshot.snapshot_id
-            ),
-            None,
-        )
-        if (
-            declared_snapshot is None
-            or declared_snapshot.manifest_digest != snapshot.manifest_digest
-        ):
-            raise ServiceError(
-                "DATA_RELEASE_SNAPSHOT_MISMATCH",
-                "the snapshot does not match the pinned data release",
-                status_code=409,
-                retryable=False,
-            )
-
-        facts = []
-        declared_digests = {
-            reference.fact_id: reference.fact_digest
-            for reference in declared_snapshot.facts
-        }
         try:
-            for fact_id, expected_digest in declared_digests.items():
-                fact = self.fact_repository.get(fact_id)
-                if canonical_fact_digest(fact) != expected_digest:
-                    raise ServiceError(
-                        "DATA_RELEASE_FACT_MISMATCH",
-                        "a canonical fact does not match the pinned data release",
-                        status_code=409,
-                        retryable=False,
-                    )
-                facts.append(fact)
-        except ServiceError:
-            raise
-        except SnapshotError as error:
+            profile = valuation_release_requirements(manifest, request.model_id)
+        except DataReleaseError as error:
             raise ServiceError(
-                "FACT_NOT_FOUND",
-                "a release-declared canonical fact is unavailable",
-                status_code=404,
-                retryable=False,
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
+        facts = self._release_snapshot_facts(manifest, snapshot)
+
+        try:
+            working_capital_inputs = valuation_release_working_capital_inputs(
+                manifest, snapshot
+            )
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
             ) from error
 
         selection = select_released_facts(
@@ -1060,6 +1400,9 @@ class FundamentalApplication:
             profile=profile,
             snapshot=snapshot,
             valuation_timestamp=snapshot.valuation_timestamp,
+            additional_fact_ids=tuple(
+                fact_id for item in working_capital_inputs for fact_id in item.fact_ids
+            ),
         )
         missing = set(selection.missing_fields)
         issue_codes = list(selection.issue_codes)
@@ -1077,6 +1420,34 @@ class FundamentalApplication:
             if issue_codes
             else QualityStatus.PROVISIONAL
         )
+        mapping_version = None
+        mappings = self._current_release_mappings(manifest)
+        if mappings is not None:
+            versions = {mapping.mapping_version for mapping in mappings}
+            mapping_by_id = {mapping.decision_id: mapping for mapping in mappings}
+            if len(versions) != 1 or any(
+                fact.mapping_decision_id not in mapping_by_id
+                or mapping_by_id[fact.mapping_decision_id].source_concept
+                != fact.concept
+                or mapping_by_id[fact.mapping_decision_id].normalized_field
+                != fact.normalized_field
+                for fact in selection.facts
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_MAPPING_FACT_MISMATCH",
+                    "release facts must bind one coherent reviewed mapping version",
+                    status_code=409,
+                    retryable=False,
+                )
+            mapping_version = next(iter(versions))
+            for fact in selection.facts:
+                assert fact.mapping_decision_id is not None
+                try:
+                    verify_accounting_role_evidence(
+                        fact, mapping_by_id[fact.mapping_decision_id], snapshot
+                    )
+                except SnapshotError as error:
+                    raise _snapshot_error(error) from error
         return ValuationEvidenceReadResponseV1(
             contract_version="fundamental.v1",
             snapshot_id=snapshot.snapshot_id,
@@ -1091,17 +1462,61 @@ class FundamentalApplication:
             issue_codes=tuple(dict.fromkeys(issue_codes)),
             missing_fields=tuple(sorted(missing)),
             rejected_fact_ids=selection.rejected_fact_ids,
+            mapping_version=mapping_version,
             facts=selection.facts,
         )
 
     def prepare_valuation(
-        self, request: ValuationEvidenceReadRequestV1
+        self,
+        request: ValuationEvidenceReadRequestV1,
+        *,
+        policy_id: str | None = None,
+        deadline_at: datetime | None = None,
     ) -> AutomaticValuationPreparationV1:
         """Prepare one valuation from the pinned release and service policy."""
 
+        guard_execution_deadline(deadline_at)
         evidence = self.read_valuation_evidence(request)
+        guard_execution_deadline(deadline_at)
         snapshot = self.snapshot(request.snapshot_id)
-        model_version = f"{request.model_id}-v1"
+        manifest = self._data_release_manifest(request.data_release_manifest_digest)
+        assert manifest is not None
+        try:
+            self._verify_current_release_artifacts(manifest, deadline_at=deadline_at)
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
+        working_capital_inputs = valuation_release_working_capital_inputs(
+            manifest, snapshot
+        )
+        declared_input_policy = manifest.valuation_working_capital_policy
+        if (
+            declared_input_policy is not None
+            and evidence.mapping_version != declared_input_policy.mapping_version
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_MAPPING_VERSION_MISMATCH",
+                "valuation working-capital inputs require the release mapping version",
+                status_code=422,
+                retryable=False,
+            )
+        try:
+            source_admissions = load_release_source_admissions(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                artifacts=self.artifact_store,
+                policy=self.source_use_policy,
+                macro_providers=self.macro_providers,
+                reference_providers=self.reference_providers,
+            )
+        except (DataReleaseError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "SOURCE_ADMISSION_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        model_version = f"{request.model_id}-v2"
         policy = None
         if self.policy_registry is not None:
             try:
@@ -1109,7 +1524,9 @@ class FundamentalApplication:
                     model_id=request.model_id,
                     model_version=model_version,
                     valuation_timestamp=snapshot.valuation_timestamp,
-                    policy_id=None,
+                    policy_id=policy_id,
+                    issuer_id=snapshot.identity.issuer_id,
+                    data_release_manifest_digest=manifest.manifest_digest,
                 )
             except PolicyError as error:
                 raise ServiceError(
@@ -1122,14 +1539,86 @@ class FundamentalApplication:
         policy_id = (
             policy.policy_id
             if policy is not None
-            else (f"{request.model_id}-us-gaap-public-v1")
+            else (f"{request.model_id}-us-gaap-public-v3")
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
-        market_policy = _approved_market_policy(
-            policy,
-            valuation_timestamp=snapshot.valuation_timestamp,
-        )
-        return prepare_automatic_valuation(
+        try:
+            load_release_automatic_market_policy(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            reference_selection = load_release_market_reference_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            terminal_selection = load_release_terminal_growth_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            market_policy = _approved_market_policy(
+                policy,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                currency=snapshot.identity.currency,
+                source_admissions=source_admissions,
+                reference_selection=reference_selection,
+                terminal_selection=terminal_selection,
+            )
+        except (MarketSourceError, DataReleaseError, SnapshotError) as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
+        try:
+            reinvestment = valuation_release_conditional_reinvestment(
+                manifest,
+                snapshot,
+                evidence.facts,
+                mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
+                artifacts=self.artifact_store,
+            )
+            conditional = valuation_release_conditional_capital(
+                manifest,
+                snapshot,
+                evidence.facts,
+                mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
+            )
+            conditional_quote = None
+            dilution = None
+            if conditional is not None:
+                conditional_quote = load_release_conditional_quote(
+                    manifest,
+                    policy=conditional.policy,
+                    snapshot=snapshot,
+                    artifacts=self.artifact_store,
+                    quote_providers=self.quote_providers,
+                    source_use_policy=self.source_use_policy,
+                )
+            else:
+                dilution = load_release_dilution_evidence(
+                    manifest,
+                    snapshot=snapshot,
+                    artifacts=self.artifact_store,
+                    released_facts=evidence.facts,
+                    quote_providers=self.quote_providers,
+                    source_use_policy=self.source_use_policy,
+                )
+        except (DataReleaseError, DilutionError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "DILUTION_EVIDENCE_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        guard_execution_deadline(deadline_at)
+        preparation = prepare_automatic_valuation(
             evidence.facts,
             snapshot=snapshot,
             model_id=request.model_id,
@@ -1140,6 +1629,32 @@ class FundamentalApplication:
             policy_version=policy_version,
             data_release_manifest_digest=request.data_release_manifest_digest,
             market_policy=market_policy,
+            mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
+            equity_dilution_evidence=dilution,
+            working_capital_inputs=working_capital_inputs,
+            conditional_capital_policy=conditional.policy
+            if conditional is not None
+            else None,
+            conditional_quote=conditional_quote,
+            conditional_reinvestment_policy=reinvestment.policy
+            if reinvestment is not None
+            else None,
+        )
+        guard_execution_deadline(deadline_at)
+        return preparation
+
+    def prepare_valuation_operation(
+        self,
+        request: ValuationEvidenceReadRequestV1,
+        *,
+        deadline_at: datetime,
+    ) -> PreparedValuationOperation:
+        preparation = self.prepare_valuation(request, deadline_at=deadline_at)
+        return PreparedValuationOperation(
+            preparation=preparation,
+            _application=self,
+            _preparation_digest=sha256_digest(preparation),
+            _deadline_at=deadline_at,
         )
 
     def apply_manual_override(
@@ -1296,6 +1811,9 @@ class FundamentalApplication:
             if cache_status == "hit" and isinstance(
                 cached_resolution, SnapshotResolutionV1
             ):
+                self._release_snapshot_facts(
+                    manifest, self.snapshot(cached_resolution.snapshot_id)
+                )
                 self.metrics.increment("cache_hit_total")
                 return cached_resolution
             if cache_status == "hit":
@@ -1334,44 +1852,47 @@ class FundamentalApplication:
             )
         selector_requested = request.fiscal_period_selector is not None
         for snapshot in candidates:
-            declared_snapshot = (
-                None
-                if declared_snapshots is None
-                else declared_snapshots[snapshot.snapshot_id]
+            snapshot = self.snapshot(snapshot.snapshot_id)
+            released_facts = (
+                self._release_snapshot_facts(active_release.manifest, snapshot)
+                if active_release is not None
+                else None
             )
-            if (
-                declared_snapshot is not None
-                and snapshot.manifest_digest != declared_snapshot.manifest_digest
-            ):
-                raise ServiceError(
-                    "DATA_RELEASE_SNAPSHOT_MISMATCH",
-                    "a release snapshot does not match its declared manifest",
-                    status_code=409,
-                    retryable=False,
-                )
             try:
-                facts = self.fact_repository.resolve(
-                    snapshot=snapshot,
-                    valuation_timestamp=request.valuation_timestamp,
-                    required_fields=request.required_fields,
-                )
+                if released_facts is None:
+                    facts = self.fact_repository.resolve(
+                        snapshot=snapshot,
+                        valuation_timestamp=request.valuation_timestamp,
+                        required_fields=request.required_fields,
+                    )
+                else:
+                    facts = resolve_canonical_facts(
+                        released_facts,
+                        snapshot=snapshot,
+                        valuation_timestamp=request.valuation_timestamp,
+                        required_fields=request.required_fields,
+                    )
             except SnapshotError as error:
                 if error.code == "FACT_NOT_FOUND":
                     continue
                 raise _snapshot_error(error) from error
             period_resolution = None
-            resolved_periods = ()
+            resolved_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
             if selector_requested:
-                list_facts = getattr(self.fact_repository, "list", None)
-                if not callable(list_facts):
-                    raise ServiceError(
-                        "FISCAL_PERIODS_UNAVAILABLE",
-                        "the fact repository cannot resolve issuer fiscal periods",
-                        status_code=503,
-                        retryable=True,
-                    )
+                if released_facts is None:
+                    list_facts = getattr(self.fact_repository, "list", None)
+                    if not callable(list_facts):
+                        raise ServiceError(
+                            "FISCAL_PERIODS_UNAVAILABLE",
+                            "the fact repository cannot resolve issuer fiscal periods",
+                            status_code=503,
+                            retryable=True,
+                        )
+                    period_facts = list_facts()
+                else:
+                    period_facts = released_facts
                 selection = resolve_fiscal_periods(
-                    list_facts(),
+                    period_facts,
                     snapshot=snapshot,
                     valuation_timestamp=request.valuation_timestamp,
                     selector=fiscal_selector,
@@ -1388,7 +1909,7 @@ class FundamentalApplication:
                         retryable=False,
                     )
                 facts = selection.facts
-            if declared_snapshot is not None:
+            if active_release is not None:
                 self._verify_release_snapshot_and_facts(
                     active_release.manifest,
                     snapshot,
@@ -1488,8 +2009,25 @@ class FundamentalApplication:
         return self.validate_valuation(value.base_input())
 
     def calculate_valuation(
-        self, value: ValuationInputV1, *, correlation_id: str
+        self,
+        value: ValuationInputV1,
+        *,
+        correlation_id: str,
+        deadline_at: datetime | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        return self._calculate_valuation(
+            value, correlation_id=correlation_id, deadline_at=deadline_at
+        )
+
+    def _calculate_valuation(
+        self,
+        value: ValuationInputV1,
+        *,
+        correlation_id: str,
+        deadline_at: datetime | None = None,
+        preparation: AutomaticValuationPreparationV1 | None = None,
+    ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
         if value.policy_id is None:
             raise ServiceError(
@@ -1500,16 +2038,89 @@ class FundamentalApplication:
             )
         resolved, resolution = self._resolve_policy(value)
         return self._calculate_resolved(
-            resolved, resolution, correlation_id=correlation_id
+            resolved,
+            resolution,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+            preparation=preparation,
         )
 
     def calculate_with_policy(
-        self, value: PolicyValuationInputV1, *, correlation_id: str
+        self,
+        value: PolicyValuationInputV1,
+        *,
+        correlation_id: str,
+        deadline_at: datetime | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        guard_execution_deadline(deadline_at)
         resolved, resolution = self._resolve_policy_overrides(value)
         return self._calculate_resolved(
-            resolved, resolution, correlation_id=correlation_id
+            resolved, resolution, correlation_id=correlation_id, deadline_at=deadline_at
         )
+
+    def _is_released_conditional_input(
+        self,
+        value: ValuationInputV1,
+        *,
+        deadline_at: datetime | None = None,
+        preparation: AutomaticValuationPreparationV1 | None = None,
+    ) -> bool:
+        manifest = self._data_release_manifest(
+            value.valuation_context.data_release_manifest_digest
+        )
+        reinvestment = bool(manifest and manifest.conditional_reinvestment_policies)
+        prefix = "CONDITIONAL_REINVESTMENT" if reinvestment else "CONDITIONAL_CAPITAL"
+        tagged = value.provenance.preparation_version in {
+            CONDITIONAL_FORECAST_COMPOSER_VERSION,
+            CONDITIONAL_REINVESTMENT_COMPOSER_VERSION,
+        }
+        if manifest is None or not (
+            manifest.conditional_capital_policies
+            or manifest.conditional_reinvestment_policies
+        ):
+            if tagged:
+                raise ServiceError(
+                    "CONDITIONAL_CAPITAL_RELEASE_MISSING",
+                    "conditional composition requires a pinned conditional release",
+                    status_code=422,
+                    retryable=False,
+                )
+            return False
+        if value.model_id != "fcff_dcf" and value.model_id != "transition_fcff_dcf":
+            raise ServiceError(
+                f"{prefix}_MODEL_MISMATCH",
+                "conditional inputs require a released FCFF composer",
+                status_code=422,
+                retryable=False,
+            )
+        expected = preparation
+        if expected is None:
+            expected = self.prepare_valuation(
+                ValuationEvidenceReadRequestV1(
+                    contract_version="fundamental.v1",
+                    snapshot_id=value.valuation_context.data_snapshot_id,
+                    data_release_manifest_digest=manifest.manifest_digest,
+                    model_id=value.model_id,
+                ),
+                policy_id=value.policy_id,
+                deadline_at=deadline_at,
+            )
+        if expected.input is not None:
+            resolved, _ = self._resolve_policy(expected.input)
+        else:
+            resolved = None
+        if resolved is None or canonical_bytes(
+            resolved.model_dump(exclude={"input_digest", "caller_approval"})
+        ) != canonical_bytes(
+            value.model_dump(exclude={"input_digest", "caller_approval"})
+        ):
+            raise ServiceError(
+                f"{prefix}_INPUT_MISMATCH",
+                "conditional calculation requires the exact recomposed release input and joint scenarios",
+                status_code=422,
+                retryable=False,
+            )
+        return True
 
     def _calculate_resolved(
         self,
@@ -1517,7 +2128,10 @@ class FundamentalApplication:
         resolution: Any,
         *,
         correlation_id: str,
+        deadline_at: datetime | None = None,
+        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        guard_execution_deadline(deadline_at)
         if resolution.input_digest != resolved.input_digest:
             raise ServiceError(
                 "INPUT_DIGEST_MISMATCH",
@@ -1528,7 +2142,34 @@ class FundamentalApplication:
         self._require_released_calculator_model(resolved)
         guard_calculation_budget(resolved, self.config)
         snapshot = self.snapshot(resolved.valuation_context.data_snapshot_id)
+        manifest = self._data_release_manifest(
+            resolved.valuation_context.data_release_manifest_digest
+        )
+        if manifest is not None:
+            try:
+                self._verify_current_release_artifacts(
+                    manifest, deadline_at=deadline_at
+                )
+            except DataReleaseError as error:
+                raise ServiceError(
+                    error.code, str(error), status_code=422, retryable=False
+                ) from error
         self._verify_fact_references(resolved)
+        if preparation is not None and manifest is not None:
+            self._release_snapshot_facts(manifest, snapshot)
+            self._current_release_mappings(manifest)
+        guard_execution_deadline(deadline_at)
+        released_conditional = self._is_released_conditional_input(
+            resolved, deadline_at=deadline_at, preparation=preparation
+        )
+        guard_execution_deadline(deadline_at)
+        if released_conditional and resolved.caller_approval is None:
+            raise ServiceError(
+                "CALLER_APPROVAL_REQUIRED",
+                "conditional scenarios require caller approval of the exact full input",
+                status_code=422,
+                retryable=False,
+            )
         has_uncertainty = resolved.uncertainty.mode != "none"
         calculation_input = resolved
         calculation_resolution = resolution
@@ -1563,7 +2204,10 @@ class FundamentalApplication:
                 update={"input_digest": calculation_input.input_digest}
             )
         try:
-            service_owned_uncertainty = is_service_owned_monte_carlo(resolved)
+            service_owned_uncertainty = (
+                released_conditional or is_service_owned_monte_carlo(resolved)
+            )
+            guard_execution_deadline(deadline_at)
             result = calculate(
                 calculation_input,
                 correlation_id=correlation_id,
@@ -1582,12 +2226,14 @@ class FundamentalApplication:
                 update={"policy_resolution": calculation_resolution, "trace": trace}
             )
         )
+        guard_execution_deadline(deadline_at)
         result = self._persist_evidence(calculation_input, result)
         self.metrics.increment("quality_status_total")
         self.metrics.increment(f"quality_status_{result.quality_status.value}_total")
         if not has_uncertainty:
             return result
         try:
+            guard_execution_deadline(deadline_at)
             uncertainty = run_uncertainty(
                 resolved,
                 base_result=result,
@@ -1610,6 +2256,7 @@ class FundamentalApplication:
         uncertainty_request = resolved.model_dump(
             exclude={"input_digest", "caller_approval"}
         )
+        guard_execution_deadline(deadline_at)
         uncertainty = self._persist_uncertainty_evidence(
             uncertainty, uncertainty_request
         )
@@ -1644,11 +2291,14 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
-        if report.status.value in {"abstain", "degraded"}:
+        if report.status == "abstain":
             self.metrics.increment("abstention_total")
         return report
 
-    def uncertainty_valuation(self, value: UncertaintyRequestV1) -> UncertaintyReportV1:
+    def uncertainty_valuation(
+        self, value: UncertaintyRequestV1, *, deadline_at: datetime | None = None
+    ) -> UncertaintyReportV1:
+        guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
         if value.policy_id is None:
             raise ServiceError(
@@ -1724,7 +2374,11 @@ class FundamentalApplication:
             base = self.calculate_valuation(
                 resolved,
                 correlation_id="uncertainty-base",
+                deadline_at=deadline_at,
             )
+            if isinstance(base, UncertaintyReportV1):
+                base = base.base
+            guard_execution_deadline(deadline_at)
             result = run_uncertainty(
                 resolved_value,
                 monte_carlo=monte_carlo,
@@ -1751,6 +2405,7 @@ class FundamentalApplication:
         evidence_request = resolved_value.model_dump(
             exclude={"input_digest", "caller_approval"}
         )
+        guard_execution_deadline(deadline_at)
         result = self._persist_uncertainty_evidence(result, evidence_request)
         self.metrics.increment("quality_status_total")
         self.metrics.increment(f"quality_status_{result.status.value}_total")

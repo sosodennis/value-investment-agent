@@ -1,0 +1,150 @@
+{
+  "archive_byte_length": 142008253,
+  "archive_filename": "research-evidence.tar.gz",
+  "archive_manifest_filename": "manifest.json",
+  "archive_manifest_sha256": "e33675f8b19f46dbf8a742c8d8d037d261361140c2c447b46aff977ee2a17388",
+  "archive_sha256": "921937cbcf490aee8893fd343835d234eec1e48514108cf33ca88e6b11eea037",
+  "clean_directory_restore_verified": true,
+  "file_count": 10358,
+  "files_removed_from_branch": 10357,
+  "git_bundle_filename": "source-history.bundle",
+  "git_bundle_sha256": "d27238c031cbbbd79b90c114e4fb46b8f199a3d9245d0685e33c0a7435eca11c",
+  "git_bundle_verified": true,
+  "input_digest": "472c9c1f4c37cd44e1d400d2099d6e04e5b4b4d2f7ea027ccdad77c7d95f1b15",
+  "local_archive_directory": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-research-archive-59830e16",
+  "production_snapshot_imported": false,
+  "research_tools_preserved_in_git_bundle": [
+    {
+      "byte_length": 29802,
+      "path": "fundamental-service/src/fundamental_service/history_forecast_replay.py",
+      "sha256": "e4e9627b4eae14ed72119e08d9b5b1969c5d2795a77bcff5514f32b7b3538c7c"
+    },
+    {
+      "byte_length": 3425,
+      "path": "fundamental-service/src/fundamental_service/history_forecast_replay_cli.py",
+      "sha256": "75e4d497f65764ef1990c34baa44808fc7676e3c8a51775512e05ab9f6b0e6ea"
+    },
+    {
+      "byte_length": 39539,
+      "path": "fundamental-service/src/fundamental_service/history_mapping_audit.py",
+      "sha256": "eda269561941d9680dd9c8be937686a61c94a4ae098e5b03478a6b50e49bcdaf"
+    },
+    {
+      "byte_length": 9858,
+      "path": "fundamental-service/src/fundamental_service/history_mapping_proposals.py",
+      "sha256": "893d6851d3ca8558a2384f3c8e33e34801491cd2a676e77bc134e99b9dd53da4"
+    },
+    {
+      "byte_length": 11802,
+      "path": "fundamental-service/src/fundamental_service/history_market_evidence.py",
+      "sha256": "350851a145e12d38c5d5f10471b1e490226680ab6ec461cd6bff99a39985a441"
+    },
+    {
+      "byte_length": 11392,
+      "path": "fundamental-service/src/fundamental_service/history_original_validation.py",
+      "sha256": "2cdb55bec4342c0be86f65bf4542551527e250493f72dc1e6fb8395fb1c3989f"
+    },
+    {
+      "byte_length": 11344,
+      "path": "fundamental-service/src/fundamental_service/history_policy_proposal.py",
+      "sha256": "e9f411c456bec1ccb730c0e3e96111fd832bb6b1eb4f50ab88fbc2ec896b501e"
+    },
+    {
+      "byte_length": 31730,
+      "path": "fundamental-service/src/fundamental_service/history_replay.py",
+      "sha256": "3271faa82842aba5135ffb36b0e1d35616adcbf6beb44033e677fb9ca02fb0b9"
+    },
+    {
+      "byte_length": 26239,
+      "path": "fundamental-service/src/fundamental_service/history_replay_inputs.py",
+      "sha256": "47c815e92c543dd27216eee4d8785bd70b7b7fc0d8322bbe26976e1d8a842c82"
+    },
+    {
+      "byte_length": 12298,
+      "path": "fundamental-service/src/fundamental_service/history_review_signing.py",
+      "sha256": "7e0537579d591041355f293cdfd5da914bd9c96d93385b473c2c590cea2967c5"
+    },
+    {
+      "byte_length": 31154,
+      "path": "fundamental-service/tests/test_history_forecast_replay.py",
+      "sha256": "83fe725dfd0e869fd57fb316446792b8448fdbcf18c6a09cd52c2911d025de28"
+    },
+    {
+      "byte_length": 9281,
+      "path": "fundamental-service/tests/test_history_mapping_audit.py",
+      "sha256": "7a45cff7accce66fb1eb601510d975e46725603f6b3f13dde4bfd40a281c8c53"
+    },
+    {
+      "byte_length": 5445,
+      "path": "fundamental-service/tests/test_history_mapping_proposals.py",
+      "sha256": "7f306686b1f40e1143bf46c5a1bbf9739b1ba3064d2f2492c24cd90446ab3746"
+    },
+    {
+      "byte_length": 5220,
+      "path": "fundamental-service/tests/test_history_market_evidence.py",
+      "sha256": "cabee37afbdb1cffd2b870b3cdedae123d85ce2cfbb0fac0735e3512ae00303d"
+    },
+    {
+      "byte_length": 7942,
+      "path": "fundamental-service/tests/test_history_original_validation.py",
+      "sha256": "2070b46612b6356d0578f4a3c561d8abb4d682c4c5c7b892ad329400a451038a"
+    },
+    {
+      "byte_length": 3598,
+      "path": "fundamental-service/tests/test_history_policy_proposal.py",
+      "sha256": "dfad14c4ebe793cc7092473f78a65acd4ee272945c2c64bbfb70f8a25e795043"
+    },
+    {
+      "byte_length": 7143,
+      "path": "fundamental-service/tests/test_history_replay.py",
+      "sha256": "625d980fc168ec3f805dd3344e8ac89f19d21e40ef768ad1fccba2b51b429ba7"
+    },
+    {
+      "byte_length": 11718,
+      "path": "fundamental-service/tests/test_history_replay_inputs.py",
+      "sha256": "52ac6093b737735b9b8e4cea6e49123b1b9945b082b3f7a5eebaf161725d18e6"
+    },
+    {
+      "byte_length": 9443,
+      "path": "fundamental-service/tests/test_history_review_signing.py",
+      "sha256": "2ed0b2e8eb6916d5e502c819e82175c65950cfd89c1f69a3553f91d3751e9aba"
+    },
+    {
+      "byte_length": 5385,
+      "path": "fundamental-service/tests/test_history_replay_cohort_location.py",
+      "sha256": "b23b36cc08c02158dc247a1d4cb07dd68b4b60292618c440b69f188d27cae5e6"
+    },
+    {
+      "byte_length": 1682,
+      "path": "fundamental-service/tests/test_replay_command_provenance.py",
+      "sha256": "ef06d5452ff2dff877e16864566cfbd673627e51fa6368b9d137de4d3b6b3f86"
+    },
+    {
+      "byte_length": 12174,
+      "path": "fundamental-service/scripts/validate_fixed_history_originals.py",
+      "sha256": "1a18d5d7641f25170c14f53641c4f4c0ebfe49e7449fe3e3e9b15d8db31d71f4"
+    },
+    {
+      "byte_length": 3740,
+      "path": "fundamental-service/docs/issue361-original-inventory-validation.md",
+      "sha256": "a9f7f4f78719b6c604ff230652b23542a6a177614b519a11a5b22f195092703a"
+    },
+    {
+      "byte_length": 3741,
+      "path": "fundamental-service/docs/issue361-project-signing.md",
+      "sha256": "0be086918c7c7401d47ca0847c6bbee7fb9abdd90f13ee568f5d1f564e63f661"
+    },
+    {
+      "byte_length": 6758,
+      "path": "fundamental-service/docs/issue361-replay-runner.md",
+      "sha256": "eaf81cefdf7d81c8a53c2ab4c588630bee8985371df4cc99c028a0173a13a48b"
+    }
+  ],
+  "research_tools_removed_from_branch": 25,
+  "restore_reference": "docs/acceptance/issue-361-acceptance.md",
+  "schema_version": "issue361-research-archive-ref-v1",
+  "shared_storage_published": false,
+  "source_checkpoint_backup_branch": "codex/issue-361-replay-evidence-presquash-a74238ec",
+  "source_commit": "59830e161c9300e44b2b7b54eea3e43567835bff",
+  "source_tree": "c155f53fcc8f099c2bef6469bbc9ace9f9e60ee0"
+}

@@ -2,24 +2,55 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, model_validator
 
-from .annual_history import AnnualHistoryV1, resolve_annual_history
+from .annual_history import (
+    AnnualHistoryError,
+    AnnualHistoryPeriodV1,
+    AnnualHistoryV1,
+    EstimatedOperatingInputsV1,
+    resolve_annual_history,
+)
+from .conditional_capital_contracts import (
+    ConditionalCapitalPolicyV1,
+    ConditionalCapitalAssessmentV1,
+)
+from .conditional_capital import ConditionalCapitalError, assess_conditional_capital
+from .conditional_reinvestment import (
+    ConditionalReinvestmentError,
+    assess_conditional_reinvestment,
+    reinvestment_history_requirements_profile,
+)
+from .conditional_reinvestment_contracts import (
+    REINVESTMENT_CORE_FIELDS,
+    ConditionalReinvestmentAssessmentV1,
+    ConditionalReinvestmentPolicyV1,
+    ReinvestmentHypothesisV1,
+)
+from .capital_bridge_policy import (
+    CapitalBridgePolicyError,
+    require_disjoint_non_operating_assets,
+)
 from .contracts import (
     AssumptionsV1,
     CanonicalFactV1,
     CapitalBridgeAssumptionsV1,
+    FiscalPeriodV1,
     FiscalPeriodSelectorV1,
     ForecastAssumptionsV1,
+    ProvenanceInputV1,
     QualityInputV1,
     QualityStatus,
     SourceRole,
+    ScenarioInputV1,
     SourceSnapshotV1,
     StrictModel,
     TraceV1,
@@ -28,7 +59,24 @@ from .contracts import (
     ValuationInputV1,
     WaccAssumptionsV1,
 )
-from .numerical_policy import using_valuation_context
+from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
+from .equity_award_evidence import (
+    EquityDilutionEvidenceV1,
+    verify_dilution_fact_bindings,
+)
+from .equity_dilution import (
+    DilutionError,
+    CommonShareQuoteV1,
+    require_eligible_common_share_quote,
+    TreasuryStockResultV1,
+    compute_treasury_stock_dilution,
+)
+from .operating_scenario_policy import (
+    BASELINE_SCENARIO_POLICY,
+    UnconsumedBaselineCapexV1,
+    scenario_policy_digest,
+)
+from .original_issuer import IssuerOperatingSourceV1
 from .serialization import sha256_digest
 from .uncertainty_policy import (
     DEFAULT_UNCERTAINTY_POLICY_VERSION,
@@ -38,6 +86,15 @@ from .valuation_requirements import (
     ValuationRequirementsProfileV1,
     select_released_facts,
     valuation_requirements_profile,
+    composite_working_capital_requirements_profile,
+    conditional_capital_requirements_profile,
+    conditional_reinvestment_requirements_profile,
+)
+from .working_capital import (
+    CompositeWorkingCapitalAssessmentV1,
+    CompositeWorkingCapitalInputV1,
+    WORKING_CAPITAL_FIELDS,
+    canonical_working_capital_inputs,
 )
 
 _ZERO_TOLERANCE = Decimal("0.000000001")
@@ -46,6 +103,9 @@ _MAX_REVENUE_GROWTH = Decimal("1.00")
 _MIN_REINVESTMENT_RATE = Decimal("-1.00")
 _MAX_REINVESTMENT_RATE = Decimal("1.00")
 _FORECAST_PERIODS = 5
+FORECAST_COMPOSER_VERSION = "fcff-forecast-composer-v5"
+CONDITIONAL_FORECAST_COMPOSER_VERSION = "fcff-conditional-capital-composer-v1"
+CONDITIONAL_REINVESTMENT_COMPOSER_VERSION = "fcff-conditional-reinvestment-composer-v1"
 
 
 class PreparationError(ValueError):
@@ -79,6 +139,36 @@ class HistoricalMetricsV1(StrictModel):
     quality_status: QualityStatus
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
+    working_capital_assessments: tuple[CompositeWorkingCapitalAssessmentV1, ...] = (
+        Field(default=(), exclude_if=lambda value: not value)
+    )
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
+
+
+class ConditionalOperatingScenarioV1(StrictModel):
+    hypothesis: ReinvestmentHypothesisV1
+    forecast: ForecastAssumptionsV1
+
+
+class ConditionalOperatingForecastsV1(StrictModel):
+    """Operating assumptions only; not a released or caller-approved valuation."""
+
+    protocol: Literal["conditional-operating-forecasts-v1"] = (
+        "conditional-operating-forecasts-v1"
+    )
+    composer_version: str = Field(min_length=1)
+    numerical_policy_version: str = Field(min_length=1)
+    composer_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    assessment: ConditionalReinvestmentAssessmentV1
+    historical_metrics: HistoricalMetricsV1
+    scenarios: tuple[ConditionalOperatingScenarioV1, ...]
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @property
+    def output_digest(self) -> str:
+        return sha256_digest(self)
 
 
 class ApprovedMarketPolicyInputsV1(StrictModel):
@@ -232,6 +322,18 @@ class AutomaticValuationPreparationV1(StrictModel):
     historical_metrics: HistoricalMetricsV1
     assumptions_evidence: tuple[AssumptionEvidenceV1, ...] = ()
     input: ValuationInputV1 | None = None
+    equity_dilution: TreasuryStockResultV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_capital: ConditionalCapitalAssessmentV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_quote: CommonShareQuoteV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_operating: ConditionalOperatingForecastsV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
@@ -258,7 +360,7 @@ class ManualValuationOverrideRequestV1(StrictModel):
 
 def _metric(
     metric_id: str,
-    period,
+    period: AnnualHistoryPeriodV1,
     value: Decimal,
     formula: str,
     facts: Iterable[CanonicalFactV1],
@@ -281,56 +383,98 @@ def _metric(
 @using_valuation_context
 def derive_historical_metrics(
     history: AnnualHistoryV1,
+    *,
+    estimated_inputs: tuple[EstimatedOperatingInputsV1, ...] = (),
 ) -> HistoricalMetricsV1:
     """Derive reviewed FCFF historical metrics without numeric placeholders."""
 
+    return _derive_historical_metrics(
+        history, estimated_inputs=estimated_inputs, observed_reinvestment=True
+    )
+
+
+def _derive_historical_metrics(
+    history: AnnualHistoryV1,
+    *,
+    estimated_inputs: tuple[EstimatedOperatingInputsV1, ...] = (),
+    observed_reinvestment: bool,
+) -> HistoricalMetricsV1:
     if history.quality is QualityStatus.ABSTAIN:
         return HistoricalMetricsV1(
             profile_id=history.requirements_profile_id,
             profile_digest=history.requirements_profile_digest,
             quality_status=QualityStatus.ABSTAIN,
+            working_capital_assessments=history.working_capital_assessments,
+            working_capital_inputs=(),
             issue_codes=history.issue_codes,
             missing_evidence=tuple(
                 f"{year}:{field}" for year, field in history.missing_fields
             ),
         )
 
+    estimates = {item.fiscal_year: item for item in estimated_inputs}
+    if estimated_inputs and (
+        len(estimates) != len(estimated_inputs)
+        or set(estimates) != {period.fiscal_year for period in history.periods}
+    ):
+        raise ValueError("estimated operating inputs must cover each period exactly")
     metrics: list[HistoricalMetricV1] = []
     issue_codes = list(history.issue_codes)
+    if estimates:
+        issue_codes.append("SCENARIO_INPUTS_ASSUMED")
     missing: list[str] = []
     for index, period in enumerate(history.periods):
-        fields = {
-            field: period.fact(field)
-            for field in (
-                "revenue",
-                "operating_income",
-                "income_before_tax",
-                "income_tax_expense",
+        required_fields = REINVESTMENT_CORE_FIELDS
+        if observed_reinvestment:
+            required_fields += (
                 "capital_expenditure",
                 "depreciation_and_amortization",
-                "operating_current_receivables",
-                "inventory",
-                "contract_assets",
-                "operating_current_payables",
-                "accrued_operating_liabilities",
-                "deferred_revenue",
+                *(WORKING_CAPITAL_FIELDS if period.working_capital is None else ()),
             )
-        }
-        absent = tuple(name for name, fact in fields.items() if fact is None)
+        candidates = {field: period.fact(field) for field in required_fields}
+        estimate = estimates.get(period.fiscal_year)
+        if estimate is not None and isinstance(
+            estimate.capital_expenditure, UnconsumedBaselineCapexV1
+        ):
+            if (
+                index != 0
+                or history.requirements_profile_id != BASELINE_SCENARIO_POLICY
+                or history.requirements_profile_digest
+                != scenario_policy_digest(BASELINE_SCENARIO_POLICY)
+                or history.quality is not QualityStatus.PROVISIONAL
+                or estimate.capex_facts
+            ):
+                raise PreparationError(
+                    "BASELINE_CAPEX_POLICY_INVALID",
+                    "an unknown capex nonoperand requires the pinned research baseline policy",
+                    missing=(f"{period.fiscal_year}:capital_expenditure",),
+                )
+            issue_codes.append("BASELINE_CAPEX_UNKNOWN_UNCONSUMED")
+        if estimate is not None:
+            candidates = {
+                name: fact
+                for name, fact in candidates.items()
+                if name not in (*WORKING_CAPITAL_FIELDS, "capital_expenditure")
+            }
+        absent = tuple(name for name, fact in candidates.items() if fact is None)
         if absent:
             missing.extend(f"{period.fiscal_year}:{name}" for name in absent)
             continue
-        assert all(fact is not None for fact in fields.values())
-        revenue = fields["revenue"].value
-        operating_income = fields["operating_income"].value
-        income_before_tax = fields["income_before_tax"].value
-        tax_expense = fields["income_tax_expense"].value
-        if not all(
-            isinstance(value, Decimal)
-            for value in (revenue, operating_income, income_before_tax, tax_expense)
-        ):
+        fields = {name: fact for name, fact in candidates.items() if fact is not None}
+        values = {
+            name: fact.value
+            for name, fact in fields.items()
+            if isinstance(fact.value, Decimal)
+        }
+        if len(values) != len(fields):
             issue_codes.append("METRIC_NON_NUMERIC_VALUE")
             continue
+        if estimate is not None and isinstance(estimate.capital_expenditure, Decimal):
+            values["capital_expenditure"] = estimate.capital_expenditure
+        revenue = values["revenue"]
+        operating_income = values["operating_income"]
+        income_before_tax = values["income_before_tax"]
+        tax_expense = values["income_tax_expense"]
         if revenue <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_REVENUE_NON_POSITIVE")
             continue
@@ -379,85 +523,147 @@ def derive_historical_metrics(
         if previous_revenue.value <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_GROWTH_DENOMINATOR_UNSTABLE")
             continue
-        current_working_capital = (
-            fields["operating_current_receivables"].value
-            + fields["inventory"].value
-            + fields["contract_assets"].value
-            - fields["operating_current_payables"].value
-            - fields["accrued_operating_liabilities"].value
-            - fields["deferred_revenue"].value
+        growth = _metric(
+            "revenue_growth",
+            period,
+            revenue / previous_revenue.value - Decimal("1"),
+            "revenue / prior_revenue - 1",
+            (fields["revenue"], previous_revenue),
         )
-        previous_working_capital = (
-            previous.fact("operating_current_receivables").value
-            + previous.fact("inventory").value
-            + previous.fact("contract_assets").value
-            - previous.fact("operating_current_payables").value
-            - previous.fact("accrued_operating_liabilities").value
-            - previous.fact("deferred_revenue").value
-        )
+        if not observed_reinvestment:
+            metrics.append(growth)
+            continue
+        current_working_capital: Decimal | None
+        previous_working_capital: Decimal | None
+        if estimate is not None:
+            previous_estimate = estimates[previous.fiscal_year]
+            current_working_capital = estimate.operating_working_capital
+            previous_working_capital = previous_estimate.operating_working_capital
+            current_working_capital_facts = estimate.working_capital_facts
+            previous_working_capital_facts = previous_estimate.working_capital_facts
+            capex_facts = estimate.capex_facts
+        else:
+            working_capital_fields = (
+                WORKING_CAPITAL_FIELDS if previous.working_capital is None else ()
+            )
+            previous_candidates = {
+                name: previous.fact(name) for name in working_capital_fields
+            }
+            absent_previous = tuple(
+                name for name, fact in previous_candidates.items() if fact is None
+            )
+            if absent_previous:
+                missing.extend(
+                    f"{period.fiscal_year}:prior_{name}" for name in absent_previous
+                )
+                continue
+            previous_fields = {
+                name: fact
+                for name, fact in previous_candidates.items()
+                if fact is not None
+            }
+            previous_values = {
+                name: fact.value
+                for name, fact in previous_fields.items()
+                if isinstance(fact.value, Decimal)
+            }
+            if len(previous_values) != len(previous_fields):
+                issue_codes.append("METRIC_NON_NUMERIC_VALUE")
+                continue
+            current_working_capital = (
+                period.working_capital.value
+                if period.working_capital is not None
+                else (
+                    values["operating_current_receivables"]
+                    + values["inventory"]
+                    + values["contract_assets"]
+                    - values["operating_current_payables"]
+                    - values["accrued_operating_liabilities"]
+                    - values["deferred_revenue"]
+                )
+            )
+            previous_working_capital = (
+                previous.working_capital.value
+                if previous.working_capital is not None
+                else (
+                    previous_values["operating_current_receivables"]
+                    + previous_values["inventory"]
+                    + previous_values["contract_assets"]
+                    - previous_values["operating_current_payables"]
+                    - previous_values["accrued_operating_liabilities"]
+                    - previous_values["deferred_revenue"]
+                )
+            )
+            if current_working_capital is None or previous_working_capital is None:
+                issue_codes.append("WORKING_CAPITAL_ESTIMATE_UNAVAILABLE")
+                continue
+            current_working_capital_facts = (
+                period.working_capital.source_facts
+                if period.working_capital is not None
+                else tuple(fields[field] for field in WORKING_CAPITAL_FIELDS)
+            )
+            previous_working_capital_facts = (
+                previous.working_capital.source_facts
+                if previous.working_capital is not None
+                else tuple(previous_fields[field] for field in WORKING_CAPITAL_FIELDS)
+            )
+            capex_facts = (fields["capital_expenditure"],)
         delta_working_capital = current_working_capital - previous_working_capital
-        capex = fields["capital_expenditure"].value
-        depreciation = fields["depreciation_and_amortization"].value
+        capex = values["capital_expenditure"]
+        depreciation = values["depreciation_and_amortization"]
         if abs(nopat) <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_REINVESTMENT_DENOMINATOR_UNSTABLE")
             continue
+        net_reinvestment = capex - depreciation + delta_working_capital
+        realized_fact_candidates = (
+            fields["operating_income"],
+            fields["income_tax_expense"],
+            fields["income_before_tax"],
+            *capex_facts,
+            fields["depreciation_and_amortization"],
+            *current_working_capital_facts,
+            *previous_working_capital_facts,
+        )
+        realized_facts = realized_fact_candidates
         metrics.extend(
             (
-                _metric(
-                    "revenue_growth",
-                    period,
-                    revenue / previous_revenue.value - Decimal("1"),
-                    "revenue / prior_revenue - 1",
-                    (fields["revenue"], previous_revenue),
-                ),
+                growth,
                 _metric(
                     "delta_operating_working_capital",
                     period,
                     delta_working_capital,
                     "operating_working_capital - prior_operating_working_capital",
                     (
-                        fields["operating_current_receivables"],
-                        fields["inventory"],
-                        fields["contract_assets"],
-                        fields["operating_current_payables"],
-                        fields["accrued_operating_liabilities"],
-                        fields["deferred_revenue"],
-                        previous.fact("operating_current_receivables"),
-                        previous.fact("inventory"),
-                        previous.fact("contract_assets"),
-                        previous.fact("operating_current_payables"),
-                        previous.fact("accrued_operating_liabilities"),
-                        previous.fact("deferred_revenue"),
+                        *current_working_capital_facts,
+                        *previous_working_capital_facts,
                     ),
                     unit="currency",
                 ),
                 _metric(
                     "reinvestment_rate",
                     period,
-                    (capex - depreciation + delta_working_capital) / nopat,
+                    net_reinvestment / nopat,
                     (
                         "(capital_expenditure - depreciation_and_amortization + "
                         "delta_operating_working_capital) / nopat"
                     ),
                     (
-                        fields["capital_expenditure"],
+                        *capex_facts,
                         fields["depreciation_and_amortization"],
-                        fields["operating_current_receivables"],
-                        fields["inventory"],
-                        fields["contract_assets"],
-                        fields["operating_current_payables"],
-                        fields["accrued_operating_liabilities"],
-                        fields["deferred_revenue"],
+                        *current_working_capital_facts,
                         fields["operating_income"],
                         fields["income_tax_expense"],
                         fields["income_before_tax"],
-                        previous.fact("operating_current_receivables"),
-                        previous.fact("inventory"),
-                        previous.fact("contract_assets"),
-                        previous.fact("operating_current_payables"),
-                        previous.fact("accrued_operating_liabilities"),
-                        previous.fact("deferred_revenue"),
+                        *previous_working_capital_facts,
                     ),
+                ),
+                _metric(
+                    "realized_fcff",
+                    period,
+                    nopat - net_reinvestment,
+                    "nopat - (capital_expenditure - depreciation_and_amortization + delta_operating_working_capital)",
+                    realized_facts,
+                    unit="currency",
                 ),
             )
         )
@@ -476,6 +682,7 @@ def derive_historical_metrics(
         quality_status=status,
         issue_codes=tuple(dict.fromkeys(issue_codes)),
         missing_evidence=tuple(sorted(set(missing))),
+        working_capital_assessments=history.working_capital_assessments,
     )
 
 
@@ -493,7 +700,9 @@ def _latest_fact(
     )
     if not matches:
         return None
-    latest_period = max(fact.instant for fact in matches)
+    latest_period = max(
+        instant for fact in matches if (instant := fact.instant) is not None
+    )
     period_matches = tuple(fact for fact in matches if fact.instant == latest_period)
     latest_available = max(fact.available_at for fact in period_matches)
     latest = tuple(
@@ -625,6 +834,16 @@ def apply_manual_override(
 ) -> AutomaticValuationPreparationV1:
     """Apply one supported override and bind it to the automatic preparation."""
 
+    if preparation.conditional_operating is not None:
+        raise PreparationError(
+            "CONDITIONAL_REINVESTMENT_OVERRIDE_UNSUPPORTED",
+            "forward inputs require the exact retained policy and joint scenarios",
+        )
+    if preparation.conditional_capital is not None:
+        raise PreparationError(
+            "CONDITIONAL_CAPITAL_OVERRIDE_UNSUPPORTED",
+            "conditional inputs require the exact immutable policy and joint scenarios",
+        )
     if preparation.status != "prepared" or preparation.input is None:
         raise PreparationError(
             "MANUAL_OVERRIDE_UNAVAILABLE",
@@ -705,22 +924,24 @@ def apply_manual_override(
         "assumptions_evidence": updated_evidence,
         "input": updated_input,
     }
-    return AutomaticValuationPreparationV1(
-        **payload,
-        preparation_digest=sha256_digest(
-            {
-                **payload,
-                "automatic_preparation_digest": preparation.preparation_digest,
-                "manual_provenance": provenance,
-            }
-        ),
+    return AutomaticValuationPreparationV1.model_validate(
+        {
+            **payload,
+            "preparation_digest": sha256_digest(
+                {
+                    **payload,
+                    "automatic_preparation_digest": preparation.preparation_digest,
+                    "manual_provenance": provenance,
+                }
+            ),
+        }
     )
 
 
 def _transition_filing_evidence(
     facts: Iterable[CanonicalFactV1],
     *,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
 ) -> tuple[CanonicalFactV1, ...]:
     """Require transition evidence to remain tied to a filed SEC source."""
 
@@ -756,7 +977,146 @@ def _transition_filing_evidence(
 
 
 @using_valuation_context
-def prepare_automatic_valuation(
+def compose_forecast_assumptions(
+    history: AnnualHistoryV1,
+    metrics: HistoricalMetricsV1,
+    *,
+    reinvestment_hypothesis: ReinvestmentHypothesisV1 | None = None,
+) -> ForecastAssumptionsV1:
+    """Compose the shared #352 operating assumptions without valuation claims."""
+
+    metric_by_name: dict[str, list[HistoricalMetricV1]] = {}
+    for metric in metrics.metrics:
+        metric_by_name.setdefault(metric.metric_id, []).append(metric)
+    growth = [item.value for item in metric_by_name.get("revenue_growth", ())]
+    margins = [item.value for item in metric_by_name.get("operating_margin", ())]
+    reinvestment = [item.value for item in metric_by_name.get("reinvestment_rate", ())]
+    if (
+        len(growth) < 2
+        or len(margins) < 3
+        or (reinvestment_hypothesis is None and len(reinvestment) < 2)
+    ):
+        raise PreparationError(
+            "FORECAST_HISTORY_INSUFFICIENT",
+            "forecast requires three margins, two growth periods and a reinvestment basis",
+            missing=("forecast_history",),
+        )
+    latest_revenue = history.periods[-1].fact("revenue")
+    assert latest_revenue is not None and isinstance(latest_revenue.value, Decimal)
+    mean_growth = sum(growth, Decimal("0")) / Decimal(len(growth))
+    mean_margin = sum(margins[-3:], Decimal("0")) / Decimal(min(3, len(margins)))
+    if not _MIN_REVENUE_GROWTH <= mean_growth <= _MAX_REVENUE_GROWTH:
+        raise PreparationError(
+            "FORECAST_GROWTH_OUT_OF_BOUNDS", "mean revenue growth exceeds policy bounds"
+        )
+    if reinvestment_hypothesis is None:
+        mean_reinvestment = sum(reinvestment, Decimal("0")) / Decimal(len(reinvestment))
+        bounded_reinvestment = min(
+            _MAX_REINVESTMENT_RATE,
+            max(_MIN_REINVESTMENT_RATE, mean_reinvestment),
+        )
+    else:
+        hypothesis = ReinvestmentHypothesisV1.model_validate_json(
+            reinvestment_hypothesis.model_dump_json()
+        )
+        bounded_reinvestment = hypothesis.reinvestment_rate
+    forecast_growth = tuple(
+        mean_growth * (Decimal(_FORECAST_PERIODS - index) / Decimal(_FORECAST_PERIODS))
+        for index in range(_FORECAST_PERIODS)
+    )
+    return ForecastAssumptionsV1(
+        base_revenue=latest_revenue.value,
+        revenue_growth=forecast_growth,
+        operating_margin=(mean_margin,) * _FORECAST_PERIODS,
+        reinvestment_rate=(bounded_reinvestment,) * _FORECAST_PERIODS,
+    )
+
+
+def _conditional_operating_composer_digest() -> str:
+    root = Path(__file__).parent
+    return sha256_digest(
+        {
+            "protocol": "conditional-operating-forecasts-v1",
+            "composer_version": FORECAST_COMPOSER_VERSION,
+            "numerical_policy_version": VALUATION_NUMERICAL_POLICY,
+            "sources": {
+                name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+                for name in ("valuation_preparation.py", "numerical_policy.py")
+            },
+        }
+    )
+
+
+@using_valuation_context
+def compose_conditional_operating_forecasts(
+    policy: ConditionalReinvestmentPolicyV1,
+    facts: Iterable[CanonicalFactV1],
+    *,
+    snapshot: SourceSnapshotV1,
+    mapping_version: str,
+) -> ConditionalOperatingForecastsV1:
+    """Reuse formal operating formulas with explicitly assumed forward rates."""
+
+    assessment = assess_conditional_reinvestment(
+        policy, facts, snapshot=snapshot, mapping_version=mapping_version
+    )
+    policy = assessment.policy
+    history = resolve_annual_history(
+        assessment.source_facts,
+        snapshot=snapshot,
+        valuation_timestamp=snapshot.valuation_timestamp,
+        profile=reinvestment_history_requirements_profile(policy.recipe.model_id),
+    )
+    metrics = _derive_historical_metrics(history, observed_reinvestment=False)
+    if metrics.quality_status is QualityStatus.ABSTAIN or any(
+        code.startswith("METRIC_") for code in metrics.issue_codes
+    ):
+        raise PreparationError(
+            "CONDITIONAL_OPERATING_METRICS_INVALID",
+            "core operating metrics cannot support a forward forecast",
+            missing=metrics.issue_codes,
+        )
+    metrics = metrics.model_copy(
+        update={
+            "issue_codes": (
+                *metrics.issue_codes,
+                "CONDITIONAL_FORWARD_REINVESTMENT_HYPOTHESES",
+            ),
+            "missing_evidence": tuple(
+                sorted(set(metrics.missing_evidence) | set(policy.unknowns))
+            ),
+        }
+    )
+    composer_digest = _conditional_operating_composer_digest()
+    return ConditionalOperatingForecastsV1(
+        composer_version=FORECAST_COMPOSER_VERSION,
+        numerical_policy_version=VALUATION_NUMERICAL_POLICY,
+        composer_digest=composer_digest,
+        assessment=assessment,
+        historical_metrics=metrics,
+        scenarios=tuple(
+            ConditionalOperatingScenarioV1(
+                hypothesis=hypothesis,
+                forecast=compose_forecast_assumptions(
+                    history, metrics, reinvestment_hypothesis=hypothesis
+                ),
+            )
+            for hypothesis in policy.recipe.scenarios
+        ),
+        input_digest=sha256_digest(
+            {
+                "protocol": "conditional-operating-forecasts-v1",
+                "composer_version": FORECAST_COMPOSER_VERSION,
+                "numerical_policy_version": VALUATION_NUMERICAL_POLICY,
+                "composer_digest": composer_digest,
+                "assessment_digest": assessment.output_digest,
+            }
+        ),
+    )
+
+
+@using_valuation_context
+def _prepare_automatic_valuation(
     facts: Iterable[CanonicalFactV1],
     *,
     snapshot: SourceSnapshotV1,
@@ -767,16 +1127,75 @@ def prepare_automatic_valuation(
     data_release_manifest_digest: str,
     market_policy: ApprovedMarketPolicyInputsV1 | None = None,
     mapping_version: str = "sec-canonical-mapping-v1",
+    equity_dilution_evidence: EquityDilutionEvidenceV1 | None = None,
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
+    conditional_capital_policy: ConditionalCapitalPolicyV1 | None = None,
+    conditional_quote: CommonShareQuoteV1 | None = None,
+    conditional_reinvestment_policy: ConditionalReinvestmentPolicyV1 | None = None,
 ) -> AutomaticValuationPreparationV1:
     """Compose a deterministic valuation request or an explicit gate outcome."""
 
-    profile = valuation_requirements_profile(model_id)
+    facts = tuple(facts)
+    profile = (
+        conditional_reinvestment_requirements_profile(
+            model_id,
+            conditional_capital=conditional_capital_policy is not None,
+            hypothetical_balance_fields=(
+                conditional_capital_policy.hypothetical_balance_fields
+                if conditional_capital_policy is not None
+                else ()
+            ),
+        )
+        if conditional_reinvestment_policy is not None
+        else conditional_capital_requirements_profile(
+            model_id,
+            composite_inputs=bool(working_capital_inputs),
+            hypothetical_balance_fields=conditional_capital_policy.hypothetical_balance_fields,
+        )
+        if conditional_capital_policy is not None
+        else composite_working_capital_requirements_profile(
+            model_id, operating_only=False
+        )
+        if working_capital_inputs
+        else valuation_requirements_profile(model_id)
+    )
     selected = select_released_facts(
         facts,
         profile=profile,
         snapshot=snapshot,
         valuation_timestamp=snapshot.valuation_timestamp,
+        additional_fact_ids=tuple(
+            fact_id for item in working_capital_inputs for fact_id in item.fact_ids
+        ),
     )
+    if conditional_reinvestment_policy is not None and working_capital_inputs:
+        return _blocked_preparation(
+            status="abstained",
+            quality=QualityStatus.ABSTAIN,
+            profile=profile,
+            model_id=model_id,
+            model_version=model_version,
+            policy_id=policy_id,
+            policy_version=policy_version,
+            issues=("CONDITIONAL_REINVESTMENT_POLICY_CONFLICT",),
+            missing=(),
+            facts=selected.facts,
+            snapshot=snapshot,
+        )
+    if any(item.mapping_version != mapping_version for item in working_capital_inputs):
+        return _blocked_preparation(
+            status="abstained",
+            quality=QualityStatus.ABSTAIN,
+            profile=profile,
+            model_id=model_id,
+            model_version=model_version,
+            policy_id=policy_id,
+            policy_version=policy_version,
+            issues=("WORKING_CAPITAL_MAPPING_VERSION_MISMATCH",),
+            missing=(),
+            facts=selected.facts,
+            snapshot=snapshot,
+        )
     if selected.missing_fields:
         return _blocked_preparation(
             status="abstained",
@@ -816,21 +1235,52 @@ def prepare_automatic_valuation(
                 facts=selected.facts,
                 snapshot=snapshot,
             )
+    conditional_operating = None
     try:
-        history = resolve_annual_history(
-            selected.facts,
-            snapshot=snapshot,
-            valuation_timestamp=snapshot.valuation_timestamp,
-            profile=profile,
-        )
-        metrics = derive_historical_metrics(history)
-    except PreparationError as error:
+        if conditional_reinvestment_policy is not None:
+            if (
+                conditional_reinvestment_policy.recipe.model_id,
+                conditional_reinvestment_policy.recipe.model_version,
+            ) != (model_id, model_version):
+                raise PreparationError(
+                    "CONDITIONAL_REINVESTMENT_MODEL_MISMATCH",
+                    "forward hypotheses require the exact composer model/version",
+                )
+            conditional_operating = compose_conditional_operating_forecasts(
+                conditional_reinvestment_policy,
+                facts,
+                snapshot=snapshot,
+                mapping_version=mapping_version,
+            )
+            history = resolve_annual_history(
+                conditional_operating.assessment.source_facts,
+                snapshot=snapshot,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                profile=reinvestment_history_requirements_profile(model_id),
+            )
+            metrics = conditional_operating.historical_metrics
+        else:
+            history = resolve_annual_history(
+                selected.facts,
+                snapshot=snapshot,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                profile=profile,
+                working_capital_inputs=working_capital_inputs,
+            )
+            metrics = derive_historical_metrics(history)
+    except (
+        PreparationError,
+        AnnualHistoryError,
+        ConditionalReinvestmentError,
+    ) as error:
         metrics = HistoricalMetricsV1(
             profile_id=profile.profile_id,
             profile_digest=profile.digest,
             quality_status=QualityStatus.ABSTAIN,
             issue_codes=(error.code,),
-            missing_evidence=error.missing,
+            missing_evidence=error.missing
+            if isinstance(error, PreparationError)
+            else (),
         )
         return _blocked_from_metrics(
             metrics,
@@ -853,22 +1303,19 @@ def prepare_automatic_valuation(
             facts=selected.facts,
             snapshot=snapshot,
         )
-    metric_by_name: dict[str, list[HistoricalMetricV1]] = {}
-    for metric in metrics.metrics:
-        metric_by_name.setdefault(metric.metric_id, []).append(metric)
-    growth = [item.value for item in metric_by_name.get("revenue_growth", ())]
-    margins = [item.value for item in metric_by_name.get("operating_margin", ())]
-    reinvestment = [item.value for item in metric_by_name.get("reinvestment_rate", ())]
-    if len(growth) < 2 or len(margins) < 3 or len(reinvestment) < 2:
+    try:
+        forecast = (
+            conditional_operating.scenarios[0].forecast
+            if conditional_operating is not None
+            else compose_forecast_assumptions(history, metrics)
+        )
+    except PreparationError as error:
         return _blocked_from_metrics(
             metrics.model_copy(
                 update={
                     "quality_status": QualityStatus.ABSTAIN,
-                    "issue_codes": (
-                        *metrics.issue_codes,
-                        "FORECAST_HISTORY_INSUFFICIENT",
-                    ),
-                    "missing_evidence": (*metrics.missing_evidence, "forecast_history"),
+                    "issue_codes": (*metrics.issue_codes, error.code),
+                    "missing_evidence": (*metrics.missing_evidence, *error.missing),
                 }
             ),
             profile=profile,
@@ -881,42 +1328,9 @@ def prepare_automatic_valuation(
         )
     latest_revenue = history.periods[-1].fact("revenue")
     assert latest_revenue is not None and isinstance(latest_revenue.value, Decimal)
-    mean_growth = sum(growth, Decimal("0")) / Decimal(len(growth))
-    mean_margin = sum(margins[-3:], Decimal("0")) / Decimal(min(3, len(margins)))
-    mean_reinvestment = sum(reinvestment, Decimal("0")) / Decimal(len(reinvestment))
-    if not _MIN_REVENUE_GROWTH <= mean_growth <= _MAX_REVENUE_GROWTH:
-        return _blocked_from_metrics(
-            metrics.model_copy(
-                update={
-                    "quality_status": QualityStatus.ABSTAIN,
-                    "issue_codes": (
-                        *metrics.issue_codes,
-                        "FORECAST_GROWTH_OUT_OF_BOUNDS",
-                    ),
-                }
-            ),
-            profile=profile,
-            model_id=model_id,
-            model_version=model_version,
-            policy_id=policy_id,
-            policy_version=policy_version,
-            facts=selected.facts,
-            snapshot=snapshot,
-        )
-    bounded_reinvestment = min(
-        _MAX_REINVESTMENT_RATE,
-        max(_MIN_REINVESTMENT_RATE, mean_reinvestment),
-    )
-    forecast_growth = tuple(
-        mean_growth * (Decimal(_FORECAST_PERIODS - index) / Decimal(_FORECAST_PERIODS))
-        for index in range(_FORECAST_PERIODS)
-    )
-    forecast = ForecastAssumptionsV1(
-        base_revenue=latest_revenue.value,
-        revenue_growth=forecast_growth,
-        operating_margin=(mean_margin,) * _FORECAST_PERIODS,
-        reinvestment_rate=(bounded_reinvestment,) * _FORECAST_PERIODS,
-    )
+    metric_by_name: dict[str, list[HistoricalMetricV1]] = {}
+    for metric in metrics.metrics:
+        metric_by_name.setdefault(metric.metric_id, []).append(metric)
     if market_policy is None:
         return _blocked_from_metrics(
             metrics.model_copy(
@@ -941,39 +1355,109 @@ def prepare_automatic_valuation(
             status="requires_input",
         )
     try:
+        assert market_policy.risk_free_rate is not None
+        assert market_policy.beta is not None
+        assert market_policy.equity_risk_premium is not None
+        assert market_policy.pre_tax_cost_of_debt is not None
+        assert market_policy.debt_weight is not None
+        assert market_policy.equity_weight is not None
+        assert market_policy.terminal_growth is not None
         tax_metrics = metric_by_name["normalized_tax_rate"]
         tax_rate = sum((item.value for item in tax_metrics), Decimal("0")) / Decimal(
             len(tax_metrics)
         )
-        wacc = WaccAssumptionsV1(
-            risk_free_rate=market_policy.risk_free_rate,
-            beta=market_policy.beta,
-            equity_risk_premium=market_policy.equity_risk_premium,
-            pre_tax_cost_of_debt=market_policy.pre_tax_cost_of_debt,
-            tax_rate=tax_rate,
-            debt_weight=market_policy.debt_weight,
-            equity_weight=market_policy.equity_weight,
+        wacc = WaccAssumptionsV1.model_validate(
+            {
+                "risk_free_rate": market_policy.risk_free_rate,
+                "beta": market_policy.beta,
+                "equity_risk_premium": market_policy.equity_risk_premium,
+                "pre_tax_cost_of_debt": market_policy.pre_tax_cost_of_debt,
+                "tax_rate": tax_rate,
+                "debt_weight": market_policy.debt_weight,
+                "equity_weight": market_policy.equity_weight,
+            }
         )
-        cost_of_equity = (
-            market_policy.risk_free_rate
-            + market_policy.beta * market_policy.equity_risk_premium
-        )
+        terminal_growth = market_policy.terminal_growth
+        if terminal_growth is None:
+            raise ValueError("terminal growth is required")
+        cost_of_equity = wacc.risk_free_rate + wacc.beta * wacc.equity_risk_premium
         weighted_average_cost = (
-            cost_of_equity * market_policy.equity_weight
-            + market_policy.pre_tax_cost_of_debt
-            * (Decimal("1") - tax_rate)
-            * market_policy.debt_weight
+            cost_of_equity * wacc.equity_weight
+            + wacc.pre_tax_cost_of_debt * (Decimal("1") - tax_rate) * wacc.debt_weight
         )
-        if market_policy.terminal_growth >= min(cost_of_equity, weighted_average_cost):
+        if terminal_growth >= min(cost_of_equity, weighted_average_cost):
             raise PreparationError(
                 "TERMINAL_GROWTH_NOT_BELOW_DISCOUNT_RATE",
                 "terminal growth must be below the applicable discount rates",
             )
-        capital = _capital_bridge(selected.facts, snapshot, policy_version)
+        conditional_assessment = None
+        dilution = None
+        if conditional_capital_policy is not None:
+            if equity_dilution_evidence is not None:
+                raise PreparationError(
+                    "CONDITIONAL_CAPITAL_INVENTORY_CONFLICT",
+                    "conditional hypotheses cannot assert a complete award inventory",
+                )
+            if (
+                conditional_capital_policy.model_id,
+                conditional_capital_policy.model_version,
+            ) != (model_id, model_version):
+                raise PreparationError(
+                    "CONDITIONAL_CAPITAL_MODEL_MISMATCH",
+                    "conditional hypotheses require the exact composer model and version",
+                )
+            conditional_assessment = assess_conditional_capital(
+                conditional_capital_policy,
+                selected.facts,
+                snapshot=snapshot,
+                mapping_version=mapping_version,
+            )
+            if conditional_quote is None:
+                raise PreparationError(
+                    "DILUTION_QUOTE_ADMISSION_MISSING",
+                    "conditional hypotheses require an eligible released quote",
+                    missing=("conditional_quote",),
+                )
+            require_eligible_common_share_quote(
+                conditional_quote,
+                issuer_id=snapshot.identity.issuer_id,
+                security_id=snapshot.identity.security_id,
+                currency=snapshot.identity.currency,
+                period_end=conditional_capital_policy.period_end,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                max_quote_age_seconds=conditional_capital_policy.max_quote_age_seconds,
+            )
+            capital = conditional_assessment.scenarios[0].bridge
+        else:
+            if conditional_quote is not None:
+                raise PreparationError(
+                    "CONDITIONAL_CAPITAL_POLICY_MISSING",
+                    "conditional quote requires an explicit capital policy",
+                )
+            if equity_dilution_evidence is None:
+                raise PreparationError(
+                    "DILUTION_EVIDENCE_MISSING",
+                    "reviewed award inventory and valuation-date quote are required",
+                    missing=("equity_dilution_evidence",),
+                )
+            verify_dilution_fact_bindings(
+                equity_dilution_evidence,
+                snapshot=snapshot,
+                released_facts=selected.facts,
+            )
+            dilution = compute_treasury_stock_dilution(
+                equity_dilution_evidence.inventory,
+                equity_dilution_evidence.quote,
+                equity_dilution_evidence.policy,
+                valuation_timestamp=snapshot.valuation_timestamp,
+            )
+            capital = _capital_bridge(selected.facts, snapshot, dilution)
     except (PreparationError, TypeError, ValueError) as error:
         code = (
             error.code
-            if isinstance(error, PreparationError)
+            if isinstance(
+                error, (PreparationError, DilutionError, ConditionalCapitalError)
+            )
             else "MARKET_POLICY_INPUTS_INVALID"
         )
         missing = error.missing if isinstance(error, PreparationError) else ()
@@ -993,6 +1477,25 @@ def prepare_automatic_valuation(
             facts=selected.facts,
             snapshot=snapshot,
         )
+    if conditional_assessment is not None:
+        metrics = metrics.model_copy(
+            update={
+                "quality_status": QualityStatus.PROVISIONAL,
+                "issue_codes": tuple(
+                    dict.fromkeys(
+                        (*metrics.issue_codes, "CONDITIONAL_CAPITAL_HYPOTHESES")
+                    )
+                ),
+                "missing_evidence": tuple(
+                    dict.fromkeys(
+                        (
+                            *metrics.missing_evidence,
+                            *conditional_assessment.policy.unknowns,
+                        )
+                    )
+                ),
+            }
+        )
     evidence = (
         _assumption_evidence(
             "assumptions.forecast.base_revenue",
@@ -1005,7 +1508,7 @@ def prepare_automatic_valuation(
         ),
         _assumption_evidence(
             "assumptions.terminal_growth",
-            market_policy.terminal_growth,
+            terminal_growth,
             "approved_policy",
             "approved market/policy input",
             trace=market_policy.evidence["terminal_growth"],
@@ -1023,6 +1526,26 @@ def prepare_automatic_valuation(
         capital_bridge=capital,
         trace=TraceV1(
             expression="service-owned historical metrics and approved policy inputs",
+            source_refs=(
+                *(item.output_digest for item in metrics.working_capital_assessments),
+                *(
+                    (
+                        conditional_operating.output_digest,
+                        conditional_operating.assessment.policy.recipe.assumption_document_digest,
+                    )
+                    if conditional_operating is not None
+                    else ()
+                ),
+                *(
+                    (
+                        conditional_assessment.output_digest,
+                        conditional_quote.content_hash,
+                    )
+                    if conditional_assessment is not None
+                    and conditional_quote is not None
+                    else ()
+                ),
+            ),
             inputs=tuple(item.fact_id for item in selected.facts),
             description=(
                 (
@@ -1040,7 +1563,7 @@ def prepare_automatic_valuation(
         data_snapshot_id=snapshot.snapshot_id,
         fiscal_period_selector=FiscalPeriodSelectorV1(
             mode="explicit_periods",
-            periods=tuple({"fiscal_year": year} for year in history_years),
+            periods=tuple(FiscalPeriodV1(fiscal_year=year) for year in history_years),
         ),
         data_release_manifest_digest=data_release_manifest_digest,
         source_selection_policy=snapshot.policy_version,
@@ -1058,28 +1581,107 @@ def prepare_automatic_valuation(
             issue_codes=metrics.issue_codes,
             missing_evidence=metrics.missing_evidence,
         ),
-        provenance={
-            "snapshot_id": snapshot.snapshot_id,
-            "fact_ids": tuple(sorted(item.fact_id for item in selected.facts)),
-            "fiscal_period_selector": context.fiscal_period_selector,
-            "mapping_version": mapping_version,
-            "parser_version": snapshot.parser_version,
-            "taxonomy_version": snapshot.taxonomy_manifest_id or "sec-taxonomy-v1",
-            "policy_version": policy_version,
-        },
+        provenance=ProvenanceInputV1(
+            snapshot_id=snapshot.snapshot_id,
+            fact_ids=tuple(sorted(item.fact_id for item in selected.facts)),
+            fiscal_period_selector=context.fiscal_period_selector,
+            mapping_version=mapping_version,
+            parser_version=snapshot.parser_version,
+            taxonomy_version=snapshot.taxonomy_manifest_id or "sec-taxonomy-v1",
+            policy_version=policy_version,
+            preparation_version=(
+                CONDITIONAL_REINVESTMENT_COMPOSER_VERSION
+                if conditional_operating is not None
+                else CONDITIONAL_FORECAST_COMPOSER_VERSION
+                if conditional_assessment is not None
+                else FORECAST_COMPOSER_VERSION
+            ),
+            equity_dilution_evidence_digest=(
+                equity_dilution_evidence.digest
+                if equity_dilution_evidence is not None
+                else None
+            ),
+        ),
         model_id=model_id,
         model_version=model_version,
         policy_id=policy_id,
     ).with_digest()
-    request = request.model_copy(
-        update={
-            "uncertainty": build_default_uncertainty(
-                request,
-                historical_metrics=metrics.metrics,
-                policy_version=DEFAULT_UNCERTAINTY_POLICY_VERSION,
+    if conditional_assessment is not None or conditional_operating is not None:
+        scenario_names: tuple[Literal["base", "downside", "upside"], ...] = (
+            "base",
+            "downside",
+            "upside",
+        )
+        capital_scenarios = (
+            {
+                row.hypothesis.name: row.bridge
+                for row in conditional_assessment.scenarios
+            }
+            if conditional_assessment is not None
+            else {}
+        )
+        operating_scenarios = (
+            {
+                row.hypothesis.name: row.forecast
+                for row in conditional_operating.scenarios
+            }
+            if conditional_operating is not None
+            else {}
+        )
+        if (
+            capital_scenarios
+            and operating_scenarios
+            and capital_scenarios.keys() != operating_scenarios.keys()
+        ):
+            raise PreparationError(
+                "CONDITIONAL_SCENARIO_NAMES_MISMATCH",
+                "joint hypotheses must share all three exact scenario names",
             )
-        }
-    ).with_digest()
+        request = request.model_copy(
+            update={
+                "uncertainty": UncertaintyV1(
+                    mode="scenarios",
+                    scenarios=tuple(
+                        ScenarioInputV1(
+                            name=name,
+                            assumptions={
+                                **(
+                                    {
+                                        f"assumptions.capital_bridge.{field}": getattr(
+                                            capital_scenarios[name], field
+                                        )
+                                        for field in CapitalBridgeAssumptionsV1.model_fields
+                                    }
+                                    if capital_scenarios
+                                    else {}
+                                ),
+                                **(
+                                    {
+                                        f"assumptions.forecast.reinvestment_rate[{index}]": value
+                                        for index, value in enumerate(
+                                            operating_scenarios[name].reinvestment_rate
+                                        )
+                                    }
+                                    if operating_scenarios
+                                    else {}
+                                ),
+                            },
+                        )
+                        for name in scenario_names
+                    ),
+                ),
+            }
+        ).with_digest()
+    else:
+        request = request.model_copy(
+            update={
+                "uncertainty": build_default_uncertainty(
+                    request,
+                    historical_metrics=metrics.metrics,
+                    policy_version=DEFAULT_UNCERTAINTY_POLICY_VERSION,
+                )
+            }
+        ).with_digest()
     fact_by_id = {fact.fact_id: fact for fact in selected.facts}
 
     def metric_facts(metric_name: str) -> tuple[CanonicalFactV1, ...]:
@@ -1101,7 +1703,123 @@ def prepare_automatic_valuation(
     margin_facts = metric_facts("operating_margin")
     reinvestment_facts = metric_facts("reinvestment_rate")
     tax_facts = metric_facts("normalized_tax_rate")
-    capital_fact_map = _capital_bridge_facts(selected.facts, snapshot=snapshot)
+    if conditional_assessment is not None:
+        assert conditional_quote is not None
+        capital_evidence = _conditional_capital_assumptions_evidence(
+            conditional_assessment, conditional_quote
+        )
+    else:
+        assert equity_dilution_evidence is not None
+        capital_fact_map = _capital_bridge_facts(selected.facts, snapshot=snapshot)
+        share_facts = (
+            capital_fact_map["common_shares_outstanding"],
+            *equity_dilution_evidence.facts,
+            capital_fact_map["other_share_classes"],
+        )
+        capital_evidence = (
+            _assumption_evidence(
+                "assumptions.capital_bridge.cash",
+                capital.cash,
+                "derived",
+                "cash_and_equivalents",
+                facts=(capital_fact_map["cash_and_equivalents"],),
+                policy_version=policy_version,
+                as_of=latest_fact_time((capital_fact_map["cash_and_equivalents"],)),
+            ),
+            _assumption_evidence(
+                "assumptions.capital_bridge.non_operating_assets",
+                capital.non_operating_assets,
+                "derived",
+                "non_operating_assets (excluding cash and operating working capital)",
+                facts=(capital_fact_map["non_operating_assets"],),
+                policy_version=policy_version,
+                as_of=latest_fact_time((capital_fact_map["non_operating_assets"],)),
+            ),
+            _assumption_evidence(
+                "assumptions.capital_bridge.debt",
+                capital.debt,
+                "derived",
+                (
+                    "current_interest_bearing_debt + long_term_interest_bearing_debt "
+                    "+ convertible_instruments"
+                ),
+                facts=(
+                    capital_fact_map["current_interest_bearing_debt"],
+                    capital_fact_map["long_term_interest_bearing_debt"],
+                    capital_fact_map["convertible_instruments"],
+                ),
+                policy_version=policy_version,
+                as_of=latest_fact_time(
+                    (
+                        capital_fact_map["current_interest_bearing_debt"],
+                        capital_fact_map["long_term_interest_bearing_debt"],
+                        capital_fact_map["convertible_instruments"],
+                    )
+                ),
+            ),
+            _assumption_evidence(
+                "assumptions.capital_bridge.lease_liabilities",
+                capital.lease_liabilities,
+                "derived",
+                "current_finance_lease_liabilities + long_term_finance_lease_liabilities",
+                facts=tuple(
+                    capital_fact_map[field]
+                    for field in (
+                        "current_finance_lease_liabilities",
+                        "long_term_finance_lease_liabilities",
+                    )
+                ),
+                policy_version=policy_version,
+                as_of=latest_fact_time(
+                    tuple(
+                        capital_fact_map[field]
+                        for field in (
+                            "current_finance_lease_liabilities",
+                            "long_term_finance_lease_liabilities",
+                        )
+                    )
+                ),
+            ),
+            _assumption_evidence(
+                "assumptions.capital_bridge.preferred_stock",
+                capital.preferred_stock,
+                "derived",
+                "preferred_claims",
+                facts=(capital_fact_map["preferred_claims"],),
+                policy_version=policy_version,
+                as_of=latest_fact_time((capital_fact_map["preferred_claims"],)),
+            ),
+            _assumption_evidence(
+                "assumptions.capital_bridge.non_controlling_interest",
+                capital.non_controlling_interest,
+                "derived",
+                "noncontrolling_interests",
+                facts=(capital_fact_map["noncontrolling_interests"],),
+                policy_version=policy_version,
+                as_of=latest_fact_time((capital_fact_map["noncontrolling_interests"],)),
+            ),
+            _assumption_evidence(
+                "assumptions.capital_bridge.diluted_shares",
+                capital.diluted_shares,
+                "derived",
+                "common_shares_outstanding + sum(max(0, award_quantity - (exercise_proceeds + unrecognized_compensation) / valuation_date_quote)) + other_share_classes",
+                facts=share_facts,
+                trace=TraceV1(
+                    source_refs=tuple(
+                        sorted(
+                            {
+                                equity_dilution_evidence.quote.content_hash,
+                                *(fact.source.content_hash for fact in share_facts),
+                            }
+                        )
+                    )
+                ),
+                policy_version=equity_dilution_evidence.policy.policy_version,
+                as_of=max(
+                    latest_fact_time(share_facts), equity_dilution_evidence.quote.as_of
+                ),
+            ),
+        )
     assumptions_evidence = (
         *evidence,
         *tuple(
@@ -1117,12 +1835,12 @@ def prepare_automatic_valuation(
                 policy_version=policy_version,
                 as_of=latest_fact_time(growth_facts),
             )
-            for index, value in enumerate(forecast_growth)
+            for index, value in enumerate(forecast.revenue_growth)
         ),
         *tuple(
             _assumption_evidence(
                 f"assumptions.forecast.operating_margin[{index}]",
-                mean_margin,
+                forecast.operating_margin[index],
                 "derived",
                 "mean(last_three historical operating_margin)",
                 facts=margin_facts,
@@ -1131,17 +1849,21 @@ def prepare_automatic_valuation(
             )
             for index in range(_FORECAST_PERIODS)
         ),
-        *tuple(
-            _assumption_evidence(
-                f"assumptions.forecast.reinvestment_rate[{index}]",
-                bounded_reinvestment,
-                "derived",
-                "clamp(mean(historical reinvestment_rate), -1, 1)",
-                facts=reinvestment_facts,
-                policy_version=policy_version,
-                as_of=latest_fact_time(reinvestment_facts),
+        *(
+            _conditional_reinvestment_assumptions_evidence(conditional_operating)
+            if conditional_operating is not None
+            else tuple(
+                _assumption_evidence(
+                    f"assumptions.forecast.reinvestment_rate[{index}]",
+                    forecast.reinvestment_rate[index],
+                    "derived",
+                    "clamp(mean(historical reinvestment_rate), -1, 1)",
+                    facts=reinvestment_facts,
+                    policy_version=policy_version,
+                    as_of=latest_fact_time(reinvestment_facts),
+                )
+                for index in range(_FORECAST_PERIODS)
             )
-            for index in range(_FORECAST_PERIODS)
         ),
         _assumption_evidence(
             "assumptions.wacc.tax_rate",
@@ -1177,110 +1899,22 @@ def prepare_automatic_valuation(
                 "equity_weight",
             )
         ),
-        _assumption_evidence(
-            "assumptions.capital_bridge.cash",
-            capital.cash,
-            "derived",
-            "cash_and_equivalents",
-            facts=(capital_fact_map["cash_and_equivalents"],),
-            policy_version=policy_version,
-            as_of=latest_fact_time((capital_fact_map["cash_and_equivalents"],)),
-        ),
-        _assumption_evidence(
-            "assumptions.capital_bridge.debt",
-            capital.debt,
-            "derived",
-            (
-                "current_interest_bearing_debt + long_term_interest_bearing_debt "
-                "+ convertible_instruments"
-            ),
-            facts=(
-                capital_fact_map["current_interest_bearing_debt"],
-                capital_fact_map["long_term_interest_bearing_debt"],
-                capital_fact_map["convertible_instruments"],
-            ),
-            policy_version=policy_version,
-            as_of=latest_fact_time(
-                (
-                    capital_fact_map["current_interest_bearing_debt"],
-                    capital_fact_map["long_term_interest_bearing_debt"],
-                    capital_fact_map["convertible_instruments"],
-                )
-            ),
-        ),
-        _assumption_evidence(
-            "assumptions.capital_bridge.lease_liabilities",
-            capital.lease_liabilities,
-            "derived",
-            "current_and_long_term_operating_and_finance_lease_liabilities",
-            facts=tuple(
-                capital_fact_map[field]
-                for field in (
-                    "current_operating_lease_liabilities",
-                    "long_term_operating_lease_liabilities",
-                    "current_finance_lease_liabilities",
-                    "long_term_finance_lease_liabilities",
-                )
-            ),
-            policy_version=policy_version,
-            as_of=latest_fact_time(
-                tuple(
-                    capital_fact_map[field]
-                    for field in (
-                        "current_operating_lease_liabilities",
-                        "long_term_operating_lease_liabilities",
-                        "current_finance_lease_liabilities",
-                        "long_term_finance_lease_liabilities",
-                    )
-                )
-            ),
-        ),
-        _assumption_evidence(
-            "assumptions.capital_bridge.preferred_stock",
-            capital.preferred_stock,
-            "derived",
-            "preferred_claims",
-            facts=(capital_fact_map["preferred_claims"],),
-            policy_version=policy_version,
-            as_of=latest_fact_time((capital_fact_map["preferred_claims"],)),
-        ),
-        _assumption_evidence(
-            "assumptions.capital_bridge.non_controlling_interest",
-            capital.non_controlling_interest,
-            "derived",
-            "noncontrolling_interests",
-            facts=(capital_fact_map["noncontrolling_interests"],),
-            policy_version=policy_version,
-            as_of=latest_fact_time((capital_fact_map["noncontrolling_interests"],)),
-        ),
-        _assumption_evidence(
-            "assumptions.capital_bridge.diluted_shares",
-            capital.diluted_shares,
-            "derived",
-            "common_shares_outstanding + dilutive_instruments + other_share_classes",
-            facts=(
-                capital_fact_map["common_shares_outstanding"],
-                capital_fact_map["dilutive_instruments"],
-                capital_fact_map["other_share_classes"],
-            ),
-            policy_version=policy_version,
-            as_of=latest_fact_time(
-                (
-                    capital_fact_map["common_shares_outstanding"],
-                    capital_fact_map["dilutive_instruments"],
-                    capital_fact_map["other_share_classes"],
-                )
-            ),
-        ),
+        *capital_evidence,
     )
-    digest = sha256_digest(
-        {
-            "input": request,
-            "metrics": metrics,
-            "evidence": assumptions_evidence,
-            "profile_digest": profile.digest,
-        }
-    )
+    digest_payload = {
+        "input": request,
+        "metrics": metrics,
+        "evidence": assumptions_evidence,
+        "profile_digest": profile.digest,
+    }
+    if conditional_assessment is not None:
+        digest_payload.update(
+            conditional_capital=conditional_assessment,
+            conditional_quote=conditional_quote,
+        )
+    if conditional_operating is not None:
+        digest_payload["conditional_operating"] = conditional_operating
+    digest = sha256_digest(digest_payload)
     return AutomaticValuationPreparationV1(
         status="prepared",
         model_id=model_id,
@@ -1296,35 +1930,158 @@ def prepare_automatic_valuation(
         assumptions_evidence=assumptions_evidence,
         input=request,
         preparation_digest=digest,
+        equity_dilution=dilution,
+        conditional_capital=conditional_assessment,
+        conditional_quote=conditional_quote,
+        conditional_operating=conditional_operating,
+    )
+
+
+@using_valuation_context
+def prepare_automatic_valuation(
+    facts: Iterable[CanonicalFactV1],
+    *,
+    snapshot: SourceSnapshotV1,
+    model_id: Literal["fcff_dcf", "transition_fcff_dcf"],
+    model_version: str,
+    policy_id: str,
+    policy_version: str,
+    data_release_manifest_digest: str,
+    market_policy: ApprovedMarketPolicyInputsV1 | None = None,
+    mapping_version: str = "sec-canonical-mapping-v1",
+    equity_dilution_evidence: EquityDilutionEvidenceV1 | None = None,
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
+    conditional_capital_policy: ConditionalCapitalPolicyV1 | None = None,
+    conditional_quote: CommonShareQuoteV1 | None = None,
+    conditional_reinvestment_policy: ConditionalReinvestmentPolicyV1 | None = None,
+) -> AutomaticValuationPreparationV1:
+    """Compose exact or explicitly versioned composite inputs; retain all refusals."""
+
+    inputs = canonical_working_capital_inputs(working_capital_inputs)
+    result = _prepare_automatic_valuation(
+        facts,
+        snapshot=snapshot,
+        model_id=model_id,
+        model_version=model_version,
+        policy_id=policy_id,
+        policy_version=policy_version,
+        data_release_manifest_digest=data_release_manifest_digest,
+        market_policy=market_policy,
+        mapping_version=mapping_version,
+        equity_dilution_evidence=equity_dilution_evidence,
+        working_capital_inputs=inputs,
+        conditional_capital_policy=conditional_capital_policy,
+        conditional_quote=conditional_quote,
+        conditional_reinvestment_policy=conditional_reinvestment_policy,
+    )
+    if not inputs:
+        return result
+    metrics = result.historical_metrics.model_copy(
+        update={"working_capital_inputs": inputs}
+    )
+    payload = {
+        **result.model_dump(exclude={"preparation_digest"}),
+        "historical_metrics": metrics,
+    }
+    return AutomaticValuationPreparationV1.model_validate(
+        {**payload, "preparation_digest": sha256_digest(payload)}
+    )
+
+
+def _conditional_reinvestment_assumptions_evidence(
+    operating: ConditionalOperatingForecastsV1,
+) -> tuple[AssumptionEvidenceV1, ...]:
+    policy = operating.assessment.policy
+    return tuple(
+        _assumption_evidence(
+            f"assumptions.forecast.reinvestment_rate[{index}]",
+            value,
+            "approved_policy",
+            "source-bound base forward hypothesis; historical reinvestment remains unknown",
+            facts=operating.assessment.source_facts,
+            trace=TraceV1(
+                source_refs=(
+                    operating.output_digest,
+                    policy.recipe.assumption_document_digest,
+                )
+            ),
+            policy_version=policy.protocol + ":" + policy.digest,
+            as_of=policy.valuation_timestamp,
+        ).model_copy(update={"editable": False})
+        for index, value in enumerate(operating.scenarios[0].forecast.reinvestment_rate)
+    )
+
+
+def _conditional_capital_assumptions_evidence(
+    assessment: ConditionalCapitalAssessmentV1, quote: CommonShareQuoteV1
+) -> tuple[AssumptionEvidenceV1, ...]:
+    bridge = assessment.scenarios[0].bridge
+    return tuple(
+        _assumption_evidence(
+            f"assumptions.capital_bridge.{field}",
+            getattr(bridge, field),
+            "approved_policy",
+            "source-bound base conditional hypothesis; not an estimate or proven bound",
+            facts=assessment.source_facts,
+            trace=TraceV1(
+                source_refs=tuple(
+                    sorted(
+                        {
+                            assessment.output_digest,
+                            quote.content_hash,
+                            *(
+                                fact.source.content_hash
+                                for fact in assessment.source_facts
+                            ),
+                        }
+                    )
+                )
+            ),
+            policy_version=assessment.policy.protocol + ":" + assessment.policy.digest,
+            as_of=assessment.policy.valuation_timestamp,
+        ).model_copy(update={"editable": False})
+        for field in CapitalBridgeAssumptionsV1.model_fields
     )
 
 
 def _capital_bridge(
     facts: Iterable[CanonicalFactV1],
     snapshot: SourceSnapshotV1,
-    policy_version: str,
+    dilution: TreasuryStockResultV1,
 ) -> CapitalBridgeAssumptionsV1:
-    _ = policy_version
-    values = _capital_bridge_facts(facts, snapshot=snapshot)
+    facts = tuple(facts)
+    facts_by_field = _capital_bridge_facts(facts, snapshot=snapshot)
+    try:
+        require_disjoint_non_operating_assets(facts_by_field, facts, snapshot)
+    except CapitalBridgePolicyError as error:
+        raise PreparationError(error.code, str(error)) from error
+    values = {
+        name: fact.value
+        for name, fact in facts_by_field.items()
+        if isinstance(fact.value, Decimal)
+    }
+    if len(values) != len(facts_by_field):
+        raise PreparationError(
+            "METRIC_NON_NUMERIC_VALUE", "capital bridge facts must be numeric"
+        )
     return CapitalBridgeAssumptionsV1(
-        cash=values["cash_and_equivalents"].value,
+        cash=values["cash_and_equivalents"],
+        non_operating_assets=values["non_operating_assets"],
         debt=(
-            values["current_interest_bearing_debt"].value
-            + values["long_term_interest_bearing_debt"].value
-            + values["convertible_instruments"].value
+            values["current_interest_bearing_debt"]
+            + values["long_term_interest_bearing_debt"]
+            + values["convertible_instruments"]
         ),
-        preferred_stock=values["preferred_claims"].value,
+        preferred_stock=values["preferred_claims"],
         lease_liabilities=(
-            values["current_operating_lease_liabilities"].value
-            + values["long_term_operating_lease_liabilities"].value
-            + values["current_finance_lease_liabilities"].value
-            + values["long_term_finance_lease_liabilities"].value
+            values["current_finance_lease_liabilities"]
+            + values["long_term_finance_lease_liabilities"]
         ),
-        non_controlling_interest=values["noncontrolling_interests"].value,
+        non_controlling_interest=values["noncontrolling_interests"],
         diluted_shares=(
-            values["common_shares_outstanding"].value
-            + values["dilutive_instruments"].value
-            + values["other_share_classes"].value
+            values["common_shares_outstanding"]
+            + dilution.incremental_shares
+            + values["other_share_classes"]
         ),
     )
 
@@ -1338,6 +2095,7 @@ def _capital_bridge_facts(
     valuation_date = snapshot.valuation_timestamp.date() if snapshot else None
     for field in (
         "cash_and_equivalents",
+        "non_operating_assets",
         "current_interest_bearing_debt",
         "long_term_interest_bearing_debt",
         "current_operating_lease_liabilities",
@@ -1348,7 +2106,6 @@ def _capital_bridge_facts(
         "noncontrolling_interests",
         "convertible_instruments",
         "common_shares_outstanding",
-        "dilutive_instruments",
         "other_share_classes",
     ):
         eligible = tuple(
@@ -1442,9 +2199,8 @@ def _blocked_preparation(
         "snapshot_manifest_digest": snapshot.manifest_digest,
         "fact_ids": tuple(sorted(fact.fact_id for fact in facts)),
     }
-    return AutomaticValuationPreparationV1(
-        **payload,
-        preparation_digest=sha256_digest(digest_payload),
+    return AutomaticValuationPreparationV1.model_validate(
+        {**payload, "preparation_digest": sha256_digest(digest_payload)}
     )
 
 

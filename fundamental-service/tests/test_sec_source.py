@@ -1,7 +1,10 @@
 import hashlib
 import json
+from io import BytesIO
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from email.message import Message
+from http.client import IncompleteRead
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from urllib.error import HTTPError
@@ -9,12 +12,15 @@ from urllib.request import Request
 
 import pytest
 from fundamental_service.contracts import SourceRole
+from fundamental_service.replay import ArtifactStore
+from fundamental_service.sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1
 from fundamental_service.sec_source import (
     SecEdgarSourceAdapter,
     SecRequestPolicy,
     SecSourceError,
     _open_sec,
 )
+from fundamental_service.snapshots import FilesystemContentStore
 
 
 class FakeResponse:
@@ -38,6 +44,71 @@ class FakeResponse:
         return False
 
 
+@pytest.mark.parametrize("chunked", [False, True])
+@pytest.mark.parametrize("size", [16, 20, 21])
+def test_full_submission_uses_its_own_bounded_budget(tmp_path, chunked, size):
+    payload = b"s" * size
+
+    def opener(request, timeout):
+        response = FakeResponse(payload)
+        if chunked:
+            response.read = BytesIO(payload).read
+        return response
+
+    provider = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com",
+            min_interval_seconds=0,
+            max_response_bytes=10,
+            max_submission_bytes=20,
+        ),
+        opener=opener,
+    )
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    adapter = RetainedSecSourceAdapter(
+        provider,
+        scope=SecCaptureScopeV1(
+            cik="0000000001",
+            accession_number="0000000001-26-000001",
+            valuation_timestamp=datetime(2026, 2, 1, tzinfo=timezone.utc),
+            source_profile="submission-budget-test-v1",
+        ),
+        receipts=artifacts,
+        content=FilesystemContentStore(tmp_path / "content"),
+        capture_lock=lambda _: nullcontext(),
+    )
+    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    params = {
+        "cik": "0000000001",
+        "accession_number": "0000000001-26-000001",
+        "filed_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+    if size <= 20:
+        assert adapter.capture_filing_submission(**params).content == payload
+        assert len(adapter.observed_responses) == 1
+    else:
+        with pytest.raises(SecSourceError) as raised:
+            adapter.capture_filing_submission(**params)
+        assert raised.value.code == "SOURCE_RESPONSE_TOO_LARGE"
+        assert not adapter.observed_responses
+        assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
+    for capture in (
+        lambda: adapter.capture_filing(**params, primary_document="primary.htm"),
+        lambda: adapter.capture_submissions("0000000001"),
+    ):
+        with pytest.raises(SecSourceError) as raised:
+            capture()
+        assert raised.value.code == "SOURCE_RESPONSE_TOO_LARGE"
+
+
+@pytest.mark.parametrize("budget", [0, -1])
+def test_submission_budget_must_be_positive(budget):
+    with pytest.raises(ValueError):
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", max_submission_bytes=budget
+        )
+
+
 def test_companyfacts_capture_is_public_and_hashable():
     calls = []
 
@@ -57,6 +128,53 @@ def test_companyfacts_capture_is_public_and_hashable():
     assert source.source_id == "sec-companyfacts"
     assert source.uri.endswith("CIK0000320193.json")
     assert calls[0][1] == "value-agent test@example.com"
+
+
+def test_submission_history_capture_uses_the_registered_issuer_endpoint():
+    payload = b'{"accessionNumber":[]}'
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request.full_url)
+        return FakeResponse(payload)
+
+    source = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=opener,
+    ).capture_submission_history(
+        cik="0000320193", filename="CIK0000320193-submissions-001.json"
+    )
+    assert source.source_id == "sec-submissions-history"
+    assert source.role is SourceRole.ACQUISITION
+    assert source.content == payload
+    assert calls == [
+        "https://data.sec.gov/submissions/CIK0000320193-submissions-001.json"
+    ]
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "CIK0000000001-submissions-001.json",
+        "../CIK0000320193-submissions-001.json",
+        "CIK0000320193-submissions-001.json?extra=1",
+        "https://example.com/CIK0000320193-submissions-001.json",
+    ],
+)
+def test_submission_history_rejects_foreign_or_noncanonical_filename_without_io(
+    filename,
+):
+    calls = []
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(user_agent="value-agent test@example.com"),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SecSourceError) as error:
+        adapter.capture_submission_history(cik="0000320193", filename=filename)
+    assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
+    assert calls == []
 
 
 def test_company_ticker_directory_capture_is_exact_and_hashable():
@@ -254,6 +372,66 @@ def test_filing_resource_capture_preserves_dts_role_and_metadata():
     assert source.taxonomy_manifest_id == "manifest-v1"
 
 
+def test_filing_submission_capture_is_accession_bound_and_preserves_original_bytes():
+    payload = b"<SEC-DOCUMENT>0000320193-24-000123.txt</SEC-DOCUMENT>"
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request.full_url)
+        response = FakeResponse(payload)
+        response.headers.replace_header("Content-Type", "text/plain")
+        return response
+
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=opener,
+        sleep=lambda _seconds: None,
+    )
+    filed_at = datetime(2024, 11, 1, 10, 1, 36, tzinfo=timezone.utc)
+    accepted_at = datetime(2024, 11, 1, 10, 2, 5, tzinfo=timezone.utc)
+    source = adapter.capture_filing_submission(
+        cik="0000320193",
+        accession_number="0000320193-24-000123",
+        filed_at=filed_at,
+        accepted_at=accepted_at,
+        filing_date=filed_at.date(),
+    )
+
+    assert source.source_id == "sec-filing-submission"
+    assert source.role is SourceRole.FILING
+    assert source.uri == (
+        "https://www.sec.gov/Archives/edgar/data/320193/"
+        "000032019324000123/0000320193-24-000123.txt"
+    )
+    assert source.content == payload
+    assert source.media_type == "text/plain"
+    assert source.accession_number == "0000320193-24-000123"
+    assert source.available_at == accepted_at
+    assert source.filed_at == filed_at
+    assert source.received_size == len(payload)
+    assert calls == [source.uri]
+
+
+@pytest.mark.parametrize("accession_number", ["not-an-accession"])
+def test_filing_submission_capture_rejects_malformed_accession_before_io(
+    accession_number,
+):
+    calls = []
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(user_agent="value-agent test@example.com"),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(ValueError, match="accession number"):
+        adapter.capture_filing_submission(
+            cik="0000320193",
+            accession_number=accession_number,
+            filed_at=datetime(2024, 11, 1, tzinfo=timezone.utc),
+        )
+    assert calls == []
+
+
 def test_filing_archive_capture_is_accession_bound_and_preserves_provenance():
     adapter = SecEdgarSourceAdapter(
         SecRequestPolicy(
@@ -313,3 +491,112 @@ def test_sec_source_rejects_custom_port():
             uri="https://data.sec.gov:443/api/xbrl/companyfacts/CIK0000000001.json",
         )
     assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
+
+
+@pytest.mark.parametrize(
+    ("failures", "max_attempts", "succeeds"),
+    [(1, 3, True), (3, 3, False), (1, 1, False)],
+)
+def test_truncated_chunked_response_retries_without_retaining_partial_bytes(
+    tmp_path, failures, max_attempts, succeeds
+):
+    payload = b'{"padding":"' + b"x" * (1024 * 1024 + 64) + b'"}'
+    attempts = []
+    responses = []
+    delays = []
+
+    class ChunkedHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            attempts.append(self.path)
+            truncated = len(attempts) <= failures
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            declared = len(payload) + 100 if truncated else len(payload)
+            self.wfile.write(f"{declared:X}\r\n".encode() + payload)
+            if not truncated:
+                self.wfile.write(b"\r\n0\r\n\r\n")
+            self.close_connection = True
+
+        def log_message(self, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ChunkedHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+
+    def opener(_request, timeout):
+        response = _open_sec(
+            Request(f"http://127.0.0.1:{server.server_address[1]}/original"),
+            timeout=timeout,
+        )
+        responses.append(response)
+        return response
+
+    provider = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com",
+            min_interval_seconds=0,
+            max_attempts=max_attempts,
+            timeout_seconds=2,
+        ),
+        opener=opener,
+        sleep=delays.append,
+    )
+    receipts = ArtifactStore(tmp_path / "receipts")
+    adapter = RetainedSecSourceAdapter(
+        provider,
+        scope=SecCaptureScopeV1(
+            cik="0001539778",
+            accession_number="0001477932-16-007985",
+            valuation_timestamp=datetime(2016, 1, 12, tzinfo=timezone.utc),
+            source_profile="truncated-transfer-test-v1",
+        ),
+        receipts=receipts,
+        content=FilesystemContentStore(tmp_path / "content"),
+        capture_lock=lambda _key: nullcontext(),
+    )
+    initial = {
+        p: (p.read_bytes(), p.stat().st_mtime_ns)
+        for p in tmp_path.rglob("*")
+        if p.is_file()
+    }
+    try:
+        thread.start()
+        if succeeds:
+            source = adapter.capture_submissions("0001539778")
+            assert source.content == payload
+            assert len(attempts) == failures + 1
+            before = {
+                p: (p.read_bytes(), p.stat().st_mtime_ns)
+                for p in tmp_path.rglob("*")
+                if p.is_file()
+            }
+            assert adapter.capture_submissions("0001539778") == source
+            assert len(attempts) == failures + 1
+            assert {
+                p: (p.read_bytes(), p.stat().st_mtime_ns)
+                for p in tmp_path.rglob("*")
+                if p.is_file()
+            } == before
+            assert len(receipts._records) == 1
+        else:
+            with pytest.raises(SecSourceError) as error:
+                adapter.capture_submissions("0001539778")
+            assert error.value.code == "SOURCE_UNAVAILABLE"
+            assert error.value.retryable is True
+            assert isinstance(error.value.__cause__, IncompleteRead)
+            assert len(attempts) == max_attempts
+            assert not receipts._records
+            assert {
+                p: (p.read_bytes(), p.stat().st_mtime_ns)
+                for p in tmp_path.rglob("*")
+                if p.is_file()
+            } == initial
+        assert delays == [2**i for i in range(len(attempts) - 1)]
+        assert all(response.isclosed() for response in responses)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import math
 import random
-from decimal import Decimal
+import re
+from collections.abc import Mapping
+from decimal import Decimal, DecimalException
 from statistics import NormalDist
 from typing import Literal
 
@@ -20,6 +22,8 @@ from .contracts import (
     SensitivityInputV1,
     UncertaintyV1,
     ValuationInputV1,
+    WaccAssumptionsV1,
+    CapitalBridgeAssumptionsV1,
 )
 from .numerical_policy import using_valuation_context
 from .serialization import sha256_digest
@@ -87,52 +91,67 @@ class UncertaintyEvidenceV1(BaseModel):
         return self
 
 
-def _path_value(request: ValuationInputV1, path: str) -> object:
+def _path_target(request: ValuationInputV1, path: str) -> tuple[str, str, int | None]:
     if path == "assumptions.terminal_growth":
-        return request.assumptions.terminal_growth
-    prefix = "assumptions.forecast."
-    if path.startswith(prefix) and path.count("[") == 1 and path.endswith("]"):
-        field, index_text = path[len(prefix) :].split("[")
-        index = int(index_text[:-1])
-        values = getattr(request.assumptions.forecast, field, None)
-        if values is None or not 0 <= index < len(values):
-            raise ValueError(f"unsupported assumption path: {path}")
-        return values[index]
-    prefix = "assumptions.wacc."
-    if path.startswith(prefix):
-        value = getattr(request.assumptions.wacc, path[len(prefix) :], None)
-        if value is None:
-            raise ValueError(f"unsupported assumption path: {path}")
-        return value
+        if request.assumptions.terminal_growth is not None:
+            return "", "terminal_growth", None
+    for group, fields in (
+        ("wacc", WaccAssumptionsV1.model_fields),
+        ("capital_bridge", CapitalBridgeAssumptionsV1.model_fields),
+    ):
+        prefix = f"assumptions.{group}."
+        if path.startswith(prefix):
+            field = path[len(prefix) :]
+            if field in fields and getattr(request.assumptions, group) is not None:
+                return group, field, None
+    match = re.fullmatch(
+        r"assumptions\.forecast\.(revenue_growth|operating_margin|reinvestment_rate)\[(0|[1-9][0-9]*)\]",
+        path,
+    )
+    if match is not None and request.assumptions.forecast is not None:
+        field, index_text = match.groups()
+        index = int(index_text)
+        if index < len(getattr(request.assumptions.forecast, field)):
+            return "forecast", field, index
     raise ValueError(f"unsupported assumption path: {path}")
 
 
-def _with_path(request: ValuationInputV1, path: str, value: object) -> ValuationInputV1:
-    if isinstance(value, str):
-        value = Decimal(value)
-    _path_value(request, path)
-    if path == "assumptions.terminal_growth":
-        assumptions = request.assumptions.model_copy(update={"terminal_growth": value})
-    elif path.startswith("assumptions.forecast."):
-        if request.assumptions.forecast is None:
-            raise ValueError(f"unsupported assumption path: {path}")
-        field, index_text = path[len("assumptions.forecast.") :].split("[")
-        index = int(index_text[:-1])
-        values = list(getattr(request.assumptions.forecast, field))
-        values[index] = value
-        forecast = request.assumptions.forecast.model_copy(
-            update={field: tuple(values)}
-        )
-        assumptions = request.assumptions.model_copy(update={"forecast": forecast})
-    elif path.startswith("assumptions.wacc."):
-        if request.assumptions.wacc is None:
-            raise ValueError(f"unsupported assumption path: {path}")
-        field = path[len("assumptions.wacc.") :]
-        wacc = request.assumptions.wacc.model_copy(update={field: value})
-        assumptions = request.assumptions.model_copy(update={"wacc": wacc})
-    else:
-        raise ValueError(f"unsupported assumption path: {path}")
-    return request.model_copy(update={"assumptions": assumptions}).with_digest()
+def _scenario_number(value: object, path: str) -> Decimal:
+    if isinstance(value, bool) or not isinstance(value, (Decimal, str, int, float)):
+        raise ValueError(f"assumption value must be a finite number: {path}")
+    try:
+        number = Decimal(str(value))
+    except DecimalException as error:
+        raise ValueError(f"assumption value must be a finite number: {path}") from error
+    if not number.is_finite():
+        raise ValueError(f"assumption value must be a finite number: {path}")
+    return number
+
+
+def _with_paths(
+    request: ValuationInputV1, changes: Mapping[str, object]
+) -> ValuationInputV1:
+    """Apply a joint hypothesis before validating coupled assumption constraints."""
+
+    assumptions = request.assumptions.model_dump()
+    for path, value in changes.items():
+        group, field, index = _path_target(request, path)
+        number = _scenario_number(value, path)
+        if group == "capital_bridge" and number < 0:
+            raise ValueError(f"capital scenario operands must be nonnegative: {path}")
+        if not group:
+            assumptions[field] = number
+        elif index is None:
+            assumptions[group][field] = number
+        else:
+            values = list(assumptions[group][field])
+            values[index] = number
+            assumptions[group][field] = tuple(values)
+    payload = request.model_dump(
+        include=set(ValuationInputV1.model_fields) - {"input_digest", "caller_approval"}
+    )
+    payload["assumptions"] = assumptions
+    return ValuationInputV1.model_validate(payload).with_digest()
 
 
 def _draw(
@@ -240,6 +259,22 @@ def validate_uncertainty_controls(
         declared_scenarios or declared_sensitivity
     ):
         raise ValueError("scenarios mode requires scenario or sensitivity inputs")
+    if declared_scenarios:
+        if len(declared_scenarios) != 3 or {
+            scenario.name for scenario in declared_scenarios
+        } != {"base", "downside", "upside"}:
+            raise ValueError(
+                "scenarios must include base, downside, and upside exactly once"
+            )
+        for scenario in declared_scenarios:
+            _with_paths(request, scenario.assumptions)
+    if len({item.path for item in declared_sensitivity}) != len(declared_sensitivity):
+        raise ValueError("sensitivity paths must be unique")
+    for item in declared_sensitivity:
+        for value in item.values:
+            _with_paths(request, {item.path: value})
+    for parameter in request.uncertainty.parameters:
+        _path_target(request, parameter.path)
 
 
 @using_valuation_context
@@ -286,24 +321,20 @@ def run_uncertainty(
     )
     assert resolved_digest is not None
     scenario_results: list[CalculationArtifactV1] = []
-    if scenarios:
-        if {scenario.name for scenario in scenarios} != {"base", "downside", "upside"}:
-            raise ValueError(
-                "scenarios must include base, downside, and upside exactly once"
+    for scenario in scenarios:
+        scenario_results.append(
+            calculate(
+                _with_paths(deterministic_request, scenario.assumptions),
+                allow_provisional=allow_provisional,
             )
-        for scenario in scenarios:
-            scenario_request = deterministic_request
-            for path, value in scenario.assumptions.items():
-                scenario_request = _with_path(scenario_request, path, value)
-            scenario_results.append(
-                calculate(scenario_request, allow_provisional=allow_provisional)
-            )
+        )
     sensitivity_results: dict[str, tuple[object, ...]] = {}
     spreads: list[tuple[str, Decimal]] = []
     for item in sensitivity:
         sensitivity_values = tuple(
             _per_share(
-                _with_path(deterministic_request, item.path, value), allow_provisional
+                _with_paths(deterministic_request, {item.path: value}),
+                allow_provisional,
             )
             for value in item.values
         )
@@ -315,7 +346,7 @@ def run_uncertainty(
     if monte_carlo is None:
         return _with_report_result_hash(
             UncertaintyReportV1(
-                status=QualityStatus.VERIFIED,
+                status=request.quality.status,
                 input_digest=resolved_digest,
                 base=base,
                 scenario_results=tuple(scenario_results),
@@ -336,9 +367,13 @@ def run_uncertainty(
             invalid["OUT_OF_BOUNDS"] = invalid.get("OUT_OF_BOUNDS", 0) + 1
             continue
         try:
-            sampled = deterministic_request
-            for parameter, value in zip(spec.parameters, draw, strict=True):
-                sampled = _with_path(sampled, parameter.path, value)
+            sampled = _with_paths(
+                deterministic_request,
+                {
+                    parameter.path: value
+                    for parameter, value in zip(spec.parameters, draw, strict=True)
+                },
+            )
             values.append(_per_share(sampled, allow_provisional))
         except (CalculationRefusal, ValueError):
             invalid["CALCULATION_REFUSAL"] = invalid.get("CALCULATION_REFUSAL", 0) + 1

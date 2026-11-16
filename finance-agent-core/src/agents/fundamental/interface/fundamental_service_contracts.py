@@ -8,9 +8,14 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_validator,
+    model_validator,
+)
 
 
 class FundamentalIdentityResolutionRequestV1(BaseModel):
@@ -114,7 +119,7 @@ class FundamentalServiceResponseV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     correlation_id: str = Field(min_length=1, max_length=128)
-    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    contract_version: Literal["internal.v1"]
     schema_version: Literal["fundamental.v1"]
     result: dict[str, object]
 
@@ -125,7 +130,7 @@ class FundamentalServiceErrorV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     correlation_id: str = Field(min_length=1, max_length=128)
-    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    contract_version: Literal["internal.v1"]
     error: dict[str, object]
 
 
@@ -232,6 +237,8 @@ class FundamentalCanonicalFactV1(BaseModel):
     rejected_candidate_reasons: tuple[FundamentalCandidateRejectionV1, ...] = ()
     point_in_time_policy: str | None = None
     selection_reason: str | None = None
+    # Validated by Fundamental Service; callers preserve the source evidence.
+    accounting_evidence: dict[str, JsonValue] | None = None
 
 
 class FundamentalFactsReadResultV1(BaseModel):
@@ -280,6 +287,18 @@ class FundamentalValuationPreparationResultV1(BaseModel):
     assumptions_evidence: tuple[dict[str, object], ...] = ()
     input: dict[str, object] | None = None
     preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    equity_dilution: dict[str, object] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_capital: dict[str, JsonValue] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_quote: dict[str, JsonValue] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_operating: dict[str, JsonValue] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def status_matches_input(

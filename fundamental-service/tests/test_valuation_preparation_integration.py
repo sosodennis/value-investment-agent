@@ -1,88 +1,26 @@
-from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 from fundamental_service.app import create_app
-from fundamental_service.data_releases import DataReleaseManifestV1
-from fundamental_service.operations import OperationsConfig
-from fundamental_service.serialization import sha256_digest
-from fundamental_service.snapshots import FilesystemContentStore
 from fundamental_service.testsupport import (
-    TEST_SERVICE_TOKEN,
     auth_headers,
     make_internal_envelope,
 )
-from fundamental_service.valuation_requirements import valuation_requirements_profile
-from test_api import _release_manifest_for
-from test_postgres_metadata import _snapshot
-from test_valuation_preparation import _facts
-
-
-class _CompleteFactRepository:
-    def __init__(self, facts):
-        self._facts = {fact.fact_id: fact for fact in facts}
-
-    def get(self, fact_id: str):
-        return self._facts[fact_id]
-
-
-def _complete_manifest(snapshot, facts) -> DataReleaseManifestV1:
-    base = _release_manifest_for(snapshot, facts)
-    payload = base.model_dump(mode="python")
-    payload["required_fields"] = valuation_requirements_profile(
-        "fcff_dcf"
-    ).required_fact_fields
-    payload["manifest_digest"] = sha256_digest(
-        {key: value for key, value in payload.items() if key != "manifest_digest"}
-    )
-    return DataReleaseManifestV1(**payload)
+from test_preparation_runner import _fixture
 
 
 def test_http_prepare_composes_complete_release_and_policy_inputs(tmp_path: Path):
-    facts = tuple(
-        fact.model_copy(
-            update={
-                "captured_at": fact.available_at,
-                "source": fact.source.model_copy(
-                    update={
-                        "available_at": fact.available_at,
-                        "captured_at": fact.available_at,
-                    }
-                ),
-            }
-        )
-        for fact in _facts()
-    )
-    snapshot = _snapshot(
-        "complete-preparation",
-        identity={
-            "issuer_id": "CIK1",
-            "issuer_name": "Example Co",
-            "domicile": "US",
-            "reporting_basis": "us-gaap",
-            "security_id": "COMMON",
-            "share_class": "common",
-            "currency": "USD",
-        },
-        valuation_timestamp=datetime(2026, 3, 1, tzinfo=UTC),
-    )
-    manifest = _complete_manifest(snapshot, facts)
-
-    class _Metadata:
-        def get_data_release_manifest(self, digest: str):
-            return manifest if digest == manifest.manifest_digest else None
-
+    fixture = _fixture(tmp_path)
+    manifest = fixture.manifest
+    snapshot = fixture.snapshot
     app = create_app(
-        snapshot_repository=type(
-            "SnapshotRepository",
-            (),
-            {"get": lambda _self, _snapshot_id: snapshot},
-        )(),
-        fact_repository=_CompleteFactRepository(facts),
-        artifact_store=None,
-        content_store=FilesystemContentStore(tmp_path / "content"),
-        metadata_store=_Metadata(),
-        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+        snapshot_repository=fixture.snapshots,
+        fact_repository=fixture.facts,
+        artifact_store=fixture.artifacts,
+        metadata_store=fixture.metadata,
+        config=fixture.application.config,
+        policy_registry=fixture.application.policy_registry,
+        source_use_policy=fixture.application.source_use_policy,
     )
 
     client = TestClient(app)
@@ -112,7 +50,7 @@ def test_http_prepare_composes_complete_release_and_policy_inputs(tmp_path: Path
         item["path"] == "assumptions.wacc.risk_free_rate"
         and item["source_refs"]
         and item["as_of"] == "2025-01-03T00:00:00Z"
-        and item["method"] == "approved_source"
+        and item["method"] == "approved_policy"
         for item in result["assumptions_evidence"]
     )
     assert (
@@ -135,3 +73,39 @@ def test_http_prepare_composes_complete_release_and_policy_inputs(tmp_path: Path
     assert repeat_result["status"] == "prepared"
     assert repeat_result["quality_status"] == "provisional"
     assert repeat_result["preparation_digest"] == result["preparation_digest"]
+
+
+def test_http_prepare_preserves_released_history_conflict_as_abstention(tmp_path: Path):
+    fixture = _fixture(tmp_path, misaligned_history=True)
+    app = create_app(
+        snapshot_repository=fixture.snapshots,
+        fact_repository=fixture.facts,
+        artifact_store=fixture.artifacts,
+        metadata_store=fixture.metadata,
+        config=fixture.application.config,
+        policy_registry=fixture.application.policy_registry,
+        source_use_policy=fixture.application.source_use_policy,
+    )
+    payload = make_internal_envelope(
+        {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": fixture.snapshot.snapshot_id,
+            "data_release_manifest_digest": fixture.manifest.manifest_digest,
+            "model_id": "fcff_dcf",
+        }
+    )
+    client = TestClient(app)
+    response = client.post(
+        "/v1/valuation/prepare", headers=auth_headers(), json=payload
+    )
+    repeated = client.post(
+        "/v1/valuation/prepare", headers=auth_headers(), json=payload
+    )
+
+    assert response.status_code == repeated.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "abstained"
+    assert result["quality_status"] == "abstain"
+    assert result["issue_codes"] == ["HISTORY_PERIOD_ALIGNMENT_CONFLICT"]
+    assert result["input"] is None
+    assert result == repeated.json()["result"]

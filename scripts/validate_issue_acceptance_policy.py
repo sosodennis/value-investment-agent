@@ -12,10 +12,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from validate_acceptance_manifest import load_manifest, validate_manifest
+from validate_acceptance_manifest import (
+    acceptance_metadata_path,
+    load_manifest,
+    validate_manifest,
+)
 
 ISSUE_BRANCH_RE = re.compile(r"^codex/issue-(\d+)-")
-GATED_ISSUES = {351, 352, 353, 354, 355}
+GATED_ISSUES = {351, 352, 353, 354, 355, 361}
 CLOSING_RE_TEMPLATE = r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#{}\b"
 
 
@@ -43,15 +47,9 @@ def _verified_commit_errors(
     if changed.returncode != 0:
         return ["cannot inspect files changed after the verified implementation commit"]
 
-    allowed = {
-        f"docs/acceptance/issue-{issue}-runtime.json",
-        f"docs/acceptance/issue-{issue}-acceptance.md",
-    }
     invalid = []
     for path in changed.stdout.splitlines():
-        if path in allowed or re.fullmatch(
-            rf"docs/acceptance/issue-{issue}-progress-.+\.md", path
-        ):
+        if acceptance_metadata_path(path, issue):
             continue
         invalid.append(path)
     if invalid:
@@ -90,7 +88,7 @@ def _pull_request_is_draft() -> bool | None:
 
 
 def main() -> int:
-    branch = os.getenv("GITHUB_HEAD_REF") or os.getenv("GITHUB_REF_NAME", "")
+    branch = os.getenv("GITHUB_HEAD_REF") or os.getenv("GITHUB_REF_NAME") or ""
     match = ISSUE_BRANCH_RE.match(branch)
     if not match:
         print(f"acceptance policy: PASS not applicable branch={branch or 'unknown'}")
@@ -123,8 +121,15 @@ def main() -> int:
     errors = validate_manifest(
         manifest,
         expected_issue=issue,
-        require_sec_identity=issue == 355,
+        require_sec_identity=issue in {355, 361},
     )
+    expected_schema = 2 if issue == 361 else 1
+    if manifest.get("schema_version") != expected_schema:
+        errors.append(
+            f"issue {issue} requires acceptance schema_version={expected_schema}"
+        )
+    if manifest.get("branch") != branch:
+        errors.append("manifest branch must match the issue branch being checked")
     if manifest.get("status") == "VERIFIED":
         if not current_sha:
             errors.append("VERIFIED acceptance policy requires GITHUB_SHA")

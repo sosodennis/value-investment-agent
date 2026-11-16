@@ -54,6 +54,7 @@ _FCFF_REQUIRED_FIELDS = [
     "accrued_operating_liabilities",
     "deferred_revenue",
     "cash_and_equivalents",
+    "non_operating_assets",
     "current_interest_bearing_debt",
     "long_term_interest_bearing_debt",
     "current_operating_lease_liabilities",
@@ -64,7 +65,6 @@ _FCFF_REQUIRED_FIELDS = [
     "noncontrolling_interests",
     "convertible_instruments",
     "common_shares_outstanding",
-    "dilutive_instruments",
     "other_share_classes",
 ]
 
@@ -476,7 +476,7 @@ def _input(*, monte_carlo: bool = False) -> dict[str, object]:
             "policy_version": "policy-v1",
         },
         "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v1",
+        "model_version": "fcff_dcf-v2",
         "policy_id": "fcff-dcf-policy-v1",
         "input_digest": None,
     }
@@ -637,14 +637,14 @@ class _FactsOnlyClient(_Client):
                 "data_release_manifest_digest"
             ],
             "source_selection_policy": "pit-v1",
-            "coverage_profile": "fcff-valuation-requirements-v1",
+            "coverage_profile": "fcff-valuation-requirements-v3",
         }
         prepared["provenance"] = {
             **prepared["provenance"],
             "snapshot_id": input_payload["snapshot_id"],
             "fact_ids": list(self.resolved_fact_ids),
         }
-        prepared["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+        prepared["policy_id"] = "fcff_dcf-us-gaap-public-v2"
         if self.preparation_padding:
             provenance = prepared["provenance"]
             assert isinstance(provenance, dict)
@@ -654,11 +654,11 @@ class _FactsOnlyClient(_Client):
                 "contract_version": "fundamental.v1",
                 "status": "prepared",
                 "model_id": input_payload["model_id"],
-                "model_version": "fcff_dcf-v1",
-                "profile_id": "fcff-valuation-requirements-v1",
+                "model_version": "fcff_dcf-v2",
+                "profile_id": "fcff-valuation-requirements-v3",
                 "profile_digest": "d" * 64,
-                "policy_id": "fcff_dcf-us-gaap-public-v1",
-                "policy_version": "fcff_dcf-v1-quality-v1",
+                "policy_id": "fcff_dcf-us-gaap-public-v2",
+                "policy_version": "fcff_dcf-v2-quality-v1",
                 "quality_status": "provisional",
                 "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
                 "missing_evidence": [],
@@ -683,7 +683,7 @@ class _FactsOnlyClient(_Client):
                 "identity": facts.identity.model_dump(mode="json"),
                 "valuation_timestamp": facts.valuation_timestamp,
                 "model_id": input_payload["model_id"],
-                "profile_id": "fcff-valuation-requirements-v1",
+                "profile_id": "fcff-valuation-requirements-v3",
                 "profile_digest": "d" * 64,
                 "quality_status": "provisional",
                 "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
@@ -1307,7 +1307,7 @@ async def test_cutover_compacts_nested_automatic_preparation_evidence() -> None:
         )
     )
     preparation_metrics = {
-        "profile_id": "fcff-valuation-requirements-v1",
+        "profile_id": "fcff-valuation-requirements-v3",
         "profile_digest": "d" * 64,
         "quality_status": "provisional",
         "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"] * 64,
@@ -1334,7 +1334,7 @@ async def test_cutover_compacts_nested_automatic_preparation_evidence() -> None:
             "formula": "formula " + ("y" * 2000),
             "fact_ids": [f"fact-{index}-{item}" for item in range(20)],
             "source_refs": ["b" * 64 for _ in range(20)],
-            "policy_version": "fcff_dcf-v1-quality-v1",
+            "policy_version": "fcff_dcf-v2-quality-v1",
             "as_of": "2026-11-01T00:00:00Z",
             "editable": True,
         }

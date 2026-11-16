@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from validate_acceptance_manifest import emit_preflight_env, validate_manifest
+from validate_acceptance_manifest import (
+    VALUATION_FLOW_CHECKS,
+    VALUATION_FLOW_PROFILE,
+    emit_preflight_env,
+    validate_manifest,
+)
 
 
 def _manifest() -> dict[str, object]:
@@ -87,3 +93,148 @@ def test_emit_preflight_env_is_tab_delimited(capsys) -> None:
     output = capsys.readouterr().out
     assert "EXPECTED_COMMIT\t" in output
     assert "FUNDAMENTAL_COMPOSE_FILES\t" in output
+
+
+def service_manifest():
+    manifest = _manifest()
+    manifest.update(
+        schema_version=2,
+        acceptance_scope="fundamental-service",
+        acceptance_profile=VALUATION_FLOW_PROFILE,
+        issue=361,
+    )
+    runtime = manifest["runtime"]
+    del runtime["app"]
+    del runtime["browser_session"]
+    service = runtime["fundamental"]
+    service["env_files"] = [
+        {"path": service.pop("env_file"), "sha256": service.pop("env_file_sha256")}
+    ]
+    service.update(
+        published_host="127.0.0.1",
+        image_id="sha256:" + "c" * 64,
+        source={
+            "repository_path": "fundamental-service/src/fundamental_service",
+            "container_path": "/app/src/fundamental_service",
+            "sha256": "d" * 64,
+            "file_count": 53,
+        },
+        runtime_pins={
+            "python": "3.12.16",
+            "arelle-release": "2.47.4",
+            "pydantic": "2.14.2",
+        },
+        dependencies=[
+            {
+                "service": "fundamental-postgres",
+                "published_host": "127.0.0.1",
+                "container_port": 5432,
+                "published_port": 18891,
+            }
+        ],
+        networks=["fundamental-project_default"],
+        volumes=["fundamental-project_data"],
+    )
+    manifest["checks"] = [
+        {"name": name, "command": "pending", "status": "not_run"}
+        for name in sorted(VALUATION_FLOW_CHECKS)
+    ]
+    return manifest
+
+
+def test_service_scope_does_not_require_app_or_browser(capsys) -> None:
+    manifest = service_manifest()
+    assert (
+        validate_manifest(manifest, expected_issue=361, require_sec_identity=True) == []
+    )
+    emit_preflight_env(manifest)
+    assert capsys.readouterr().out == "ACCEPTANCE_SCOPE\tfundamental-service\n"
+
+
+def test_service_scope_cannot_silently_downgrade_app_contract() -> None:
+    manifest = _manifest()
+    manifest["schema_version"] = 2
+    manifest["acceptance_scope"] = "fundamental-service"
+    assert any(
+        "cannot contain app or browser" in error
+        for error in validate_manifest(manifest)
+    )
+
+
+def test_service_scope_requires_source_runtime_and_owned_resources() -> None:
+    for key in (
+        "source",
+        "image_id",
+        "runtime_pins",
+        "env_files",
+        "dependencies",
+        "networks",
+        "volumes",
+    ):
+        manifest = deepcopy(service_manifest())
+        del manifest["runtime"]["fundamental"][key]
+        assert any(key in error for error in validate_manifest(manifest)), key
+
+
+def test_service_verification_requires_complete_valuation_flow_checks() -> None:
+    manifest = service_manifest()
+    manifest.update(status="VERIFIED", blockers=[])
+    assert any("every check" in error for error in validate_manifest(manifest))
+    manifest["checks"] = []
+    assert any(
+        "missing persistent valuation flow checks" in error
+        for error in validate_manifest(manifest)
+    )
+
+
+def test_research_checks_cannot_verify_the_revised_delivery_scope() -> None:
+    manifest = service_manifest()
+    manifest.update(status="VERIFIED", blockers=[])
+    manifest["checks"] = [
+        {
+            "name": name,
+            "command": "old research check",
+            "status": "pass",
+            "commit": manifest["commit"],
+            "input_digest": "a" * 64,
+            "output_digest": "b" * 64,
+            "exit_code": 0,
+        }
+        for name in (
+            "mapping",
+            "history_replay",
+            "forecast",
+            "label",
+            "deterministic_replay",
+            "failure_retention",
+            "architecture",
+            "ruff",
+            "types",
+            "diff",
+            "service_acceptance",
+            "full_replay_repeat",
+            "review",
+        )
+    ]
+    errors = validate_manifest(manifest)
+    assert any("source_reuse" in error for error in errors)
+    assert any("restart_restore" in error for error in errors)
+    assert any("calculation" in error for error in errors)
+
+
+def test_service_scope_requires_its_declared_valuation_flow_profile() -> None:
+    manifest = service_manifest()
+    del manifest["acceptance_profile"]
+    assert any("acceptance_profile" in error for error in validate_manifest(manifest))
+    manifest["acceptance_profile"] = "historical-threshold-research"
+    assert any("acceptance_profile" in error for error in validate_manifest(manifest))
+
+
+def test_service_passing_checks_require_exact_commit_and_digests() -> None:
+    manifest = service_manifest()
+    check = manifest["checks"][0]
+    check.update(status="pass", commit="e" * 40, exit_code=0)
+    errors = validate_manifest(manifest)
+    assert any("commit must match" in error for error in errors)
+    assert any("input_digest" in error for error in errors)
+    assert any("output_digest" in error for error in errors)

@@ -15,6 +15,7 @@ from src.agents.fundamental.infrastructure.fundamental_service_client import (
     HttpFundamentalServiceClient,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalCanonicalFactV1,
     FundamentalIdentityResolutionRequestV1,
 )
 from src.shared.internal_services import InternalPrincipal
@@ -166,6 +167,33 @@ def _identity_result() -> dict[str, object]:
         sort_keys=True,
     ).encode("utf-8")
     return {**payload, "resolution_digest": hashlib.sha256(canonical).hexdigest()}
+
+
+def test_fact_projection_preserves_service_owned_accounting_evidence() -> None:
+    fact = _facts_success("projection")["result"]["facts"][0]
+    evidence = {
+        "rule_set": {
+            "protocol": "sec-accounting-role-v1",
+            "policy_version": "synthetic-accounting-policy-v1",
+            "raw_content_hash": "b" * 64,
+            "parser_fact_digest": "c" * 64,
+        },
+        "period_rule": {
+            "disposition": "derived",
+            "components": [
+                {"parsed_fact_digest": "d" * 64, "sign": 1},
+                {"parsed_fact_digest": "e" * 64, "sign": -1},
+            ],
+        },
+        "source_facts": [{"context_id": "original", "value": "120"}],
+        "value": "100",
+    }
+    fact["accounting_evidence"] = evidence
+    projected = FundamentalCanonicalFactV1.model_validate_json(json.dumps(fact))
+
+    assert projected.accounting_evidence == evidence
+    assert projected.model_dump(mode="json")["accounting_evidence"] == evidence
+    assert projected.value == fact["value"]
 
 
 @pytest.mark.asyncio

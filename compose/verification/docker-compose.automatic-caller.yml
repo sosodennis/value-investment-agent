@@ -1,0 +1,8 @@
+services:
+  fundamental-service:
+    environment:
+      FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_FILE: /run/fundamental-automatic-approval.json
+      FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_DIGEST: ${FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_DIGEST:?pin the deployment approval policy digest}
+      FUNDAMENTAL_AUTOMATIC_APPROVAL_SERVICE_URL: http://127.0.0.1:8080
+    volumes:
+      - ${FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_HOST_FILE:?provide the deployment approval policy}:/run/fundamental-automatic-approval.json:ro

@@ -93,14 +93,25 @@ def _quality_status(request: ValuationInputV1) -> QualityStatus:
 
 
 @using_valuation_context
-def independent_calculate(request: ValuationInputV1) -> IndependentResult:
+def independent_calculate(
+    request: ValuationInputV1,
+    *,
+    scope: Literal[
+        "verified-deterministic-v1", "conditional-arithmetic-v1"
+    ] = "verified-deterministic-v1",
+) -> IndependentResult:
     """Recompute the production graph with independently entered equations.
 
     The implementation intentionally uses only the public request contract and
     does not import or call any production calculation function.
     """
 
-    if _quality_status(request) is not QualityStatus.VERIFIED:
+    if scope not in {"verified-deterministic-v1", "conditional-arithmetic-v1"}:
+        raise VerificationRefusal("SCOPE_UNSUPPORTED", "unknown reference scope")
+    if _quality_status(request) is not QualityStatus.VERIFIED and not (
+        scope == "conditional-arithmetic-v1"
+        and _quality_status(request) is QualityStatus.PROVISIONAL
+    ):
         raise VerificationRefusal(
             "QUALITY_NOT_VERIFIED", "reference calculation requires verified quality"
         )
@@ -112,6 +123,10 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
     if request.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
         raise VerificationRefusal(
             "MODEL_UNSUPPORTED", "model is outside the V1 profile"
+        )
+    if request.model_version != f"{request.model_id}-v2":
+        raise VerificationRefusal(
+            "MODEL_VERSION_UNSUPPORTED", "the current FCFF graph requires model v2"
         )
     if request.model_id == "transition_fcff_dcf" and (
         "filed_operating_evidence" not in request.historical_facts
@@ -267,6 +282,7 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
         equity = (
             enterprise
             + bridge.cash
+            + bridge.non_operating_assets
             - bridge.debt
             - bridge.preferred_stock
             - bridge.lease_liabilities
@@ -290,7 +306,7 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
                 ),
                 _node(
                     "equity_value",
-                    "enterprise_value + cash - debt - preferred - leases - NCI",
+                    "enterprise_value + cash + non_operating_assets - debt - preferred - leases - NCI",
                     equity,
                     "currency",
                     ("enterprise_value",),
@@ -408,6 +424,7 @@ def invariant_findings(
     expected_equity = (
         values["enterprise_value"].value
         + bridge.cash
+        + bridge.non_operating_assets
         - bridge.debt
         - bridge.preferred_stock
         - bridge.lease_liabilities

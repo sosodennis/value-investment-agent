@@ -1,0 +1,499 @@
+# Market inputs and replaceable sources
+
+Fundamental Service owns source acquisition, source admission, issuer mapping
+and market-input policy. The formal #352 composer owns valuation preparation
+and calculation. Providers reproduce source evidence; deterministic policies
+decide whether that evidence can supply a model input.
+
+## Current inputs
+
+| Model input | Current source and selection | Meaning retained by the service |
+| --- | --- | --- |
+| Risk-free rate | U.S. Treasury daily ten-year par yield, through `MacroSeriesProviderPort` and `select_market_rate` | Latest eligible daily observation under the currency, age and availability policy. Published percent converts to a fraction. |
+| Beta | NYU Damodaran U.S. industry cost-of-capital workbook, through `MarketReferenceProviderPort` | An explicitly adopted industry equity-beta proxy. It is not a measured company beta; unlevered beta cannot silently replace equity beta. |
+| Equity risk premium | NYU Damodaran country ERP workbook, through `MarketReferenceProviderPort` | The eligible country row selected using original-bound jurisdiction evidence and a versioned crosswalk. |
+| Pretax borrowing cost | The same NYU industry cost-of-capital workbook | An industry borrowing-cost assumption, not the issuer's contracted debt rate. Overnight SOFR cannot silently replace it. |
+| Debt/equity capital weights | The same NYU industry cost-of-capital workbook and industry row | Industry capital-policy assumptions, not current issuer market weights. A coherent published pair permits only the existing bounded representation normalization. |
+| Terminal growth | Captured current BEA NIPA workbook or publication-bound historical GDP vintage, plus the selected long-term risk-free rate | The explicit policy `min(nominal_gdp_cagr, long_term_risk_free_rate)`, with a pinned GDP horizon and freshness bound. It is a stable-growth assumption, not observed company growth. |
+
+SEC original-submission headers supply the issuer's dated SIC and incorporation
+jurisdiction. `IssuerClassificationProviderPort`,
+`ClassificationCrosswalkProviderPort` and `CountryCrosswalkProviderPort` keep
+source classification, reference taxonomy mapping and input selection separate.
+A mapped incorporation country is the current policy basis; it does not assert
+the issuer's complete geographic revenue or country-risk exposure.
+
+These adapters exist independently of complete real-issuer valuation acceptance.
+An approved source or mapping does not establish all accounting roles, a quote,
+an approved release, caller approval or a verified history threshold.
+
+## Ordinary issuer market preparation
+
+An ordinary source plan can carry `issuer_market_policy`, an
+`IssuerMarketPreparationRequestV1` pinning its classification provider, original
+annual accession/report period, country and industry crosswalk policies,
+reference selection policy and automatic market policy. The plan requires the
+same issuer, valuation timestamp, currency and source revision. In explicit
+current mode, classification and terminal policy timestamps freeze with the
+rest of the plan after public capture; historical plans keep their fixed dates.
+
+`IssuerMarketPreparation` coordinates the existing classification, crosswalk,
+reference-plan and automatic-market-policy functions through injected ports.
+The CLI's SEC source adapter reads the exact complete submission already stored
+in the snapshot. It checks its original context and raw hash, and retains the
+acquisition's actual SEC terms reference. It makes no HTTP request and never
+uses current company metadata to reconstruct a historical classification.
+
+Preparation saves canonical request, classification, mapping, plan, decision and
+bundle artifacts in the existing immutable store. The report references the
+bundle even when incomplete accounting or source evidence blocks valuation.
+Shared originals and classifications can serve distinct policy requests;
+unrelated request metadata cannot change their artifact identities. Repeated
+publication reuses unchanged artifacts, including after reopening or restoring
+the store. Unsupported mappings, unavailable originals and source conflicts
+remain explicit refusals.
+
+An eligible bundle exposes the exact reference plan, terminal plan, automatic
+decision and bundle references needed for a release. Source preparation refuses
+a candidate or active release missing those exact references before activation
+or composer execution. These references are prepared evidence: the existing
+trusted deployment policy, signed release canary, formal #352 composer and exact
+caller approval still enforce their own contracts. This stage does not install
+a deployment policy or approve historical sufficiency.
+
+The release boundary's `assemble_authorized_market_policy_record` can build an
+unpublished policy candidate from that retained decision. Its operator-supplied
+authorization must already name the exact decision and both selection plans,
+issuer, effective time, policy version, model version and profile. It fills only
+absent market inputs, using the same evidence reader and evaluator as serving
+and the canary. Existing conflicting inputs, missing authorization, refused
+decisions and incompatible pins fail explicitly. It performs no publication,
+signing, activation or network call. Publishing a different candidate under an
+already published policy identity remains an immutable-repository conflict.
+The source plan cannot supply deployment authority.
+
+An operator can publish through `fundamental-prepare-source` with an already
+signed `--candidate`, `--market-policy-authorization`, its canonical
+`--market-policy-authorization-digest`, and the exact installed
+`--runtime-source-revision`. Publication requires the deployment's authorized
+organization. The command reproduces source admissions and runs the independent
+signed release canary with the proposed policy before publishing it. It then
+uses the existing release publication/activation, formal composer and exact
+caller approval flow. This command never creates a trust key or substitutes
+source preparation for deployment authority.
+
+Every assembled policy pins `data_release_manifest_digest`. Serving,
+calculation and the independent canary select it only for that release, including
+when a caller supplies its explicit policy ID. Publishing a candidate cannot
+change an older release before activation. A distinct release needs its own
+immutable policy identity; reusing a published identity with different content
+refuses. Unscoped existing policies preserve their canonical bytes and selection
+behavior. The command saves a content-addressed policy-publication receipt and
+includes its reference in the preparation evidence. A crash between policy and
+receipt publication is recoverable by repeating the same authorized command;
+unchanged policies and artifacts are reused without replacement.
+
+## Source suitability
+
+### Quote permission
+
+`admit_quote_source` reproduces an exact `CommonShareQuoteV1` through the
+configured `QuoteSourceProviderPort` and checks its intended use against the
+deployment-owned `SourceUsePolicyV1`. Quote rules use the source adapter's
+`source_id` as `provider_id`, metric `common_share.price` and population
+`common-share`; source version and terms reference must also match. No quote
+rule is installed by the default free-market policy.
+
+The canonical `QuoteAdmissionV1` binds the complete quote, actual original
+content digest, valuation timestamp, purpose, policy version/digest and every
+retained terms artifact. Failed reproduction, missing or changed permission,
+unsupported use and evidence captured after the cutoff remain deterministic
+refusals. The decision contains required attribution notices. Its identity
+contains no execution time or random run identifier.
+
+A signed release must retain this decision with role
+`equity-quote-source-admission-v1` and its original permission documents with
+role `equity-quote-source-terms-v1`, alongside the existing quote original and
+award evidence. Serving and the independent canary reproduce the same decision
+under the installed policy before the official composer uses the quote.
+Missing, conflicting, altered, refused or differently scoped decisions fail;
+a release signature cannot install a source-use rule. Distinct valuation dates
+may reuse the same quote with their own exact admissions. Existing immutable
+artifact publication/recovery provides unchanged reuse; admission performs no
+network or storage I/O itself. Macro/reference admission bytes are unchanged.
+
+The installed Nasdaq historical-close parser remains a format reproducer.
+Its legacy `/terms-of-use` metadata is not a grant. Source research under #394
+found that URL returns 404 and the publisher's current
+[`/legal` page](https://www.nasdaq.com/legal) restricts automated capture and
+storage without permission. No production Nasdaq admission, new quote capture
+registration or permission exception is introduced. A replacement source needs
+its own maintained interface, exact terms evidence and trusted rule; it can use
+the same quote-provider boundary without changing valuation formulas.
+
+### Twelve Data daily quote profile
+
+`TwelveDataDailyCloseProvider` implements the same `QuoteSourceProviderPort` as
+Nasdaq and is registered in the serving/canary composition. Its source profile
+is `twelve-data-us-common-daily-unadjusted-capture-v1`, source ID
+`twelve-data-daily-close`, with terms reference
+[`https://twelvedata.com/terms`](https://twelvedata.com/terms). Registration
+enables reproduction of retained bytes; the default policy grants no use.
+
+The maintained [time-series API](https://twelvedata.com/docs/market-data/time-series)
+documents daily bars and symbol, currency, exchange, MIC, asset type and exchange
+timezone metadata. This bounded profile requires an exact request to
+`https://api.twelvedata.com/time_series` with all parameters below:
+
+| Parameter | Required value |
+| --- | --- |
+| `symbol` | Exact requested security symbol |
+| `interval` | `1day` |
+| `country` | `US` |
+| `type` | `Common Stock` |
+| `mic_code` | `XNAS` or `XNYS` |
+| `date` | Exact `YYYY-MM-DD` observation date |
+| `format` | `JSON` |
+| `adjust` | `none` |
+| `dp` | `11` |
+
+The provider defaults to split-adjusted prices. Omitting `adjust=none` therefore
+refuses; an adjusted historical price cannot silently supply current treasury
+stock arithmetic. Response currency must be USD, metadata must match the
+requested exchange/common stock, and exactly one matching daily bar must be
+retained. Duplicate JSON members, provider errors and mismatched observations
+refuse. The date's New York midnight supplies conservative age; actual capture
+supplies availability and must follow that local calendar day's end. A newly
+captured historical response does not establish earlier availability.
+
+Provenance URIs exclude credentials; `apikey`, userinfo and unrecognized query
+parameters refuse. This adapter performs no HTTP capture and creates no account
+or key. Deployment must separately provide an entitled capture and exact retained
+permission evidence. Terms distinguish internal, non-display and redistribution
+uses and prohibit commercial Free Tier use. Neither a free label nor a parser
+is deployment permission. Format/admission tests use synthetic original bytes
+with explicit test-only permission; they do not establish a real issuer quote.
+
+Production market inputs require a maintained structured dataset, a stable API
+or download interface, documented field meanings and update rules, and
+verifiable version or historical-date evidence. Provider abstractions preserve
+these capabilities; they do not make an unsuitable source suitable.
+
+Do not introduce an adapter that extracts a value from an individual article,
+blog post, article feed or narrative passage. Finding similar posts in several
+years does not establish a dataset contract. The 2025 Damodaran article/feed ERP
+candidate investigated under #361/#369 is excluded on this basis. Its retained
+bytes are research evidence only; no production provider, source-use grant,
+issuer policy or valuation input is authorized by that investigation.
+
+Keep recurring current preparation and historical point-in-time availability
+explicit. A structured provider may support current captured data while lacking
+reproducible historical vintages. Report that limitation and retain the refusal
+for an unsupported historical cutoff. A year in a filename, a series observation
+date or today's capture cannot establish historical publication. New providers
+must exercise the same source reproduction and policy boundaries in serving and
+the release canary, including missing periods, conflicts and unsupported
+versions.
+
+## Maintained NYU workbooks
+
+The [publisher's data catalog](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datacurrent.html)
+links these stable annual download interfaces. The existing
+`MarketReferenceProviderPort` reproduces their retained originals; serving and
+the release canary use the same provider.
+
+| Dataset | Supported download | Source profile |
+| --- | --- | --- |
+| U.S. industry unlevered beta | `pc/datasets/betas.xls` | `damodaran-us-unlevered-beta-xls-v1` |
+| U.S. industry equity beta, borrowing cost and capital weights | `pc/datasets/wacc.xls` | `damodaran-us-industry-capital-xls-v1` |
+| Country total ERP and tax reference | `pc/datasets/ctryprem.xlsx` | `damodaran-country-erp-tax-xlsx-v2` |
+
+Download paths are relative to `https://pages.stern.nyu.edu/~adamodar/`.
+The annual country workbook uses header row 8. Its explicit v2 profile retains
+the mature-market and U.S. ERP methodology inputs, volatility adjustment and
+any update annotation. It transcribes the published country total ERP in column
+E; it does not substitute the CDS column H, a methodology input or a recomputed
+number. Tax references retain their own lookup year. The existing archive
+country v1 profile uses header row 7; neither profile guesses or falls back to
+the other when a workbook changes.
+
+These annual downloads do not promise the latest quarterly or monthly value.
+Selection still checks the workbook's declared update date, maximum age,
+issuer classification and source-use evidence. Capture time bounds availability;
+an annotation cannot silently establish an earlier publication date. Retained
+bytes and their digests identify a capture, because live URLs can change.
+`free-market-source-use-v5` includes the separate current BEA NIPA profile.
+The BEA citation rule pins the exact complete citation article, while every
+admission still records the original terms-page digest. A changed article,
+link, attribution instruction or restriction refuses; unrelated page-shell
+changes do not change the selected article digest. Other sources retain their
+whole-document terms checks. Missing or changed permission bytes, raw-table
+redistribution and historical cutoffs before capture still refuse.
+
+The current BEA adapter uses the maintained
+`https://apps.bea.gov/national/Release/XLS/Survey/Section1All_xls.xlsx`
+workbook through `BeaCurrentNominalGdpProvider` and the existing macro-series
+port. It validates the published GDP table and makes its data available only at
+the actual capture timestamp. This supports current valuation requests; it does
+not establish prior availability and cannot be selected for an earlier cutoff.
+The historical archive adapter remains separate and still requires its paired
+BEA release evidence before assigning an archival availability date. Both
+profiles retain the same normalized series contract, allowing the existing
+terminal-growth selector to consume either admitted vintage without new math.
+
+The catalog's `histimpl.xls` annual series and the publisher's `ERPbymonth.xlsx`
+monthly series are research candidates, without production adapters or grants.
+They contain multiple ERP methodologies, including inputs from analyst growth
+estimates. A historical observation in today's cumulative workbook establishes
+neither its historical availability nor threshold ground truth.
+
+## Extend a source
+
+| Responsibility | Contract | Composition point |
+| --- | --- | --- |
+| Public request validation and capture availability | `PublicSourceCaptureProfilePort` | `PublicSourceAdapter(registrations=...)`; defaults live in `public_source_catalog.py`. |
+| Reproduce a macro vintage from retained originals | `MacroSeriesProviderPort` | `create_app(macro_providers=...)` and the matching `DataReleaseCanaryRunner(macro_providers=...)`. |
+| Reproduce country/industry reference rows | `MarketReferenceProviderPort` | `create_app(reference_providers=...)` and the matching canary `reference_providers`. |
+| Reproduce a quote from retained source bytes | `QuoteSourceProviderPort` | The application's and canary's `quote_providers` parameters. |
+| Reproduce original issuer classification | `IssuerClassificationProviderPort` | `reproduce_issuer_classification(provider, ...)`. |
+| Map a classification to a reference subject | The industry/country crosswalk ports | `apply_industry_crosswalk` / `apply_country_crosswalk` with explicit provider/version/digest policy. |
+| Replace SEC HTTP transport or accession-bound capture | `SecRequestTransportPort` / `SecSourceCapturePort` | `RetainedSecSourceAdapter`, SEC acquisition and ingestion constructors. |
+
+Production defaults are assembled in `free_source_policy.py`,
+`public_source_catalog.py`, `app.py` and the release command's composition root.
+Runtime setup must supply the same approved provider set and source-use policy
+to serving and the independent canary. No agent, UI, report or financial selector
+should construct a provider client or interpret an upstream workbook/HTTP shape.
+
+To add an alternative:
+
+1. Implement the appropriate port. Validate the original source's identity,
+   metric, population, unit, schema and availability evidence, then return the
+   existing canonical vintage or observation contract. Retain missing cells and
+   conflicts; do not fill them with defaults.
+2. Register bounded request/capture behavior at the composition boundary. Keep
+   HTTP, rate limits, retries and source formats in the adapter. Keep originals
+   in the existing immutable content store and acquisition receipts.
+3. Add a versioned `SourceUsePolicyV1` rule for the exact provider, metric,
+   population, source profile, intended use, retained terms and required notices.
+   A parser being installed does not grant permission to use its data. For
+   example, ALFRED DGS10 parsing is implemented, but the default free-source
+   policy currently has no ALFRED admission rule.
+4. Supply a versioned issuer/time financial policy and compatible crosswalks.
+   A different provider can reuse the same metric and selection policy. A new
+   financial meaning, population or methodology requires its own explicit
+   policy decision rather than a silent provider fallback.
+5. Run the existing admission, selection, release and preparation boundaries with
+   the alternative provider. Cover source tampering, wrong units/issuer/time,
+   missing/conflicting rows, unchanged repeats and retained refusals. Existing
+   JSON-provider substitution tests demonstrate these boundaries without an
+   upstream network dependency.
+
+## Availability, persistence and approval
+
+The ordinary `fundamental-prepare-source --plan ... --plan-digest ...` command
+can acquire required public originals before the existing SEC/release/forecast
+flow. Add `public_sources` to its plan, with one entry per exact source:
+
+```json
+{
+  "protocol": "public-source-acquisition-v1",
+  "source_id": "damodaran-reference",
+  "uri": "https://pages.stern.nyu.edu/~adamodar/pc/datasets/ctryprem.xlsx",
+  "source_profile": "damodaran-country-erp-tax-xlsx-v2",
+  "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/",
+  "valuation_timestamp": "2026-11-13T12:00:00Z"
+}
+```
+
+The timestamp must equal the fixed-date plan's valuation timestamp. This example declares a
+request; it does not assert that the mutable workbook existed at that cutoff.
+The command uses `FUNDAMENTAL_PUBLIC_SOURCE_USER_AGENT` (or the configured SEC
+contact), existing PostgreSQL metadata and content storage. Inject
+`PublicSourceCapturePort` and the acquisition store/lock ports to use another
+capture implementation. The profile is a downstream reproduction pin; declaring
+its name does not establish that the captured bytes match it. Existing provider
+reproduction and source admission must still validate them.
+
+Canonical source/URI/profile/terms/valuation/protocol identity scopes each
+receipt. Identical requests share a lock and reuse verified originals with
+`wrote=false`, including after restart. Different valuation timestamps create
+separate captures of mutable URLs. No issuer is included in the shared public
+source identity. Corrupt receipts or originals refuse without refetch/repair;
+current registration restrictions are checked before cache reuse. Receipt and
+content stores perform the existing atomic writes. A crash after receipt commit
+can resume without another download; a crash before that commit can require
+another HTTP GET, without duplicate published records.
+
+For a current valuation, use the same command with `--current`. The pinned input
+is a complete template plan whose valuation timestamp is the business request
+time. A new request must be nonfuture and no more than 15 minutes old. The command
+retains every required original and permission receipt, then freezes an ordinary
+plan at the latest actual capture time or the request time, whichever is later.
+It updates SEC-ingestion and source-admission decision timestamps together; it
+does not change source timestamps or the original acquisition requests. The
+installed `current-capture-before-cutoff-v1` protocol requires captures within
+15 minutes of the business request. It does not refresh an old historical plan.
+
+`current-source-request:<request-digest>` and
+`current-source-preparation:<request-digest>` retain the canonical request and
+selection. The selection contains the exact frozen plan, and ordinary reports
+include `public_source_cutoff` with every capture. The request digest identifies
+`current-source-preparation-v1` wrapping the full template; it differs from the
+template's `--plan-digest`. Keep the original template and digest for retry,
+candidate-release and caller-approval invocations. Reopening the same selection
+days later returns the same plan with `wrote=false`; it cannot move the cutoff
+again. A distinct current valuation requires its own explicit business request.
+
+After interruption, completed receipts can reconstruct the same plan even when
+the request is old. An expired request with incomplete receipts refuses before
+any new capture. An in-window retry reuses successful captures and may retry
+transient failures. Permanent refusals and out-of-window captures are retained
+without a selected plan. Failed selections return their artifact receipt through
+the command; transient selections use content-addressed attempt identities.
+Corruption refuses without repair, and cached selections recheck the current
+source register without HTTP access. Neither mode grants source-use permission,
+creates an issuer market policy, approves a release or bypasses exact-input
+caller approval. Current data never establishes historical availability.
+
+If current selection fails, the command also acquires or reuses the compiled SEC
+requests at the original requested time. Its `source_acquisitions_publication`
+references the retained `SourcePreparationAcquisitionsV1`; the issuer entrypoint
+exposes that receipt as `source_acquisitions` and adds `source_acquisition` to its
+stage lineage. This evidence records independent accounting failures without
+selecting an effective valuation time or preparing a valuation.
+
+Completed SEC snapshot outcomes use `source-preparation-acquisitions:<plan-digest>`.
+Failures without a snapshot append the receipt's content hash, preserving each
+attempt while permitting the same plan to resume after repair. Reuse still calls
+the SEC acquisition owner to enforce organization access and runtime checks.
+Ordinary source preparation also retains independent SEC outcomes alongside
+public-source refusals when acquisition is configured and no matching release
+or candidate snapshot already supplies them.
+
+Every declared source's outcome appears in `public_source_outcomes`, including
+failures and originals captured after the cutoff. A failed required source or
+`SOURCE_NOT_AVAILABLE_AT_VALUATION` blocks preparation. Permanent provider
+refusals are reused for that exact request. Retryable attempts retain their own
+canonical evidence and permit a later retry; they are not completed captures.
+A busy capture lease fails retryably before provider access. Invalid requests
+and corrupted persistence fail at their boundary rather than becoming ordinary
+provider failures.
+The command returns exit 2 with canonical `source-preparation-error-v1` JSON on
+stderr for source-plane exceptions. Its stable `code`, `retryable`, `plan_digest`
+and optional `evidence_ref` let a caller distinguish a busy lease from a permanent
+refusal without parsing message text.
+
+The optional `source_admissions` plan entries connect these captures to the
+existing source-use evaluator. Each `public-source-admission-v1` entry pins
+`kind` (`macro` or `reference`), `provider_id`, `metric_id`, `intended_use`,
+`valuation_at`, trusted `policy_version`/`policy_digest`, and ordered distinct
+`source_request_digests`/`terms_request_digests`. Capture digests must identify
+entries in the same plan; admission dates must equal the effective plan cutoff.
+In current mode acquisition requests retain the earlier business request time;
+the stored cutoff binds those exact receipts to the later decision. Requests cannot install policies
+or approve numbers. The command injects the application's configured macro and
+reference providers and trusted source-use policy into `PublicSourceAdmission`.
+
+Exact permission pages have separate registrations: `damodaran-use-terms`,
+`bea-citation-terms`, `us-government-works-terms` and `new-york-fed-use-terms`.
+Each permits its registered URL only and records actual capture availability.
+These pages supply permission evidence, never numerical ERP. The existing policy
+still requires exact reviewed terms hashes; changed pages refuse until the policy
+is reviewed and versioned. A fresh download does not grant historical permission
+or data availability.
+
+`source_admission_outcomes` retains every requested decision, acquisition refs,
+original/terms refs and stable refusal codes. Reproduction/schema failures,
+unavailable or ambiguous providers, policy mismatches, failed/late captures and
+missing/changed terms block preparation. Originals and the existing
+`SourceAdmissionV1` are published using immutable content-addressed artifacts.
+Repeats, concurrent publications and resumes after intermediate publication reuse
+identical artifacts with `wrote=false`. Corrupt retained originals refuse without
+repair or a download.
+
+An eligible outcome exposes the exact `release_refs` required by the existing
+release canary. A supplied or active release must include these admission and
+original/terms refs before formal preparation; otherwise the report retains
+`SOURCE_ADMISSION_RELEASE_MISMATCH`. Admission itself does not install issuer
+crosswalks, financial policies or trusted release candidates. Source-time
+orchestration for a current request, complete issuer policies and release
+generation remain separate work. Omitting `public_sources` and
+`source_admissions` preserves existing SEC-only plans and canonical digests.
+
+Workbook filenames and observation dates do not prove historical availability.
+The current Damodaran and mutable Treasury adapters bound availability by actual
+capture time. Downloading an old annual table today cannot authorize its use at
+an earlier valuation date. Dated vintage providers must reproduce their own
+publication evidence. The same cutoff rule applies to every provider.
+
+Acquisition reuses originals under the stable source scope. Canonical inputs,
+source/mapping/model/policy versions and content digests identify derived
+artifacts. Changing a provider or methodology creates a separately evidenced
+selection; it never overwrites a prior artifact. A completed repeat returns the
+existing result with `wrote=false`, including blocked/abstained results.
+
+Automatic source-use admission, accounting mapping and market-policy approval
+are separate executable decisions. Trusted machine signing binds those decisions
+to the admitted evidence and deployment policy. The release canary reproduces
+them before use. Missing or unsupported evidence still refuses. Authentic
+caller approval remains bound to the exact prepared valuation input.
+
+Neither a new provider nor automatic approval changes
+`supported_history_threshold=null` or promotes provisional valuation quality.
+
+## Publisher references
+
+- [Damodaran data background and use](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html) and [archived industry/country data](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/dataarchived.html).
+- [U.S. Treasury interest-rate statistics](https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics).
+- [BEA historical data](https://apps.bea.gov/histdata/) and [BEA citation guidance](https://www.bea.gov/help/guidelines-for-citing-bea).
+- [ALFRED](https://alfred.stlouisfed.org/) and [FRED terms](https://fred.stlouisfed.org/terms-of-use/); these links do not replace a deployment admission rule.
+
+
+## Automatic quote capture and source admission
+
+The source-preparation CLI uses the existing public acquisition receipts and
+locks for quotes as well as macro/reference originals. A `source_admissions`
+entry with `kind="quote"`, `metric_id="common_share.price"` and one source
+request digest supplies `quote_selection` with the original-derived `issuer_id`,
+`security_id` and exact `as_of`. It supplies no expected price. The selection
+must match the source plan identity. The configured `QuoteSourceProviderPort`
+reproduces the price from the captured original. Retained terms and the trusted
+source-use policy decide whether it may be used. Existing macro/reference plan
+serialization and digests are unchanged.
+
+Twelve Data capture uses the same exact unadjusted daily URI profile documented
+above. The deployment supplies `FUNDAMENTAL_TWELVE_DATA_API_KEY_FILE`; the key
+is read lazily for a network capture and sent only as `Authorization: apikey ...`
+to that endpoint. Credentials never belong in provenance URIs or artifacts.
+Quote redirects are refused, responses are capped at 1 MiB, and an echoed key
+refuses without retaining the body. The terms capture uses source ID
+`twelve-data-terms` and the exact `https://twelvedata.com/terms` URI, with no
+Authorization header. Registering the endpoint or configuring a key grants no
+source-use permission. There is no default Twelve Data permission rule.
+
+An eligible, unambiguous deployment rule must permit `valuation_preparation`
+before a quote network request. Full terms-byte, scope, policy-digest and
+valuation-time checks still run after acquisition. Missing permission or key
+creates a retained retryable attempt, so a corrected deployment can retry the
+same request; these attempts cannot poison the successful capture key. HTTP or
+reproduction failures remain explicit. Malformed/provider-error originals are
+retained for admission diagnostics rather than silently discarded.
+
+A current request captures first, freezes its actual cutoff, and updates the
+quote admission valuation time without changing the historical observation
+selection. A retrospective capture cannot pass an earlier decision cutoff.
+An admitted result exposes exact quote-original, terms and quote-admission
+`release_refs`; candidate/active-release checks require these refs. Issuer
+market policy preparation consumes macro/reference admissions separately.
+Neither quote admission nor transport creates complete award inventories,
+financial policies, release signatures or exact-input caller approval.
+Repeated/concurrent/reopened preparation reuses the existing capture and
+immutable result, returning `wrote=false` when unchanged.
+
+The maintained authentication reference is
+[Twelve Data introduction](https://twelvedata.com/docs/introduction). Actual
+subscription/non-display/storage/redistribution scope must be established for
+the deployment before installing a source-use rule. Synthetic test rules confer
+no real provider rights. Eligible valuation quality remains provisional and
+`supported_history_threshold` remains null.

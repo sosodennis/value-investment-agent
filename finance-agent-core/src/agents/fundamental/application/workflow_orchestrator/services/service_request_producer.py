@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from pydantic import ConfigDict, JsonValue, TypeAdapter
+
 from src.agents.fundamental.application.fundamental_service_port import (
     FundamentalServiceClient,
     FundamentalServiceFailure,
@@ -25,14 +27,17 @@ from src.shared.internal_services import InternalPrincipal
 from src.shared.kernel.types import JSONObject
 
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_JSON_OBJECT = TypeAdapter[JSONObject](
+    dict[str, JsonValue], config=ConfigDict(allow_inf_nan=False)
+)
 _SUPPORTED_MODELS = {"fcff_dcf", "transition_fcff_dcf"}
 _MODEL_BY_SELECTION = {
     "dcf_standard": "fcff_dcf",
     "dcf_growth": "transition_fcff_dcf",
 }
 _MODEL_VERSION = {
-    "fcff_dcf": "fcff_dcf-v1",
-    "transition_fcff_dcf": "transition_fcff_dcf-v1",
+    "fcff_dcf": "fcff_dcf-v2",
+    "transition_fcff_dcf": "transition_fcff_dcf-v2",
 }
 _ANNUAL_DURATION_FIELDS = (
     "revenue",
@@ -59,6 +64,7 @@ _ANNUAL_INSTANT_FIELDS = (
 )
 _POINT_IN_TIME_FACT_FIELDS = (
     "cash_and_equivalents",
+    "non_operating_assets",
     "current_interest_bearing_debt",
     "long_term_interest_bearing_debt",
     "current_operating_lease_liabilities",
@@ -69,7 +75,6 @@ _POINT_IN_TIME_FACT_FIELDS = (
     "noncontrolling_interests",
     "convertible_instruments",
     "common_shares_outstanding",
-    "dilutive_instruments",
     "other_share_classes",
 )
 _BASE_REQUIRED_FIELDS = (
@@ -114,6 +119,18 @@ def _mapping(value: object, *, context: str) -> Mapping[str, object]:
     return value
 
 
+def _json_object(value: Mapping[str, object], *, context: str) -> JSONObject:
+    try:
+        return _JSON_OBJECT.validate_python(value, strict=True)
+    except (TypeError, ValueError) as error:
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            f"{context} must contain only JSON values",
+            retryable=False,
+            status_code=502,
+        ) from error
+
+
 def _timestamp(value: object) -> datetime:
     if value is None:
         return datetime.now(UTC)
@@ -154,8 +171,11 @@ def _model_id(
         return "fcff_dcf"
     candidate = request.get("model_id") if request is not None else None
     if not isinstance(candidate, str) or not candidate:
-        candidate = _MODEL_BY_SELECTION.get(fundamental.get("model_type"))
-    if candidate not in _SUPPORTED_MODELS:
+        selection = fundamental.get("model_type")
+        candidate = (
+            _MODEL_BY_SELECTION.get(selection) if isinstance(selection, str) else None
+        )
+    if not isinstance(candidate, str) or candidate not in _SUPPORTED_MODELS:
         raise FundamentalServiceFailure(
             "VALUATION_MODEL_UNAVAILABLE",
             "Fundamental service request requires a released FCFF model",
@@ -270,7 +290,10 @@ def _validate_ingestion_result(
             retryable=False,
             status_code=422,
         )
-    return dict(payload)
+    return _json_object(
+        {**payload, "canonical_fact_ids": list(fact_ids)},
+        context="Fundamental SEC ingestion",
+    )
 
 
 def _preparation_selection(
@@ -329,7 +352,7 @@ def _prepared_input(
             retryable=False,
             status_code=502,
         )
-    prepared = dict(result.input)
+    prepared = _json_object(result.input, context="Fundamental preparation.input")
     prepared_identity = prepared.get("identity")
     context = prepared.get("valuation_context")
     if (
@@ -598,21 +621,17 @@ async def prepare_service_valuation_request(
             preparation=preparation,
         )
 
-    prepared = dict(request)
+    prepared = _json_object(request, context="valuation_request")
     prepared["contract_version"] = "fundamental.v1"
     prepared["identity"] = identity
     prepared["model_id"] = model_id
     prepared["model_version"] = (
         prepared.get("model_version") or _MODEL_VERSION[model_id]
     )
-    prepared["historical_facts"] = list(ingestion["canonical_fact_ids"])
+    prepared["historical_facts"] = ingestion["canonical_fact_ids"]
     prepared["snapshot_selector"] = snapshot_selector
     prepared["valuation_context"] = {
-        **(
-            _mapping(prepared.get("valuation_context"), context="valuation_context")
-            if compact_request
-            else valuation_context
-        ),
+        **_json_object(valuation_context, context="valuation_context"),
         "valuation_timestamp": snapshot_selector["valuation_timestamp"],
         **(
             {"fiscal_period_selector": fiscal_period_selector}

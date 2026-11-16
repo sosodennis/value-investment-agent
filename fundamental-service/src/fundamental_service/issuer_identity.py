@@ -4,8 +4,53 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Literal
 
 from .contracts import IdentityResolutionRequestV1, IdentityV1
+
+if TYPE_CHECKING:
+    from .arelle_parser import ParsedXbrlFactV1
+
+ORIGINAL_IDENTITY_CONCEPTS = frozenset(
+    {
+        "dei:EntityCentralIndexKey",
+        "dei:EntityRegistrantName",
+        "dei:EntityIncorporationStateCountryCode",
+        "dei:DocumentType",
+        "dei:DocumentPeriodEndDate",
+        "dei:TradingSymbol",
+        "dei:Security12bTitle",
+    }
+)
+_DEI_NAMESPACE = re.compile(r"http://xbrl\.(?:sec\.gov|us)/dei/\d{4}(?:-\d{2}-\d{2})?")
+_GAAP_NAMESPACE = re.compile(
+    r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
+)
+OriginalSecuritySelectionPolicy = Literal[
+    "original-dei-single-common-stock-v1",
+    "original-dei-paired-common-stock-v2",
+    "original-dei-paired-common-stock-v3",
+    "original-dei-paired-common-stock-v4",
+    "original-dei-paired-common-stock-v5",
+]
+DEFAULT_ORIGINAL_SECURITY_POLICY: OriginalSecuritySelectionPolicy = (
+    "original-dei-paired-common-stock-v5"
+)
+_PAIRED_SECURITY_POLICIES = frozenset(
+    {
+        "original-dei-paired-common-stock-v2",
+        "original-dei-paired-common-stock-v3",
+        "original-dei-paired-common-stock-v4",
+        "original-dei-paired-common-stock-v5",
+    }
+)
+OriginalHistoryIdentityPolicy = Literal["original-history-name-format-v1"]
+DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY: OriginalHistoryIdentityPolicy = (
+    "original-history-name-format-v1"
+)
+_SecurityContext = tuple[str, date | None, date | None, tuple[tuple[str, str], ...]]
+
 
 _US_INCORPORATION_STATES = frozenset(
     (
@@ -76,6 +121,569 @@ class IdentityResolutionError(ValueError):
         super().__init__(message)
         self.code = code
         self.status_code = status_code
+
+
+def original_history_identity_key(
+    identity: IdentityV1, policy: OriginalHistoryIdentityPolicy | None
+) -> IdentityV1:
+    if policy is None:
+        return identity
+    if policy != DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY:
+        raise ValueError("unsupported original history identity policy")
+    return identity.model_copy(update={"issuer_name": _name(identity.issuer_name)})
+
+
+def _single_standard_common_title(
+    facts: tuple[ParsedXbrlFactV1, ...], contexts: set[_SecurityContext]
+) -> str | None:
+    titles: dict[_SecurityContext, set[str]] = {context: set() for context in contexts}
+    for fact in facts:
+        if fact.concept != "dei:Security12bTitle":
+            continue
+        context = (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        if context not in titles:
+            return None
+        titles[context].add(" ".join(fact.value.split()))
+    if any(len(values) != 1 for values in titles.values()):
+        return None
+    common = tuple(
+        next(iter(values))
+        for context, values in titles.items()
+        if context[3]
+        == (("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonStockMember"),)
+        and re.fullmatch(
+            r"common stock(?:, \$[0-9]+(?:\.[0-9]+)? par value per share)?",
+            next(iter(values)).casefold(),
+        )
+    )
+    if len(common) != 1 or any(
+        values != {common[0]}
+        and re.fullmatch(
+            r"[0-9]+(?:\.[0-9]+)?% notes due [0-9]{4}",
+            next(iter(values)).casefold(),
+        )
+        is None
+        for values in titles.values()
+    ):
+        return None
+    return common[0]
+
+
+def _no_symbol_note_contexts(
+    facts: tuple[ParsedXbrlFactV1, ...],
+) -> frozenset[_SecurityContext] | None:
+    flags = tuple(f for f in facts if f.concept == "dei:NoTradingSymbolFlag")
+    if not flags:
+        return frozenset()
+    symbols = tuple(f for f in facts if f.concept == "dei:TradingSymbol")
+    scope = {
+        (
+            f.entity_scheme,
+            f.entity_identifier,
+            f.period_start,
+            f.period_end,
+            f.namespace_uri,
+        )
+        for f in symbols
+    }
+    if len(scope) != 1:
+        return None
+    reference = next(iter(scope))
+    contexts = frozenset(
+        (f.context_id, f.period_start, f.period_end, f.dimensions) for f in flags
+    )
+    for context in contexts:
+        members = tuple(
+            f
+            for f in facts
+            if f.concept
+            in {"dei:NoTradingSymbolFlag", "dei:Security12bTitle", "dei:TradingSymbol"}
+            and (f.context_id, f.period_start, f.period_end, f.dimensions) == context
+        )
+        titles = {
+            " ".join(f.value.split())
+            for f in members
+            if f.concept == "dei:Security12bTitle"
+        }
+        if (
+            len(titles) != 1
+            or context[3] in {f.dimensions for f in symbols}
+            or re.fullmatch(
+                r"[0-9]+(?:\.[0-9]+)?% notes due [0-9]{4}",
+                next(iter(titles)).casefold(),
+            )
+            is None
+            or any(f.concept == "dei:TradingSymbol" for f in members)
+            or any(
+                f.value != "true"
+                for f in members
+                if f.concept == "dei:NoTradingSymbolFlag"
+            )
+            or any(
+                (
+                    f.entity_scheme,
+                    f.entity_identifier,
+                    f.period_start,
+                    f.period_end,
+                    f.namespace_uri,
+                )
+                != reference
+                or f.namespace_uri
+                not in {
+                    f"http://xbrl.sec.gov/dei/{year}"
+                    for year in (2023, 2024, 2025, 2026)
+                }
+                or f.unit is not None
+                or f.is_numeric
+                or f.instant is not None
+                or f.period_start is None
+                or f.period_end is None
+                or f.period_start > f.period_end
+                or len(f.dimensions) != 1
+                or f.dimensions[0][0] != "us-gaap:StatementClassOfStockAxis"
+                or not f.dimensions[0][1]
+                for f in members
+            )
+        ):
+            return None
+    return contexts
+
+
+def _paired_common_security(
+    facts: tuple[ParsedXbrlFactV1, ...],
+    *,
+    allow_omitted_per_share: bool,
+    allow_no_par_value: bool,
+    allow_no_symbol_notes: bool,
+) -> tuple[str, str, tuple[tuple[str, str], ...]] | None:
+    """Classify paired printed DEI titles, without interpreting custom member names."""
+
+    symbols: dict[_SecurityContext, set[str]] = {}
+    titles: dict[_SecurityContext, set[str]] = {}
+    for fact in facts:
+        if fact.concept not in {"dei:TradingSymbol", "dei:Security12bTitle"}:
+            continue
+        context = (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        target = symbols if fact.concept == "dei:TradingSymbol" else titles
+        target.setdefault(context, set()).add(" ".join(fact.value.split()))
+    no_symbol_notes = (
+        _no_symbol_note_contexts(facts) if allow_no_symbol_notes else frozenset()
+    )
+    if (
+        not symbols
+        or no_symbol_notes is None
+        or symbols.keys() != titles.keys() - no_symbol_notes
+        or any(
+            len(values) != 1 or "" in values
+            for values in (*symbols.values(), *titles.values())
+        )
+    ):
+        return None
+    pairs = tuple(
+        sorted(
+            (next(iter(values)), next(iter(titles[context])))
+            for context, values in symbols.items()
+        )
+    )
+    per_share = r"(?: per share)?" if allow_omitted_per_share else r" per share"
+    no_par_value = r"|no par value" if allow_no_par_value else ""
+    common_title = (
+        rf"common stock(?:, (?:\$[0-9]+(?:\.[0-9]+)? par value{per_share}"
+        rf"|par value \$[0-9]+(?:\.[0-9]+)?{per_share}{no_par_value}))?"
+    )
+    common = tuple(
+        pair for pair in pairs if re.fullmatch(common_title, pair[1].casefold())
+    )
+    if len(common) != 1 or any(
+        pair != common[0]
+        and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?% notes due [0-9]{4}", pair[1].casefold())
+        is None
+        for pair in pairs
+    ):
+        return None
+    return (*common[0], pairs)
+
+
+def resolve_original_filing_identity(
+    *,
+    cik: str,
+    accepted_at: datetime,
+    facts: tuple[ParsedXbrlFactV1, ...],
+    ticker: str | None = None,
+    share_class: str | None = None,
+    security_selection_policy: OriginalSecuritySelectionPolicy | None = None,
+) -> IdentityV1:
+    """Resolve one security from original DEI evidence using the ingestion gate."""
+
+    def refuse(code: str, message: str) -> IdentityResolutionError:
+        return IdentityResolutionError(code, message, status_code=422)
+
+    if (
+        not re.fullmatch(r"[0-9]{10}", cik)
+        or accepted_at.tzinfo is None
+        or accepted_at.utcoffset() is None
+        or (share_class is not None and not share_class.strip())
+        or security_selection_policy
+        not in (
+            None,
+            "original-dei-single-common-stock-v1",
+            "original-dei-paired-common-stock-v2",
+            "original-dei-paired-common-stock-v3",
+            "original-dei-paired-common-stock-v4",
+            "original-dei-paired-common-stock-v5",
+        )
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+            "invalid original identity selector",
+        )
+
+    symbols = {
+        fact.value.strip() for fact in facts if fact.concept == "dei:TradingSymbol"
+    }
+    if not symbols or "" in symbols:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original filing lacks a trading symbol"
+        )
+    paired = (
+        _paired_common_security(
+            facts,
+            allow_omitted_per_share=security_selection_policy
+            in {
+                "original-dei-paired-common-stock-v3",
+                "original-dei-paired-common-stock-v4",
+                "original-dei-paired-common-stock-v5",
+            },
+            allow_no_par_value=security_selection_policy
+            in {
+                "original-dei-paired-common-stock-v4",
+                "original-dei-paired-common-stock-v5",
+            },
+            allow_no_symbol_notes=security_selection_policy
+            == "original-dei-paired-common-stock-v5",
+        )
+        if security_selection_policy in _PAIRED_SECURITY_POLICIES
+        else None
+    )
+    if (
+        security_selection_policy in _PAIRED_SECURITY_POLICIES
+        and ticker is None
+        and share_class is None
+        and paired is None
+    ):
+        raise refuse(
+            "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+            "automatic common-stock selection requires complete eligible security pairs",
+        )
+    selected_pairs: tuple[tuple[str, str], ...] = ()
+    if ticker is None:
+        if len(symbols) != 1:
+            if paired is None or share_class is not None:
+                raise refuse(
+                    "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+                    "multiple original securities require an explicit ticker",
+                )
+            ticker, share_class, selected_pairs = paired
+        else:
+            ticker = next(iter(symbols))
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,14}", ticker):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED", "unsupported original ticker"
+        )
+    contexts = {
+        (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        for fact in facts
+        if fact.concept == "dei:TradingSymbol" and fact.value.strip() == ticker
+    }
+    if not contexts:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISMATCH",
+            "selected ticker does not occur in the original filing",
+        )
+    titles = {
+        " ".join(fact.value.split())
+        for fact in facts
+        if fact.concept == "dei:Security12bTitle"
+        and (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        in contexts
+    }
+    if not titles or "" in titles:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original security lacks a paired title"
+        )
+    if share_class is None and len(titles) > 1:
+        if security_selection_policy == "original-dei-single-common-stock-v1":
+            share_class = _single_standard_common_title(facts, contexts)
+        elif paired is not None and paired[0] == ticker:
+            _, share_class, selected_pairs = paired
+    if share_class is not None:
+        titles = {title for title in titles if _name(title) == _name(share_class)}
+        if not titles:
+            raise refuse(
+                "HISTORICAL_IDENTITY_MISMATCH",
+                "selected title does not belong to the original ticker",
+            )
+    if len(titles) != 1:
+        raise refuse(
+            "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+            "reused original ticker requires an explicit security title",
+        )
+    names = {
+        " ".join(fact.value.split())
+        for fact in facts
+        if fact.concept == "dei:EntityRegistrantName"
+    }
+    if not names or "" in names:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original filing lacks its issuer name"
+        )
+    if len(names) != 1:
+        raise refuse("HISTORICAL_IDENTITY_CONFLICT", "original issuer names conflict")
+    identity = IdentityV1(
+        issuer_id=cik,
+        issuer_name=next(iter(names)),
+        security_id=ticker,
+        share_class=next(iter(titles)),
+        domicile="US",
+        reporting_basis="us-gaap",
+        currency="USD",
+    )
+    # The candidate is returned only after the same original scope, issuer,
+    # currency, period and class validation required by canonical ingestion.
+    validate_original_filing_identity(
+        identity, cik=cik, ticker=ticker, accepted_at=accepted_at, facts=facts
+    )
+    for symbol, title in selected_pairs:
+        symbol_pattern = r"[A-Z0-9][A-Z0-9.-]{0,14}"
+        if security_selection_policy in {
+            "original-dei-paired-common-stock-v3",
+            "original-dei-paired-common-stock-v4",
+            "original-dei-paired-common-stock-v5",
+        } and (symbol, title) != (ticker, identity.share_class):
+            symbol_pattern = r"[A-Z0-9][A-Z0-9. -]{0,24}"
+        if not re.fullmatch(symbol_pattern, symbol):
+            raise refuse(
+                "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED", "unsupported original ticker"
+            )
+        validate_original_filing_identity(
+            identity.model_copy(update={"security_id": symbol, "share_class": title}),
+            cik=cik,
+            ticker=symbol,
+            accepted_at=accepted_at,
+            facts=facts,
+        )
+    return identity
+
+
+def validate_original_filing_identity(
+    identity: IdentityV1,
+    *,
+    cik: str,
+    ticker: str,
+    accepted_at: datetime,
+    facts: tuple[ParsedXbrlFactV1, ...],
+) -> None:
+    """Bind one security to its original DEI class, without current directories."""
+
+    def refuse(code: str, message: str) -> IdentityResolutionError:
+        return IdentityResolutionError(code, message, status_code=422)
+
+    if (
+        len(cik) != 10
+        or not cik.isascii()
+        or not cik.isdigit()
+        or accepted_at.tzinfo is None
+        or accepted_at.utcoffset() is None
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+            "invalid original CIK or acceptance",
+        )
+
+    security_concepts = {"dei:TradingSymbol", "dei:Security12bTitle"}
+    symbols = tuple(fact for fact in facts if fact.concept == "dei:TradingSymbol")
+    if not symbols:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original filing lacks dei:TradingSymbol"
+        )
+    matching_symbols = tuple(fact for fact in symbols if fact.value.strip() == ticker)
+    if not matching_symbols:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISMATCH",
+            "requested ticker differs from the original filing",
+        )
+    security_contexts = {
+        (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        for fact in matching_symbols
+    }
+    ticker_contexts = security_contexts
+    if len(security_contexts) > 1:
+        titles_by_context = {
+            context: {
+                _name(fact.value)
+                for fact in facts
+                if fact.concept == "dei:Security12bTitle"
+                and (
+                    fact.context_id,
+                    fact.period_start,
+                    fact.period_end,
+                    fact.dimensions,
+                )
+                == context
+            }
+            for context in security_contexts
+        }
+        if any(
+            len(titles) != 1 or not next(iter(titles))
+            for titles in titles_by_context.values()
+        ):
+            raise refuse(
+                "HISTORICAL_IDENTITY_CONFLICT",
+                "reused ticker requires one paired title in every security context",
+            )
+        security_contexts = {
+            context
+            for context, titles in titles_by_context.items()
+            if titles == {_name(identity.share_class)}
+        }
+    if len(security_contexts) != 1:
+        raise refuse(
+            "HISTORICAL_IDENTITY_CONFLICT",
+            "requested ticker belongs to multiple original security contexts",
+        )
+    security_context = next(iter(security_contexts))
+
+    values: dict[str, str] = {}
+    periods: set[date | None] = set()
+    for concept in sorted(ORIGINAL_IDENTITY_CONCEPTS):
+        candidates = tuple(
+            fact
+            for fact in facts
+            if fact.concept == concept
+            and (
+                concept not in security_concepts
+                or (
+                    fact.context_id,
+                    fact.period_start,
+                    fact.period_end,
+                    fact.dimensions,
+                )
+                == security_context
+            )
+        )
+        if not candidates:
+            raise refuse(
+                "HISTORICAL_IDENTITY_MISSING", f"original filing lacks {concept}"
+            )
+        scope_candidates = (
+            tuple(
+                fact
+                for fact in facts
+                if fact.concept == concept
+                and (
+                    fact.context_id,
+                    fact.period_start,
+                    fact.period_end,
+                    fact.dimensions,
+                )
+                in ticker_contexts
+            )
+            if concept in security_concepts
+            else candidates
+        )
+        if any(
+            not _DEI_NAMESPACE.fullmatch(fact.namespace_uri or "")
+            or fact.entity_scheme != "http://www.sec.gov/CIK"
+            or not (fact.entity_identifier or "").isascii()
+            or not (fact.entity_identifier or "").isdigit()
+            or int(fact.entity_identifier or "0") != int(cik)
+            or (
+                fact.dimensions
+                and not (
+                    concept in security_concepts
+                    and len(fact.dimensions) == 1
+                    and fact.dimensions[0][0] == "us-gaap:StatementClassOfStockAxis"
+                    and fact.dimensions[0][1]
+                )
+            )
+            or fact.unit is not None
+            or fact.is_numeric
+            or fact.instant is not None
+            or fact.period_start is None
+            or fact.period_end is None
+            or fact.period_start > fact.period_end
+            for fact in scope_candidates
+        ):
+            raise refuse(
+                "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+                f"original {concept} lacks a supported issuer or security DEI context",
+            )
+        unique = {" ".join(fact.value.split()) for fact in candidates}
+        if len(unique) != 1 or not next(iter(unique)):
+            raise refuse(
+                "HISTORICAL_IDENTITY_CONFLICT", f"original {concept} conflicts"
+            )
+        values[concept] = next(iter(unique))
+        periods.update(fact.period_end for fact in scope_candidates)
+    try:
+        report_end = date.fromisoformat(values["dei:DocumentPeriodEndDate"])
+    except ValueError as error:
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED", "invalid original report date"
+        ) from error
+    if (
+        periods != {report_end}
+        or report_end > accepted_at.date()
+        or values["dei:DocumentType"] != "10-K"
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+            "original identity does not belong to the selected annual report period",
+        )
+    original_cik = values["dei:EntityCentralIndexKey"]
+    if (
+        not original_cik.isascii()
+        or not original_cik.isdigit()
+        or int(original_cik) != int(cik)
+        or not identity.issuer_id.isascii()
+        or not identity.issuer_id.isdigit()
+        or int(identity.issuer_id) != int(cik)
+        or _name(values["dei:EntityRegistrantName"]) != _name(identity.issuer_name)
+        or values["dei:TradingSymbol"] != ticker
+        or identity.security_id != ticker
+        or _name(identity.share_class) != _name(values["dei:Security12bTitle"])
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISMATCH",
+            "requested issuer or security differs from the original filing",
+        )
+    monetary_units = {
+        fact.unit
+        for fact in facts
+        if _GAAP_NAMESPACE.fullmatch(fact.namespace_uri or "")
+        and fact.is_numeric
+        and fact.unit is not None
+        and re.fullmatch(r"iso4217:[A-Z]{3}", fact.unit)
+        and not fact.dimensions
+        and fact.consolidation_scope == "consolidated"
+        and (fact.period_end == report_end or fact.instant == report_end)
+        and (fact.entity_identifier or "").isascii()
+        and (fact.entity_identifier or "").isdigit()
+        and int(fact.entity_identifier or "0") == int(cik)
+        and fact.entity_scheme == "http://www.sec.gov/CIK"
+    }
+    if (
+        values["dei:EntityIncorporationStateCountryCode"]
+        not in _US_INCORPORATION_STATES
+        or identity.domicile != "US"
+        or identity.reporting_basis != "us-gaap"
+        or identity.currency != "USD"
+        or monetary_units != {"iso4217:USD"}
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+            "original filing does not establish the supported domestic USD GAAP scope",
+        )
 
 
 def _source_invalid() -> IdentityResolutionError:

@@ -1,0 +1,119 @@
+{
+  "acceptance": {
+    "full_numerical_flow": false,
+    "market_policy_admitted": false,
+    "quote_provider_terms_admitted": false,
+    "supported_history_threshold": null
+  },
+  "checkpoint_protocol": "issue-361-quote-source-binding-v1",
+  "accounting_checkpoint_digest": "693d5f5011b929499b6781c8cb8238e73e3e3647558def753c66bf10834af6f8",
+  "checkpoint_digest": "b24c311b9c1ea21a751659bc46afc358eb80a567a375d53a9828600877ead91d",
+  "ci": {
+    "conclusion": "success",
+    "executed_jobs": 12,
+    "release_gate": "skipped",
+    "run_id": 43172192355,
+    "url": "https://github.com/sosodennis/value-investment-agent/actions/runs/43172192355"
+  },
+  "exact_validation": {
+    "all_passed": true,
+    "commands": {
+      "acceptance_tools": {
+        "exit_code": 0,
+        "output_sha256": "1c5291f5f3db573d4a149e4e4f1378c195f1aa70c17eef94b57bb26b66330770",
+        "summary": "17 passed"
+      },
+      "architecture": {
+        "exit_code": 0,
+        "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+      },
+      "diff": {
+        "exit_code": 0,
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "format": {
+        "exit_code": 0,
+        "output_sha256": "ef7d13d02214e98ca902b05257cdbe6a8e84f3b4714508efdc19766460b54209"
+      },
+      "lint": {
+        "exit_code": 0,
+        "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      "quote_focused": {
+        "exit_code": 0,
+        "output_sha256": "cbdca2b2256db821302230cf338c91d2826e8b61932fda7ebcc68ad843e641e8",
+        "summary": "126 passed"
+      },
+      "service_postgres": {
+        "exit_code": 0,
+        "output_sha256": "7948939d8eed1b3c4719416bf031eb8aa7463b9b2d3989ff606a630fb775f704",
+        "summary": "1449 passed, 11 skipped, 1 intentional duplicate-ZIP warning"
+      },
+      "types": {
+        "exit_code": 0,
+        "output_sha256": "f9b031e5c45aa702cd4fef028d465551cb20a2c4698e0913c7b00766b20ac4d8"
+      }
+    },
+    "exact_commit": "cf40438429bfebf649b3630b3a75f8146323369b",
+    "input_digest": "b5876e24fb7f8f97ea95c0a689ad1fb4bb8c8428abd2c25fe9b33b75e78a9ee4",
+    "output_digest": "d0b0ecb3cd5da229818cccdfdf9c0582c1dcd5accd249f249906d94318bca6aa",
+    "runtime": {
+      "host_python": "3.12.12",
+      "postgres_compose_project": "value-investment-agent-361-flow-tests",
+      "postgres_host_port": 18665,
+      "python_hash_seed": "0",
+      "uv_lock_sha256": "98335af7aa12ea08b8089c871fd87c8d670477f55dbc205661a6f261554347bc"
+    }
+  },
+  "issue": 361,
+  "implementation": {
+    "behavior": "The release loader reproduces the quote price, security, currency, date and timestamps from the exact retained provider bytes before serving or canary activation. Snapshot issuer/security mismatch, changed signed price, unsupported profile, malformed/duplicate provider data, incomplete days and stale but valid observations retain distinct refusals.",
+    "files": {
+      "fundamental-service/src/fundamental_service/equity_award_evidence.py": "bc0bef120f798c22f282f95b9ed969faaea867da02584a9df760bbe20a270a37",
+      "fundamental-service/src/fundamental_service/quote_sources.py": "9cf7242ece3a387e055f1987ffddc41ee2661dc274e010a830c1b5e183508618",
+      "fundamental-service/tests/equity_award_fixtures.py": "6ceeb30dfa0508b4160600c556447a0254f5ef3aee032d13f667e5750ee8ce6c",
+      "fundamental-service/tests/test_equity_award_evidence.py": "caef83db5dfcc2a36b1b868b9e5b5fb7ca0aca486689929aec4197dbdc75fffc",
+      "fundamental-service/tests/test_preparation_runner.py": "4e375f1aa99a06a4e1ed45c08c0b771a2158b648cc7e7c8ee348fcc3be5805b6",
+      "fundamental-service/tests/test_quote_sources.py": "0d497a8b211a2a04aeea8b4d405a4ef8ba24b8c643004fbe7af25cf894dd7336"
+    },
+    "implementation_commit": "8807f0b4978531ee211146eeb8aad9b40042f4aa",
+    "test_commit": "cf40438429bfebf649b3630b3a75f8146323369b"
+  },
+  "installed_probe": {
+    "command": [
+      "docker",
+      "run",
+      "--rm",
+      "-i",
+      "--network",
+      "none",
+      "--entrypoint",
+      "python",
+      "sha256:25145849506593b133d3765862534f72223dc26eafebb3de189fab3dd4951b85",
+      "-"
+    ],
+    "exact_commit": "cf40438429bfebf649b3630b3a75f8146323369b",
+    "image_built_from": "8807f0b4978531ee211146eeb8aad9b40042f4aa",
+    "image_id": "sha256:25145849506593b133d3765862534f72223dc26eafebb3de189fab3dd4951b85",
+    "input_digest": "d1021e348d4fd3c486d2e2820bf2cb8ee56b7a6e81cae501b3e167e72930e1a4",
+    "output_digest": "012a0522edb2b96d44ce0506b207b345be317b574f1e8d272d924ff78f03376e",
+    "report_digest": "bfbaf519912a7fe009da6bbcc1ca63de9c8764ca17f12185514c6aad9c061888",
+    "result_digest": "03c636a3b6731198f5858bf6464b811bc207a793bfb7aefc01f193e8e273c1a1",
+    "runtime_pins": {
+      "arelle_release": "2.47.4",
+      "pydantic": "2.14.2",
+      "python": "3.12.16"
+    },
+    "source_files_verified": 72,
+    "source_manifest_digest": "d21f851e5dc44cd731c405ca2baf00ad7acbe36007401f249bd995fb0fdca54c",
+    "summary": "Two parser/release-replay executions produced one result digest; first artifact wrote=true, second wrote=false. Changed quote price refused. Synthetic profile bytes are a software probe and are not admitted market data.",
+    "wrote_second_run": false
+  },
+  "root_cause_and_remaining_work": [
+    "A signed quote previously trusted its declared price while only hashing opaque source bytes; the retained bytes did not prove the signed value. The quote reader now runs the versioned deterministic provider parser at serving and canary boundaries.",
+    "The provider's daily response contains no historical publication timestamp. Current capture time is retained as available_at and cannot be backdated to satisfy historical point-in-time cutoffs.",
+    "Official Nasdaq terms retrieval timed out without returning bytes; provider legal-use admission remains unresolved. The parser tests do not admit provider data for valuation.",
+    "The real valuation remains blocked on complete issuer/accounting/award evidence, dated approved market policy, trusted complete release, authentic caller approval, end-to-end numerical repeat/restart/restore gates and independent PR review."
+  ],
+  "supported_history_threshold": null
+}

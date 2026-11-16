@@ -1,0 +1,550 @@
+{
+  "architecture": {
+    "availability": "Actual retained capture, separate from workbook update and tax lookup dates. Caller timestamps are rejected before HTTP.",
+    "common_source_contracts": [
+      "RetainedSourceV1",
+      "SourceArtifactV1"
+    ],
+    "contract": "MarketReferenceVintageV1",
+    "owner": "Fundamental Service source feature",
+    "policy_boundary": "No issuer selection, financial assumption approval, formula execution, signing or publication in adapters; existing #352 composer/calculator retain financial math.",
+    "port": "MarketReferenceProviderPort",
+    "provider": "DamodaranReferenceProvider"
+  },
+  "artifact_policy": "Raw originals, generated workbooks/reports and command logs remain under ignored .audit; no research corpus in Git. Existing ArtifactStore performs immutable canonical publications with temporary-file/atomic rename and wrote=false reuse.",
+  "ci": {
+    "command": [
+      "gh",
+      "run",
+      "view",
+      "43211471636",
+      "--json",
+      "headSha,status,conclusion,jobs,url"
+    ],
+    "conclusion": "success",
+    "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+    "executed_jobs_passed": 12,
+    "exit_code": 0,
+    "input_digest": "4fd982741abc09661584a0d3c650993b0214bd142c34771c76f764d07879b165",
+    "output_digest": "b0caae04acd066d07ad5c1e2f09a701445e06f06f850dc5dd63cf1f11bbe8a5c",
+    "preceding_failed_run": 43210641689,
+    "release_gate": "skipped",
+    "run": 43211471636,
+    "url": "https://github.com/sosodennis/value-investment-agent/actions/runs/43211471636"
+  },
+  "full_numerical_flow": false,
+  "implementation_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+  "installed_service": {
+    "baseline_container_count": 42,
+    "command_result": {
+      "command": [
+        "python3",
+        ".audit/issue-361-reference-provider/verify_image.py"
+      ],
+      "exit_code": 0,
+      "full_command_log_sha256": "6250210e161a7c043188e343aaef11e4340fa5183c7ab581e250ec899b7b0541"
+    },
+    "commands": [
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "config",
+          "--quiet"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "build",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "4210c2732774aa12ec674a1defc08c9751f9b9294723a09f985d36cb288df354",
+        "stdout_sha256": "b9b5f3100676de55d4f808e97a6a38683ab504994cb4e5162d358c16ed5aeb11"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "up",
+          "-d",
+          "--wait",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "d2526ce49e360bc0cf239640992c2357c86549f6b46c25eccaa14c3c0eac3d32",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "config",
+          "--hash",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "627a8ee8a654c0d76ba9343b74e3a8b2de1eab0a26c97b7402e43579f3c0885b"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "restart",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "9798390c33dd723e0eb697090db407f3b2a668f3f523f5901d27be229187bdba",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "compose": {
+      "config_hash": "b8aad112c7ed085a96f21281211419f8ec08423bb1ff150252608560ddb48cfe",
+      "env_files": [],
+      "files": [
+        "compose/verification/docker-compose.issue280-operations.yml"
+      ],
+      "ports": {
+        "fundamental_postgres": 18684,
+        "fundamental_service": 18683
+      },
+      "project": "value-investment-agent-361-macro-providers"
+    },
+    "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+    "image_id": "sha256:e06713d2ab13e429cf46d1117298a9d6908dc31d6f30e8282e81cbe18d50ed6b",
+    "input_digest": "0ef4989e7a2a2d12038987a08cea7ddabd949ac7d975532d03920b2736f33a2e",
+    "installed_source_count": 81,
+    "installed_source_manifest_digest": "3c576ac2958143504d8dc52a66e5082631dfc295204a47fe25198f8714e2277a",
+    "inventory_first_digest": "16237bde67d3e3ad2a769926c4c60d52eab285793898ca09d71dca1ec0de5ba8",
+    "inventory_repeat_digest": "16237bde67d3e3ad2a769926c4c60d52eab285793898ca09d71dca1ec0de5ba8",
+    "inventory_restart_digest": "16237bde67d3e3ad2a769926c4c60d52eab285793898ca09d71dca1ec0de5ba8",
+    "new_files_after_restart": 0,
+    "new_files_second": 0,
+    "output_digest": "a2442ebc2601b66464ce53fa6391cce00d79d6de33e8b0c3d384cc02b6333579",
+    "readyz": {
+      "capabilities": {
+        "identity_resolution_configured": false
+      },
+      "contract_version": "internal.v1",
+      "status": "ready"
+    },
+    "replays": [
+      {
+        "artifact_writes": 2,
+        "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+        "input_digest": "c3738c8b73e38bc46be0dbc09e929e4c7e4b9f29da3a67ac1664761f20586158",
+        "missing_counts": [
+          0,
+          1,
+          0
+        ],
+        "output_digest": "89e3e47fc515f666cdfa0ba08ac2f093a4f9496fbf7fb9b884e2bfeccbbe61fd",
+        "provider_calls": 4,
+        "provider_downloads": 0,
+        "retained_failure_count": 4,
+        "row_counts": [
+          96,
+          158,
+          158
+        ],
+        "vintage_digests": [
+          "1db8b5a33da628c434e33bfc9d3348ffc2254c28dad6a56ebaa4db805fb3f35c",
+          "93ff620231da274ff21060402f7aca8a989241bdd52ff69ef5251771ea3c78ed",
+          "e5e3b907e443e9798e1ab742d8c26e317af1deb7f7b1b0492689723bd1fb8dae"
+        ],
+        "wrote": true
+      },
+      {
+        "artifact_writes": 0,
+        "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+        "input_digest": "c3738c8b73e38bc46be0dbc09e929e4c7e4b9f29da3a67ac1664761f20586158",
+        "missing_counts": [
+          0,
+          1,
+          0
+        ],
+        "output_digest": "89e3e47fc515f666cdfa0ba08ac2f093a4f9496fbf7fb9b884e2bfeccbbe61fd",
+        "provider_calls": 0,
+        "provider_downloads": 0,
+        "retained_failure_count": 4,
+        "row_counts": [
+          96,
+          158,
+          158
+        ],
+        "vintage_digests": [
+          "1db8b5a33da628c434e33bfc9d3348ffc2254c28dad6a56ebaa4db805fb3f35c",
+          "93ff620231da274ff21060402f7aca8a989241bdd52ff69ef5251771ea3c78ed",
+          "e5e3b907e443e9798e1ab742d8c26e317af1deb7f7b1b0492689723bd1fb8dae"
+        ],
+        "wrote": false
+      },
+      {
+        "artifact_writes": 0,
+        "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+        "input_digest": "c3738c8b73e38bc46be0dbc09e929e4c7e4b9f29da3a67ac1664761f20586158",
+        "missing_counts": [
+          0,
+          1,
+          0
+        ],
+        "output_digest": "89e3e47fc515f666cdfa0ba08ac2f093a4f9496fbf7fb9b884e2bfeccbbe61fd",
+        "provider_calls": 0,
+        "provider_downloads": 0,
+        "retained_failure_count": 4,
+        "row_counts": [
+          96,
+          158,
+          158
+        ],
+        "vintage_digests": [
+          "1db8b5a33da628c434e33bfc9d3348ffc2254c28dad6a56ebaa4db805fb3f35c",
+          "93ff620231da274ff21060402f7aca8a989241bdd52ff69ef5251771ea3c78ed",
+          "e5e3b907e443e9798e1ab742d8c26e317af1deb7f7b1b0492689723bd1fb8dae"
+        ],
+        "wrote": false
+      }
+    ],
+    "runtime": {
+      "arelle": "2.47.4",
+      "pydantic": "2.14.2",
+      "python": "3.12.16",
+      "xlrd": "2.0.2"
+    },
+    "unrelated_container_changes": {}
+  },
+  "issue": 361,
+  "owning_issues": [
+    369,
+    419
+  ],
+  "provider_implementation_commit": "30dc58404cbe5a46348ec20748bb855c5a12f958",
+  "pull_request": 370,
+  "real_source_replay": {
+    "commands": [
+      {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "python",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-reference-provider/replay_sources.py",
+          "0b294393fdbadd41a37e721643735f74dab177f5",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-reference-provider/originals",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-reference-provider/replay/artifacts"
+        ],
+        "exit_code": 0,
+        "python_hash_seed": "0",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "753918dc3a58720b1025b61839a7fa094acd96f43814fd7411f83eaaa8b7e784"
+      },
+      {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "python",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-reference-provider/replay_sources.py",
+          "0b294393fdbadd41a37e721643735f74dab177f5",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-reference-provider/originals",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-reference-provider/replay/artifacts"
+        ],
+        "exit_code": 0,
+        "python_hash_seed": "613",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "9f1a074acc513e6301e1b03fa5eeafafefb038963a424bd3afa0ee1c451b89c1"
+      }
+    ],
+    "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+    "input_digest": "4d6efd03b94c569fd1fcd6430a30804d43ba0eeb0d1d7c04d4fb73aaa280dce5",
+    "inventory_first_digest": "417ad5adfb84652fe9cf0d4ab8e718f554aafa2f559e2487263b2e6684847f12",
+    "inventory_repeat_digest": "417ad5adfb84652fe9cf0d4ab8e718f554aafa2f559e2487263b2e6684847f12",
+    "new_files_repeat": 0,
+    "output_digest": "fce7a0ffbd9f62dd6a402ed2b5dd6dc7b6a89819fd1eeaa68ce8648326ca0dcc",
+    "replays": [
+      {
+        "artifact_writes": 2,
+        "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+        "input_digest": "b3ffd1448c290a7d53979068a5cdc5cf11823f067f4ed20987b6899847d246bf",
+        "missing_counts": [
+          0,
+          1,
+          0
+        ],
+        "output_digest": "04daf1b4a46a61067c46738bb966b659fbfa19ee93395b7758ae370c134b3a15",
+        "provider_calls": 4,
+        "provider_downloads": 0,
+        "retained_failure_count": 4,
+        "row_counts": [
+          96,
+          158,
+          158
+        ],
+        "vintage_digests": [
+          "1db8b5a33da628c434e33bfc9d3348ffc2254c28dad6a56ebaa4db805fb3f35c",
+          "93ff620231da274ff21060402f7aca8a989241bdd52ff69ef5251771ea3c78ed",
+          "e5e3b907e443e9798e1ab742d8c26e317af1deb7f7b1b0492689723bd1fb8dae"
+        ],
+        "wrote": true
+      },
+      {
+        "artifact_writes": 0,
+        "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+        "input_digest": "b3ffd1448c290a7d53979068a5cdc5cf11823f067f4ed20987b6899847d246bf",
+        "missing_counts": [
+          0,
+          1,
+          0
+        ],
+        "output_digest": "04daf1b4a46a61067c46738bb966b659fbfa19ee93395b7758ae370c134b3a15",
+        "provider_calls": 0,
+        "provider_downloads": 0,
+        "retained_failure_count": 4,
+        "row_counts": [
+          96,
+          158,
+          158
+        ],
+        "vintage_digests": [
+          "1db8b5a33da628c434e33bfc9d3348ffc2254c28dad6a56ebaa4db805fb3f35c",
+          "93ff620231da274ff21060402f7aca8a989241bdd52ff69ef5251771ea3c78ed",
+          "e5e3b907e443e9798e1ab742d8c26e317af1deb7f7b1b0492689723bd1fb8dae"
+        ],
+        "wrote": false
+      }
+    ]
+  },
+  "remaining": [
+    "Complete provider-backed automatic dated market policy, issuer classification, lawful quote, debt-cost/capital-weight/terminal-growth basis (#369).",
+    "Resolve accounting/award evidence and #416 before considering #414 integration. #417 remains separate research, not #361 delivery.",
+    "Trusted complete release, authentic exact-input approval, real numerical repeat/concurrency/restart/empty-store restore.",
+    "Independent PR review, current CI, merge/main-SHA verification, then issue closure and issue-owned cleanup."
+  ],
+  "retained_failures": [
+    {
+      "implementation_commit": "30dc58404cbe5a46348ec20748bb855c5a12f958",
+      "input_digest": "1db5457a8dd6774577d589825dc36d0abb0a0b3d6865445fcf75c8cc8e17457f",
+      "output_digest": "75e493c46cbf4a65ebcf371a18a767a64f539bfef9479ff8c337ae4c64e7c95a",
+      "result": "1611 passed, 11 skips, one architecture guard failure; #419 records/fixes scanning of third-party .venv bytes."
+    },
+    "Audit image wrapper initially compared first-run parser_calls=4 with cached parser_calls=0 as if both were content. It now compares stable digests/counts/classifications and separately asserts zero repeat calls/writes. Prior output/logs remain.",
+    "A preliminary audit command contained an invalid manually transcribed SHA; those artifacts remain excluded from accepted evidence. Corrected wrapper obtains exact SHA from Git, validates the commit, and runner requires 40 hex characters.",
+    "Real original workbook inspection showed many country/ERP values and names are upstream formulas. Initial overstrict rejection was corrected before the implementation commit: retain published cache and formula metadata without executing formulas."
+  ],
+  "scope": "Interchangeable public aggregate market reference providers; no complete policy admission or numerical valuation.",
+  "source_evidence": {
+    "beta_sha256": "cd3f0356e71588d974bb2cb16f5398aec576992e3dfe49e959e54d77c329d636",
+    "beta_update": "2025-01-05",
+    "country_sha256": "cc3dab2aa2a39e862c31d77a930ef7c39da79d473fe99ea50e91c9eb8998d879",
+    "country_update": "2025-01-01",
+    "preserved": [
+      "numeric lexemes or exact binary64 hex",
+      "number formats",
+      "published formula cache, formula text and shared-formula attributes where available",
+      "BIFF values explicitly identified as published opaque cached cells; no formula reconstruction",
+      "worksheet/cell locator",
+      "source/terms/profile/capture/hash",
+      "missing countries and aggregates",
+      "corrupt original and future-vintage failure classifications"
+    ],
+    "tax_lookup_note": "Looked up for 2023"
+  },
+  "sources": [
+    {
+      "metric": "industry.unlevered_beta",
+      "missing": 0,
+      "rows": 96,
+      "vintage_digest": "1db8b5a33da628c434e33bfc9d3348ffc2254c28dad6a56ebaa4db805fb3f35c"
+    },
+    {
+      "metric": "country.equity_risk_premium",
+      "missing": 1,
+      "rows": 158,
+      "vintage_digest": "93ff620231da274ff21060402f7aca8a989241bdd52ff69ef5251771ea3c78ed"
+    },
+    {
+      "metric": "country.tax_rate",
+      "missing": 0,
+      "rows": 158,
+      "vintage_digest": "e5e3b907e443e9798e1ab742d8c26e317af1deb7f7b1b0492689723bd1fb8dae"
+    }
+  ],
+  "status": "PARTIAL",
+  "supported_history_threshold": null,
+  "verification": {
+    "commands": {
+      "architecture": {
+        "command": [
+          "python3",
+          "scripts/architecture_guard.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+      },
+      "diff": {
+        "command": [
+          "git",
+          "diff",
+          "--check",
+          "origin/main"
+        ],
+        "exit_code": 0,
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "focused": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "-q",
+          "fundamental-service/tests/test_market_reference.py",
+          "fundamental-service/tests/test_damodaran_source.py",
+          "fundamental-service/tests/test_treasury_source.py",
+          "fundamental-service/tests/test_public_source.py",
+          "fundamental-service/tests/test_macro_series.py",
+          "fundamental-service/tests/test_bea_source.py",
+          "fundamental-service/tests/test_sofr_source.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "baabe831d2ecf1ca1de9bb1ff8b155aa9e3a5feac0d5d5bed4b6a2fa9a203986"
+      },
+      "format": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "format",
+          "--check",
+          "fundamental-service/src/fundamental_service/architecture_guard.py",
+          "fundamental-service/src/fundamental_service/bea_source.py",
+          "fundamental-service/src/fundamental_service/damodaran_source.py",
+          "fundamental-service/src/fundamental_service/macro_series.py",
+          "fundamental-service/src/fundamental_service/market_reference.py",
+          "fundamental-service/src/fundamental_service/public_source.py",
+          "fundamental-service/src/fundamental_service/reference_workbook.py",
+          "fundamental-service/src/fundamental_service/sofr_source.py",
+          "fundamental-service/src/fundamental_service/source_evidence.py",
+          "fundamental-service/src/fundamental_service/treasury_source.py",
+          "fundamental-service/tests/reference_source_fixtures.py",
+          "fundamental-service/tests/test_architecture_guard.py",
+          "fundamental-service/tests/test_bea_source.py",
+          "fundamental-service/tests/test_damodaran_source.py",
+          "fundamental-service/tests/test_macro_series.py",
+          "fundamental-service/tests/test_market_reference.py",
+          "fundamental-service/tests/test_public_source.py",
+          "fundamental-service/tests/test_treasury_source.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "c4fd3f494556e5e7cf4355131a1080dbdcf0bbf09664638af9984db197ad88c0"
+      },
+      "mypy": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "--with",
+          "mypy==1.19.1",
+          "mypy",
+          "--no-incremental",
+          "--follow-imports=silent",
+          "--ignore-missing-imports",
+          "fundamental-service/src/fundamental_service/architecture_guard.py",
+          "fundamental-service/src/fundamental_service/bea_source.py",
+          "fundamental-service/src/fundamental_service/damodaran_source.py",
+          "fundamental-service/src/fundamental_service/macro_series.py",
+          "fundamental-service/src/fundamental_service/market_reference.py",
+          "fundamental-service/src/fundamental_service/public_source.py",
+          "fundamental-service/src/fundamental_service/reference_workbook.py",
+          "fundamental-service/src/fundamental_service/sofr_source.py",
+          "fundamental-service/src/fundamental_service/source_evidence.py",
+          "fundamental-service/src/fundamental_service/treasury_source.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "14fdf673bd175fe32ef42df34666481bb15e465313f7dbef32d0aea2ba76a26e"
+      },
+      "ruff": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      "service_postgres": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "fundamental-service/tests",
+          "-ra"
+        ],
+        "exit_code": 0,
+        "output_sha256": "82194eeed2c9806d44fdd302a274131adb88cab1e50abbbb7f68236da9e93a3b"
+      }
+    },
+    "counts": {
+      "focused_passed": 160,
+      "intentional_duplicate_zip_warnings": 1,
+      "service_postgres_passed": 1623,
+      "service_postgres_skipped": 11
+    },
+    "exact_commit": "0b294393fdbadd41a37e721643735f74dab177f5",
+    "input_digest": "916517a23ccecdb0d50ace421a6361ae26bb805a41a6f7cfe02c7177751e82e3",
+    "output_digest": "668ed23284424672ac0b6cd3ac0418981b254d9260daa4cbe751b497de0ba7da",
+    "runtime": {
+      "mypy": "1.19.1",
+      "python": "3.12.12",
+      "ruff": "0.14.10",
+      "synthetic_xls_fixture_writer": "xlwt 1.3.0 (dev only)",
+      "uv_lock_sha256": "229bc76c75019d54df8c1cba240839bacf01e56d7493f4bc615e058c4e5f6f11",
+      "xlrd": "2.0.2"
+    }
+  }
+}

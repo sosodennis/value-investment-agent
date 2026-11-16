@@ -6,12 +6,15 @@ import json
 import logging
 import os
 import tempfile
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from time import monotonic
-from typing import Any, Literal
+from typing import Any, Literal, ParamSpec, TypeVar
 
+from anyio import CapacityLimiter, fail_after, to_thread
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -21,6 +24,13 @@ from starlette.concurrency import run_in_threadpool
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
+from .automatic_approval import AutomaticValuationApprovalPolicyV1
+from .automatic_valuation import (
+    AutomaticValuationExecutor,
+    AutomaticValuationRequestV1,
+    AutomaticValuationResponseV1,
+    load_runtime_automatic_approval_policy,
+)
 from .contracts import (
     CalculationArtifactV1,
     FactsReadRequestV1,
@@ -43,6 +53,17 @@ from .data_releases import (
     DataReleaseTrustRootsV1,
 )
 from .facts import CanonicalFactRepository
+from .quote_providers import QuoteSourceProviderPort
+from .quote_sources import default_quote_providers
+from .free_source_policy import (
+    default_macro_providers,
+    default_reference_providers,
+    free_market_source_policy,
+)
+from .macro_series import MacroSeriesProviderPort
+from .market_reference import MarketReferenceProviderPort
+from .source_admission import SourceUsePolicyV1
+from .source_use_deployment import load_runtime_source_use_policy
 from .governance import ModelInventory
 from .interface.transport import (
     EmptyOperationInputV1,
@@ -69,6 +90,8 @@ from .operations import (
     ServiceError,
     correlation_id,
     guard_body_size,
+    guard_caller_approval,
+    guard_execution_deadline,
 )
 from .policies import (
     MetadataModelRepository,
@@ -106,6 +129,8 @@ from .forward_evidence import (
 )
 
 LOGGER = logging.getLogger("fundamental_service")
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 def _validation_error(
@@ -162,6 +187,11 @@ def create_app(
     model_inventory: ModelInventory | None = None,
     sec_acquisition: SecAcquisitionUseCase | None = None,
     identity_resolution: SecIdentityResolutionUseCase | None = None,
+    quote_providers: tuple[QuoteSourceProviderPort, ...] | None = None,
+    macro_providers: tuple[MacroSeriesProviderPort, ...] | None = None,
+    reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
+    source_use_policy: SourceUsePolicyV1 | None = None,
+    automatic_approval_policy: AutomaticValuationApprovalPolicyV1 | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -195,6 +225,18 @@ def create_app(
         require_metadata=require_metadata,
         policy_registry=policy_registry,
         model_inventory=model_inventory,
+        quote_providers=(
+            default_quote_providers() if quote_providers is None else quote_providers
+        ),
+        macro_providers=default_macro_providers()
+        if macro_providers is None
+        else macro_providers,
+        reference_providers=default_reference_providers()
+        if reference_providers is None
+        else reference_providers,
+        source_use_policy=free_market_source_policy()
+        if source_use_policy is None
+        else source_use_policy,
     )
 
     @asynccontextmanager
@@ -243,6 +285,29 @@ def create_app(
     sec_acquisition_limiter = RateLimiter(
         runtime_config.ingestion_rate_limit_per_minute
     )
+    valuation_limiter = CapacityLimiter(1)
+
+    async def run_valuation_operation(
+        request: Request, operation: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        deadline_at = request.state.deadline
+        guard_execution_deadline(deadline_at)
+        try:
+            with fail_after((deadline_at - datetime.now(UTC)).total_seconds()) as scope:
+                result = await to_thread.run_sync(
+                    partial(operation, *args, **kwargs), limiter=valuation_limiter
+                )
+        except TimeoutError as error:
+            if not scope.cancel_called:
+                raise
+            raise ServiceError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "request deadline expired while waiting for valuation execution",
+                status_code=408,
+                retryable=True,
+            ) from error
+        guard_execution_deadline(deadline_at)
+        return result
 
     def release_actor(
         request: Request, allowed_organizations: frozenset[str]
@@ -324,7 +389,7 @@ def create_app(
             return response
         except ServiceError as error:
             status_code = error.status_code
-            context = getattr(request.state, "context", None)
+            failed_context = getattr(request.state, "context", None)
             LOGGER.warning(
                 "fundamental_request_failed path=%s status_code=%s error_code=%s "
                 "error_message=%s organization_id=%s",
@@ -332,7 +397,9 @@ def create_app(
                 error.status_code,
                 error.code,
                 error.message,
-                getattr(getattr(context, "principal", None), "organization_id", None),
+                getattr(
+                    getattr(failed_context, "principal", None), "organization_id", None
+                ),
             )
             if (
                 error.code.startswith("internal_auth")
@@ -479,7 +546,13 @@ def create_app(
     )
     async def prepare_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationEvidenceReadRequestV1)
-        return success_response(request, application.prepare_valuation(value))
+        result = await run_valuation_operation(
+            request,
+            application.prepare_valuation,
+            value,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
 
     @app.post(
         "/v1/valuation/prepare/override",
@@ -777,10 +850,12 @@ def create_app(
     async def validate_valuation(request: Request) -> JSONResponse:
         raw_input = request.state.operation_input
         if any(key in raw_input for key in ("scenarios", "sensitivity", "monte_carlo")):
-            value = UncertaintyRequestV1.model_validate_json(
+            uncertainty_value = UncertaintyRequestV1.model_validate_json(
                 json.dumps(normalize_uncertainty_payload(raw_input))
             )
-            return success_response(request, application.validate_uncertainty(value))
+            return success_response(
+                request, application.validate_uncertainty(uncertainty_value)
+            )
         value = decode_input(request, ValuationInputV1)
         return success_response(request, application.validate_valuation(value))
 
@@ -808,6 +883,35 @@ def create_app(
         return success_response(request, application.validate_with_policy(value))
 
     @app.post(
+        "/v1/valuation/calculate-automatically",
+        response_model=TypedFundamentalResponseEnvelopeV1[AutomaticValuationResponseV1],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/FundamentalAutomaticValuationRequestEnvelopeV1"
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def calculate_automatically(request: Request) -> JSONResponse:
+        value = decode_input(request, AutomaticValuationRequestV1)
+        principal = request.state.context.principal
+        result = await run_valuation_operation(
+            request,
+            AutomaticValuationExecutor(application, automatic_approval_policy).execute,
+            value,
+            caller_id=principal.subject_id,
+            organization_id=principal.organization_id,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
+
+    @app.post(
         "/v1/valuation/calculate",
         response_model=TypedFundamentalResponseEnvelopeV1[
             CalculationArtifactV1 | UncertaintyReportV1
@@ -830,8 +934,17 @@ def create_app(
     )
     async def calculate_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationInputV1)
-        result = application.calculate_valuation(
-            value, correlation_id=request.state.correlation_id
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
+        )
+        result = await run_valuation_operation(
+            request,
+            application.calculate_valuation,
+            value,
+            correlation_id=request.state.correlation_id,
+            deadline_at=request.state.deadline,
         )
         return success_response(request, result)
 
@@ -858,8 +971,17 @@ def create_app(
     )
     async def calculate_with_policy(request: Request) -> JSONResponse:
         value = decode_input(request, PolicyValuationInputV1)
-        result = application.calculate_with_policy(
-            value, correlation_id=request.state.correlation_id
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
+        )
+        result = await run_valuation_operation(
+            request,
+            application.calculate_with_policy,
+            value,
+            correlation_id=request.state.correlation_id,
+            deadline_at=request.state.deadline,
         )
         return success_response(request, result)
 
@@ -873,7 +995,18 @@ def create_app(
         value = UncertaintyRequestV1.model_validate_json(
             json.dumps(normalize_uncertainty_payload(request.state.operation_input))
         )
-        return success_response(request, application.uncertainty_valuation(value))
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
+        )
+        result = await run_valuation_operation(
+            request,
+            application.uncertainty_valuation,
+            value,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
 
     base_openapi = app.openapi
 
@@ -882,6 +1015,10 @@ def create_app(
             return app.openapi_schema
         schema = base_openapi()
         request_models = (
+            (
+                "FundamentalAutomaticValuationRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[AutomaticValuationRequestV1],
+            ),
             (
                 "FundamentalCalculationRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[ValuationInputV1],
@@ -950,7 +1087,7 @@ def create_app(
         app.openapi_schema = schema
         return schema
 
-    app.openapi = openapi_with_typed_internal_envelopes
+    setattr(app, "openapi", openapi_with_typed_internal_envelopes)
     return app
 
 
@@ -958,10 +1095,17 @@ def create_runtime_app() -> FastAPI:
     """Build production with PostgreSQL metadata and a content-only volume."""
 
     config = OperationsConfig.from_env()
+    source_use_policy = load_runtime_source_use_policy()
+    automatic_approval_policy = load_runtime_automatic_approval_policy()
     root_value = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
     database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
     if not root_value or not database_url:
-        return create_app(config=config, require_metadata=True)
+        return create_app(
+            config=config,
+            require_metadata=True,
+            source_use_policy=source_use_policy,
+            automatic_approval_policy=automatic_approval_policy,
+        )
     root = Path(root_value)
     data_release_trust_roots_file = os.getenv(
         "FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE"
@@ -1014,6 +1158,11 @@ def create_runtime_app() -> FastAPI:
         edgar_plugin_sha256=edgar_plugin_sha256,
         xule_plugin_sha256=xule_plugin_sha256,
         dqc_ruleset_sha256=dqc_ruleset_sha256,
+        dqc_ruleset_catalog_path=os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH")
+        or None,
+        historical_dqc_dir=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR") or None,
+        historical_dqc_sha256=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256")
+        or None,
         supported_filing_years=supported_filing_years,
         supported_filing_forms=supported_filing_forms,
         authorized_organizations=config.ingestion_authorized_organizations,
@@ -1039,6 +1188,8 @@ def create_runtime_app() -> FastAPI:
         ),
         sec_acquisition=sec_acquisition,
         identity_resolution=identity_resolution,
+        source_use_policy=source_use_policy,
+        automatic_approval_policy=automatic_approval_policy,
     )
 
 
