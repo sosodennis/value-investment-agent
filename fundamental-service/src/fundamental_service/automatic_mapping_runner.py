@@ -28,6 +28,7 @@ from .automatic_mapping_batch import (
     AutomaticMappingProposalDecisionV1,
     AutomaticMappingRoleDecisionV1,
 )
+from .automatic_mapping_evidence import AutomaticMappingEvidenceChecks
 from .command_artifacts import EvidenceArtifactStore, command_artifacts
 from .data_releases import (
     ArtifactRefV1,
@@ -92,6 +93,7 @@ def approve_mapping(
     artifacts: EvidenceArtifactStore,
     trust_roots: DataReleaseTrustRootsV1,
     private_key: Ed25519PrivateKey,
+    evidence_checks: AutomaticMappingEvidenceChecks | None = None,
 ) -> AutomaticMappingReceiptV1:
     _require_machine_identity(request, trust_roots=trust_roots, private_key=private_key)
     contents = {}
@@ -119,7 +121,9 @@ def approve_mapping(
                 "ARTIFACT_NOT_FOUND",
             }:
                 raise
-    decision = evaluate_automatic_mapping(request, contents=contents)
+    decision = evaluate_automatic_mapping(
+        request, contents=contents, evidence_checks=evidence_checks
+    )
     input_digest, output_digest = sha256_digest(request), sha256_digest(decision)
     parser_report_publication, input_publication = publish_mapping_input(
         request,
@@ -217,6 +221,7 @@ def approve_mapping_batch(
         batch=True,
     )
     roles, receipts = [], []
+    evidence_checks = AutomaticMappingEvidenceChecks()
     for role in sorted(
         set(request.requirements.required_fact_fields)
         | set(request.requirements.supporting_fact_fields)
@@ -254,6 +259,7 @@ def approve_mapping_batch(
                 artifacts=artifacts,
                 trust_roots=trust_roots,
                 private_key=private_key,
+                evidence_checks=evidence_checks,
             )
             decision = AutomaticMappingDecisionV1.model_validate_json(
                 artifacts.read(receipt.decision_publication.artifact.artifact_id)

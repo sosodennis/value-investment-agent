@@ -90,6 +90,13 @@ The same selected rows and bytes can be reinstated during a stopped-service
 maintenance window, after first verifying the manifest and retained-state
 preconditions. Do not replace current metadata wholesale or overwrite newer rows.
 
-Storage amplification remains unresolved: new mapping evidence must share an
-immutable original/parser report through digest-bound artifact references.
-Deleting historical copies is not a fix for repeated report serialization.
+At the maintenance checkpoint, storage amplification remained unresolved.
+The subsequent `2e385256` increment introduced the versioned
+`fundamental.mapping-input-artifact.v2` envelope: individual and batch inputs
+reference one shared immutable parser report, bind its digest and the complete
+resolved semantic input, and validate both again on replay. Existing retained
+v1 evidence remains readable; corrupt v2 evidence cannot fall back to v1.
+Real MSFT publication reduced an approximately 8.58 MB individual input to an
+approximately 41 KB envelope referencing one 8.54 MB report; repeated publication
+returned `wrote=false`. This addresses repeated report storage separately from
+the retirement above. It does not establish M2 or M3 numerical acceptance.

@@ -9,6 +9,7 @@ from .automatic_mapping import (
     verify_automatic_mapping_replay,
 )
 from .automatic_mapping_batch import AutomaticMappingBatchRequestV1
+from .automatic_mapping_evidence import AutomaticMappingEvidenceChecks
 from .contracts import (
     QualityStatus,
     SecHistoryIntegrityEvidenceV1,
@@ -105,9 +106,13 @@ def require_automatic_release_sources(
         for review in request.mapping_reviews
         if isinstance(review, AutomaticMappingApprovalV1)
     )
+    evidence_checks = AutomaticMappingEvidenceChecks()
     sources: tuple[AutomaticMappingSourceV1, ...] = tuple(
         verify_automatic_mapping_replay(
-            review, mappings.get_mapping(review.mapping_id), artifacts=artifacts
+            review,
+            mappings.get_mapping(review.mapping_id),
+            artifacts=artifacts,
+            evidence_checks=evidence_checks,
         )
         for review in automatic
     )

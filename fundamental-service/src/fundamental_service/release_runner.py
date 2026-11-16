@@ -24,6 +24,7 @@ from .contracts import (
 )
 from .conditional_capital_contracts import CAPITAL_SUPPORTING_AWARD_FIELDS
 from .automatic_mapping import verify_automatic_mapping_replay
+from .automatic_mapping_evidence import AutomaticMappingEvidenceChecks
 from .automatic_market_policy_evidence import (
     AUTOMATIC_MARKET_POLICY_ROLE,
     load_release_automatic_market_policy,
@@ -487,6 +488,7 @@ class DataReleaseCanaryRunner:
         verification: DataReleaseContentRequestV1,
         mappings: dict[str, CanonicalMappingV1],
     ) -> None:
+        evidence_checks = AutomaticMappingEvidenceChecks()
         for review in verification.mapping_reviews:
             mapping = mappings[review.mapping_id]
             if not isinstance(review, AutomaticMappingApprovalV1):
@@ -497,7 +499,10 @@ class DataReleaseCanaryRunner:
                     )
                 continue
             request = verify_automatic_mapping_replay(
-                review, mapping, artifacts=self._artifacts
+                review,
+                mapping,
+                artifacts=self._artifacts,
+                evidence_checks=evidence_checks,
             )
             used = False
             for ref in manifest.snapshot_refs:

@@ -26,8 +26,7 @@ from .data_releases import (
     ReleaseModel,
 )
 from .facts import CanonicalMappingV1, MappingObservationScopeV1, select_fact
-from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
-from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
+from .automatic_mapping_evidence import AutomaticMappingEvidenceChecks
 from .original_issuer import OriginalIssuerEvidenceV1
 from .registered_capital_expenditure import (
     CAPITAL_EXPENDITURE,
@@ -63,7 +62,6 @@ from .mapping_input_storage import MappingInputReader, resolve_mapping_input
 from .serialization import sha256_digest
 from .sec_rebuild import parsed_facts_to_candidates
 from .snapshots import SnapshotError
-from .taxonomy_evidence import require_original_taxonomy
 from .standard_accounting_representations import standard_accounting_representation
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
@@ -212,6 +210,7 @@ def automatic_mapping_policy_digest() -> str:
                 name: hashlib.sha256((root / name).read_bytes()).hexdigest()
                 for name in (
                     "automatic_mapping.py",
+                    "automatic_mapping_evidence.py",
                     "automatic_mapping_batch.py",
                     "automatic_mapping_runner.py",
                     "mapping_input_storage.py",
@@ -607,45 +606,20 @@ def _observation_rejection(
 
 
 def evaluate_automatic_mapping(
-    request: AutomaticMappingRequestV1, *, contents: dict[str, bytes]
+    request: AutomaticMappingRequestV1,
+    *,
+    contents: dict[str, bytes],
+    evidence_checks: AutomaticMappingEvidenceChecks | None = None,
 ) -> AutomaticMappingDecisionV1:
     """Approve or retain abstention without providers, publication or signatures."""
     policy_digest = automatic_mapping_policy_digest()
-    reasons: set[str] = set()
+    checks = (
+        evidence_checks
+        if evidence_checks is not None
+        else AutomaticMappingEvidenceChecks()
+    )
+    reasons = set(checks.assess(request, contents=contents))
     original, proposal = request.original, request.proposal
-    if original.status != "matched":
-        reasons.update(original.issue_codes)
-    try:
-        for ref in request.evidence_refs:
-            if (
-                ref.content_hash not in contents
-                or hashlib.sha256(contents[ref.content_hash]).hexdigest()
-                != ref.content_hash
-            ):
-                raise DataReleaseError(
-                    "MAPPING_SOURCE_ARTIFACT_UNAVAILABLE",
-                    "automatic mapping requires its retained evidence bytes",
-                )
-        require_original_taxonomy(
-            original.report.taxonomy_cache_hash or "", request.evidence_refs, contents
-        )
-        verify_original_integrity(
-            original, request.integrity, parser_version=original.report.parser_version
-        )
-        verify_original_bytes(request.integrity, contents)
-    except DataReleaseError as error:
-        reasons.add(error.code)
-    if request.security_identity is not None:
-        try:
-            validate_original_filing_identity(
-                request.security_identity,
-                cik=original.source.cik,
-                ticker=request.security_identity.security_id,
-                accepted_at=original.source.available_at,
-                facts=original.report.facts,
-            )
-        except IdentityResolutionError as error:
-            reasons.add(error.code)
     rule = _RULES.get(proposal.normalized_field)
     disclosed = (
         proposal.normalized_field == "stock_based_compensation"
@@ -1014,6 +988,7 @@ def verify_automatic_mapping_replay(
     mapping: CanonicalMappingV1,
     *,
     artifacts: MappingInputReader,
+    evidence_checks: AutomaticMappingEvidenceChecks | None = None,
 ) -> AutomaticMappingRequestV1:
     """Re-evaluate retained inputs; a trusted signature alone is insufficient."""
     refs = tuple(
@@ -1042,7 +1017,9 @@ def verify_automatic_mapping_replay(
         ref.content_hash: artifacts.read(ref.artifact_id)
         for ref in request.evidence_refs
     }
-    decision = evaluate_automatic_mapping(request, contents=contents)
+    decision = evaluate_automatic_mapping(
+        request, contents=contents, evidence_checks=evidence_checks
+    )
     if (
         request.evaluator_id != approval.evaluator_id
         or request.source_revision != approval.source_revision
