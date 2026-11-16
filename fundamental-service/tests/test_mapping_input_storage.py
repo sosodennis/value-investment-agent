@@ -7,6 +7,32 @@ from fundamental_service.serialization import sha256_digest
 from test_automatic_mapping import case, MACHINE_KEY
 
 
+def test_resolving_an_envelope_validates_its_complete_original_once(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import original_issuer
+    from fundamental_service.automatic_mapping import AutomaticMappingRequestV1
+    from fundamental_service.mapping_input_storage import resolve_mapping_input
+
+    request, store, roots, _ = case(tmp_path)
+    receipt = approve_mapping(
+        request, artifacts=store, trust_roots=roots, private_key=MACHINE_KEY
+    )
+    raw = store.read(receipt.input_publication.artifact.artifact_id)
+    calls = []
+    original_digest = original_issuer._issuer_input_digest
+
+    def observed(*args, **kwargs):
+        calls.append(True)
+        return original_digest(*args, **kwargs)
+
+    monkeypatch.setattr(original_issuer, "_issuer_input_digest", observed)
+    replayed = resolve_mapping_input(raw, AutomaticMappingRequestV1, artifacts=store)
+    assert replayed == request
+    assert sha256_digest(replayed) == receipt.input_digest
+    assert len(calls) == 1
+
+
 def test_fields_and_revisions_share_one_original_without_inline_reports(tmp_path):
     request, store, roots, _ = case(tmp_path)
     requests = (
@@ -198,7 +224,18 @@ def test_substituted_report_and_unknown_envelope_version_are_rejected(tmp_path):
     )
     envelope = json.loads(store.read(receipt.input_publication.artifact.artifact_id))
     replacement = store.put_with_receipt(
-        "different-report", other.original.report.model_dump(mode="json")
+        "different-report",
+        other.original.report.model_dump(mode="json"),
+        dependency_hashes=tuple(
+            sorted(
+                value
+                for value in {
+                    other.original.report.source_content_hash,
+                    other.original.report.taxonomy_cache_hash,
+                }
+                if value
+            )
+        ),
     )
     envelope["original_ref"].update(
         artifact_id=replacement.artifact.artifact_id,
