@@ -590,3 +590,20 @@ This engineering cohort does not establish real numerical acceptance. CI run
 and is not a pass. Applicable release-gate integration remains outstanding.
 M1/M2/M3 remain incomplete, threshold null and PR370 draft. Detailed receipts,
 failed-before logs and original bytes remain in the ignored audit directory.
+
+At committed implementation `71d07e41`, all 297 related PostgreSQL cases and
+the same static gates passed again, zero skips; the isolated database was
+removed. Input/output digests:
+`d9a6ac71ca209557ee14f9f15b5b1504cdedbcf61048d99d5549790497c38546` /
+`410b593057c2800374c684fb2e45aafff91ca8f59bd45900ca564320dcb03b66`.
+
+The workflow now executes the existing independent Service engineering gate
+on every PR, main push and manual dispatch, followed by the provisional
+scenario verifier checks. It requires the report upload even on failure.
+Local exact CLI execution passed all 21 gate cases and 22 scenario verifier
+tests. A parsed workflow comparison proves the separate manually dispatched
+agent release job, its condition and thresholds are unchanged. Its known
+failure remains retained and is not counted as a Service pass. The Service
+gate covers arithmetic/replay/refusals, while deployment SEC source/release,
+caller, numerical retrieval and recovery acceptance remain separate required
+work. The new CI job itself must still execute on the resulting committed SHA.

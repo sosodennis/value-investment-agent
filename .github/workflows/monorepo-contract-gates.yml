@@ -85,6 +85,43 @@ jobs:
               --no-incremental --follow-imports=silent --ignore-missing-imports "${type_paths[@]}"
           fi
 
+  fundamental-service-release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install frozen Fundamental Service dependencies
+        run: uv sync --frozen --extra dev --project fundamental-service
+
+      - name: Run independent Service calculator release gate
+        run: >
+          uv run --frozen --extra dev --project fundamental-service python
+          -m fundamental_service.verification_gate
+          --cohort fundamental-service/tests/fixtures/verification/golden_cohort.json
+          --report ${{ runner.temp }}/fundamental-service-verification.json
+
+      - name: Verify provisional scenario arithmetic checks
+        run: >
+          uv run --frozen --extra dev --project fundamental-service pytest
+          fundamental-service/tests/test_scenario_verification.py -q
+
+      - name: Upload independent Service calculator report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fundamental-service-verification
+          path: ${{ runner.temp }}/fundamental-service-verification.json
+          if-no-files-found: error
+
   model-inference-service-contract-gate:
     runs-on: ubuntu-latest
     defaults:

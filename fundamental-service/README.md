@@ -512,6 +512,17 @@ requires machine-readable reasons and missing evidence for every abstention or
 degraded case. The engineering cohort is replay evidence only; it is never
 used as calibration ground truth.
 
+CI executes this gate as `fundamental-service-release-gate` on pull requests,
+main pushes and manual dispatch, together with the provisional scenario
+arithmetic verifier tests. It uploads the independent report and fails if the
+report is missing. This Service gate does not depend on the agent's forward
+signal calibration, consensus cohort or reinvestment clamp profile. The separate
+manually dispatched `fundamental-release-gate` retains those agent research
+checks and their thresholds; a skip or failure there is not a Service gate pass.
+The engineering gate does not certify source completeness, permissions, trusted
+release publication, automatic caller authorization or real numerical recovery.
+Those require the deployment's exact-input SEC-backed service acceptance.
+
 For a completed Service FCFF scenario report, compare the retained resolved
 `ValuationInputV1` and `UncertaintyReportV1` without provider access:
 
