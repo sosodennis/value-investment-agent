@@ -632,8 +632,12 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
     persist = runner._persist
     if interrupted:
 
-        def stopped(*args):
+        def stopped(plan_arg, evidence, *, prepared_facts):
             assert fixture.state.active is not None
+            assert prepared_facts is not None
+            prepared_facts.require_scope(
+                plan_arg, fixture.application.snapshot(evidence.snapshot_id)
+            )
             raise SnapshotError(
                 "SYNTHETIC_INTERRUPTION", "after activation before flow report"
             )
