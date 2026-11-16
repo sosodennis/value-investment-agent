@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
+from collections import OrderedDict
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, JsonValue, ValidationInfo, field_serializer, model_validator
+from pydantic import (
+    Field,
+    JsonValue,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from .arelle_parser import ArelleParseReportV1, fact_semantic_digest
 from .contracts import CanonicalFactV1, SourceRole, SourceSnapshotV1, StrictModel
@@ -33,14 +43,77 @@ _REQUIRED_DEI = (
 class OriginalIssuerEvidenceChecks:
     """Reuse exact original semantics within one verifier operation only."""
 
-    def __init__(self) -> None:
-        self._verified: set[str] = set()
+    def __init__(
+        self,
+        *,
+        max_report_bytes: int = 64 * 1024 * 1024,
+        max_reports: int = 8,
+        max_report_facts: int = 50_000,
+    ) -> None:
+        if min(max_report_bytes, max_reports, max_report_facts) < 0:
+            raise ValueError("original report retention limits must be nonnegative")
+        self._verified: set[tuple[str, str]] = set()
+        self._reports: OrderedDict[str, tuple[ArelleParseReportV1, int]] = OrderedDict()
+        self._max_report_bytes = max_report_bytes
+        self._max_reports = max_reports
+        self._max_report_facts = max_report_facts
+        self._report_bytes = 0
+        self._report_facts = 0
 
     def validate(self, original: OriginalIssuerEvidenceV1) -> None:
-        digest = sha256_digest(original.model_dump(mode="json"))
-        if digest not in self._verified:
+        self._validate(
+            original, ("embedded", sha256_digest(original.model_dump(mode="json")))
+        )
+
+    def _validate(
+        self, original: OriginalIssuerEvidenceV1, key: tuple[str, str]
+    ) -> None:
+        if key not in self._verified:
             original.validate_original_evidence()
-            self._verified.add(digest)
+            self._verified.add(key)
+
+    def resolve_report(self, raw: bytes) -> _OriginalReportResolution:
+        """Decode exact report content once; artifact checks remain with the reader."""
+        digest = hashlib.sha256(raw).hexdigest()
+        retained = self._reports.pop(digest, None)
+        if retained is not None:
+            self._reports[digest] = retained
+            return _OriginalReportResolution(self, retained[0], digest)
+        report = ArelleParseReportV1.model_validate_json(raw)
+        size, count = len(raw), len(report.facts)
+        if (
+            self._max_reports
+            and size <= self._max_report_bytes
+            and count <= self._max_report_facts
+        ):
+            while self._reports and (
+                self._report_bytes + size > self._max_report_bytes
+                or self._report_facts + count > self._max_report_facts
+                or len(self._reports) >= self._max_reports
+            ):
+                _, (removed, removed_size) = self._reports.popitem(last=False)
+                self._report_bytes -= removed_size
+                self._report_facts -= len(removed.facts)
+            self._reports[digest] = report, size
+            self._report_bytes += size
+            self._report_facts += count
+        return _OriginalReportResolution(self, report, digest)
+
+
+@dataclass(frozen=True)
+class _OriginalReportResolution:
+    owner: OriginalIssuerEvidenceChecks
+    report: ArelleParseReportV1
+    content_digest: str
+
+    def validate(self, original: OriginalIssuerEvidenceV1) -> None:
+        if original.report is not self.report:
+            self.owner.validate(original)
+            return
+        key = sha256_digest(
+            (original.model_dump(mode="json", exclude={"report"}), self.content_digest)
+        )
+        self.owner._validate(original, ("referenced", key))
 
 
 class OriginalIssuerIdentityV1(StrictModel):
@@ -237,11 +310,20 @@ class OriginalIssuerEvidenceV1(StrictModel):
     def serialize_report(self, report: ArelleParseReportV1) -> dict[str, JsonValue]:
         return report.model_dump(mode="json")
 
+    @field_validator("report", mode="before")
+    @classmethod
+    def resolve_checked_report(cls, value: object, info: ValidationInfo) -> object:
+        if value is None and isinstance(info.context, _OriginalReportResolution):
+            return info.context.report
+        return value
+
     @model_validator(mode="after")
     def original_evidence_matches(
         self, info: ValidationInfo
     ) -> OriginalIssuerEvidenceV1:
-        if isinstance(info.context, OriginalIssuerEvidenceChecks):
+        if isinstance(
+            info.context, (OriginalIssuerEvidenceChecks, _OriginalReportResolution)
+        ):
             info.context.validate(self)
         else:
             self.validate_original_evidence()

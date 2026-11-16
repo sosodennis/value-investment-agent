@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Final, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, Field, JsonValue, model_validator
 
-from .arelle_parser import ArelleParseReportV1
 from .data_releases import ArtifactRefV1, DataReleaseError, ReleaseModel
 from .original_issuer import OriginalIssuerEvidenceChecks, OriginalIssuerEvidenceV1
 from .replay import ArtifactPublicationV1, ArtifactRecordV1
@@ -121,7 +120,10 @@ def resolve_mapping_input(
         raise DataReleaseError(
             "MAPPING_ORIGINAL_HASH_MISMATCH", "shared mapping original changed"
         )
-    report = ArelleParseReportV1.model_validate_json(original_raw)
+    resolution = (original_checks or OriginalIssuerEvidenceChecks()).resolve_report(
+        original_raw
+    )
+    report = resolution.report
     record = artifacts.get(ref.artifact_id)
     expected_dependencies = tuple(
         sorted(
@@ -151,11 +153,11 @@ def resolve_mapping_input(
                 **envelope.request,
                 "original": {
                     **envelope.original,
-                    "report": report.model_dump(mode="json"),
+                    "report": None,
                 },
             }
         ),
-        context=original_checks,
+        context=resolution,
     )
     if sha256_digest(request) != envelope.input_digest:
         raise DataReleaseError(

@@ -328,3 +328,37 @@ owner's complete validation remain. Every subsequent compile rechecks storage;
 there is no cross-operation state. Compiler regressions preserve historical
 identity conflicts, publication/reuse and corruption refusal. This removes one
 known duplicate read per filing per compile; full-flow timing remains unverified.
+
+## Operation-local referenced report resolution
+
+V2 mapping resolution now decodes a shared report once per owning verifier
+scope. It hydrates that immutable report through a private typed context while
+parsing fresh original metadata and the request through their existing JSON
+contracts. Every reference still checks current artifact status, retention,
+media type, dependencies and exact bytes. Original claims bind all metadata
+and the checked report content hash; the complete request digest and approval
+semantics remain unchanged. Inline v1 inputs retain their existing validation.
+No serialized validation flag or `model_construct` grants trust.
+
+The owner retains at most eight reports, 64 MiB of serialized report input and
+50,000 facts, evicting least recently used reports. Oversized reports still
+validate without retention. These are retention budgets, not heap/RSS bounds;
+transient parsing, callers' references and verified fingerprints are separate.
+New operations and independent verifiers establish new scopes.
+
+A read-only work-count comparison resolved 55 retained real MSFT mapping inputs
+once per side. All complete request digests matched the original approvals.
+Explicit report decodes fell from 55 to three. Diagnostic resolver intervals
+totaled 16.82 and 6.55 seconds, with concurrent owner tests; this single sample
+is neither a formal latency comparison nor an end-to-end result. The baseline
+uses the unchanged generic embedded-original check path in the current owner.
+The comparison made no writes or policy-digest substitutions.
+
+543 owner/original/mapping/release/recovery tests passed without skips, alongside
+Ruff, format, changed-source mypy and both architecture guards. Two independent
+static reviews found no actionable scoped findings. Full-flow installed-commit
+acceptance and whole-PR review remain outstanding. Git-external receipts:
+`wip-report-resolution-receipt.json` and
+`e63f7073-report-resolution-work-comparison-receipt.json`. Comparison input/output:
+`527ce8f9d1cc1355827fe3a4ab0496b1e481955e27c92b23a391f586c853995b` /
+`ec7c55cbf4f47cb0b8dd3db8c65faabf32486f36bb9f363ded0c5993bb057e1a`.
