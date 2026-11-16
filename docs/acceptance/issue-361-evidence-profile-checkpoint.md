@@ -71,16 +71,82 @@ formal caller tests, zero skips, Ruff/format, parser types, both architecture
 guards and diff check. WIP input/output digests:
 `6aaf58761432f48e219820fb54615290d953ea3ef3a63edaf1ab8468aeb16e0c` /
 `5b89a5d29fe9fad582852324b382a653a72cadb25a59508a0eb9209bb8306b0e`.
-Exact-commit deployment and the remaining full-path profile still follow.
+The exact-commit deployment and diagnostic follow below.
+
+## Exact `82a1a559` execution
+
+The installed image is
+`sha256:57505e1a3242c345f4cf1ef39fa29e7ad148f70cda73ffbb4a509e42ed1007af`.
+All 170 Python files equal Git; package source digest is
+`c975713218ba718e9b08531395ca557a6d1910b3bbc5fe2340c085a13c791d84`.
+Exact checks passed 139 focused and 56 formal caller tests, zero skips,
+lint/format, types, architecture and diff checks. Input/output digests:
+`5430439d26340adec1d66b9f8b9908e356b8260b54825851117d04a7c5140740` /
+`7f61d00a82a747a5cd64fa56ca127a47322d2a1ef2005853bbb280cebb821b76`.
+SEC preflight input/output:
+`41ab13595d23411c7652d9a3bce87edad3eb764f4619c03a85d0d7afc69ab0d7` /
+`5ec9ab6ac69542c06d4bd448c438a326877f819828618f4e7557d3fd672c3278`.
+Three installed Linux parser resource-limit assertions passed. CI run
+43806470778 passed all twelve executed jobs; its release gate was skipped.
+
+The v17 fixed-MSFT diagnostic retained the 900-second issuer deadline. Its
+first attempt timed out in preparation (902.70 seconds including command
+overhead), after discovery, original preparation, acquisition and history.
+Input/output digests:
+`766bf7922ece902e35d24f6c69f7b95916b22d703520e727446b3865538ba115` /
+`9e197f17e235630520be40ce383a74cd00f1a606f2ae90dcc62a0b7d69dd128e`.
+Twelve completed parser workers were recorded: six for original preparation
+and six repeated during acquisition. Their peak RSS was approximately
+1,826 MiB. No parser exception was captured; the old generic failure's cause
+remains unproved.
+
+An identical-command continuation completed in 362.45 seconds and retained
+`DILUTION_QUOTE_ADMISSION_MISSING`. Input/output digests:
+`a5522351e615300165a0be5f230f25464cf78a25bc521cdc81a45a600b1cb83a` /
+`4e85e6865e61fc915f1abdc71e45e517bbf9bc3e8c173e9a74360fb8db42fbc8`.
+Its completed preparation process recorded 337.65 wall seconds and 321.82 CPU
+seconds. Inclusive spans include 118.50 seconds in 22 preparation reads,
+122.26 seconds replaying 55 mappings and 170.95 seconds in the release content
+verifier. These overlap. Artifact reads accounted for 18.72 seconds; SQL
+roundtrips for 4.92 seconds. Read time alone does not explain the timeout.
+The verifier reached the quote refusal; this is not a profile of successful
+release signing or the unreachable post-refusal path. Summary SHA256:
+`1b49b5bc7bb11bbf4c45db190837f8ac6f2705eb87ecd0dd4e2b5bea753ff60c`.
+
+A separate ordinary run without cProfile/sampling completed in 218.78 seconds.
+It returned the same blocked preparation digest
+`089cfceb6a58cc7b31fd1c84a4368c47a9860a4ba45728afb1a279ff09a56ff6`,
+with every lineage publication reporting `wrote=false`. All fifteen measured
+tables retained identical row counts and ordered-row digests. Before/after
+inventory output digest:
+`b8bdaee85778dab5c58c6e96bce2022e4f6a5702c349d1df1333d22ef086de40`.
+Ordinary request/output digests:
+`0c6c490e87267acf2e35bd94053d9ea92dfe95b3f80ddbee1c5ac04a2a530c48` /
+`b5791575d89cc0701b4f2355a7301b1af8e2a69d62b31385a4e8fc212130c833`.
+Authenticated API retrieval returned 200 and the exact preparation digest;
+the unauthenticated request returned 401. API input/output digests:
+`20a86797eb6dcd79b16fb62cf7dde922679ddf04fdd5e9989c893566e1fe0d36` /
+`4f049f26ccdd1175fd530b806defeedcb0051c9a69a2dd4fef2b2c75a941ccc6`.
+
+Independent read-only methodology review identified limitations: checkpoint
+JSON contributes to JSON counters; independently overwritten live/interrupted
+JSON and pstats have no shared snapshot ID; bounded Python CPU samples cannot
+be converted into exact CPU time or native attribution; and the direct
+port-80/443 socket guard is not universal zero-download proof. No stack keys
+were dropped in this run. The ordinary guard recorded three process loads and
+no intercepted attempts, within that limited scope. Review receipt SHA256:
+`0fd6bde46af58bf97d8e5492116a49a1cf281a849f461f3ba99611ac267fa73e`.
+Raw profiles, inventories and requests remain Git-external as `82a1a559-*`.
 
 ## Next measurement
 
-Use parent cProfile plus bounded 20 Hz CPU stack sampling in parser workers
+The diagnostic used parent cProfile plus bounded 20 Hz CPU sampling in workers
 (at most 4,096 stack keys of twelve frames), with separate CPU/wait/RSS and
 phase counters. Child cProfile startup statistics must not be mistaken for a
-full worker call profile. Reconcile every phase and retained refusal, then run
-ordinary comparisons separately. Select broader operation-local immutable
-bytes/report/index reuse only after the remaining path has been measured.
+full worker call profile. The next increment can consume checked acquisition,
+mapping and fact stage outputs within one preparation operation, then compare
+the same reachable refusal path without a profiler. Further bytes/report/index
+reuse requires bounded ownership and separate measurements.
 Keep independent verifier scopes, exact source/profile/policy binding and
 existing semantic input/signature identities.
 
