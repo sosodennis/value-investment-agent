@@ -70,7 +70,7 @@ The **Neuro-Symbolic Valuation Engine** employs a hierarchical multi-agent syste
 *   **Evidence**: Bind each approval or refusal to the exact input digest, caller identity, policy identity/version and decision evidence. Revalidate that binding before calculation; changed inputs require a new decision.
 *   **Failure behavior**: Missing authorization, failed checks or inputs outside the supported policy scope retain explicit refusal reasons and do not run the calculator. Agents and UI must not fabricate approval or bypass the owning service.
 *   **Human decisions**: Require human review only when explicitly selected by deployment policy or the user. A human approval must remain distinguishable from an automatic policy decision.
-*   **Implementation status**: This is the intended approval path. Documentation alone does not implement automatic approval or establish runtime acceptance; existing caller contracts remain enforced until their owning-layer replacement is implemented and verified.
+*   **Implementation status**: Fundamental Service provides a deployment-configured automatic caller endpoint that recomposes and binds the exact input before execution. Issuer CLI wiring and real runtime acceptance remain outstanding; existing explicit caller contracts remain enforced on other paths. Documentation alone grants no runtime authorization.
 
 ### **7. The Engine (Calculator Node)**
 

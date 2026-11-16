@@ -321,6 +321,42 @@ records deployment-approved rights; it cannot create provider permission.
 
 ## Source preparation command
 
+### Automatic caller approval
+
+`POST /v1/valuation/calculate-automatically` uses the same signed internal
+context and bearer authentication as calculation. Its input contains
+`preparation` (the existing release/snapshot/model selector),
+`expected_input_digest` and `approval_policy_digest`. The caller cannot supply
+valuation parameters, an approval envelope, or its own identity in this payload.
+The service recomposes the input through the formal composer, checks the exact
+digest and evaluates its deployment-authorized caller policy before calculation.
+
+Automatic approval is disabled until the deployment supplies both
+`FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_FILE` and
+`FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_DIGEST`. Mount the file read-only and pin
+the canonical `AutomaticValuationApprovalPolicyV1.digest`. Invalid or incomplete
+configuration stops composition. There is no default caller grant. The policy
+names authorized caller/organization pairs, exact model/policy versions, an
+authorization window and the deployed source-use policy digest. Provisional
+quality and uncalibrated conditional what-if scenarios each need explicit
+authorization. Only enumerated issue codes and missing-evidence categories may
+proceed; manual overrides and Monte Carlo are not supported by this path.
+Exceptions authorize the stated calculation scope, not factual completeness,
+provider rights, calibrated estimates or economic error bounds.
+
+Policy, recomposed preparation and automatic decision are retained as immutable
+artifacts. Refusals retain their reasons and do not call the calculator. Approved
+execution uses the existing calculator and retains an artifact joining the
+decision to the saved numerical evidence. Decision content is deterministic;
+storage publication and authenticated request logs supply event timing, rather
+than adding the request clock to the reusable decision's identity. Every retry
+recomposes and checks the policy authorization window again. The decision is
+explicitly automatic and does not represent a human approval. Independent source
+release signatures and all calculation/source-use gates remain enforced.
+
+The issuer CLI does not yet invoke this endpoint automatically. Until that
+caller wiring is verified, it still returns its ordinary preparation receipt.
+
 Mapping input artifacts use `fundamental.mapping-input-artifact.v2`: each field
 and batch retains its request metadata and original evidence metadata, with a
 SHA-256 reference to one immutable parser report. Identical reports are shared

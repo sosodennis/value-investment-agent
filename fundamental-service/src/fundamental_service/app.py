@@ -24,6 +24,13 @@ from starlette.concurrency import run_in_threadpool
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
+from .automatic_approval import AutomaticValuationApprovalPolicyV1
+from .automatic_valuation import (
+    AutomaticValuationExecutor,
+    AutomaticValuationRequestV1,
+    AutomaticValuationResponseV1,
+    load_runtime_automatic_approval_policy,
+)
 from .contracts import (
     CalculationArtifactV1,
     FactsReadRequestV1,
@@ -184,6 +191,7 @@ def create_app(
     macro_providers: tuple[MacroSeriesProviderPort, ...] | None = None,
     reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
     source_use_policy: SourceUsePolicyV1 | None = None,
+    automatic_approval_policy: AutomaticValuationApprovalPolicyV1 | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -875,6 +883,35 @@ def create_app(
         return success_response(request, application.validate_with_policy(value))
 
     @app.post(
+        "/v1/valuation/calculate-automatically",
+        response_model=TypedFundamentalResponseEnvelopeV1[AutomaticValuationResponseV1],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/FundamentalAutomaticValuationRequestEnvelopeV1"
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def calculate_automatically(request: Request) -> JSONResponse:
+        value = decode_input(request, AutomaticValuationRequestV1)
+        principal = request.state.context.principal
+        result = await run_valuation_operation(
+            request,
+            AutomaticValuationExecutor(application, automatic_approval_policy).execute,
+            value,
+            caller_id=principal.subject_id,
+            organization_id=principal.organization_id,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
+
+    @app.post(
         "/v1/valuation/calculate",
         response_model=TypedFundamentalResponseEnvelopeV1[
             CalculationArtifactV1 | UncertaintyReportV1
@@ -979,6 +1016,10 @@ def create_app(
         schema = base_openapi()
         request_models = (
             (
+                "FundamentalAutomaticValuationRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[AutomaticValuationRequestV1],
+            ),
+            (
                 "FundamentalCalculationRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[ValuationInputV1],
             ),
@@ -1055,11 +1096,15 @@ def create_runtime_app() -> FastAPI:
 
     config = OperationsConfig.from_env()
     source_use_policy = load_runtime_source_use_policy()
+    automatic_approval_policy = load_runtime_automatic_approval_policy()
     root_value = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
     database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
     if not root_value or not database_url:
         return create_app(
-            config=config, require_metadata=True, source_use_policy=source_use_policy
+            config=config,
+            require_metadata=True,
+            source_use_policy=source_use_policy,
+            automatic_approval_policy=automatic_approval_policy,
         )
     root = Path(root_value)
     data_release_trust_roots_file = os.getenv(
@@ -1144,6 +1189,7 @@ def create_runtime_app() -> FastAPI:
         sec_acquisition=sec_acquisition,
         identity_resolution=identity_resolution,
         source_use_policy=source_use_policy,
+        automatic_approval_policy=automatic_approval_policy,
     )
 
 

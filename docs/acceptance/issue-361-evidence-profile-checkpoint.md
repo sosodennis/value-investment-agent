@@ -457,3 +457,38 @@ Full failed logs and snapshot/replay/backtest artifacts remain outside Git as
 PR-event CI `43843650727` passed twelve executed jobs with release skipped.
 The dispatched run's separate service-contract job was still running at this
 checkpoint. M1/M2/M3 and final review/main delivery remain incomplete.
+
+## Deployment-authorized automatic caller endpoint
+
+The service adds `POST /v1/valuation/calculate-automatically`. An authenticated
+context supplies the caller and organization; the payload supplies only the
+release/snapshot/model selector and expected input/policy digests. The formal
+composer runs again. A deployment-pinned policy controls caller grants, exact
+model/policy versions, source-use policy, authorization time, provisional
+quality, explicit uncalibrated what-if permission and enumerated diagnostics.
+No default grant, supplied approval envelope, manual override or Monte Carlo
+path is admitted here. The policy does not establish provider permission or
+turn assumptions into observed facts.
+
+The owner saves policy, preparation and automatic approval/refusal evidence
+before execution. Approved results use the existing calculator; a separate
+immutable execution artifact binds the automatic decision to its result and
+saved evidence references. Repeats recompute the decision from current release
+and configuration checks, preserving deterministic artifact identities.
+Corrupted retained decision bytes refuse before calculation.
+
+113 focused automatic-caller/API/composer/execution tests passed, zero skips.
+Changed-source mypy, repository architecture guard, both preparation-boundary
+tests, full Service Ruff, changed-file format and diff checks passed. An initial
+refusal-test harness incorrectly patched a frozen application instance; it was
+corrected to patch the class before these passing checks. This is synthetic
+owner verification, not real MSFT numerical acceptance. The installed runtime
+remains `465ad865` and has no automatic caller policy deployed yet. CLI wiring,
+real acceptance, bounded independent review and final whole-PR review remain.
+
+The three agent-specific skill entrypoints were checked under the architecture
+skill maintainer. Their graph/state/ownership guidance remains current: this
+increment adds a Service-owned HTTP boundary and changes no agent graph or
+valuation formula. No skill edits were required. The previously dispatched
+`5f91bf4d` workflow has now completed: the Service contract job passed and the
+workflow failed because its actually executed legacy release gate failed.
