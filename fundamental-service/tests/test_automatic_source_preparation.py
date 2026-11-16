@@ -195,7 +195,7 @@ def test_existing_release_without_plan_report_retains_mapping_refusals_without_r
     monkeypatch.setattr(
         runner,
         "_resolve",
-        lambda _: SimpleNamespace(
+        lambda _, **kwargs: SimpleNamespace(
             snapshot_id=acquired.snapshot_id,
             data_release_manifest_digest="d" * 64,
         ),

@@ -489,7 +489,12 @@ class SourcePreparationRunner:
             groups.append(tuple(references))
         return tuple(groups)
 
-    def _resolve(self, plan: SourcePreparationPlan) -> SnapshotResolutionV1 | None:
+    def _resolve(
+        self,
+        plan: SourcePreparationPlan,
+        *,
+        prepared_facts: _PreparedPlanFacts | None = None,
+    ) -> SnapshotResolutionV1 | None:
         try:
             resolution = self._application.resolve_snapshot(plan.resolution_request())
         except ServiceError as error:
@@ -513,7 +518,9 @@ class SourcePreparationRunner:
                 status_code=409,
                 retryable=False,
             )
-        if not self._matches_release(plan, snapshot, manifest):
+        if not self._matches_release(
+            plan, snapshot, manifest, prepared_facts=prepared_facts
+        ):
             return None
         if (
             self._automatic_release is not None
@@ -547,7 +554,10 @@ class SourcePreparationRunner:
         manifest: DataReleaseManifestV1,
         *,
         require_source_bindings: bool = True,
+        prepared_facts: _PreparedPlanFacts | None = None,
     ) -> bool:
+        if prepared_facts is not None and prepared_facts.plan_digest != plan.digest:
+            raise ValueError("prepared facts differ from the exact plan and snapshot")
         policy = manifest.valuation_working_capital_policy
         recipe = plan.valuation_working_capital_recipe
         if recipe is None:
@@ -566,7 +576,11 @@ class SourcePreparationRunner:
         released = {
             item.mapping_id: item.mapping_digest for item in manifest.mapping_refs
         }
-        groups = self._plan_mappings(plan)
+        groups = (
+            prepared_facts.mapping_groups
+            if prepared_facts is not None
+            else self._plan_mappings(plan)
+        )
         if groups is None:
             return False
         references = {item.decision_id: item for group in groups for item in group}
@@ -595,19 +609,6 @@ class SourcePreparationRunner:
                 or mapping.normalized_field != reference.normalized_field
             ):
                 return False
-        if recipe is not None:
-            for snapshot_ref in manifest.snapshot_refs:
-                try:
-                    snapshot = self._application.snapshot(snapshot_ref.snapshot_id)
-                except ServiceError as error:
-                    if error.code != "SNAPSHOT_NOT_FOUND":
-                        raise
-                    continue
-                if self._matches_plan(plan, snapshot):
-                    binding = self._bind_working_capital(plan, snapshot)
-                    assert binding is not None
-                    if binding.policy is None or binding.policy != policy:
-                        return False
         capital_recipe = plan.conditional_capital_recipe
         if capital_recipe is None:
             if manifest.conditional_capital_policies:
@@ -634,8 +635,9 @@ class SourcePreparationRunner:
                 manifest.artifact_refs,
                 artifacts=self._application.artifact_store,
             )
-        if require_source_bindings and (
-            capital_recipe is not None or reinvestment_recipe is not None
+        if recipe is not None or (
+            require_source_bindings
+            and (capital_recipe is not None or reinvestment_recipe is not None)
         ):
             matched = False
             for snapshot_ref in manifest.snapshot_refs:
@@ -646,8 +648,18 @@ class SourcePreparationRunner:
                         raise
                     continue
                 if self._matches_plan(plan, snapshot):
-                    if capital_recipe is not None:
-                        capital_binding = self._bind_conditional_capital(plan, snapshot)
+                    selected = self._facts_for_snapshot(plan, snapshot, prepared_facts)
+                    if recipe is not None:
+                        binding = self._bind_working_capital(
+                            plan, snapshot, facts=selected.facts
+                        )
+                        assert binding is not None
+                        if binding.policy is None or binding.policy != policy:
+                            return False
+                    if require_source_bindings and capital_recipe is not None:
+                        capital_binding = self._bind_conditional_capital(
+                            plan, snapshot, facts=selected.facts
+                        )
                         assert capital_binding is not None
                         if (
                             capital_binding.policy is None
@@ -655,8 +667,10 @@ class SourcePreparationRunner:
                             not in manifest.conditional_capital_policies
                         ):
                             return False
-                    if reinvestment_recipe is not None:
-                        forward = self._bind_conditional_reinvestment(plan, snapshot)
+                    if require_source_bindings and reinvestment_recipe is not None:
+                        forward = self._bind_conditional_reinvestment(
+                            plan, snapshot, facts=selected.facts
+                        )
                         assert forward is not None
                         if (
                             forward.policy is None
@@ -665,7 +679,11 @@ class SourcePreparationRunner:
                         ):
                             return False
                     matched = True
-            if not matched:
+            if (
+                not matched
+                and require_source_bindings
+                and (capital_recipe is not None or reinvestment_recipe is not None)
+            ):
                 return False
         return True
 
@@ -674,9 +692,9 @@ class SourcePreparationRunner:
         plan: SourcePreparationPlan,
         snapshot: SourceSnapshotV1,
         manifest: DataReleaseManifestV1,
+        *,
+        prepared_facts: _PreparedPlanFacts | None = None,
     ) -> bool:
-        if not self._matches_release_mappings(plan, manifest):
-            return False
         declared = next(
             (
                 item
@@ -688,9 +706,17 @@ class SourcePreparationRunner:
         facts = self._application.fact_repository
         if declared is None or facts is None:
             return False
-        groups = self._plan_mappings(plan)
-        if groups is None:
+        try:
+            prepared_facts = self._facts_for_snapshot(plan, snapshot, prepared_facts)
+        except SnapshotError as error:
+            if error.code != "HISTORY_MAPPING_EVIDENCE_UNAVAILABLE":
+                raise
             return False
+        if not self._matches_release_mappings(
+            plan, manifest, prepared_facts=prepared_facts
+        ):
+            return False
+        groups = prepared_facts.mapping_groups
         expected = {
             (request.filing.accession_number, item.normalized_field, item.decision_id)
             for request, group in zip(plan.ingestions, groups, strict=True)
@@ -724,13 +750,20 @@ class SourcePreparationRunner:
         self,
         plan: SourcePreparationPlan,
         candidate: DataReleaseCandidatePublishRequestV1,
+        *,
+        prepared_facts: _PreparedPlanFacts | None = None,
     ) -> bool:
-        return self._candidate_snapshot(plan, candidate) is not None
+        return (
+            self._candidate_snapshot(plan, candidate, prepared_facts=prepared_facts)
+            is not None
+        )
 
     def _candidate_snapshot(
         self,
         plan: SourcePreparationPlan,
         candidate: DataReleaseCandidatePublishRequestV1,
+        *,
+        prepared_facts: _PreparedPlanFacts | None = None,
     ) -> SourceSnapshotV1 | None:
         for reference in candidate.manifest.snapshot_refs:
             try:
@@ -740,7 +773,7 @@ class SourcePreparationRunner:
                     raise
                 continue
             if self._matches_plan(plan, snapshot) and self._matches_release(
-                plan, snapshot, candidate.manifest
+                plan, snapshot, candidate.manifest, prepared_facts=prepared_facts
             ):
                 return snapshot
         return None
@@ -782,6 +815,7 @@ class SourcePreparationRunner:
         correlation_id: str,
         plan: SourcePreparationPlan,
         deadline_at: datetime,
+        prepared_facts: _PreparedPlanFacts | None = None,
     ) -> None:
         guard_execution_deadline(deadline_at)
         config = self._application.config
@@ -811,7 +845,9 @@ class SourcePreparationRunner:
             active = None
         self._canary.validate(manifest, candidate.verification)
         guard_execution_deadline(deadline_at)
-        if not self._candidate_snapshot_available(plan, candidate):
+        if not self._candidate_snapshot_available(
+            plan, candidate, prepared_facts=prepared_facts
+        ):
             raise ValueError(
                 "candidate does not match the requested source, date and fact mappings"
             )
@@ -1330,12 +1366,12 @@ class SourcePreparationRunner:
         snapshot: SourceSnapshotV1,
         *,
         groups: tuple[tuple[SecMappingReferenceV1, ...], ...] | None = None,
+        acquisitions: tuple[SecIngestionResponseV1 | None, ...] | None = None,
     ) -> tuple[CanonicalFactV1, ...]:
         facts = self._application.fact_repository
         if facts is None:
             raise ValueError("history assessment requires a canonical fact repository")
-        acquisitions = None
-        if isinstance(plan, AutomaticSourcePreparationPlanV1):
+        if acquisitions is None and isinstance(plan, AutomaticSourcePreparationPlanV1):
             assert self._acquisition is not None
             acquisitions = tuple(
                 self._acquisition.retained_acquisition(request)
@@ -1390,9 +1426,16 @@ class SourcePreparationRunner:
         snapshot: SourceSnapshotV1,
         *,
         groups: tuple[tuple[SecMappingReferenceV1, ...], ...] | None = None,
+        acquisitions: tuple[SecIngestionResponseV1 | None, ...] | None = None,
     ) -> _PreparedPlanFacts:
+        if acquisitions is None and isinstance(plan, AutomaticSourcePreparationPlanV1):
+            assert self._acquisition is not None
+            acquisitions = tuple(
+                self._acquisition.retained_acquisition(request)
+                for request in plan.ingestions
+            )
         if groups is None:
-            groups = self._plan_mappings(plan)
+            groups = self._plan_mappings(plan, acquisitions=acquisitions)
         if groups is None:
             raise SnapshotError(
                 "HISTORY_MAPPING_EVIDENCE_UNAVAILABLE",
@@ -1402,8 +1445,26 @@ class SourcePreparationRunner:
             plan_digest=plan.digest,
             snapshot_manifest_digest=snapshot.manifest_digest,
             mapping_groups=groups,
-            facts=self._plan_facts(plan, snapshot, groups=groups),
+            facts=self._plan_facts(
+                plan, snapshot, groups=groups, acquisitions=acquisitions
+            ),
         )
+
+    def _facts_for_snapshot(
+        self,
+        plan: SourcePreparationPlan,
+        snapshot: SourceSnapshotV1,
+        prepared_facts: _PreparedPlanFacts | None,
+    ) -> _PreparedPlanFacts:
+        if prepared_facts is not None:
+            if prepared_facts.plan_digest != plan.digest:
+                raise ValueError(
+                    "prepared facts differ from the exact plan and snapshot"
+                )
+            if prepared_facts.snapshot_manifest_digest == snapshot.manifest_digest:
+                prepared_facts.require_scope(plan, snapshot)
+                return prepared_facts
+        return self._prepare_plan_facts(plan, snapshot)
 
     def _bind_working_capital(
         self,
@@ -1668,7 +1729,7 @@ class SourcePreparationRunner:
             ),
             DataReleaseCandidatePublishRequestV1,
         )
-        self.validate_candidate(plan, candidate)
+        self.validate_candidate(plan, candidate, prepared_facts=prepared_facts)
         return candidate, ref, ()
 
     def _acquire_public_sources(
@@ -1766,6 +1827,8 @@ class SourcePreparationRunner:
         self,
         plan: SourcePreparationPlan,
         candidate: DataReleaseCandidatePublishRequestV1 | None,
+        *,
+        prepared_facts: _PreparedPlanFacts | None = None,
     ) -> None:
         """Reject incompatible release inputs before source acquisition."""
         if candidate is not None and (
@@ -1775,7 +1838,10 @@ class SourcePreparationRunner:
                 candidate.manifest.required_fields
             )
             or not self._matches_release_mappings(
-                plan, candidate.manifest, require_source_bindings=False
+                plan,
+                candidate.manifest,
+                require_source_bindings=False,
+                prepared_facts=prepared_facts,
             )
         ):
             raise ValueError(
@@ -1881,7 +1947,7 @@ class SourcePreparationRunner:
             if self._acquisition is not None and (
                 bool(outcomes)
                 or (
-                    self._resolve(plan) is None
+                    self._resolve(plan, prepared_facts=prepared_facts) is None
                     and not (
                         candidate is not None
                         and self._candidate_snapshot_available(plan, candidate)
@@ -1927,7 +1993,7 @@ class SourcePreparationRunner:
                 ),
                 prepared_facts=prepared_facts,
             )
-        resolution = self._resolve(plan)
+        resolution = self._resolve(plan, prepared_facts=prepared_facts)
         if resolution is None and not (
             candidate is not None
             and self._candidate_snapshot_available(plan, candidate)
@@ -2066,7 +2132,7 @@ class SourcePreparationRunner:
                 item.snapshot_id for item in candidate.manifest.snapshot_refs
             }:
                 raise ValueError("candidate does not contain the acquired snapshot")
-            resolution = self._resolve(plan)
+            resolution = self._resolve(plan, prepared_facts=prepared_facts)
             if (
                 candidate is None
                 and resolution is None
@@ -2096,14 +2162,19 @@ class SourcePreparationRunner:
             assert isinstance(plan, AutomaticSourcePreparationPlanV1)
             try:
                 if prepared_facts is None:
-                    groups = self._plan_mappings(plan)
+                    assert self._acquisition is not None
+                    acquisitions = tuple(
+                        self._acquisition.retained_acquisition(request)
+                        for request in plan.ingestions
+                    )
+                    groups = self._plan_mappings(plan, acquisitions=acquisitions)
                     if groups is None:
                         raise DataReleaseError(
                             "AUTOMATIC_PREPARATION_MAPPING_EVIDENCE_MISSING",
                             "release assembly requires retained automatic source mappings",
                         )
                     prepared_facts = self._prepare_plan_facts(
-                        plan, snapshot, groups=groups
+                        plan, snapshot, groups=groups, acquisitions=acquisitions
                     )
                 candidate, automatic_release_ref, release_issues = (
                     self._automatic_candidate(
@@ -2176,7 +2247,9 @@ class SourcePreparationRunner:
         if plan.issuer_market_policy is not None:
             market_manifest: DataReleaseManifestV1 | None
             if candidate is not None:
-                market_snapshot = self._candidate_snapshot(plan, candidate)
+                market_snapshot = self._candidate_snapshot(
+                    plan, candidate, prepared_facts=prepared_facts
+                )
                 if market_snapshot is None:
                     raise ValueError(
                         "candidate does not contain the source-plan snapshot"
@@ -2223,7 +2296,9 @@ class SourcePreparationRunner:
             if market_policy_authorization is not None:
                 assert self._market_policy_deployment is not None
                 assert market_policy_authorization_digest is not None
-                deployment_snapshot = self._candidate_snapshot(plan, candidate)
+                deployment_snapshot = self._candidate_snapshot(
+                    plan, candidate, prepared_facts=prepared_facts
+                )
                 if deployment_snapshot is None:
                     raise ValueError(
                         "policy candidate does not contain the requested snapshot"
@@ -2270,8 +2345,9 @@ class SourcePreparationRunner:
                 correlation_id=correlation_id,
                 plan=plan,
                 deadline_at=deadline_at,
+                prepared_facts=prepared_facts,
             )
-            resolution = self._resolve(plan)
+            resolution = self._resolve(plan, prepared_facts=prepared_facts)
             if resolution is None:
                 raise ServiceError(
                     "DATA_RELEASE_SNAPSHOT_MISMATCH",

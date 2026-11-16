@@ -608,7 +608,9 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
         automatic_release=SimpleNamespace(),
         automatic_release_policy=SimpleNamespace(),
     )
-    monkeypatch.setattr(runner, "_plan_mappings", lambda _: (original.mappings,))
+    monkeypatch.setattr(
+        runner, "_plan_mappings", lambda _, **kwargs: (original.mappings,)
+    )
     calls = []
 
     def compiled(

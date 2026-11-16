@@ -301,3 +301,26 @@ def test_retained_fact_ids_do_not_override_plan_source_and_mapping_pins(
     assert selected_id not in {
         fact.fact_id for fact in case.runner._plan_facts(case.plan, case.snapshot)
     }
+
+
+def test_prepared_stage_reads_each_retained_acquisition_once(
+    plan_facts_case, monkeypatch
+):
+    case = plan_facts_case
+    acquisition = case.runner._acquisition
+    read = acquisition.retained_acquisition
+    requests = []
+
+    def observed(request):
+        requests.append(request)
+        return read(request)
+
+    monkeypatch.setattr(acquisition, "retained_acquisition", observed)
+    prepared = case.runner._prepare_plan_facts(case.plan, case.snapshot)
+    assert requests == list(case.plan.ingestions)
+    assert {fact.fact_id for fact in prepared.facts} == set(
+        case.retained.canonical_fact_ids
+    )
+    requests.clear()
+    assert case.runner._prepare_plan_facts(case.plan, case.snapshot) == prepared
+    assert requests == list(case.plan.ingestions)

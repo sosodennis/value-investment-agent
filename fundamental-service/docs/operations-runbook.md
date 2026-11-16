@@ -367,6 +367,15 @@ the operation. Withdrawing only the shared report therefore blocks preparation
 and calculation even when the envelope and canonical facts remain readable.
 Dependency hashes are not interpreted as arbitrary artifact IDs. Independent
 canary replay continues to verify the complete original and mapping semantics.
+Source preparation carries its checked mapping groups and canonical facts
+through release matching, candidate selection and activation within the same
+run. The stage is bound to the exact plan and snapshot digests. Working-capital,
+capital and reinvestment bindings consume that same stage; selecting mappings
+and facts reads each acquisition once. A different snapshot or a new operation
+selects again. Current released mapping/fact checks and independent canary
+verification still run. Missing acquisitions remain a release miss so a new
+plan can acquire them; corrupt evidence remains an error. This reuse does not
+change input identities, signatures or the absolute execution deadline.
 Only approved decisions receive `AutomaticMappingApprovalV1` certificates.
 Receipts record exact `source_revision`, input/output digests and separate
 publication results. Identical inputs and retained evidence return `wrote=false`
