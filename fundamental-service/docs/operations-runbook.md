@@ -360,6 +360,13 @@ canonical report bytes and 256 small identity entries per report; this is not a
 bound on total process memory. Copies, eviction and new operations recompute.
 `wrote=false` establishes storage reuse and does not establish reduced parser
 or verification work; measure those separately from end-to-end completion.
+Serving follows each retained v2 envelope's explicit report reference, including
+releases published before this check was added. It verifies the current report
+metadata, bytes and exact parser-input/taxonomy dependencies once per report in
+the operation. Withdrawing only the shared report therefore blocks preparation
+and calculation even when the envelope and canonical facts remain readable.
+Dependency hashes are not interpreted as arbitrary artifact IDs. Independent
+canary replay continues to verify the complete original and mapping semantics.
 Only approved decisions receive `AutomaticMappingApprovalV1` certificates.
 Receipts record exact `source_revision`, input/output digests and separate
 publication results. Identical inputs and retained evidence return `wrote=false`

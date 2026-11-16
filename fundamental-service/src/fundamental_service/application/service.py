@@ -50,6 +50,10 @@ from ..data_releases import (
     ReleaseResolutionCacheKeyV1,
 )
 from ..artifact_evidence import read_retained_artifact
+from ..mapping_input_storage import (
+    mapping_input_report_dependency,
+    require_mapping_report_record,
+)
 from ..facts import (
     CanonicalFactRepository,
     canonical_fact_digest,
@@ -584,7 +588,7 @@ class FundamentalApplication:
                 "DATA_RELEASE_VERIFICATION_MISMATCH",
                 "release dependency verification differs from its manifest",
             )
-        refs = (
+        refs = [
             *manifest.taxonomy_refs,
             *manifest.artifact_refs,
             *verification.evidence_refs,
@@ -593,8 +597,10 @@ class FundamentalApplication:
                 for review in verification.mapping_reviews
                 for ref in review.evidence_refs
             ),
-        )
+        ]
         seen: dict[str, tuple[str, str]] = {}
+        report_dependencies: dict[str, tuple[str, ...]] = {}
+        expanded_inputs: set[str] = set()
         for reference in refs:
             guard_execution_deadline(deadline_at)
             identity = (reference.content_hash, reference.media_type)
@@ -604,11 +610,30 @@ class FundamentalApplication:
                     "DATA_RELEASE_ARTIFACT_REFERENCE_CONFLICT",
                     "release references one artifact ID with different content",
                 )
-            if previous is not None:
-                continue
-            seen[reference.artifact_id] = identity
+            mapping_input = reference.role in {
+                "automatic-mapping-input-v1",
+                "automatic-mapping-batch-input-v1",
+            }
             try:
-                raw = read_retained_artifact(self.artifact_store, reference)
+                if (
+                    previous is not None
+                    and reference.artifact_id in report_dependencies
+                ):
+                    require_mapping_report_record(
+                        self.artifact_store.get(reference.artifact_id),
+                        reference,
+                        report_dependencies[reference.artifact_id],
+                    )
+                if previous is not None and (
+                    not mapping_input or reference.artifact_id in expanded_inputs
+                ):
+                    continue
+                seen[reference.artifact_id] = identity
+                raw = read_retained_artifact(
+                    self.artifact_store,
+                    reference,
+                    dependency_hashes=report_dependencies.get(reference.artifact_id),
+                )
             except DataReleaseError:
                 raise
             except Exception as error:  # pragma: no cover - adapter boundary
@@ -621,6 +646,20 @@ class FundamentalApplication:
                     "DATA_RELEASE_ARTIFACT_HASH_MISMATCH",
                     f"release artifact {reference.artifact_id} failed hash verification",
                 )
+            if mapping_input:
+                expanded_inputs.add(reference.artifact_id)
+                dependency = mapping_input_report_dependency(raw)
+                if dependency is not None:
+                    report_ref, expected = dependency
+                    previous_dependencies = report_dependencies.setdefault(
+                        report_ref.artifact_id, expected
+                    )
+                    if previous_dependencies != expected:
+                        raise DataReleaseError(
+                            "MAPPING_ORIGINAL_ARTIFACT_MISMATCH",
+                            "shared mapping report has conflicting source dependencies",
+                        )
+                    refs.append(report_ref)
         guard_execution_deadline(deadline_at)
 
     def publish_data_release_candidate(

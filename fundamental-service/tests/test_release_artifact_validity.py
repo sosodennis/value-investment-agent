@@ -179,6 +179,143 @@ def test_automatic_calculation_rejects_withdrawn_release_dependencies(
     )
 
 
+@pytest.mark.parametrize("batch", (False, True))
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "invalidated",
+        "stale",
+        "retention",
+        "dependencies",
+        "dependency_race",
+        "corrupt",
+        "missing",
+    ),
+)
+def test_calculation_checks_shared_report_referenced_by_mapping_input(
+    tmp_path, batch, mutation
+):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from fundamental_service.data_releases import (
+        ArtifactRefV1,
+        sign_data_release_verification,
+    )
+    from fundamental_service.mapping_input_storage import publish_mapping_input
+    from test_automatic_mapping import case
+
+    fixture, client, _, request = _case(tmp_path / "valuation")
+    mapping, _, _, _ = case(tmp_path / "mapping")
+    report, envelope = publish_mapping_input(
+        mapping,
+        mapping.original,
+        artifacts=fixture.artifacts,
+        evidence_refs=mapping.evidence_refs,
+        batch=batch,
+    )
+    digest = request["preparation"]["data_release_manifest_digest"]
+    verification = fixture.metadata.get_data_release_verification(digest)
+    payload = verification.model_dump(exclude={"signature", "verification_digest"})
+    payload["evidence_refs"] = (
+        *verification.evidence_refs,
+        ArtifactRefV1(
+            artifact_id=envelope.artifact.artifact_id,
+            content_hash=envelope.artifact.content_hash,
+            media_type=envelope.artifact.media_type,
+            role="retained-mapping-envelope",
+        ),
+        ArtifactRefV1(
+            artifact_id=envelope.artifact.artifact_id,
+            content_hash=envelope.artifact.content_hash,
+            media_type=envelope.artifact.media_type,
+            role=(
+                "automatic-mapping-batch-input-v1"
+                if batch
+                else "automatic-mapping-input-v1"
+            ),
+        ),
+    )
+    verification = sign_data_release_verification(
+        payload,
+        Ed25519PrivateKey.from_private_bytes(b"verifier-key".ljust(32, b"0")),
+    )
+    fixture.metadata.get_data_release_verification = lambda _: verification
+    original_read = fixture.artifacts.read
+    report_reads = []
+
+    def observed(artifact_id):
+        if artifact_id == report.artifact.artifact_id:
+            report_reads.append(artifact_id)
+        return original_read(artifact_id)
+
+    fixture.artifacts.read = observed
+    prepared = client.app.state.application.prepare_valuation(
+        ValuationEvidenceReadRequestV1.model_validate(request["preparation"])
+    )
+    assert prepared.status == "prepared"
+    assert len(report_reads) == 1
+    assert report.artifact.artifact_id not in {
+        ref.artifact_id for ref in verification.evidence_refs
+    }
+    if mutation == "corrupt":
+        observed_read = fixture.artifacts.read
+        fixture.artifacts.read = lambda artifact_id: (
+            b"corrupt"
+            if artifact_id == report.artifact.artifact_id
+            else observed_read(artifact_id)
+        )
+    elif mutation == "invalidated":
+        fixture.artifacts.invalidate(report.artifact.artifact_id)
+    elif mutation == "missing":
+        from fundamental_service.snapshots import SnapshotError
+
+        get = fixture.artifacts.get
+
+        def missing(artifact_id):
+            if artifact_id == report.artifact.artifact_id:
+                raise SnapshotError("ARTIFACT_NOT_FOUND", "report is unavailable")
+            return get(artifact_id)
+
+        fixture.artifacts.get = missing
+    elif mutation == "dependency_race":
+        get = fixture.artifacts.get
+        observed_records = []
+
+        def substitute(artifact_id):
+            record = get(artifact_id)
+            if artifact_id == report.artifact.artifact_id:
+                observed_records.append(record)
+                if len(observed_records) > 1:
+                    return record.model_copy(update={"dependency_hashes": ("0" * 64,)})
+            return record
+
+        fixture.artifacts.get = substitute
+    else:
+        get = fixture.artifacts.get
+        changes = (
+            {"status": "stale"}
+            if mutation == "stale"
+            else {"retention": "operational_cache"}
+            if mutation == "retention"
+            else {"dependency_hashes": ("0" * 64,)}
+        )
+        fixture.artifacts.get = lambda artifact_id: (
+            get(artifact_id).model_copy(update=changes)
+            if artifact_id == report.artifact.artifact_id
+            else get(artifact_id)
+        )
+    response = _execute(client, request)
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == (
+        "DATA_RELEASE_ARTIFACT_HASH_MISMATCH"
+        if mutation == "corrupt"
+        else "DATA_RELEASE_ARTIFACT_UNAVAILABLE"
+        if mutation == "missing"
+        else "ARTIFACT_EVIDENCE_CHANGED"
+        if mutation == "dependency_race"
+        else "ARTIFACT_EVIDENCE_INVALID"
+    )
+
+
 @pytest.mark.parametrize(
     "role",
     (

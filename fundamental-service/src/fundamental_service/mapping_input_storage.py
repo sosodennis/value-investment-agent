@@ -8,8 +8,13 @@ from typing import TYPE_CHECKING, Final, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, Field, JsonValue, model_validator
 
+from .contracts import SecIntegrityEvidenceV1
 from .data_releases import ArtifactRefV1, DataReleaseError, ReleaseModel
-from .original_issuer import OriginalIssuerEvidenceChecks, OriginalIssuerEvidenceV1
+from .original_issuer import (
+    OriginalIssuerEvidenceChecks,
+    OriginalIssuerEvidenceV1,
+    OriginalOperatingSourceV1,
+)
 from .mapping_input_identity import MappingInputDigests
 from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .serialization import canonical_bytes, sha256_digest
@@ -49,6 +54,54 @@ class StoredMappingInputV2(ReleaseModel):
                 "mapping originals require one exact JSON artifact reference"
             )
         return self
+
+
+def mapping_input_report_dependency(
+    raw: bytes,
+) -> tuple[ArtifactRefV1, tuple[str, ...]] | None:
+    """Expose the v2 reference and dependencies without re-evaluating mappings.
+
+    The caller must authenticate the input bytes against its release reference.
+    Legacy embedded reports have no separate artifact to recheck.
+    """
+    value = json.loads(raw)
+    if not isinstance(value, dict) or value.get("protocol") != PROTOCOL:
+        return None
+    envelope = StoredMappingInputV2.model_validate_json(raw)
+    source = OriginalOperatingSourceV1.model_validate_json(
+        canonical_bytes(envelope.original["source"])
+    )
+    integrity = SecIntegrityEvidenceV1.model_validate_json(
+        canonical_bytes(envelope.request["integrity"])
+    )
+    if source.parser_input_hash != integrity.parser_input_hash:
+        raise DataReleaseError(
+            "MAPPING_ORIGINAL_ARTIFACT_MISMATCH",
+            "shared mapping report source dependencies differ",
+        )
+    return envelope.original_ref, tuple(
+        sorted({source.parser_input_hash, integrity.taxonomy_manifest_hash})
+    )
+
+
+def require_mapping_report_record(
+    record: ArtifactRecordV1,
+    ref: ArtifactRefV1,
+    expected_dependencies: tuple[str, ...],
+) -> None:
+    """Check the exact retained report identity and its source dependencies."""
+    if (
+        record.artifact_id != ref.artifact_id
+        or record.status != "valid"
+        or record.retention != "evidence"
+        or record.media_type != ref.media_type
+        or record.content_hash != ref.content_hash
+        or record.dependency_hashes != expected_dependencies
+    ):
+        raise DataReleaseError(
+            "MAPPING_ORIGINAL_ARTIFACT_MISMATCH",
+            "shared mapping report requires valid retained evidence and exact dependencies",
+        )
 
 
 def publish_mapping_input(
@@ -140,18 +193,7 @@ def resolve_mapping_input(
             if value
         )
     )
-    if (
-        record.artifact_id != ref.artifact_id
-        or record.status != "valid"
-        or record.retention != "evidence"
-        or record.media_type != ref.media_type
-        or record.content_hash != ref.content_hash
-        or record.dependency_hashes != expected_dependencies
-    ):
-        raise DataReleaseError(
-            "MAPPING_ORIGINAL_ARTIFACT_MISMATCH",
-            "shared mapping report requires valid retained evidence and exact dependencies",
-        )
+    require_mapping_report_record(record, ref, expected_dependencies)
     request = model.model_validate_json(
         canonical_bytes(
             {

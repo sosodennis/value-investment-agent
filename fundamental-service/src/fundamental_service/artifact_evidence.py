@@ -13,7 +13,10 @@ class EvidenceArtifactReader(Protocol):
 
 
 def read_retained_artifact(
-    artifacts: EvidenceArtifactReader, ref: ArtifactRefV1
+    artifacts: EvidenceArtifactReader,
+    ref: ArtifactRefV1,
+    *,
+    dependency_hashes: tuple[str, ...] | None = None,
 ) -> bytes:
     """Check exact, stable metadata; the consumer checks bytes and domain meaning."""
     record = artifacts.get(ref.artifact_id)
@@ -23,6 +26,8 @@ def read_retained_artifact(
         or record.retention != "evidence"
         or record.content_hash != ref.content_hash
         or record.media_type != ref.media_type
+        or dependency_hashes is not None
+        and record.dependency_hashes != dependency_hashes
     ):
         raise DataReleaseError(
             "ARTIFACT_EVIDENCE_INVALID",
