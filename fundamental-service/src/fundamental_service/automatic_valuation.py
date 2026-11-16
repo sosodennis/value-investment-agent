@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .application.service import FundamentalApplication
 from .automatic_approval import (
@@ -66,6 +66,52 @@ class AutomaticValuationResponseV1(StrictModel):
     decision_publication: ArtifactPublicationV1
     execution_publication: ArtifactPublicationV1 | None = None
     calculation: CalculationArtifactV1 | UncertaintyReportV1 | None = None
+
+    @model_validator(mode="after")
+    def decision_matches_execution(self) -> "AutomaticValuationResponseV1":
+        decision = self.decision
+        if (decision.decision == "approved") != (not decision.issue_codes):
+            raise ValueError("automatic decision must preserve its refusal reasons")
+        for reference, publication in (
+            (decision.policy_ref, self.policy_publication),
+            (decision.preparation_ref, self.preparation_publication),
+        ):
+            if (
+                reference.artifact_id != publication.artifact.artifact_id
+                or reference.content_hash != publication.artifact.content_hash
+                or reference.media_type != publication.artifact.media_type
+            ):
+                raise ValueError(
+                    "automatic decision publication differs from reference"
+                )
+        if sha256_digest(decision) != self.decision_publication.artifact.content_hash:
+            raise ValueError("automatic decision publication content differs")
+        if (self.execution_publication is None) != (self.calculation is None):
+            raise ValueError("automatic execution must retain its calculation")
+        if self.calculation is not None and (
+            decision.decision != "approved"
+            or self.calculation.input_digest != decision.input_digest
+            or decision.input_digest != decision.expected_input_digest
+        ):
+            raise ValueError("automatic calculation requires its exact approved input")
+        if decision.decision == "approved" and (
+            decision.policy_ref.content_hash != decision.requested_policy_digest
+        ):
+            raise ValueError("automatic approval requires the requested policy")
+        if self.calculation is not None:
+            execution = AutomaticValuationExecutionEvidenceV1(
+                approval_ref=_reference(self.decision_publication, decision.protocol),
+                input_digest=self.calculation.input_digest,
+                result_digest=sha256_digest(self.calculation),
+                result_references=self.calculation.artifact_references,
+            )
+            assert self.execution_publication is not None
+            if (
+                sha256_digest(execution)
+                != self.execution_publication.artifact.content_hash
+            ):
+                raise ValueError("automatic execution publication content differs")
+        return self
 
 
 def load_runtime_automatic_approval_policy() -> (
@@ -245,8 +291,9 @@ class AutomaticValuationExecutor:
                 *(item.content_hash for item in execution.result_references),
             ),
         )
-        return response.model_copy(
-            update={
+        return AutomaticValuationResponseV1.model_validate(
+            {
+                **response.model_dump(),
                 "execution_publication": execution_publication,
                 "calculation": calculation,
             }

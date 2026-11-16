@@ -492,3 +492,36 @@ increment adds a Service-owned HTTP boundary and changes no agent graph or
 valuation formula. No skill edits were required. The previously dispatched
 `5f91bf4d` workflow has now completed: the Service contract job passed and the
 workflow failed because its actually executed legacy release gate failed.
+
+## Company/date automatic caller wiring
+
+The issuer CLI now discovers the optional deployment automatic approval policy
+and service origin at startup. After source preparation it reads the exact
+artifact through the authenticated API, verifies its content hash and invokes
+the automatic endpoint with the composer's exact input digest. The output joins
+the source receipt to the automatic decision/execution artifact and preserves
+write dispositions. `--prepare-only` and an explicit approval are mutually
+exclusive; source-only checks can stop without requesting calculation.
+
+A bounded HTTP child receives the credential through stdin, never argv or
+diagnostic output. The parent limits the complete connection/header/body work
+to the original command's remaining deadline and kills/reaps an expired worker.
+Redirects refuse and responses are bounded to 8 MiB. The typed response
+reconstructs execution evidence to bind the returned calculation and saved
+references to its publication hash and exact approved policy.
+
+Independent read-only review found three P2 gaps in the initial candidate:
+socket timeout did not enforce a total deadline, prepare-only could forward a
+manual approval, and response validation did not bind the numerical result to
+execution content. All three were corrected in their owning boundaries. The
+reviewer's subsequent static pass found no remaining confirmed actionable
+findings. It executed no tests/Git/GitHub actions and remains a bounded review.
+Slow-drip HTTP deadline, conflicting mode, changed result, source hash and
+credential regressions cover these corrections.
+
+142 related caller/issuer/API/composer/execution and typed-boundary tests passed,
+zero skips. Changed-source mypy, both architecture guards, configuration
+reference, Ruff/format and diff checks passed. The automatic-caller Compose
+overlay mounts an explicitly supplied policy read-only. Real installed-runtime
+acceptance, real numerical M2/M3, applicable release gate and final review/main
+delivery remain outstanding. No milestone is marked complete by this increment.

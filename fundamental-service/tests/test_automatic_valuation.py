@@ -226,6 +226,18 @@ def test_corrupted_decision_refuses_reuse_before_calculator(tmp_path, monkeypatc
     assert repeated.json()["error"]["code"] == "ARTIFACT_BYTES_UNAVAILABLE"
 
 
+def test_changed_result_cannot_reuse_execution_publication(tmp_path):
+    from fundamental_service.automatic_valuation import AutomaticValuationResponseV1
+
+    _, client, _, request = _case(tmp_path)
+    response = _execute(client, request)
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    result["calculation"]["base"]["per_share_value"] = "0.0001"
+    with pytest.raises(ValidationError, match="execution publication content differs"):
+        AutomaticValuationResponseV1.model_validate_json(canonical_bytes(result))
+
+
 def test_deployment_requires_complete_exact_pin_and_valid_policy(tmp_path, monkeypatch):
     _, _, policy, _ = _case(tmp_path)
     monkeypatch.delenv("FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_FILE", raising=False)

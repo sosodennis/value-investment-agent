@@ -354,8 +354,19 @@ recomposes and checks the policy authorization window again. The decision is
 explicitly automatic and does not represent a human approval. Independent source
 release signatures and all calculation/source-use gates remain enforced.
 
-The issuer CLI does not yet invoke this endpoint automatically. Until that
-caller wiring is verified, it still returns its ordinary preparation receipt.
+Set `FUNDAMENTAL_AUTOMATIC_APPROVAL_SERVICE_URL` to the service origin in the
+issuer command's environment. With the pinned approval policy and service
+credential configured, the company/date CLI retrieves the exact preparation
+through the authenticated artifact API and invokes automatic calculation. It
+verifies the preparation bytes and decision identities, carries the remaining
+original command deadline, refuses redirects and bounds responses to 8 MiB.
+The output adds `automatic_execution` and a joined lineage stage. Source
+refusals stay blocked; policy refusals retain their decision without calculation.
+An explicitly supplied `--approval` selects the existing explicit caller path.
+`--prepare-only` stops after source preparation and requests no calculation.
+`compose/verification/docker-compose.automatic-caller.yml` mounts a deployment
+policy read-only and configures the in-container issuer client against the
+service. It creates no grant or policy on the operator's behalf.
 
 Mapping input artifacts use `fundamental.mapping-input-artifact.v2`: each field
 and batch retains its request metadata and original evidence metadata, with a
