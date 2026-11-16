@@ -409,3 +409,51 @@ Complete evidence and the exact-input review bundle remain Git-external under
 `.audit/issue-361-current-issuer-service/465ad865-*`. All M1/M2/M3 completion
 boxes remain open. CI run `43838059735` passed twelve executed jobs; the release
 gate was skipped and is not counted as passed.
+
+## Prepared-input replay, concurrency and owned restart
+
+Installed implementation remains `465ad865`; head `5f91bf4d` adds documentation
+only. The exact company/date command completed again in 111.59 seconds, then
+two concurrent invocations completed in 228.30/228.50 seconds. All five stage
+lineage dispositions were `wrote=false`. The two concurrent outputs are byte
+identical to the ordinary replay. This proves retained-output and storage
+deduplication; it does not prove singleflight of CPU work or zero network calls.
+
+Restarting this issue's PostgreSQL and service restored SEC-enabled readiness.
+All 46 unrelated container identities, images, start times and running states
+were unchanged; no volume was removed. The post-restart fixed-input replay
+completed in 113.29 seconds, with byte-identical output and `wrote=false`.
+All 15 measured PostgreSQL tables retained the same counts and ordered row
+content hashes through ordinary/concurrent/restart runs. Inventory output digest:
+`596ac3c7fb0a000f30cef29a654b1c7d62a654ac3e917e386d3d29ac61d89c97`.
+The four replay stdout hashes are
+`1306fb4ec0259345430bdd6591d2301b9bc7a06b5877b9fe59e031c7ce45cca1`.
+Restart receipt input/output digests:
+`d2cf120605b0b0768ac900b131ff41aaab21b63bab490785e2a920f9750c71b2` /
+`2dc3bf11c88509371f465909b40c4e243bb860d1bfb81821413aa1de295f822f`.
+These remain preparation-only checks: no approval or calculator execution.
+
+Git-external commands/receipts: `run_prepared_repeat.py`,
+`run_prepared_concurrency.py`, `restart_prepared_runtime.py`,
+`run_prepared_post_restart.py`, `capture_prepared_store_state.py` and their
+`465ad865-prepared-*`/`465ad865-msft-prepared-*` outputs in the same audit folder.
+
+## Executed legacy release gate remains failed
+
+The manually dispatched release gate at exact head `5f91bf4d`, run
+`43844023954`, job `133219550706`, actually executed and failed with exit 4.
+The retained agent clamp profile is 252 days old against a 21-day limit;
+consensus has 2 samples against 20 required; replay has 2 against 4 required.
+Its Arelle facts-only profile uses 2.38.20, whereas the service uses 2.47.4.
+Service calculation does not consume the agent clamp/consensus/forward-signal
+artifacts. Applicability and a real service release gate still need an owning
+layer correction; neither skipping this job nor reducing its thresholds is
+acceptance. #376's fixed cohort/threshold work is unchanged.
+
+Full failed logs and snapshot/replay/backtest artifacts remain outside Git as
+`5f91bf4d-release-gate-*`. Executed gate receipt input/output:
+`4e54e990093c8450d1e65a2b02651d683ac9bbe9ebba6a15886151ddf803ba7a` /
+`07e0881a31f934a16dccd6cf2e7d376781b6e83034743e39b32228d2a6e5eb89`.
+PR-event CI `43843650727` passed twelve executed jobs with release skipped.
+The dispatched run's separate service-contract job was still running at this
+checkpoint. M1/M2/M3 and final review/main delivery remain incomplete.
