@@ -1,3 +1,107 @@
+# #361 numerical delivery acceptance
+
+Implementation `4778657847f946f8dacab0fc44b9e791ac7e8fe8` has passed the real
+MSFT numerical Service flow. The canonical runtime tuple and 19 named checks are
+in [issue-361-runtime.json](issue-361-runtime.json); compact results and
+Git-external command/receipt locations are in
+[issue-361-numerical-delivery-checkpoint.json](issue-361-numerical-delivery-checkpoint.json).
+This is branch acceptance. Ordinary PR #370 merge, merge-SHA acceptance and final
+owned-resource cleanup remain required before closing #361 or checking M3.
+
+## Observed outcome and supported conclusion
+
+With deployment source, signing and caller policies configured, the actual
+company/CIK plus timestamp entrypoint automatically discovers/reuses SEC
+originals, compiles and executes its source plan, publishes through independent
+trusted verification, prepares through #352, obtains an authenticated automatic
+caller's versioned exact-input decision, invokes the existing Service calculator
+and saves retrievable numerical/provenance artifacts. It does not require a
+caller-authored complete preparation plan or per-field manual mapping review.
+
+The fixed case is MSFT / CIK0000789019, USD common equity, valuation timestamp
+`2026-11-16T07:18:50.589199Z`, `fcff_dcf-v2`. The result is **provisional,
+uncalibrated what-if**, with explicit 20/40/60% forward-reinvestment scenarios and
+conditional capital/award assumptions. Historical unknowns remain unknown;
+capital/award completeness remains false. This is not complete precise
+valuation, calibrated prediction, or an economic error bound.
+
+| Scenario | USD/share |
+| --- | ---: |
+| Base | 228.5786011380525 |
+| Downside | 137.2064211010579 |
+| Upside | 313.4919235602710 |
+
+Exact input: `8d6bdfb68a3495b77dc848e91d23ea95fc4315de2457da737867c9a4c1305979`.
+Result: `f1547cfedf3b6defd9460229fab0f419468b82dfbfd11b705384ae1dad6a7608`.
+Five authenticated API reads return200 and exact bytes; unsigned access returns401.
+Independent scenario arithmetic passes. Source/mapping/model/market/approval and
+use-policy identities, assumptions, limitations and sensitivities are retained
+in the checkpoint and immutable artifacts. The deployment records the user's
+personal/noncommercial/local purpose; it does not assert separate publisher
+permission. `supported_history_threshold` remains null; #376/#339/#350 are not
+advanced by this acceptance.
+
+## Repeat, recovery and refusal evidence
+
+Complete normal, two concurrent, interrupted/resumed and Service/PostgreSQL
+restart replays preserve the exact input, numerical result and artifact identities;
+all existing lineage/publications return `wrote=false`. Full row and content
+inventories remain identical and the Python socket guard observes zero upstream
+HTTP attempts. That guard does not independently trace C-native networking.
+
+Before recovery,127 proven unreferenced local WIP rows were archived, roundtripped
+through a disposable SQL database and retired transactionally. This comprises119
+old synthetic fixture rows and8 unreferenced AAPL probe facts without a completed
+snapshot. No bytes were deleted. Every other row is unchanged; historical failed
+exports and all originals/reports/mappings remain. The deliberate post-retirement
+baseline is37,099 rows /11,369 objects /16,514,870,831 bytes.
+
+The strict full-bundle verifier passes manifest
+`c569d4ebf819a72f48a0084c76089066613145a9968246c97e760109dbbe068c`.
+All content reuses individually hash-checked host backup bytes. Restoring into an
+observed empty independent DB/volume under the normal service UID, restoring
+again (`wrote=false`), and replaying the genuine numerical flow/API preserves rows,
+content, result and provenance. Fourteen invalid cases refuse without calculation;
+after restoring each mutation the valid exact input replays unchanged. Future and
+conflicting fact runtime tests establish signed-binding tamper rejection,
+complementing the semantic owner tests; they are not a pure future-data admission
+test. Full refusal responses and recovery supplements remain outside Git.
+
+Content digest: `f10566a53ea62394e9ba5eb2e4a0a5d39fc772a6674122aba1fa4f71c8a89c69`.
+Post-retirement row digest:
+`4cf111c26ed70bdabd843e519ae444611b887ce310e314f88288685a81f9435c`.
+The earlier37,226-row baseline remains retained as pre-retirement evidence.
+
+## Engineering and performance evidence
+
+The unprofiled first full flow for this revision completed in796.394s under the
+unchanged900s CLI /5000ms API budgets, reusing retained SEC bytes. This is not an
+empty-store/download cold benchmark or a throughput claim. Fixes retain independent
+verifier scopes and signed identities while removing repeated whole-report work,
+sharing bounded evidence within operations, authenticating persisted verification
+against current trust roots, and batching retained metadata reads. Shared report
+references also prevent renewed per-input embedded-report storage amplification.
+
+Exact implementation checks:4,670 tests passed /20 skipped; eight configured SEC
+cases and three Linux memory cases separately pass. Nine historical/DQC/config
+diagnostics remain outside this case; no skipped test is reported passed. Ruff,
+types, both architecture guards, contracts, Service calculator release gate,
+diff and installed-source parity/preflight pass. CI43904162515 has13 successful
+jobs and one skipped legacy Agent Core gate. The latter remains unpassed and its
+prior failures remain retained; it is not this Service calculator's owning gate.
+The actual applicable Service release gate executed successfully.
+
+Independent incremental and final integration-risk reviews have no confirmed open
+findings. The final static review covered high-risk cross-stage boundaries of the
+500-file diff, not every line, and is not formal GitHub approval or runtime proof.
+No implementation, tests or GitHub operations were delegated.
+
+## Historical checkpoints
+
+The following text records earlier SHAs and their then-current blockers. Its WIP,
+missing-data and incomplete-numerical statements are historical, not current
+branch status. Original evidence remains preserved.
+
 # #361 persistent source preparation and valuation flow
 
 ## Accepted outcome

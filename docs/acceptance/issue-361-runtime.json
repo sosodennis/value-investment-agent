@@ -1,339 +1,335 @@
 {
-  "acceptance_profile": "persistent-valuation-flow-v1",
+  "schema_version": 2,
   "acceptance_scope": "fundamental-service",
-  "blockers": [
-    "M1 source preparation now executes from CIK/date on current c3d head, but preparation remains blocked on six required source roles; M2/M3 remain incomplete.",
-    "MSFT award inventory, capital-claims completeness and historical reinvestment scope are not established; unknowns remain unknown and forward 20/40/60% values are uncalibrated hypotheses.",
-    "yfinance is retained by user choice, but no publisher automated-use/retained-replay entitlement is established; no quote or caller approval is fabricated.",
-    "No trusted numerical release, exact caller approval, calculation/API result, numerical replay/empty-store restore, independent whole-PR review or main merge. Skipped release gate is not passed."
-  ],
-  "branch": "codex/issue-361-replay-evidence",
-  "checks": [
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "architecture",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "artifact_retrieval",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "calculation",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "concurrent_deduplication",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "deterministic_repeat",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "diff",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "failure_retention",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "forecast",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "full_flow_repeat",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "mapping",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "preparation",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "restart_restore",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "review",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "ruff",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "service_acceptance",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "snapshot_persistence",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "source_acquisition",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "source_reuse",
-      "status": "not_run"
-    },
-    {
-      "command": "Current entrypoint installed acceptance only; complete numerical acceptance remains incomplete.",
-      "name": "types",
-      "status": "not_run"
-    }
-  ],
-  "commit": "c3d25d9ff1756254509102516a03b67dfef88a9e",
-  "completed_source_evidence": {
-    "checkpoint_key": "c3d25d9f_current_head_source_plan_and_replay",
-    "implementation_commit": "c3d25d9ff1756254509102516a03b67dfef88a9e",
-    "input_digest": "aa8390f19f8028d996e93e5cda8e6ec9cf703ffa772ce460e6996d9ace0ca6ca",
-    "output_digest": "3a8fda99e4615c1a21b5a1be1746fff288c45d45fcbeef0a0536babc86ba25e8",
-    "api_artifact": "source-preparation:260353d78f5f00481c12fe359150ffd4bbb86eb734acdf8bc0398676fbf9eb42",
-    "api_content_hash": "260353d78f5f00481c12fe359150ffd4bbb86eb734acdf8bc0398676fbf9eb42",
-    "api_authenticated_status": 200,
-    "api_unauthenticated_status": 401,
-    "inventory_digest": "45af47272044a7fb0d0b3015b65aef8b60a07e116b1b42429ba08ec3b34ebcbd",
-    "missing_evidence": [
-      "convertible_instruments",
-      "current_interest_bearing_debt",
-      "non_operating_assets",
-      "noncontrolling_interests",
-      "other_share_classes",
-      "preferred_claims"
-    ],
-    "real_numerical_acceptance": false
-  },
+  "acceptance_profile": "persistent-valuation-flow-v1",
   "issue": 361,
-  "latest_authorized_market_policy_assembly_increment": {
-    "candidate_result_digest": "7a6bee9a3f49341f166c5ebf01209206ecdf745c46c98a4748be7721d52c54f3",
-    "checkpoint_key": "authorized_market_policy_assembly_increment",
-    "factory_only": true,
-    "full_numerical_acceptance": false,
-    "implementation_commit": "3c6135ca2d8d86d1e868c6e58b1e761605e00afd",
-    "input_digest": "e423333a97d011b296928eb384d8df7eed1ba960fb1655bbb9fa6d8482bd77ae",
-    "output_digest": "d1d0f516cc17fb77b9a3b6ee422861dbaf5e6e6fa084cee36da2b4a979390099",
-    "synthetic": true
-  },
-  "latest_current_source_preparation_increment": {
-    "checkpoint_key": "c3d25d9f_current_source_preparation_and_replay",
-    "implementation_commit": "c3d25d9ff1756254509102516a03b67dfef88a9e",
-    "runtime_input_digest": "aa73d44f174de90f6cd3419dfecfa2dc5ee78b638476ee46e1d4928992879a27",
-    "runtime_output_digest": "3a8fda99e4615c1a21b5a1be1746fff288c45d45fcbeef0a0536babc86ba25e8",
-    "source_plan_digest": "5f8fa1a53d694276e519d12bd1a91954f4858ed650f8b6a7113654a57a758137",
-    "source_preparation_digest": "260353d78f5f00481c12fe359150ffd4bbb86eb734acdf8bc0398676fbf9eb42",
-    "source_preparation_api_receipt": "5e7b291dc7c126f6873a353379a78fafae844ef79fb5c0eb1b50ee553e22a97b",
-    "snapshot_manifest_digest": "5d0c4d7760dd7b711dbb3582199dc57af29ed3e2c617d4a87731e7917c139563",
-    "source_replay_receipt_sha256": "e8f7e6c694aa97684b6d0e73a19462cac8468ce440c60d6b3d136550053e6981",
-    "restart_replay_receipt_sha256": "7eb6b0a31e01c18e1e46be110067efbdbd17dfc6445719bede7b6056ff5358df",
-    "source_only": true,
-    "full_numerical_acceptance": false
-  },
-  "latest_engineering_evidence": {
-    "implementation_commit": "c3d25d9ff1756254509102516a03b67dfef88a9e",
-    "quality": {
-      "focused_passed": 17,
-      "full_suite_on_this_head": "not rerun",
-      "ruff_format_types_architecture_diff": "pass",
-      "skipped": 0,
-      "ci_run": 43730660117,
-      "ci_receipt_sha256": "f8560f5cee556f01e12afe68d3c8189148649ca2f1483c0a988811fb78789d42",
-      "release_gate": "skipped_not_passed"
-    },
-    "real_source": {
-      "api_content_hash": "260353d78f5f00481c12fe359150ffd4bbb86eb734acdf8bc0398676fbf9eb42",
-      "api_authenticated_status": 200,
-      "api_unauthenticated_status": 401,
-      "inventory_digest": "45af47272044a7fb0d0b3015b65aef8b60a07e116b1b42429ba08ec3b34ebcbd",
-      "missing_evidence": [
-        "convertible_instruments",
-        "current_interest_bearing_debt",
-        "non_operating_assets",
-        "noncontrolling_interests",
-        "other_share_classes",
-        "preferred_claims"
-      ],
-      "replay_receipt_sha256": "e8f7e6c694aa97684b6d0e73a19462cac8468ce440c60d6b3d136550053e6981",
-      "restart_receipt_sha256": "7eb6b0a31e01c18e1e46be110067efbdbd17dfc6445719bede7b6056ff5358df",
-      "rows_digest": "fdf24453be31cfbb39e5136ba994818fd23ad86b1739e308f71d85a47473ba88",
-      "files_digest": "ad2036f84f622d37dfe1c5ee93f8b6f1d4b8343bee11d9aa0fb256c28991b4f4",
-      "file_count": 6870,
-      "http_attempts": 0,
-      "status": "blocked"
-    },
-    "scope": "Exact c3d CIK/date source preparation, authenticated retrieval, reuse, parallel deduplication and owned service/PostgreSQL restart; no numerical M2/M3 acceptance.",
-    "scoped_review": {
-      "actionable_findings": 0,
-      "base": "380a054e3d4c015ede5bcadd2d61e91adc225ddf",
-      "conclusion": "FASB2024/2025 cash/current investment total matches the existing composite exclusion; capital cash remains separate and source/integrity/conflict gates remain.",
-      "diff_bytes": 11601,
-      "diff_sha256": "a815fab9a7c71d741a238a6e35962d1d2061a19df44eada3ddde25e33fe685f4",
-      "head": "347b018d5cb4615eea9c9e827e5746e0768d33f1",
-      "reviewer": "lease_correctness_review",
-      "scope": "Independent read-only cash mapping source correctness/security review only; not whole-PR approval. No tests, implementation or GitHub delegated."
-    }
-  },
-  "latest_issuer_market_preparation_increment": {
-    "checkpoint_key": "issuer_market_preparation_increment",
-    "full_numerical_acceptance": false,
-    "implementation_commit": "2fdeb1da3d6e9f3da91741c4930d0d13d94d4b8b",
-    "runtime_input_digest": "6f5be84ddeb324d3cfc958c97ffa992910aaf32e9e685a8199a8b6d600b6db90",
-    "runtime_output_digest": "0f481934384afd4512d603bf3d07ed196043daa15ae7cc8dcf2acd4aae08104a",
-    "saved_bundle_digest": "a3daa518163d8fbd139be6cfb88c6acec89dffe7e374a3ab6488a9b39a367b45",
-    "source_only": true,
-    "synthetic": true
-  },
-  "latest_market_policy_deployment_increment": {
-    "checkpoint": "docs/acceptance/issue-361-market-policy-deployment-checkpoint.json",
-    "checkpoint_digest": "75e77d662eb9e9cf3891cd0542692c4dfc499fb1634208d387c2363653439217",
-    "full_numerical_acceptance": false,
-    "implementation_commit": "fb6dfa44d73a0101af245c64e87dec4dbc62b18e",
-    "input_digest": "efe383811acd24a12e3440a9ed576f8a00f0662e5f30e0cee27897b175496d3f",
-    "output_digest": "6c9b0d076b1f9b405d44bbe0ddb9c90d03fb24b1770371945a9cbbc91657633f",
-    "synthetic": true
-  },
-  "latest_option_parser_identity_increment": {
-    "checkpoint": "docs/acceptance/issue-361-option-parser-identity-checkpoint.json",
-    "checkpoint_digest": "9c3fc7337d0c35a1590cdfdd3a53a4c04c9196263233eb1d9e5193b657dc1b2d",
-    "implementation_commit": "307309d4048291532ab88d4941afff8592717a74",
-    "input_digest": "a4c5854269ff63355cadf6035796df13e783330220a32ce9b31dda06dad80683",
-    "output_digest": "db7926b42ec98f8b22853cb64e640d47a9c9f5c2758f35b15d64ac7ec84be00f",
-    "real_numerical_acceptance": false
-  },
-  "latest_registered_parser_identity_increment": {
-    "checkpoint": "docs/acceptance/issue-361-parser-identity-checkpoint.json",
-    "checkpoint_digest": "c7645122c7b58534f546842e80c83e3e3302e4c9bc3f0327cbe6d01d83fed72f",
-    "implementation_commit": "749281c5c4715a33cc0f075e6756fb3dabf4545f",
-    "input_digest": "6f6953af72d46e7d98f74922cb8965b1fa99211669520402859bf6da833fdb49",
-    "output_digest": "25be452fbede58bd9796fea32aa9383e5648a7028a4d7cffaf884c8fd9125bbf",
-    "real_numerical_acceptance": false
-  },
-  "latest_source_acquisition_increment": {
-    "checkpoint_key": "public_source_acquisition_increment",
-    "full_numerical_acceptance": false,
-    "implementation_commit": "d2d81864931ecdc30ab071c250eea1f584eedd7d",
-    "runtime_input_digest": "71253d1b4588ed21c93d7d1729a5afda3f6ccfcfdf853786fe141131ac4a4dfc",
-    "runtime_output_digest": "f38a0fbef3b471e9911fe3ec8c128c4205a607cb3daebc9a82d6865fef1ef8d9",
-    "saved_report_digest": "ab6a9d5f3e2c32415fa130fd567062508c50d878c0f2883d8d4dee95d921b7e1",
-    "source_only": true,
-    "source_plan_digest": "6b1b03ef28bafb15347dd326e0ce29df08835e6407fda898a8bdd02d48ff1624"
-  },
-  "latest_source_admission_increment": {
-    "checkpoint_key": "public_source_admission_increment",
-    "full_numerical_acceptance": false,
-    "implementation_commit": "35ba1189c3eb5842fa4a3bcb301666b35270e47d",
-    "runtime_input_digest": "f5c6023630987578aebb31a455e58be1cdfabcd362e0eac1f186ec5e5e928acd",
-    "runtime_output_digest": "b9c99f925d57c70b0df8aad697866a21c596be0ab03f0981dc7427dca4f1e76e",
-    "saved_report_digest": "8b0a462ac84ece8f5df27ebdc4d62a375e6219ba7c0ccec170f4757a47f4dea0",
-    "source_only": true,
-    "source_plan_digest": "8c4c2e690a8260b04c73f3dc62f01c48948d833be7fa1a09867824c17976a30e"
-  },
-  "latest_source_provider_increment": {
-    "checkpoint_key": "maintained_market_dataset_increment",
-    "full_numerical_acceptance": false,
-    "implementation_commit": "d8cf7ad81783d8b640cee7b4e8e487aca910cc0e",
-    "source_input_digest": "6e025cc845da928c9c40f2e53752cbaef8172a74ac980daaa607312568f8b9ba",
-    "source_output_digest": "d01791d2efc0ed578a36338467b916f4bc143dcd075c33b22f5bbbcc19477762"
-  },
-  "next_step": "Resolve source-supported current debt and operating reinvestment scope in reusable versioned owner policy; then establish an entitled yfinance quote, complete capital/award evidence, trusted release, exact caller approval and numerical replay. M1 source/replay evidence is current; M2/M3 remain unchecked.",
-  "readiness": {
-    "status": "ready",
-    "capabilities": {
-      "identity_resolution_configured": true
-    },
-    "source_preparation": "blocked_missing_required_evidence",
-    "numerical_acceptance": "not_run"
-  },
-  "research_archive": "docs/acceptance/issue-361-research-archive.json",
+  "branch": "codex/issue-361-replay-evidence",
+  "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+  "status": "VERIFIED",
+  "sec_identity_required": true,
   "runtime": {
+    "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence",
     "allowed_untracked_paths": [],
     "fundamental": {
+      "compose_project": "value-investment-agent-361-current-issuer",
       "compose_files": [
         "compose/verification/docker-compose.issue280-operations.yml",
         "compose/verification/docker-compose.issue312-sec-ingestion.yml",
-        ".audit/issue-361-current-issuer-service/overlay-catalog-bb55ae09.json"
-      ],
-      "compose_project": "value-investment-agent-361-current-issuer",
-      "container_port": 8080,
-      "dependencies": [
-        {
-          "container_port": 5432,
-          "published_host": "0.0.0.0",
-          "published_port": 21472,
-          "service": "fundamental-postgres"
-        }
+        ".audit/issue-361-current-issuer-service/overlay-catalog-47786578.json",
+        "compose/verification/docker-compose.personal-local-sources.json",
+        "compose/verification/docker-compose.automatic-caller.yml"
       ],
       "env_files": [
         {
-          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/runtime-parser-budget-bb55ae09.env",
-          "sha256": "b47c383663dfdf80f0e6c42d37d08d8c43aa992c234bab411f4572269f7375c1"
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/runtime-automatic-caller-47786578.env",
+          "sha256": "3d944224d9b22f441d1f6e4a4929131762b8ee64664b2089b8c02d3dae5a5788"
         }
       ],
-      "image_id": "sha256:5ea8247463eaebf917664293cb77f3fdca3ef6c0bf498fc6395dffb98939478e",
-      "networks": [
-        "value-investment-agent-361-current-issuer_default"
-      ],
-      "published_host": "0.0.0.0",
-      "published_port": 21471,
+      "image_id": "sha256:982c89be383dfa065a4782c1730bed232e1eca35afa0b5a0eec39c8fbe62c7e3",
       "runtime_pins": {
         "arelle-release": "2.47.4",
         "pydantic": "2.14.2",
         "python": "3.12.16"
       },
+      "published_host": "127.0.0.1",
+      "published_port": 21471,
+      "container_port": 8080,
       "service": "fundamental-service",
-      "source": {
-        "container_path": "/app/src/fundamental_service",
-        "file_count": 162,
-        "repository_path": "fundamental-service/src/fundamental_service",
-        "sha256": "f14af844e8a43c51e4ce7319864ea75e4ee503b191e48e14bcdcb9daf176ca21"
-      },
       "url": "http://127.0.0.1:21471",
+      "dependencies": [
+        {
+          "service": "fundamental-postgres",
+          "published_host": "127.0.0.1",
+          "published_port": 21472,
+          "container_port": 5432
+        }
+      ],
+      "networks": [
+        "value-investment-agent-361-current-issuer_default"
+      ],
       "volumes": [
         "value-investment-agent-361-current-issuer_fundamental-postgres-data",
         "value-investment-agent-361-current-issuer_fundamental-service-data"
+      ],
+      "source": {
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 176,
+        "sha256": "6239d513ab55a51e34169d1c16962359a51b9b7818ad86eee0af2eb5be35d4b6"
+      }
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    },
+    "numerical_acceptance": "real_msft_provisional_what_if_calculated_api_replayed_restored"
+  },
+  "checks": [
+    {
+      "name": "architecture",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-delivery-checks-receipt.json",
+      "input_digest": "b9aecd2c0336339c1e8c09af28851032a41874f51186d9c583ba5196d679a29f",
+      "output_digest": "bab0c2b39a8b25d4b443382086cdddb950835a0b3f4102c1e8bc954c57027d8b",
+      "evidence_keys": [
+        "checks"
       ]
     },
-    "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence"
-  },
-  "runtime_revalidation_required": false,
-  "schema_version": 2,
-  "sec_identity_required": true,
-  "status": "WIP",
-  "prior_checkpoint": {
-    "commit": "347b018d5cb4615eea9c9e827e5746e0768d33f1",
-    "latest_current_source_preparation_increment": {
-      "checkpoint_key": "current_source_preparation_increment",
-      "frozen_plan_digest": "bfad875b0eeee765cd4f7b3aedd1749cdc1d7b2d5505adad80e80a685457844c",
-      "full_numerical_acceptance": false,
-      "implementation_commit": "4977132a725f731faa7d7f8734cb019bdcf65285",
-      "runtime_input_digest": "fb2d2ef2629dba24613798aa8416b555702f66ac7dd9b65cbde15e2500c19d75",
-      "runtime_output_digest": "a5219de6fc491884e062f3449e5a8d3a6d7c525f0d58f4ec0bf27580e95fc8d2",
-      "saved_report_digest": "0c2315c281d2e6143472061c93b199d38438524cdc2de629401f2fed1d763ff6",
-      "source_only": true,
-      "template_digest": "6270c97145d28e680fbbabbcf93974eb401290ae75917ff3d9dc71a72f7dbb5e"
+    {
+      "name": "artifact_retrieval",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json, 47786578-restore-v3-flow-numerical-api-receipt.json",
+      "input_digest": "d0a31ee0de2b553927476cb4f3e8010bc0c0fd9609c34a012a322972c3936dd5",
+      "output_digest": "52890ca5c9748309b11d4264f5c7108617d59d3a0fd4a8c16bca85ad2d51e1dd",
+      "evidence_keys": [
+        "api",
+        "restore_api"
+      ]
     },
-    "latest_engineering_evidence_commit": "347b018d5cb4615eea9c9e827e5746e0768d33f1"
-  }
+    {
+      "name": "calculation",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json, 47786578-delivery-contracts-receipt.json",
+      "input_digest": "e1140a0b8b74b295cdea4e9469bf48bce839b8c705ee42cf51aacf1b46c79844",
+      "output_digest": "7916b4bd9d0d4973879deeceec0bb1a5d939ba7830b796a5bddf6e5607aefa3b",
+      "evidence_keys": [
+        "run",
+        "api",
+        "contracts"
+      ]
+    },
+    {
+      "name": "concurrent_deduplication",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-numerical-concurrent-replay-receipt.json, 47786578-numerical-stable-store-receipt.json",
+      "input_digest": "b8384f5fba2ef039cb618dd9dfd02ac1a99a524e4eda0747e8bb582d3016ad99",
+      "output_digest": "bf8ec6b6d5c904cd1f02163c2252cb86d856f1b118fc8fa8c92615fbe37e75be",
+      "evidence_keys": [
+        "concurrent",
+        "stable"
+      ]
+    },
+    {
+      "name": "deterministic_repeat",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-numerical-resumed-replay-receipt.json, 47786578-numerical-stable-store-receipt.json",
+      "input_digest": "95a474abf89dcc6dd789e6c6dd19316d495b44b6ff74c9e638d74343ae642d8b",
+      "output_digest": "929dab77285087a98ed1a3b285afb66f5800713556ad34bb9f8abca5c87cd967",
+      "evidence_keys": [
+        "repeat",
+        "stable"
+      ]
+    },
+    {
+      "name": "diff",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-delivery-checks-receipt.json",
+      "input_digest": "62c7142ec3138b47338a09ec6559605360e93b073880786590c6a59fe12af458",
+      "output_digest": "bab0c2b39a8b25d4b443382086cdddb950835a0b3f4102c1e8bc954c57027d8b",
+      "evidence_keys": [
+        "checks"
+      ]
+    },
+    {
+      "name": "failure_retention",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-m1-insufficient-receipt.json, 47786578-m1-identity-conflict-receipt.json, 47786578-m1-security-ambiguous-receipt.json, 47786578-restored-refusals-v4-numerical-refusals-receipt.json",
+      "input_digest": "8c011b94287421bb0b775a84de2883d4b1fc36ae88dea718dfa9890c41e24e3f",
+      "output_digest": "49eee085ceb729a0c04c5439565c83418d038229287597f373606bc26e7ce3ea",
+      "evidence_keys": [
+        "negative_insufficient",
+        "negative_conflict",
+        "negative_ambiguous",
+        "refusals"
+      ]
+    },
+    {
+      "name": "forecast",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-delivery-contracts-receipt.json, 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json",
+      "input_digest": "2cb138ae06c802679265d8a260372986e348f3d4b60aea16cf8b1aa1aa667356",
+      "output_digest": "7916b4bd9d0d4973879deeceec0bb1a5d939ba7830b796a5bddf6e5607aefa3b",
+      "evidence_keys": [
+        "run",
+        "contracts",
+        "api"
+      ]
+    },
+    {
+      "name": "full_flow_repeat",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-numerical-resumed-replay-receipt.json, 47786578-numerical-concurrent-replay-receipt.json, 47786578-numerical-restart-numerical-restart-receipt.json, 47786578-restore-v3-numerical-restore-receipt.json",
+      "input_digest": "49592e9387d599a27153f71a40abca9d6f5381e1c0b4efc539cedefef4136ebf",
+      "output_digest": "530f4469944af0e1e9ee1dcfa1e1ceec1b5c39c62a9c94bc4cbeef6f4de610c0",
+      "evidence_keys": [
+        "repeat",
+        "concurrent",
+        "restart",
+        "restore"
+      ]
+    },
+    {
+      "name": "mapping",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-delivery-checks-receipt.json",
+      "input_digest": "0cfe84377b5f2b3e5c83ac42fd4d32eafc684663715dc384ca0026ee94b8b9dc",
+      "output_digest": "f8a7c1ddefd217ba8d3bfea72f6fe6634c83d133f393c4513e8559481847579d",
+      "evidence_keys": [
+        "run",
+        "checks"
+      ]
+    },
+    {
+      "name": "preparation",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json",
+      "input_digest": "fecaf079ff7f5969beec392e245904d19f092f594f38a4cf98cd7c0ba3bf65b7",
+      "output_digest": "9da7ac99e6ae5c5296d5e17e75a54e000f13a2a32ad80e3fc93b5ac9daf5ad86",
+      "evidence_keys": [
+        "run",
+        "api"
+      ]
+    },
+    {
+      "name": "restart_restore",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-numerical-restart-numerical-restart-receipt.json, 47786578-numerical-v3-numerical-backup-receipt.json, 47786578-restore-v3-numerical-restore-receipt.json",
+      "input_digest": "fa03f6453521c77dda178f61120e577f5bdb99716556f8cee36694f6b791cff1",
+      "output_digest": "994eea214c1316d607019a7631029240a80638e3b275b2adb93080d9a5d4ba4a",
+      "evidence_keys": [
+        "restart",
+        "backup",
+        "restore"
+      ]
+    },
+    {
+      "name": "review",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-integration-independent-review-receipt.json, 47786578-final-independent-review-receipt.json",
+      "input_digest": "8b6a87abda6fe62c961015b7b1822458cfd8ad3feb5d7c36d00ad21aebea378e",
+      "output_digest": "897c66b8902cdaa53c43760ee225a63e2ea5d05dcd41c22f29627c22ef36216c",
+      "evidence_keys": [
+        "review",
+        "review_scope"
+      ]
+    },
+    {
+      "name": "ruff",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-delivery-checks-receipt.json",
+      "input_digest": "4e6ef0e22bc528e5b5e88ee85ef30600d048d5208ee4b6c358878d14b5d30eeb",
+      "output_digest": "bab0c2b39a8b25d4b443382086cdddb950835a0b3f4102c1e8bc954c57027d8b",
+      "evidence_keys": [
+        "checks"
+      ]
+    },
+    {
+      "name": "service_acceptance",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json, 47786578-restore-v3-flow-numerical-api-receipt.json, 47786578-restored-refusals-v4-numerical-refusals-receipt.json",
+      "input_digest": "9dbe199963a47a62c1821119bd6bf79ec341af76c2df5621539888e4003a1065",
+      "output_digest": "17873d34ae288834528e58d517ef53636d22e627e74991d77bb5aeee5d818644",
+      "evidence_keys": [
+        "api",
+        "restore_api",
+        "refusals"
+      ]
+    },
+    {
+      "name": "snapshot_persistence",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-numerical-stable-store-receipt.json, 47786578-restore-v3-numerical-restore-receipt.json",
+      "input_digest": "6a2e5eb3d0e3161713f4c62b343c907ec7a15163fcf109d3e2ed3dbcaa313c6e",
+      "output_digest": "9c867bac7dc6ab6572d1d79a502143e83cb762c03d33f451f0484a6f6818b5dc",
+      "evidence_keys": [
+        "stable",
+        "restore"
+      ]
+    },
+    {
+      "name": "source_acquisition",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-configured-sec-regressions-receipt.json",
+      "input_digest": "54193f7c358d6cc5c5a82e550983ee08bafd247084cb22e5d10a9035202b37ca",
+      "output_digest": "6d7d74438c10a934cbb873421c180b6243f5bff040c0c9e5c26641891335903c",
+      "evidence_keys": [
+        "run",
+        "sec"
+      ]
+    },
+    {
+      "name": "source_reuse",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-numerical-resumed-replay-receipt.json, 47786578-numerical-stable-store-receipt.json",
+      "input_digest": "30912faa849736c9e36dbf35f9bbcc6e4a753c0c77e412f2132ef2eabfa5c43a",
+      "output_digest": "929dab77285087a98ed1a3b285afb66f5800713556ad34bb9f8abca5c87cd967",
+      "evidence_keys": [
+        "repeat",
+        "stable"
+      ]
+    },
+    {
+      "name": "types",
+      "status": "pass",
+      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+      "exit_code": 0,
+      "command": "See exact commands in Git-external receipts: 47786578-delivery-checks-receipt.json",
+      "input_digest": "b5e1a31b5729a3abfe1c561f2bacf5d5b5cfb5cd64d8c93bbd20bdec4636ba30",
+      "output_digest": "bab0c2b39a8b25d4b443382086cdddb950835a0b3f4102c1e8bc954c57027d8b",
+      "evidence_keys": [
+        "checks"
+      ]
+    }
+  ],
+  "blockers": [],
+  "next_step": "Ordinary merge PR370 only after exact delivery-head CI passes; verify main merge SHA and back up new main evidence before issue closure and owned-resource cleanup.",
+  "checkpoint": "docs/acceptance/issue-361-numerical-delivery-checkpoint.json",
+  "checkpoint_digest": "5d7c28905af6fe7f7f1a46e33341c9d9ff41d9dc4ad1262548e6bc67ee011e8f",
+  "limitations": [
+    "Personal noncommercial local research only; no trading recommendation or provider permission created.",
+    "Conditional capital/award/reinvestment hypotheses are uncalibrated what-if inputs; not complete observations, probability estimates, or proved economic bounds.",
+    "Unknown historical reinvestment, full capital claims and award detail remain unknown; zero scenarios are hypotheses only.",
+    "History threshold remains null; outputs retain provisional quality."
+  ],
+  "supported_history_threshold": null,
+  "skipped_legacy_gate": "not_passed; applicability and actual Service gate evidence in checkpoint",
+  "scope": "Branch implementation runtime acceptance only. M3 main delivery and cleanup remain pending."
 }
