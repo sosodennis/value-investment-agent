@@ -724,7 +724,7 @@ confirmed issue in the inspected source. This is workload evidence, not an
 end-to-end speedup claim; full-request serialization and separate verifier passes
 remain work to measure in the actual flow.
 
-705 related PostgreSQL-backed cases pass with zero skips. Changed-source types,
+703 related PostgreSQL-backed cases pass with zero skips. Changed-source types,
 Ruff/format, architecture guards and diff checks pass; the temporary database was
 removed. Exact command evidence is retained outside Git in
 `report-reuse-final-checks-receipt.json`, input digest
