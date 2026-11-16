@@ -741,6 +741,7 @@ class SourcePreparationRunner:
                 source.accession_number
                 for source in snapshot.source_records
                 if source.role is SourceRole.FILING
+                and source.source_id != "sec-supplemental-filing"
             }
             if accessions != expected:
                 return False

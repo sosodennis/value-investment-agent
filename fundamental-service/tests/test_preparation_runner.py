@@ -1401,6 +1401,7 @@ def test_multi_original_plan_covers_model_with_partial_per_filing_roles(tmp_path
     "partial_case",
     [
         "complete",
+        "complete_with_supplemental_filings",
         "earlier_capital_gap",
         "aggregate_capital_gap",
         "future_capital_fact",
@@ -1416,6 +1417,21 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
 ):
     fixture = _fixture(tmp_path, released=False)
     originals = tuple(_original(year) for year in (2023, 2025))
+    if partial_case == "complete_with_supplemental_filings":
+        original = originals[-1]
+        supplemental = original.source_records[0].model_copy(
+            update={
+                "source_id": "sec-supplemental-filing",
+                "accession_number": "0000000001-26-000002",
+                "uri": "https://www.sec.gov/Archives/edgar/data/1/supplemental.htm",
+                "form": "10-Q",
+                "content_hash": sha256_digest({"synthetic_supplemental": True}),
+            }
+        )
+        originals = (
+            originals[0],
+            _changed(original, source_records=(*original.source_records, supplemental)),
+        )
     first_request = fixture.plan.ingestions[0]
     requests = tuple(
         first_request.model_copy(
@@ -1520,7 +1536,14 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
             == request.filing.accession_number
         )
         fixture.snapshots.publish(original)
-        incomplete = partial_case != "complete" and original == originals[0]
+        incomplete = (
+            partial_case
+            not in {
+                "complete",
+                "complete_with_supplemental_filings",
+            }
+            and original == originals[0]
+        )
         return SecIngestionResponseV1(
             contract_version="fundamental.v1",
             status="abstain" if incomplete else "created",
@@ -1549,7 +1572,11 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
     publication = _run(runner, plan)
     first = _reader(fixture, publication)
     assert len(first.source_outcomes) == 2
-    if partial_case not in {"complete", "earlier_capital_gap"}:
+    if partial_case not in {
+        "complete",
+        "complete_with_supplemental_filings",
+        "earlier_capital_gap",
+    }:
         assert first.status == "blocked"
         expected_issue = {
             "aggregate_capital_gap": "VALUATION_REQUIRED_FACTS_MISSING",
@@ -1717,6 +1744,36 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
         _run(runner, plan, approval=approval)
     assert missing_error.value.code == "HISTORY_COMPONENT_UNAVAILABLE"
     assert tuple(calls) == calls_before
+
+
+@pytest.mark.parametrize(
+    "source_id,replace_primary,matches",
+    [
+        ("sec-supplemental-filing", False, True),
+        ("sec-supplemental-filing", True, False),
+        ("sec-filing", False, False),
+        ("unrecognized-filing-source", False, False),
+    ],
+)
+def test_plan_accessions_distinguish_supplemental_from_required_filings(
+    tmp_path, source_id, replace_primary, matches
+):
+    fixture = _fixture(tmp_path)
+    supplemental = fixture.snapshot.source_records[0].model_copy(
+        update={
+            "source_id": source_id,
+            "accession_number": "0000000001-26-000099",
+            "uri": "https://www.sec.gov/Archives/edgar/data/1/additional.htm",
+            "content_hash": sha256_digest({"synthetic_additional": source_id}),
+        }
+    )
+    snapshot = _changed(
+        fixture.snapshot,
+        source_records=(supplemental,)
+        if replace_primary
+        else (*fixture.snapshot.source_records, supplemental),
+    )
+    assert SourcePreparationRunner._matches_plan(fixture.plan, snapshot) is matches
 
 
 def test_command_rejects_changed_plan_digest(tmp_path, capsys):

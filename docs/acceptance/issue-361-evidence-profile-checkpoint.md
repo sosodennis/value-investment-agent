@@ -229,3 +229,25 @@ eviction, oversized objects and issuer-integrity reference corruption.
 All raw measurements and review receipts remain Git-external under
 `.audit/issue-361-current-issuer-service/3963dafc-scoped-bytes-*` and
 `scoped-artifact-bytes-independent-review-final.json`.
+
+## Primary and supplemental filing membership
+
+The real MSFT current-source run at `3211068e` passed automatic release
+verification and retained a signed candidate after correcting a stale deployment
+mapping-version pin. The runner then refused that candidate because it compared
+all filing-role accessions with the annual source plan. Three retained
+`sec-supplemental-filing` records support the capital/award evidence; they are
+not additional annual inputs. All other snapshot pins and released fact/mapping
+memberships matched in the retained diagnosis.
+
+Plan membership now excludes only that explicit supplemental source ID from
+the primary accession equality. Supplemental records remain in the immutable
+snapshot and history/integrity checks. Missing originals, unexpected primary
+filings and unknown filing-source IDs still refuse. A history regression covers
+supplemental evidence through release, composition, calculation, deterministic
+reuse and original corruption refusal. These synthetic calculations do not
+count as M2. The real run still needs formal preparation, authentic caller
+approval and numerical replay/recovery acceptance.
+
+Failed runs, the signed candidate, deployment policy versions and diagnosis
+remain outside Git under `.audit/issue-361-current-issuer-service/3211068e-*`.
