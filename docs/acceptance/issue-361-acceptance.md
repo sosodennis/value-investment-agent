@@ -1,40 +1,21 @@
-# Research follow-up in progress
-
-A subsequent bounded amplification correction is under development: immutable
-source-byte fingerprints within one operation, repeated release-reference byte
-checks, and concept filtering before observation hashing. The independent
-investigation at9d1dd00d uses1b9ec129 as its baseline; these three paths were also
-confirmed in47786578. Taxonomy closure reduction and cross-restart action identity
-are not changed without their own dependency proof. The prior numerical evidence
-below remains pinned to47786578; it is not acceptance of the newer correction.
-PR370 remains draft until new exact-head full-flow/recovery/CI checks pass.
-
 # #361 numerical delivery acceptance
 
-Implementation `4778657847f946f8dacab0fc44b9e791ac7e8fe8` has passed the real
-MSFT numerical Service flow. The canonical runtime tuple and 19 named checks are
-in [issue-361-runtime.json](issue-361-runtime.json); compact results and
-Git-external command/receipt locations are in
-[issue-361-numerical-delivery-checkpoint.json](issue-361-numerical-delivery-checkpoint.json).
-This is branch acceptance. Ordinary PR #370 merge, merge-SHA acceptance and final
-owned-resource cleanup remain required before closing #361 or checking M3.
+Implementation `53afbafd1d94ce4e32aef188237b5346c78bcdb8` passes the real MSFT company/date
+Service flow and branch recovery acceptance. The canonical tuple and 19 checks
+are in [issue-361-runtime.json](issue-361-runtime.json); exact command/receipt
+identities are in [issue-361-numerical-delivery-checkpoint.json](issue-361-numerical-delivery-checkpoint.json).
+Ordinary PR #370 merge, merge-SHA acceptance and final owned-resource cleanup
+remain required before closing #361 or checking M3.
 
-## Observed outcome and supported conclusion
+## Real result and supported conclusion
 
-With deployment source, signing and caller policies configured, the actual
-company/CIK plus timestamp entrypoint automatically discovers/reuses SEC
-originals, compiles and executes its source plan, publishes through independent
-trusted verification, prepares through #352, obtains an authenticated automatic
-caller's versioned exact-input decision, invokes the existing Service calculator
-and saves retrievable numerical/provenance artifacts. It does not require a
-caller-authored complete preparation plan or per-field manual mapping review.
-
-The fixed case is MSFT / CIK0000789019, USD common equity, valuation timestamp
-`2026-11-16T07:18:50.589199Z`, `fcff_dcf-v2`. The result is **provisional,
-uncalibrated what-if**, with explicit 20/40/60% forward-reinvestment scenarios and
-conditional capital/award assumptions. Historical unknowns remain unknown;
-capital/award completeness remains false. This is not complete precise
-valuation, calibrated prediction, or an economic error bound.
+CIK `0000789019`, MSFT USD common equity, valuation timestamp
+`2026-11-16T07:18:50.589199Z`, model `fcff_dcf-v2`: company/date automatically
+drives SEC original reuse/acquisition, source-plan compilation and execution,
+source/mapping/policy verification, trusted release, formal #352 preparation,
+authenticated versioned automatic approval of the exact input, existing Service
+calculator, persistence and authenticated API retrieval. No complete source plan
+or per-field manual mapping review is supplied by the caller.
 
 | Scenario | USD/share |
 | --- | ---: |
@@ -42,76 +23,83 @@ valuation, calibrated prediction, or an economic error bound.
 | Downside | 137.2064211010579 |
 | Upside | 313.4919235602710 |
 
-Exact input: `8d6bdfb68a3495b77dc848e91d23ea95fc4315de2457da737867c9a4c1305979`.
-Result: `f1547cfedf3b6defd9460229fab0f419468b82dfbfd11b705384ae1dad6a7608`.
-Five authenticated API reads return200 and exact bytes; unsigned access returns401.
-Independent scenario arithmetic passes. Source/mapping/model/market/approval and
-use-policy identities, assumptions, limitations and sensitivities are retained
-in the checkpoint and immutable artifacts. The deployment records the user's
-personal/noncommercial/local purpose; it does not assert separate publisher
-permission. `supported_history_threshold` remains null; #376/#339/#350 are not
-advanced by this acceptance.
+These are **provisional, uncalibrated what-if scenarios** with 20/40/60% forward
+reinvestment and conditional capital/award assumptions. Historical unknowns remain
+unknown and capital/award completeness remains false. This is not complete precise
+valuation, calibrated prediction or an economic error bound. Assumptions,
+limitations and sensitivities remain in the immutable inputs/results. The user's
+personal/noncommercial/local yfinance purpose is recorded without asserting
+separate publisher permission. `supported_history_threshold` stays null;
+#376 owns that historical research, and #339/#350 remain deferred.
 
-## Repeat, recovery and refusal evidence
+Exact input: `49033e8349d1a4891e0f3efa065f6e6754aa9ccb1ecc481b4acb782980d36264`.
+Result: `22a64a40ae4f2738cb9131a265cede4b212c8578b3d7ee65ef77009a7b111cad`.
+Five authenticated artifact reads return 200 with exact bytes; unsigned retrieval
+returns 401. Independent scenario arithmetic passes. Source, mapping, parser,
+model, market, release, approval and source-use identities are in the checkpoint.
 
-Complete normal, two concurrent, interrupted/resumed and Service/PostgreSQL
-restart replays preserve the exact input, numerical result and artifact identities;
-all existing lineage/publications return `wrote=false`. Full row and content
-inventories remain identical and the Python socket guard observes zero upstream
-HTTP attempts. That guard does not independently trace C-native networking.
+## Replay, recovery and refusals
 
-Before recovery,127 proven unreferenced local WIP rows were archived, roundtripped
-through a disposable SQL database and retired transactionally. This comprises119
-old synthetic fixture rows and8 unreferenced AAPL probe facts without a completed
-snapshot. No bytes were deleted. Every other row is unchanged; historical failed
-exports and all originals/reports/mappings remain. The deliberate post-retirement
-baseline is37,099 rows /11,369 objects /16,514,870,831 bytes.
+Normal, interrupted/resumed, two concurrent and Service/PostgreSQL restart replays
+preserve exact input/result/artifact identities and return `wrote=false` throughout
+existing lineage/publications. Complete row, content and mtime inventories remain
+identical. The Python socket guard records zero upstream HTTP attempts; C-native
+network calls are not independently traced.
 
-The strict full-bundle verifier passes manifest
-`c569d4ebf819a72f48a0084c76089066613145a9968246c97e760109dbbe068c`.
-All content reuses individually hash-checked host backup bytes. Restoring into an
-observed empty independent DB/volume under the normal service UID, restoring
-again (`wrote=false`), and replaying the genuine numerical flow/API preserves rows,
-content, result and provenance. Fourteen invalid cases refuse without calculation;
-after restoring each mutation the valid exact input replays unchanged. Future and
-conflicting fact runtime tests establish signed-binding tamper rejection,
-complementing the semantic owner tests; they are not a pure future-data admission
-test. Full refusal responses and recovery supplements remain outside Git.
+Baseline: 38,000 rows, 11,647 content objects,
+16,553,990,481 logical bytes.
+Rows: `4b59f81664cb8f514cc2072ed47335aceb961ddd43305ddd317d7580bac918c1`.
+Content: `63ed6cf9b370b16e2cebd57b852e9ab7ea6fc6d52f2c433320af871aa01b3ed8`.
+Strict verified complete backup: `d99f57008a2841d6e9b155371174cbfc2cbf429c8630dc85ca80e76907884ae2`.
+The backup reuses individually hash-checked host bytes and copies only missing
+objects. A normal-UID restore into an observed empty independent DB/volume,
+repeat restore (`wrote=false`), genuine numerical flow and authenticated API
+preserve values, provenance and complete inventories. Fourteen invalid cases
+refuse calculation; the final valid input replays unchanged. Future/conflicting
+fact runtime mutations test signed-binding tamper refusal, complemented by
+semantic source-admission tests. Original failed cases and recovery supplements
+remain outside Git.
 
-Content digest: `f10566a53ea62394e9ba5eb2e4a0a5d39fc772a6674122aba1fa4f71c8a89c69`.
-Post-retirement row digest:
-`4cf111c26ed70bdabd843e519ae444611b887ce310e314f88288685a81f9435c`.
-The earlier37,226-row baseline remains retained as pre-retirement evidence.
+The earlier 47786578 numerical/recovery results and 127-row local WIP retirement
+are historical evidence with their own receipts. They are not relabeled as this
+head's acceptance. The large historical mapping retirement remains separately
+recoverable; shared immutable parser-report references address storage growth.
 
-## Engineering and performance evidence
+## Root-cause correction and engineering checks
 
-The unprofiled first full flow for this revision completed in796.394s under the
-unchanged900s CLI /5000ms API budgets, reusing retained SEC bytes. This is not an
-empty-store/download cold benchmark or a throughput claim. Fixes retain independent
-verifier scopes and signed identities while removing repeated whole-report work,
-sharing bounded evidence within operations, authenticating persisted verification
-against current trust roots, and batching retained metadata reads. Shared report
-references also prevent renewed per-input embedded-report storage amplification.
+On fixed real MSFT offline inputs, 16 source checks process 2,015,339,881 →
+375,540,376 SHA256 constructor bytes; 16-fold references read the same nine
+release objects 144 → 9 times. Six operating-income candidates retain identical
+semantics after only executable-policy/derived identity normalization. Changed
+bytes still refuse. Preparation fanout remains unchanged. This is a paired work
+count diagnosis, not a timing, peak-memory or capacity benchmark.
 
-Exact implementation checks:4,670 tests passed /20 skipped; eight configured SEC
-cases and three Linux memory cases separately pass. Nine historical/DQC/config
-diagnostics remain outside this case; no skipped test is reported passed. Ruff,
-types, both architecture guards, contracts, Service calculator release gate,
-diff and installed-source parity/preflight pass. CI43904162515 has13 successful
-jobs and one skipped legacy Agent Core gate. The latter remains unpassed and its
-prior failures remain retained; it is not this Service calculator's owning gate.
-The actual applicable Service release gate executed successfully.
+The unprofiled first full flow for this source revision completed in 782.847s
+under unchanged 900s CLI / 5000ms API budgets. It reused retained SEC originals;
+it is not an empty-store/download cold benchmark. Bounded immutable source
+fingerprints, per-operation release byte checks, concept selection before fact
+membership hashing, shared report references and previous batched metadata reads
+preserve current metadata/retention/dependency checks and independent verification.
+No financial formula, signature meaning, deadline or taxonomy closure changed.
 
-Independent incremental and final integration-risk reviews have no confirmed open
-findings. The final static review covered high-risk cross-stage boundaries of the
-500-file diff, not every line, and is not formal GitHub approval or runtime proof.
-No implementation, tests or GitHub operations were delegated.
+Exact checks: **4,708 passed / 20 skipped**. Eight configured SEC cases and three
+Linux memory cases separately pass; nine historical/DQC/config diagnostics remain
+outside this case. Ruff, types, format, two architecture guards, contracts,
+applicable Service calculator release gate, diff and 176-file installed-source
+parity/preflight pass. CI 43922682085 has 13 successes and one skipped legacy
+Agent Core gate. That skipped gate remains unpassed and is outside this Service
+calculator path; prior failed legacy evidence is retained.
+
+The prior integration-risk review and independent seven-file increment review
+have no confirmed open findings and are bound to committed bytes. The broader
+review covers high-risk integration boundaries, not every line, and is not formal
+GitHub approval or runtime evidence. No implementation, tests or GitHub operations
+were delegated. Exact delivery-head CI must pass before ordinary merge.
 
 ## Historical checkpoints
 
-The following text records earlier SHAs and their then-current blockers. Its WIP,
-missing-data and incomplete-numerical statements are historical, not current
-branch status. Original evidence remains preserved.
+The text below records older SHAs and their then-current blockers. WIP and
+incomplete-numerical statements below describe those historical checkpoints.
 
 # #361 persistent source preparation and valuation flow
 

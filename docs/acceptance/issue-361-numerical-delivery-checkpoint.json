@@ -1,5 +1,5 @@
 {
-  "implementation_commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+  "implementation_commit": "53afbafd1d94ce4e32aef188237b5346c78bcdb8",
   "issue": 361,
   "pr": 370,
   "scope": "Real MSFT personal noncommercial local research; explicitly provisional uncalibrated what-if scenarios, not complete precise valuation or calibrated economic error bounds.",
@@ -10,8 +10,8 @@
     "automatic_approval_expires_at": "2026-11-18T10:47:15.805505+00:00",
     "automatic_approval_policy_digest": "78bd618e96e902959ae991bef97b3a1a9cf37d52a05d748d8c1dcf20f17d3a98",
     "automatic_approval_policy_version": "personal-local-automatic-caller-v1",
-    "automatic_mapping_policy_digest": "4bbc26560e3b38a481bdfd1a49a6004e216e18e85ce9d48660e83e0f8a6f46e5",
-    "automatic_release_suite_digest": "c7f3855cf71d41b2a82dc295956cbc9ce3525607fae09d6c01a002aa959007f7",
+    "automatic_mapping_policy_digest": "ac67908be80d1d8c69d7e1307a895c999f13d46a5d8c596fc7ea811f4583592b",
+    "automatic_release_suite_digest": "823b3cd93374119a21f0976a5e23296814c99ac44167d2ff32eb093e65003f10",
     "baseline_containers": 59,
     "branch": "codex/issue-361-replay-evidence",
     "browser": null,
@@ -19,7 +19,7 @@
       "docker",
       "compose",
       "--env-file",
-      "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/runtime-automatic-caller-47786578.env",
+      "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/runtime-automatic-caller-53afbafd.env",
       "-p",
       "value-investment-agent-361-current-issuer",
       "-f",
@@ -27,14 +27,14 @@
       "-f",
       "compose/verification/docker-compose.issue312-sec-ingestion.yml",
       "-f",
-      ".audit/issue-361-current-issuer-service/overlay-catalog-47786578.json",
+      ".audit/issue-361-current-issuer-service/overlay-catalog-53afbafd.json",
       "-f",
       "compose/verification/docker-compose.personal-local-sources.json",
       "-f",
       "compose/verification/docker-compose.automatic-caller.yml"
     ],
     "compose_digests": {
-      ".audit/issue-361-current-issuer-service/overlay-catalog-47786578.json": "d4152ef3132aee192fe4cb88b31da0c6c2eddb6ec283f74c19e1fa52157359d7",
+      ".audit/issue-361-current-issuer-service/overlay-catalog-53afbafd.json": "ade7bdf6868feaacc3a679492b9ead48efc92cb1fb976f281ea738857e9fcc7f",
       "compose/verification/docker-compose.automatic-caller.yml": "39ede473c2491308e676a5752bdbbd37d2f39b375f3ca84e40c6e410a60efb06",
       "compose/verification/docker-compose.issue280-operations.yml": "9aa39254d0c2dfe4359587fbbae4c7aa527da71e1669ec9719fe5ff9d0fad264",
       "compose/verification/docker-compose.issue312-sec-ingestion.yml": "3260c34633f4cb3bababd7005bf8d4811edb4c78855a52f28800256c31e6fae2",
@@ -43,7 +43,7 @@
     "compose_files": [
       "compose/verification/docker-compose.issue280-operations.yml",
       "compose/verification/docker-compose.issue312-sec-ingestion.yml",
-      ".audit/issue-361-current-issuer-service/overlay-catalog-47786578.json",
+      ".audit/issue-361-current-issuer-service/overlay-catalog-53afbafd.json",
       "compose/verification/docker-compose.personal-local-sources.json",
       "compose/verification/docker-compose.automatic-caller.yml"
     ],
@@ -51,17 +51,17 @@
     "dqc_applicability_policy_digest": "58b4712c9ba643b28f23e98fbf69dc52a206f968522c954daad420808b6fcc94",
     "dqc_assertion_date_catalog_digest": "18beabf159df10733c21451e1c114f0095586ac7674747ba738387549a39bf40",
     "dqc_catalog_digest": "56f71221de6911319f5c11c20e32463f97ba80b965151be0b66a54f6fcade285",
-    "env_digest": "3d944224d9b22f441d1f6e4a4929131762b8ee64664b2089b8c02d3dae5a5788",
-    "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/runtime-automatic-caller-47786578.env",
-    "exact_commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+    "env_digest": "fe4239962b9f7b35d5307b0cc9dabcff4b04c014de016ef4e57a6992ce94b4de",
+    "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/runtime-automatic-caller-53afbafd.env",
+    "exact_commit": "53afbafd1d94ce4e32aef188237b5346c78bcdb8",
     "host_bindings": {
       "fundamental-postgres": "127.0.0.1:21472",
       "fundamental-service": "127.0.0.1:21471"
     },
-    "image_build_commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-    "image_id": "sha256:982c89be383dfa065a4782c1730bed232e1eca35afa0b5a0eec39c8fbe62c7e3",
-    "image_tag": "value-investment-agent-361-current-issuer-fundamental-service:47786578",
-    "implementation_commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
+    "image_build_commit": "53afbafd1d94ce4e32aef188237b5346c78bcdb8",
+    "image_id": "sha256:34875a1e51b247ff41aa69a7fba5dfe99e128c2b5e644113a67456c25f4fc4ed",
+    "image_tag": "value-investment-agent-361-current-issuer-fundamental-service:53afbafd",
+    "implementation_commit": "53afbafd1d94ce4e32aef188237b5346c78bcdb8",
     "issue": 361,
     "ports": {
       "fundamental-postgres": 21472,
@@ -72,7 +72,7 @@
       "pydantic": "2.14.2",
       "python": "3.12.16"
     },
-    "scope": "Checked exact retained metadata batch reads and persisted verification authentication installed. Existing source-use, automatic caller authority and all deadlines unchanged; genuine first full-flow acceptance remains to be measured.",
+    "scope": "Checked exact immutable-source fingerprints, release reference reuse and concept-scoped rebuild installed. Existing source-use, automatic caller authority and all deadlines unchanged; genuine first full-flow acceptance remains to be measured.",
     "source_rights_status": "operator personal/noncommercial/local decision only; no separate Yahoo/provider automated-collection permission supplied or verified",
     "source_use_policy_digest": "a7ff57184cd22632a91a119dee78e414b6db5a12e3b941df190efa82cb4bb6ea",
     "source_use_policy_version": "personal-noncommercial-local-source-use-v1",
@@ -81,7 +81,7 @@
     "taxonomy_closure_manifest_digest": "8596499c1c2f5a58591f1ccc353f4bdf977c0008259351cc5ef303a38b6cc3ec",
     "taxonomy_extension_digest": "9b733d28dce1b135fe3091b0907779d2ab0eb0a71420c89b4eedee927cf41797",
     "taxonomy_support_status": "Official AAPL 2025/2026 closure validated at prior exact implementation; unchanged assets retained for new runtime validation.",
-    "trust_digest": "86bb51a3e7f8860659e46145707784eb8d54bcea23e74c07db416654202dc404",
+    "trust_digest": "cc51debe900f62e800c056a90d7d5640d64d23ad35f29e832b19b2820729fea3",
     "validation_assets_digest": "ec9fde10d5bb4086ba2ae65643ee24e0166744e5b7846115f644c78e17bff205",
     "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence"
   },
@@ -99,8 +99,8 @@
     "valuation_timestamp": "2026-11-16T07:18:50.589199Z",
     "model_id": "fcff_dcf",
     "model_version": "fcff_dcf-v2",
-    "exact_input_digest": "8d6bdfb68a3495b77dc848e91d23ea95fc4315de2457da737867c9a4c1305979",
-    "result_hash": "f1547cfedf3b6defd9460229fab0f419468b82dfbfd11b705384ae1dad6a7608",
+    "exact_input_digest": "49033e8349d1a4891e0f3efa065f6e6754aa9ccb1ecc481b4acb782980d36264",
+    "result_hash": "22a64a40ae4f2738cb9131a265cede4b212c8578b3d7ee65ef77009a7b111cad",
     "base_per_share_usd": "228.57860113805253696196280467660237483564405879558",
     "scenario_per_share_usd": [
       "228.57860113805253696196280467660237483564405879558",
@@ -117,7 +117,7 @@
     "taxonomy_version": "issue361-official-cyd2024-v9-6a70c9acb563",
     "market_policy_version": "automatic-usd-market-policy-v1",
     "source_selection_policy": "sec-public-pit-v1",
-    "release_manifest_digest": "1c43f7ed15cc843c3642371a0e01322d4e5559bc29e83ca0c5dd89a05c80bb53",
+    "release_manifest_digest": "1a2fe5fef404372b3d18c79fa3d137913ee256bfe04dfcde984c8431a758a0f5",
     "approval_policy_version": "personal-local-automatic-caller-v1",
     "approval_policy_digest": "78bd618e96e902959ae991bef97b3a1a9cf37d52a05d748d8c1dcf20f17d3a98",
     "source_use_policy_version": "personal-noncommercial-local-source-use-v1",
@@ -132,82 +132,82 @@
   },
   "evidence": {
     "run": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-msft-personal-local-retained-batch-cold-1-receipt.json",
-      "sha256": "522bbfbdbf956746825da630fc2fbe12d31887d8aed1c0ae811600ebe04d7677",
-      "input_digest": "e317688e9cfc119dfc5a248db67e5d34a26b04cf4d8e01ddd2ec2c5672c592a7",
-      "output_digest": "c4b88677552112136735e5fa3f6f0fe2e2d7cc0272c1ae95d9c32f190030a887"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-msft-personal-local-amplification-cold-1-receipt.json",
+      "sha256": "977def4f89f6d05c3cf4d555d36620a43174d2de9f7f1a8a745983c34755a622",
+      "input_digest": "583db55e229a6b46963aadbf504e4de17b2fb3152bb7d15fa9e5bd542b3747a4",
+      "output_digest": "7e30d4a127b90bc84ecd1b60fffa6eae5e518dff182e5821fe1bc9a65bf04cb0"
     },
     "api": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json",
-      "sha256": "f6dbcdf22fa9ce85a508390196860209c2a27d1422694818f99533bdc21ca9b1",
-      "input_digest": "505ca1f6fd37fc8ce1f8107c87c18db94e2ad137257a1f91508c5775b79c7689",
-      "output_digest": "af0f39a8ab068fc55920993c9fc4758a23c0234db607ad462d6e1a5811f1cfbf"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-msft-personal-local-amplification-cold-1-numerical-api-receipt.json",
+      "sha256": "22db2baec28362d8ef121e714f0b4dfe930f35c4b5db1aab7234e035897f1f5c",
+      "input_digest": "799e704e6b3c1de834a3b60b4356b6305f2ecd620bf9bbca1d69c2025a437e35",
+      "output_digest": "f5587f6727642f10a47bdf96e3a0ca8052916b4babb0134d340dc87ede42f1ba"
     },
     "checks": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-delivery-checks-receipt.json",
-      "sha256": "1e34f40f341dcf098059106944360693d6d17bcd59c47e0157fec58cf903966b",
-      "input_digest": "770e7db26ac0c84f476736eaf083ef2fbcfd5773a04eee46885836d0b7119e0a",
-      "output_digest": "0a969ce60f58148477c6327ee95fd1408f760d25f884295075d2c8739a7b6a21"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-delivery-checks-receipt.json",
+      "sha256": "78444071cec3ad52b6265fdd39894f55dce7b11067db1cfc3545d2b306afd98e",
+      "input_digest": "e6a21ba9e4a48b25a509ce98afd574825b8e47663bf78e29afa6368926c752c1",
+      "output_digest": "5b16ed2d0f633e5ebd5137bd489e7b1c6dacf6f915bacf79b02dbd237fc10221"
     },
     "contracts": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-delivery-contracts-receipt.json",
-      "sha256": "5e3370575879c5ea1b209422667ea1f13036ff075a083b8063290e431de6e468",
-      "input_digest": "4c725078c1c81c8f4d310056604a7d3c9c370721736865f296ca2fd07068e31f",
-      "output_digest": "04a28b56f2f318092c73c9cb57af7bd85e381934996ba45c3b1094edbdafbdfc"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-delivery-contracts-receipt.json",
+      "sha256": "a5710681bd4451e22434bfe64dea194010f336bb3f402c9e1aeb404af8c5718b",
+      "input_digest": "a21214ebe1851e6a0b38b8bd383f66ce538acd63e0e5d6b0bbd76aff2163a093",
+      "output_digest": "1d69e7bca31f76482f9affa902e88e4716e0b3cfa03657df07cb8bd78db93cd4"
     },
     "sec": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-configured-sec-regressions-receipt.json",
-      "sha256": "4c1a62360ae50a34b0cbd5a714828c5f19a9a25fd3f561effb929fb8563f9fa2",
-      "input_digest": "0d238bac1512174baea7ac0039b19c5c4f8cbe67dd2c55e5ec474067b3f032a5",
-      "output_digest": "998b46035f9ee939c6fa1fa157d711aa06b81e80c5c462b6997feef3bf80f78f"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-configured-sec-regressions-receipt.json",
+      "sha256": "e476309edbcfca7b867f308902bd686e0dc4f5b31e252aba091a2b9b6bc031fc",
+      "input_digest": "fcb63dd56a7517a4e396168811e5f8c09eb67c30787e63f4a4cdc8e25efde9b8",
+      "output_digest": "55d6e113af98f3814fd62b8c343944b55dbec3c70b0419bb0a0323764555bd0c"
     },
     "repeat": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-numerical-resumed-replay-receipt.json",
-      "sha256": "1f0651359b4f3af5661d1d5bfeffe2a7dbe7c076639c5290d6b41cad37ea0a9a",
-      "input_digest": "dc11e32f57e8656d7fd4336a2613e5adb27b5d9b2804e343afb3b6a36c264ec9",
-      "output_digest": "61f91dce1deb85ea58fa8194d7e4b03a10d219f0b34a36b9a6ab59a798af88e8"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-numerical-resumed-replay-receipt.json",
+      "sha256": "83f3b33b2abda6cba465d0be82c1f71e9dac98658ef597c4482d29a5b7b1e015",
+      "input_digest": "1449dbce18e494da17a82802f6520d4dc82728c6b4c391ece2cf3dddd443a90d",
+      "output_digest": "3bb2eb68d9aea3c73ba155e8a99b2a0f7e4e818ab19dc3c3afb3d7fefd266299"
     },
     "concurrent": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-numerical-concurrent-replay-receipt.json",
-      "sha256": "7060e803ec573158bc8e71eee444b990319b64a5e564f72b8a7aa38cfb8175a8",
-      "input_digest": "cb4972ac1a6a02f153df56525495b946a5994f8c3df912f6648e08df2913b648",
-      "output_digest": "6148217f5706680d45c885549bf67a09e0ade8b7353852af2df4f849c22fdc8a"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-numerical-concurrent-replay-receipt.json",
+      "sha256": "e83f971910dd53ecf1cf48c0a17a7ce49c6a46d3a9a93279d79332a45c56ee2e",
+      "input_digest": "1dd526bbef05f990ee6afc07899a466def6d7c421a01ba3638b0edbdb88e8d60",
+      "output_digest": "189c8512186f5bf2f9691a1d955e4199762b2584c365be9cd2ef2e1113261353"
     },
     "restart": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-numerical-restart-numerical-restart-receipt.json",
-      "sha256": "3f5fd81aa58cc39f651b5008c320782ff0728f3f98b5bbeae6da3ece7fd53d7f",
-      "input_digest": "4905da8c198ba9b641b17b67e20731ecfab698f556da0f04afeb7398bd7c1a9a",
-      "output_digest": "db3128c41a40f92d1e409df9da6b6ce863b278f30cc1b61c5730469b71bae402"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-numerical-restart-numerical-restart-receipt.json",
+      "sha256": "a63143bf48f5db9a623c36e0132978ca6db00b875152e6df7e88baad18da6924",
+      "input_digest": "dd456224271ef3360626f4af871c4e5b9888f70062d52ef0249dca14394002bb",
+      "output_digest": "6bbbc50d61cd2afb44742b3cd332ef7c59661f59fb1f6768804a47421d613a4c"
     },
     "stable": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-numerical-stable-store-receipt.json",
-      "sha256": "c58af927d1bb2ff84efc440035024b9f1c42f4a02131e35869f3c017c9f1a2af",
-      "input_digest": "ddb8b5965e148221c578d907542bb2b6a6977ff718c59bd6c1076b0db20c4326",
-      "output_digest": "edbbcfd07afb903ffc68749ae9197c68cc1250ef4a4be2e83b07fe3a99aa469c"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-numerical-stable-store-receipt.json",
+      "sha256": "8cb9261be15fbeeed3782f4101fe959cc1b0f9de24d0af801bd4c98a1b49b205",
+      "input_digest": "d48e536f275c12593b0b238c86b37e17d5b36eb4e86ef5c2568150c59fc01c29",
+      "output_digest": "89a67dea975eaa1d43d2585ccf1f978117c5f64c7b38d66d30dcc0137f26c36e"
     },
     "backup": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-numerical-v3-numerical-backup-receipt.json",
-      "sha256": "a0aded2bc0a8a26753b558de3b13f1565d81cd97c091843b9dc5a09df6263038",
-      "input_digest": "473f4489aee19518fc18897e57b79a2b9b7466da985910264afa888f225b69bf",
-      "output_digest": "9898a2c24c37b0f9469da1718704a61c245c946f1828bae871175d4d973f96b7"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-numerical-v1-numerical-backup-receipt.json",
+      "sha256": "b988610ee68303e6196e91f5fd1ad0f15d473984bdaf5e23ffd8db871448541e",
+      "input_digest": "3ce156631d607f57722aa46779fbae63d6d73fed2c82dfa0bb946e1fe6e5fa04",
+      "output_digest": "9d585c7e34bcb7d894bad12e57e3f486cb5207087015e5c7f2006a5dc7fa0787"
     },
     "restore": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-restore-v3-numerical-restore-receipt.json",
-      "sha256": "5d3de096e7d35d135de14bfd378b4c0ed67bf6d19d90a73c430f461cfebe3dd6",
-      "input_digest": "15f610d684986c6b0d6d6b8cc8124ded55ec7e7c8859a57bcaeaf2518b67d3a2",
-      "output_digest": "3044a3d0e7b2a4c612c19432bc83748998fd3df86819efc1a71a5d67489756b1"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-restore-v1-numerical-restore-receipt.json",
+      "sha256": "25b709c9e049b7148a2db19c133ea732c8dc62e4a113a3faf8593740a45317c9",
+      "input_digest": "05ffec6ed6095022623bb87e27ebd487baac5844adc1d16256ba4cf54fd3c8b5",
+      "output_digest": "86ab6227a20643571e07999a09ec05b617077f69ea8ac2e8731eb5fcfde15217"
     },
     "restore_api": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-restore-v3-flow-numerical-api-receipt.json",
-      "sha256": "6cf67059cf9b3e0eecc4a612e6880e564d5a6a6e47fbd2d9cfc8a6cca42162cb",
-      "input_digest": "3fedd7c99f25c30d09cac80b8e63a2faa609aa7d83681d62324651f9245b85c7",
-      "output_digest": "af0f39a8ab068fc55920993c9fc4758a23c0234db607ad462d6e1a5811f1cfbf"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-restore-v1-flow-numerical-api-receipt.json",
+      "sha256": "2648702d1db2f480b57de7dbac12a5a3fa4b0f6f1b8f3843f65ac2fcd9b5189c",
+      "input_digest": "d60696e44167e760d8a677ce140efb68939a03b19b68ba2e8f3c9b1752d8cc10",
+      "output_digest": "f5587f6727642f10a47bdf96e3a0ca8052916b4babb0134d340dc87ede42f1ba"
     },
     "refusals": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-restored-refusals-v4-numerical-refusals-receipt.json",
-      "sha256": "9bf5af15978b880245bb690ecc31e93a3689468d82dde70fb7d652651de20faa",
-      "input_digest": "3674ae52085b51da19349b391fb6889c2046cb079c14887fc3fbe1365f8784f9",
-      "output_digest": "7a73086779d79fa51232850d436252ffed0a085e079c107b3f4fcba1f150834b"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-restored-refusals-v1-numerical-refusals-receipt.json",
+      "sha256": "4194b730a9316f60acfda6c3baddf948bd9c612793fc38fb1aaae0502dec37af",
+      "input_digest": "a6455d6dd25570e25a1bf78cdaffb50debb6f74e165faf69f737b1153ac7bab0",
+      "output_digest": "0a1188b7ca04b3302762d6f6abb2ca67970dfb0df43fe3eb7c2f0fcfff786bfa"
     },
     "review": {
       "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-integration-independent-review-receipt.json",
@@ -216,132 +216,129 @@
       "output_digest": "a223c86bae94a62031c384f8571830cc5c38fd47ce88acb14b061e54dc8acefe"
     },
     "review_scope": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-final-independent-review-receipt.json",
-      "sha256": "dfa09728fc141fbdd045d62dbe5ac15ffbc05536230486d04d7f8c09b5cad952",
-      "input_digest": "e1366f877eb2473db3481d6fdeaaf27bd78b209f4c2f9fd3a5108f8923845c64",
-      "output_digest": "05dbbc4cc4452ea0329b2a822028112984cdea3ad78dff5698de68c5c1a7e599"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-committed-review-binding.json",
+      "sha256": "2c55e9bb287b04461f3d94049b2b5e498c9e30ac8364b91f31421c1c99fde5e3",
+      "input_digest": "80942961d4de08d9ad2c13d686f3a17a340bf4fabe37165a145346c4b2152701",
+      "output_digest": "b7d53b5bf1c78bbb423c3f32f233f55d4c3914f5aceb1040a8cec391235ec6a3"
     },
     "negative_insufficient": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-m1-insufficient-receipt.json",
-      "sha256": "e68c6fbb5246d8f53487b9ce28cb4e44dd3203ed75c12d66fc963470ed3666c1",
-      "input_digest": "ba0165c25708f9290cc770709b17d057a36b7ca0e43f699c6a1e65682f4ea39c",
-      "output_digest": "cc5fa93ee82ba25dc10dd13b200bc78149cbc996ec82382504fdfa2ff2362fb4"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-m1-insufficient-receipt.json",
+      "sha256": "d6325c7710dec7cfd3fd01ac0ce5a38fbf18d2b67d8005435d43fef71c4fac6c",
+      "input_digest": "a3356c7616ef737143aae0865752348d3a87645eebfd523bf4650afa1cfb0408",
+      "output_digest": "3501c3b5100f2a3bd8de907a80a9a4c24f373a9104882895fb919f443a2b34d5"
     },
     "negative_conflict": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-m1-identity-conflict-receipt.json",
-      "sha256": "26aa767d0632b500be51af9999b28250cfad88fa75c1b3fbcb62e79fa3f9b397",
-      "input_digest": "558912fd8306ded57b854d2fd44e8a7baa14b8060714a394fd31f3f5f3ae945e",
-      "output_digest": "a40f08dc4387d0ae8f576fa00666c609cbed9a0047b4bd8aa466334b7c5cd7cd"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-m1-identity-conflict-receipt.json",
+      "sha256": "00e89fc33cb197f34232df054699917921ac6388dbf872206a275cf3bc5a4daf",
+      "input_digest": "55e95a2946dfefcf211b0eb12cc33a6989b25ae6ccc79bfd7baf2c69048bbf33",
+      "output_digest": "8bfc2fc2ff61cf72c48bb840a29615e1dd13f33524467fa9797a80132f059c7f"
     },
     "negative_ambiguous": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-m1-security-ambiguous-receipt.json",
-      "sha256": "aec8a6b689a408e382617281a5e5f672b9203f0e9d49423b59ffca8f7ea833d0",
-      "input_digest": "7ffafac674dec4462a2b53da1d8fd707e6cdb1f8edd7247708eb08eb2d8e9fe4",
-      "output_digest": "1cbb658eb5eceb8cbe131d4191751096f034dbf037f2607926de59f43a2b3997"
-    },
-    "post_retirement": {
-      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-numerical-post-retirement-replay-receipt.json",
-      "sha256": "6d257bb37ee0bb9f2ae50b3f0be9973407d119f0356f63b2bd6db152f22c9257",
-      "input_digest": "dc11e32f57e8656d7fd4336a2613e5adb27b5d9b2804e343afb3b6a36c264ec9",
-      "output_digest": "71cdd40ab0c96b495d32c47fa707b1fe1f19ea20a3f4ab4dd0a8b930ab8cddf2"
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-m1-security-ambiguous-receipt.json",
+      "sha256": "d30ea39287669c4f3d25825ac29a9fb09fde21b0053b9f2b76de3cfd6084ddbd",
+      "input_digest": "771bb5889363e95589ec9abbc8b7ad6bc82d903e904b00565620f6b188d5ea93",
+      "output_digest": "64a92e415260690e42bf45535688449273f0262430cab323c4236b31f820104f"
     },
     "retirement": {
       "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/47786578-recovery-retirement-v3/retirement-receipt.json",
       "sha256": "5af1da55ee966a5e3e7fb0b1f29251bd0c60a17c139995d167542b27e290cb46",
       "input_digest": "bed36dc0205421577ae1195132eac11a1fb9388c4b6472e6e549edb844e7d0ea",
       "output_digest": "52171ba14371b2c812b748d2b130c93676794633e2a782a549f0ff4e585051c7"
+    },
+    "amplification": {
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service/53afbafd-amplification-comparison-receipt.json",
+      "sha256": "46101796a919d63657077680c80228a4a7516aaac8fcf0af58fa3cfe9c959808",
+      "input_digest": "3ce774d9db1748efb71841cd67de0d26687f880c30bfa55dee1deb7a0d26f9ab",
+      "output_digest": "b8ba331348196a0f569d5ba434bcfdbc188a0ade233583ccafd78ae7394ff156"
     }
   },
   "store": {
-    "rows_digest": "4cf111c26ed70bdabd843e519ae444611b887ce310e314f88288685a81f9435c",
-    "files_digest": "efaaf7a9fe18fe612729a49e1feaa1cf229d2ef60f5910221ec7f6ad6edcbfb6",
-    "content_digest": "f10566a53ea62394e9ba5eb2e4a0a5d39fc772a6674122aba1fa4f71c8a89c69",
-    "content_files": 11369,
-    "content_bytes": 16514870831
+    "rows_digest": "4b59f81664cb8f514cc2072ed47335aceb961ddd43305ddd317d7580bac918c1",
+    "files_digest": "685c25a436b71fb4563eb7e12e09db03ed5f85af479b420e9e5c1be9ba93379e",
+    "content_digest": "63ed6cf9b370b16e2cebd57b852e9ab7ea6fc6d52f2c433320af871aa01b3ed8",
+    "content_files": 11647,
+    "content_bytes": 16553990481
   },
-  "rows": 37099,
-  "backup_manifest_digest": "c569d4ebf819a72f48a0084c76089066613145a9968246c97e760109dbbe068c",
-  "real_flow_seconds": 796.3942897925153,
+  "rows": 38000,
+  "backup_manifest_digest": "d99f57008a2841d6e9b155371174cbfc2cbf429c8630dc85ca80e76907884ae2",
+  "real_flow_seconds": 782.8467210829258,
   "performance_scope": "First full flow for this source revision reuses retained SEC bytes. Not an empty-store/download cold benchmark or capacity claim.900s CLI and5000ms API remain unchanged.",
-  "ci": {
-    "checks": [
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397730",
-        "name": "fundamental-offline-fixture-contracts",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397418",
-        "name": "fundamental-service-release-gate",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397308",
-        "name": "contract-codegen-check",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397488",
-        "name": "llm-provider-contract-gate",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397277",
-        "name": "frontend-lint-type-test",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397432",
-        "name": "llm-provider-service-contract-gate",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397628",
-        "name": "fundamental-service-contract-gate",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397559",
-        "name": "search-service-contract-gate",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397339",
-        "name": "backend-lint-test",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397494",
-        "name": "notification-postgres-integration",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397399",
-        "name": "production-compose-secret-contract",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428397421",
-        "name": "contract-policy",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428396742",
-        "name": "model-inference-service-contract-gate",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43904162515/job/133428399290",
-        "name": "fundamental-release-gate",
-        "state": "SKIPPED"
-      }
-    ],
-    "head": "4778657847f946f8dacab0fc44b9e791ac7e8fe8"
-  },
+  "ci": [
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805994",
+      "name": "llm-provider-service-contract-gate",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805965",
+      "name": "notification-postgres-integration",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805964",
+      "name": "model-inference-service-contract-gate",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805723",
+      "name": "llm-provider-contract-gate",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805829",
+      "name": "production-compose-secret-contract",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805674",
+      "name": "contract-codegen-check",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805735",
+      "name": "frontend-lint-type-test",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805833",
+      "name": "fundamental-service-contract-gate",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805309",
+      "name": "fundamental-service-release-gate",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805738",
+      "name": "backend-lint-test",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805837",
+      "name": "contract-policy",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805767",
+      "name": "fundamental-offline-fixture-contracts",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493805728",
+      "name": "search-service-contract-gate",
+      "state": "SUCCESS"
+    },
+    {
+      "link": "https://github.com/sosodennis/value-investment-agent/actions/runs/43922682085/job/133493808444",
+      "name": "fundamental-release-gate",
+      "state": "SKIPPED"
+    }
+  ],
   "legacy_agent_gate": "Skipped/unpassed, not applicable to this Service calculator path. Prior legacy failures retained. Actual Service calculator release gate executed and passed.",
   "host_skips": "20 full-suite skips disclosed: eight configured SEC cases and three Linux memory cases separately executed successfully; nine historical/DQC/config diagnostics remain outside this case. No skipped test is counted passed.",
   "m1_m2": "complete for stated provisional what-if scope",
   "m3": "branch numerical replay/restart/empty restore/refusal evidence complete; delivery-head CI, ordinary merge, main SHA acceptance and final own-resource cleanup pending",
   "full_reports_root": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-current-issuer-service",
-  "recovery_retirement": "127 unreferenced old local WIP rows removed after archive+typed SQL recovery proof; no content files removed. Deliberate new baseline37099rows, old37226row baseline retained."
+  "recovery_retirement": "Prior477 retirement preserved127 unreferenced local WIP rows via verified archive and typed recovery before deletion. Current full store baseline is measured independently after new-head run."
 }
