@@ -133,7 +133,7 @@ def test_release_plan_reproduces_exact_issuer_date_reference_and_remains_unchang
     [
         ("unapproved", "MARKET_REFERENCE_PLAN_UNAPPROVED"),
         ("duplicate", "MARKET_REFERENCE_PLAN_AMBIGUOUS"),
-        ("bytes", "MARKET_REFERENCE_PLAN_MISMATCH"),
+        ("bytes", "ARTIFACT_EVIDENCE_INVALID"),
         ("issuer", "MARKET_REFERENCE_PLAN_CONTEXT_MISMATCH"),
         ("policy_issuer", "MARKET_REFERENCE_POLICY_ISSUER_MISMATCH"),
         ("timestamp", "MARKET_REFERENCE_PLAN_CONTEXT_MISMATCH"),
@@ -193,7 +193,9 @@ def test_serving_preparation_consumes_the_pinned_reference_plan_and_exact_erp(tm
     fixture = _fixture(tmp_path)
     manifest, artifacts, admission, plan, ref, policy = _bound(fixture)
     for name, content in artifacts.data.items():
-        fixture.artifacts.put_bytes_with_receipt(name, content)
+        fixture.artifacts.put_bytes_with_receipt(
+            name, content, media_type=artifacts.get(name).media_type
+        )
     previous_lookup = fixture.metadata.get_data_release_manifest
     fixture.metadata.get_data_release_manifest = (
         lambda digest: manifest
@@ -249,7 +251,9 @@ def test_release_canary_checks_the_same_policy_authority_and_source_value(
     fixture.manifest = candidate.manifest
     manifest, artifacts, admission, plan, ref, policy = _bound(fixture)
     for name, content in artifacts.data.items():
-        fixture.artifacts.put_bytes_with_receipt(name, content)
+        fixture.artifacts.put_bytes_with_receipt(
+            name, content, media_type=artifacts.get(name).media_type
+        )
     payload = candidate.verification.model_dump(
         exclude={"signature", "verification_digest"}
     )

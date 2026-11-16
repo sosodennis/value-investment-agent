@@ -15,6 +15,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .artifact_evidence import read_retained_artifact
 from .contracts import (
     CanonicalFactV1,
     SecIntegrityEvidenceV1,
@@ -699,7 +700,9 @@ class DataReleaseCanaryRunner:
                     "candidate references one artifact ID with different hashes",
                 )
             try:
-                content = self._artifacts.read(reference.artifact_id)
+                content = read_retained_artifact(self._artifacts, reference)
+            except DataReleaseError:
+                raise
             except Exception as exc:  # pragma: no cover - adapter boundary
                 raise DataReleaseError(
                     "DATA_RELEASE_ARTIFACT_UNAVAILABLE",

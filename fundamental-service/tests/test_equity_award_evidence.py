@@ -573,12 +573,21 @@ def test_artifact_and_quote_source_failures_are_retained(tmp_path, alteration, c
         ref for ref in references if ref.role == EQUITY_DILUTION_ARTIFACT_ROLE
     )
     quote = next(ref for ref in references if ref.role == EQUITY_QUOTE_SOURCE_ROLE)
+
+    def metadata(artifact_id):
+        ref = next(item for item in references if item.artifact_id == artifact_id)
+        source_id = target.artifact_id if artifact_id == "duplicate" else artifact_id
+        return fixture.artifacts.get(source_id).model_copy(
+            update={"artifact_id": artifact_id, "content_hash": ref.content_hash}
+        )
+
     if alteration in {"hash", "noncanonical"}:
         raw = canonical_bytes(fixture.dilution) + b"\n"
         reader = SimpleNamespace(
+            get=metadata,
             read=lambda artifact_id: raw
             if artifact_id == target.artifact_id
-            else fixture.artifacts.read(artifact_id)
+            else fixture.artifacts.read(artifact_id),
         )
         if alteration == "noncanonical":
             references[references.index(target)] = target.model_copy(
@@ -594,17 +603,19 @@ def test_artifact_and_quote_source_failures_are_retained(tmp_path, alteration, c
             )
         )
         reader = SimpleNamespace(
+            get=metadata,
             read=lambda artifact_id: canonical_bytes(fixture.dilution)
             if artifact_id == "duplicate"
-            else fixture.artifacts.read(artifact_id)
+            else fixture.artifacts.read(artifact_id),
         )
     elif alteration == "missing_quote":
         references.remove(quote)
     else:
         reader = SimpleNamespace(
+            get=metadata,
             read=lambda artifact_id: b"changed"
             if artifact_id == quote.artifact_id
-            else fixture.artifacts.read(artifact_id)
+            else fixture.artifacts.read(artifact_id),
         )
     with pytest.raises(DilutionError) as error:
         _load(fixture, manifest=_manifest(fixture, tuple(references)), artifacts=reader)

@@ -6,6 +6,8 @@ from typing import Literal, Protocol
 
 from pydantic import Field
 
+from .artifact_evidence import read_retained_artifact
+from .replay import ArtifactRecordV1
 from .contracts import CanonicalFactV1, QualityStatus, SourceRole, SourceSnapshotV1
 from .conditional_capital_contracts import ConditionalCapitalPolicyV1
 from .data_releases import DataReleaseManifestV1
@@ -57,6 +59,8 @@ class EquityDilutionEvidenceV1(DilutionModel):
 
 
 class DilutionArtifactReader(Protocol):
+    def get(self, artifact_id: str) -> ArtifactRecordV1: ...
+
     def read(self, artifact_id: str) -> bytes: ...
 
 
@@ -162,7 +166,7 @@ def load_release_dilution_evidence(
     for reference in sorted(manifest.artifact_refs, key=lambda item: item.artifact_id):
         if reference.role != EQUITY_DILUTION_ARTIFACT_ROLE:
             continue
-        raw = artifacts.read(reference.artifact_id)
+        raw = read_retained_artifact(artifacts, reference)
         if (
             reference.media_type != "application/json"
             or sha256(raw).hexdigest() != reference.content_hash
@@ -226,7 +230,7 @@ def verify_release_quote(
             "DILUTION_QUOTE_SOURCE_UNAVAILABLE",
             "reviewed quote source bytes are unavailable",
         )
-    raw_quote = artifacts.read(quote_reference.artifact_id)
+    raw_quote = read_retained_artifact(artifacts, quote_reference)
     if sha256(raw_quote).hexdigest() != quote.content_hash:
         raise DilutionError(
             "DILUTION_QUOTE_SOURCE_MISMATCH",
@@ -311,7 +315,7 @@ def _release_quote_admissions(
     for ref in sorted(manifest.artifact_refs, key=lambda item: item.artifact_id):
         if ref.role != QUOTE_ADMISSION_ROLE:
             continue
-        raw = artifacts.read(ref.artifact_id)
+        raw = read_retained_artifact(artifacts, ref)
         if (
             ref.media_type != "application/json"
             or sha256(raw).hexdigest() != ref.content_hash
@@ -387,7 +391,7 @@ def _verify_quote_admission(
                 "DILUTION_QUOTE_TERMS_MISSING",
                 "quote permission terms are absent from the pinned release",
             )
-        raw_terms = artifacts.read(refs[0].artifact_id)
+        raw_terms = read_retained_artifact(artifacts, refs[0])
         if sha256(raw_terms).hexdigest() != item.content_sha256:
             raise DilutionError(
                 "DILUTION_QUOTE_TERMS_MISMATCH",

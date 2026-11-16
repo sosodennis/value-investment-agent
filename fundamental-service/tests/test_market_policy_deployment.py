@@ -46,7 +46,9 @@ def _deployment_fixture(tmp_path):
     fixture.manifest = original.manifest
     manifest, expected, application, _ = _service_bound(fixture)
     fixture.artifacts.put_bytes_with_receipt(
-        "release-evidence", original_canary._artifacts.read("release-evidence")
+        "release-evidence",
+        original_canary._artifacts.read("release-evidence"),
+        media_type="application/json",
     )
     verification = sign_data_release_verification(
         {

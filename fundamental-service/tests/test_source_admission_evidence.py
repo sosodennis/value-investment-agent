@@ -40,8 +40,21 @@ from test_source_admission import (
 
 
 class DictionaryArtifacts:
-    def __init__(self, data: dict[str, bytes]):
+    def __init__(self, data: dict[str, bytes], refs=()):
         self.data = data
+        self.media_types = {ref.artifact_id: ref.media_type for ref in refs}
+        self.content_hashes = {ref.artifact_id: ref.content_hash for ref in refs}
+
+    def get(self, artifact_id):
+        from fundamental_service.replay import ArtifactRecordV1
+
+        return ArtifactRecordV1(
+            artifact_id=artifact_id,
+            content_hash=self.content_hashes.get(
+                artifact_id, hashlib.sha256(self.read(artifact_id)).hexdigest()
+            ),
+            media_type=self.media_types.get(artifact_id, "application/json"),
+        )
 
     def read(self, artifact_id: str) -> bytes:
         return self.data[artifact_id]
@@ -76,7 +89,7 @@ def _packet(manifest, *, raw=None, result=None, inputs=None):
     payload["artifact_refs"] = (*manifest.artifact_refs, *refs)
     return (
         DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload)),
-        DictionaryArtifacts(data),
+        DictionaryArtifacts(data, refs),
         admission,
         inputs,
     )
@@ -256,6 +269,13 @@ def test_serving_composition_injects_and_checks_the_same_provider_and_policy(tmp
     read_existing = fixture.artifacts.read
 
     class CombinedArtifacts:
+        def get(self, name):
+            return (
+                artifacts.get(name)
+                if name in artifacts.data
+                else fixture.artifacts.get(name)
+            )
+
         def read(self, name):
             return (
                 artifacts.data[name] if name in artifacts.data else read_existing(name)

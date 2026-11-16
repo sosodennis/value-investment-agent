@@ -673,3 +673,34 @@ passes. These observations motivate the next performance correction; a stack
 sample alone is not a measured speedup. Raw receipts, stack sample, review findings
 and full source evidence remain outside Git in the current issuer audit folder.
 M1/M2/M3 remain incomplete, supported history threshold null and PR370 draft.
+
+## Current retained evidence validity
+
+The shared release evidence reader now requires exact artifact ID, hash and media
+type, valid status, evidence retention and unchanged metadata across the read.
+Market admissions, originals and terms; quote/award evidence; market-reference,
+terminal-growth and automatic-policy plans; forward assumptions; and the release
+canary use this boundary. Their original byte hashes, canonical serialization,
+source-use checks and domain validations remain in their owning layers. Historical
+bytes remain readable without making withdrawn evidence eligible for valuation.
+
+Nine corrected regressions reproduced the original flaw: invalidating metadata
+while keeping bytes allowed serving preparation or automatic calculation. The
+same cases now refuse; additional cases cover stale/cache records, substituted
+metadata and invalidation during a read. Test readers now provide metadata and
+fixtures publish media types matching their release references. Existing byte
+corruption and semantic refusal tests remain enforced.
+
+543 related PostgreSQL-backed cases pass with zero skips, along with changed
+source types, whole-package Ruff, changed-file format, both architecture guards
+and diff check. `metadata-verified-checks-receipt.json` retains the exact command
+and digest evidence outside Git; its temporary database was removed. Bounded
+independent static follow-ups found no confirmed remaining deadline or metadata
+issue in the inspected changes. They did not run tests or certify runtime.
+
+A read-only preflight on the existing e20b9f86 real MSFT release found all 164
+references compatible with the new metadata requirements, output digest
+`89cd0b788f9e871461d44276371f2dac0af5767612646666db3f5d226e4ae636`.
+Its three shared parser reports total 29,281,378 bytes and 5,554 facts. These are
+working-set observations, not a performance comparison or new-runtime numerical
+acceptance. Deployment and M1/M2/M3 acceptance remain outstanding.

@@ -2,6 +2,7 @@
 
 from hashlib import sha256
 
+from .artifact_evidence import read_retained_artifact
 from .contracts import SourceSnapshotV1
 from .data_releases import DataReleaseError, DataReleaseManifestV1
 from .market_reference_selection import (
@@ -39,7 +40,7 @@ def read_release_market_reference_plan(
             "release requires exactly one issuer reference plan",
         )
     ref = references[0]
-    raw = artifacts.read(ref.artifact_id)
+    raw = read_retained_artifact(artifacts, ref)
     if (
         ref.media_type != "application/json"
         or sha256(raw).hexdigest() != ref.content_hash

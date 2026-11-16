@@ -50,7 +50,9 @@ def _bound(fixture):
     for inputs, admission in zip((rate_inputs, gdp_inputs), admissions, strict=True):
         manifest, artifacts, _, _ = _packet(manifest, result=admission, inputs=inputs)
         for name, content in artifacts.data.items():
-            fixture.artifacts.put_bytes_with_receipt(name, content)
+            fixture.artifacts.put_bytes_with_receipt(
+                name, content, media_type=artifacts.get(name).media_type
+            )
     plan = _plan(issuer_id=fixture.snapshot.identity.issuer_id)
     selection = select_terminal_growth(plan, admissions=admissions)
     raw = canonical_bytes(plan)
@@ -60,7 +62,9 @@ def _bound(fixture):
         media_type="application/json",
         role=TERMINAL_GROWTH_PLAN_ROLE,
     )
-    fixture.artifacts.put_bytes_with_receipt(ref.artifact_id, raw)
+    fixture.artifacts.put_bytes_with_receipt(
+        ref.artifact_id, raw, media_type=ref.media_type
+    )
     payload = manifest.model_dump(exclude={"manifest_digest"})
     payload["artifact_refs"] = tuple(
         {x.artifact_id: x for x in (*manifest.artifact_refs, ref)}.values()
@@ -299,7 +303,7 @@ def test_independent_canary_uses_the_same_effective_terminal_policy(
     [
         ("issuer", "TERMINAL_PLAN_CONTEXT_MISMATCH"),
         ("policy_issuer", "TERMINAL_PLAN_ISSUER_POLICY_MISMATCH"),
-        ("bytes", "TERMINAL_PLAN_MISMATCH"),
+        ("bytes", "ARTIFACT_EVIDENCE_INVALID"),
         ("duplicate", "TERMINAL_PLAN_AMBIGUOUS"),
     ],
 )

@@ -7,6 +7,7 @@ from typing import Protocol
 
 from pydantic import ValidationError
 
+from .artifact_evidence import read_retained_artifact
 from .conditional_reinvestment import (
     ConditionalReinvestmentError,
     assess_conditional_reinvestment,
@@ -19,6 +20,7 @@ from .conditional_reinvestment_contracts import (
 from .contracts import CanonicalFactV1, SourceSnapshotV1
 from .data_releases import ArtifactRefV1, DataReleaseError, DataReleaseManifestV1
 from .facts import canonical_fact_digest
+from .replay import ArtifactRecordV1
 from .serialization import canonical_bytes
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
@@ -29,6 +31,8 @@ REINVESTMENT_ASSUMPTION_ROLE = "conditional-reinvestment-assumptions-v1"
 
 
 class ReinvestmentArtifactReader(Protocol):
+    def get(self, artifact_id: str) -> ArtifactRecordV1: ...
+
     def read(self, artifact_id: str) -> bytes: ...
 
 
@@ -215,7 +219,7 @@ def validate_reinvestment_assumption_document(
             "forward assumptions require one exact retained document identity, role and hash",
         )
     try:
-        content = artifacts.read(refs[0].artifact_id)
+        content = read_retained_artifact(artifacts, refs[0])
     except Exception as error:
         raise DataReleaseError(
             "DATA_RELEASE_REINVESTMENT_DOCUMENT_UNAVAILABLE",

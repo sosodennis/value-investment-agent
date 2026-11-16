@@ -58,6 +58,15 @@ class _Artifacts:
     def read(self, artifact_id):
         return self.data[artifact_id]
 
+    def get(self, artifact_id):
+        from fundamental_service.replay import ArtifactRecordV1
+
+        return ArtifactRecordV1(
+            artifact_id=artifact_id,
+            content_hash=hashlib.sha256(self.read(artifact_id)).hexdigest(),
+            media_type="application/json",
+        )
+
 
 def _bound(*, manifest=None, snapshot=None, admissions=None):
     if snapshot is None:
@@ -302,7 +311,7 @@ def test_refused_decision_cannot_supply_market_inputs_or_become_a_policy():
         ("retired", "POLICY_NOT_EFFECTIVE"),
         ("missing", "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISSING"),
         ("ambiguous", "AUTOMATIC_MARKET_POLICY_EVIDENCE_AMBIGUOUS"),
-        ("changed", "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISMATCH"),
+        ("changed", "ARTIFACT_EVIDENCE_INVALID"),
         ("noncanonical", "AUTOMATIC_MARKET_POLICY_EVIDENCE_NONCANONICAL"),
     ],
 )
@@ -406,7 +415,7 @@ def test_release_boundary_retains_missing_or_changed_automatic_evidence():
             admissions=admissions,
             artifacts=_Artifacts(contents),
         )
-    assert error.value.code == "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISMATCH"
+    assert error.value.code == "ARTIFACT_EVIDENCE_INVALID"
 
 
 @pytest.mark.parametrize(
@@ -497,14 +506,18 @@ def _service_bound(fixture):
         admissions.append(admission)
         manifest, artifacts, _, _ = _packet(manifest, result=admission, inputs=item)
         for name, content in artifacts.data.items():
-            fixture.artifacts.put_bytes_with_receipt(name, content)
+            fixture.artifacts.put_bytes_with_receipt(
+                name, content, media_type=artifacts.get(name).media_type
+            )
     manifest, _, policy, admissions, contents, evidence = _bound(
         manifest=manifest,
         snapshot=fixture.snapshot,
         admissions=tuple(admissions),
     )
     for name, raw in contents.items():
-        fixture.artifacts.put_bytes_with_receipt(name, raw)
+        fixture.artifacts.put_bytes_with_receipt(
+            name, raw, media_type="application/json"
+        )
     policy = assemble_authorized_market_policy_record(
         manifest,
         authorization=_authorization(policy, market_inputs=None),

@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .artifact_evidence import read_retained_artifact
 from .automatic_market_policy import (
     AutomaticMarketPolicyDecisionV1,
     AutomaticMarketPolicyPolicyV1,
@@ -85,7 +86,7 @@ def _read_automatic_market_policy(
             "release requires exactly one automatic market-policy decision",
         )
     ref = refs[0]
-    raw = artifacts.read(ref.artifact_id)
+    raw = read_retained_artifact(artifacts, ref)
     if (
         ref.media_type != "application/json"
         or sha256(raw).hexdigest() != ref.content_hash

@@ -186,11 +186,16 @@ def _canary(fixture, tmp_path):
         Ed25519PrivateKey.from_private_bytes(b"verifier-key".ljust(32, b"0")),
     )
     artifacts = SimpleNamespace(
+        get=lambda artifact_id: (
+            seed_artifacts.get(artifact_id)
+            if artifact_id == "release-evidence"
+            else fixture.artifacts.get(artifact_id)
+        ),
         read=lambda artifact_id: (
             seed_artifacts.read(artifact_id)
             if artifact_id == "release-evidence"
             else fixture.artifacts.read(artifact_id)
-        )
+        ),
     )
     canary = DataReleaseCanaryRunner(
         snapshot_repository=snapshots,
@@ -305,7 +310,12 @@ def test_document_reference_alone_cannot_prove_bytes_or_assumptions(tmp_path):
         _assess(fixture, artifacts=ArtifactStore(tmp_path / "empty"))
     assert caught.value.code == "DATA_RELEASE_REINVESTMENT_DOCUMENT_UNAVAILABLE"
     with pytest.raises(DataReleaseError) as caught:
-        _assess(fixture, artifacts=SimpleNamespace(read=lambda _: b"corrupt"))
+        _assess(
+            fixture,
+            artifacts=SimpleNamespace(
+                get=fixture.artifacts.get, read=lambda _: b"corrupt"
+            ),
+        )
     assert caught.value.code == "DATA_RELEASE_REINVESTMENT_DOCUMENT_HASH_MISMATCH"
     other = b'{"protocol":"conditional-reinvestment-assumptions-v1","claim":"precise"}'
     digest = hashlib.sha256(other).hexdigest()
@@ -319,7 +329,14 @@ def test_document_reference_alone_cannot_prove_bytes_or_assumptions(tmp_path):
     )
     with pytest.raises(DataReleaseError) as caught:
         _assess(
-            fixture, manifest=manifest, artifacts=SimpleNamespace(read=lambda _: other)
+            fixture,
+            manifest=manifest,
+            artifacts=SimpleNamespace(
+                get=lambda artifact_id: fixture.artifacts.get(artifact_id).model_copy(
+                    update={"content_hash": digest}
+                ),
+                read=lambda _: other,
+            ),
         )
     assert caught.value.code == "DATA_RELEASE_REINVESTMENT_DOCUMENT_MISMATCH"
 

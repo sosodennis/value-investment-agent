@@ -390,9 +390,12 @@ def _reviewed_candidate(fixture, *, quote_providers=None):
     )
     review_artifacts = artifacts
     artifacts = SimpleNamespace(
+        get=lambda artifact_id: fixture.artifacts.get(artifact_id)
+        if artifact_id != "release-evidence"
+        else review_artifacts.get(artifact_id),
         read=lambda artifact_id: fixture.artifacts.read(artifact_id)
         if artifact_id != "release-evidence"
-        else review_artifacts.read(artifact_id)
+        else review_artifacts.read(artifact_id),
     )
     verification_payload = verification.model_dump(
         exclude={"signature", "verification_digest"}

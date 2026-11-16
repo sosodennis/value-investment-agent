@@ -69,9 +69,11 @@ REVIEWER = Ed25519PrivateKey.from_private_bytes(b"reviewer-key".ljust(32, b"0"))
 class Evidence:
     def __init__(self):
         self.values = {}
+        self.hashes = {}
 
     def add(self, name, raw, role="test-only"):
         self.values[name] = raw
+        self.hashes[name] = hashlib.sha256(raw).hexdigest()
         return ArtifactRefV1(
             artifact_id=name,
             content_hash=hashlib.sha256(raw).hexdigest(),
@@ -81,6 +83,15 @@ class Evidence:
 
     def read(self, artifact_id):
         return self.values[artifact_id]
+
+    def get(self, artifact_id):
+        from fundamental_service.replay import ArtifactRecordV1
+
+        return ArtifactRecordV1(
+            artifact_id=artifact_id,
+            content_hash=self.hashes[artifact_id],
+            media_type="application/octet-stream",
+        )
 
 
 def resign(bundle, **changes):

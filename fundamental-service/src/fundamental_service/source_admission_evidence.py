@@ -5,6 +5,8 @@ from typing import Protocol
 
 from pydantic import TypeAdapter
 
+from .artifact_evidence import read_retained_artifact
+from .replay import ArtifactRecordV1
 from .data_releases import DataReleaseError, DataReleaseManifestV1
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort, ReferenceMetric
@@ -24,6 +26,8 @@ SOURCE_TERMS_ROLE = "market_source_terms"
 
 
 class AdmissionArtifactReader(Protocol):
+    def get(self, artifact_id: str) -> ArtifactRecordV1: ...
+
     def read(self, artifact_id: str) -> bytes: ...
 
 
@@ -52,7 +56,7 @@ def _load_release_source_admissions(
                 "SOURCE_ADMISSION_ORIGINAL_MISSING",
                 "source admission original is absent from the pinned release",
             )
-        raw = artifacts.read(matches[0].artifact_id)
+        raw = read_retained_artifact(artifacts, matches[0])
         if sha256(raw).hexdigest() != item.content_sha256:
             raise DataReleaseError(
                 "SOURCE_ADMISSION_ORIGINAL_MISMATCH",
@@ -75,7 +79,7 @@ def _load_release_source_admissions(
                 "SOURCE_ADMISSION_POLICY_UNAVAILABLE",
                 "source admission requires a configured trusted policy",
             )
-        raw = artifacts.read(ref.artifact_id)
+        raw = read_retained_artifact(artifacts, ref)
         if (
             ref.media_type != "application/json"
             or sha256(raw).hexdigest() != ref.content_hash

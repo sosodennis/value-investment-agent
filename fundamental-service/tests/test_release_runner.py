@@ -75,10 +75,20 @@ class _Mappings:
 class _Artifacts:
     def __init__(self, content: bytes) -> None:
         self.content = content
+        self.content_hash = hashlib.sha256(content).hexdigest()
 
     def read(self, artifact_id: str) -> bytes:
         assert artifact_id == "release-evidence"
         return self.content
+
+    def get(self, artifact_id):
+        from fundamental_service.replay import ArtifactRecordV1
+
+        return ArtifactRecordV1(
+            artifact_id=artifact_id,
+            content_hash=self.content_hash,
+            media_type="application/json",
+        )
 
 
 def _fact() -> CanonicalFactV1:
