@@ -93,14 +93,25 @@ def _quality_status(request: ValuationInputV1) -> QualityStatus:
 
 
 @using_valuation_context
-def independent_calculate(request: ValuationInputV1) -> IndependentResult:
+def independent_calculate(
+    request: ValuationInputV1,
+    *,
+    scope: Literal[
+        "verified-deterministic-v1", "conditional-arithmetic-v1"
+    ] = "verified-deterministic-v1",
+) -> IndependentResult:
     """Recompute the production graph with independently entered equations.
 
     The implementation intentionally uses only the public request contract and
     does not import or call any production calculation function.
     """
 
-    if _quality_status(request) is not QualityStatus.VERIFIED:
+    if scope not in {"verified-deterministic-v1", "conditional-arithmetic-v1"}:
+        raise VerificationRefusal("SCOPE_UNSUPPORTED", "unknown reference scope")
+    if _quality_status(request) is not QualityStatus.VERIFIED and not (
+        scope == "conditional-arithmetic-v1"
+        and _quality_status(request) is QualityStatus.PROVISIONAL
+    ):
         raise VerificationRefusal(
             "QUALITY_NOT_VERIFIED", "reference calculation requires verified quality"
         )

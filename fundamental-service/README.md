@@ -451,6 +451,24 @@ requires machine-readable reasons and missing evidence for every abstention or
 degraded case. The engineering cohort is replay evidence only; it is never
 used as calibration ground truth.
 
+For a completed Service FCFF scenario report, compare the retained resolved
+`ValuationInputV1` and `UncertaintyReportV1` without provider access:
+
+```sh
+uv run --python 3.12 python -m fundamental_service.scenario_verification \
+  --request /path/to/resolved-input.json \
+  --production-report /path/to/uncertainty-report.json \
+  --output /tmp/conditional-arithmetic-check.json
+```
+
+The versioned `conditional-arithmetic-v1` scope independently expands joint
+scenarios and sensitivities and compares every scenario graph with the reference
+equations. It preserves verified or provisional quality and checks input/result
+identities. This check certifies arithmetic agreement only; source completeness,
+usage rights, caller approval, forecast calibration and historical performance
+require their own evidence. It supports explicit scenarios, not Monte Carlo.
+The existing deterministic cohort gate retains its verified-only default.
+
 ## Operations verification
 
 The isolated container uses

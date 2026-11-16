@@ -16,6 +16,7 @@ from fundamental_service.facts import (
 )
 from fundamental_service.original_source_plan import AutomaticSourcePlanConfigurationV1
 from fundamental_service.serialization import canonical_bytes
+from fundamental_service.scenario_verification import verify_conditional_arithmetic
 from fundamental_service.valuation_requirements import (
     automatic_source_requirements_profile,
     conditional_reinvestment_requirements_profile,
@@ -233,6 +234,10 @@ def test_source_runner_binds_prepares_and_resumes_joint_forward_input(
     result = _reader(fixture, calculated)
     assert result.calculation.base.per_share_value is not None
     assert len(result.calculation.scenario_results) == 3
+    arithmetic = verify_conditional_arithmetic(
+        prepared.preparation.input, result.calculation
+    )
+    assert arithmetic.status == "pass", arithmetic.findings
     before = inventory(fixture.artifacts.root)
     repeat = _run(_runner(fixture), plan, approval=approval)
     assert not repeat.wrote and repeat.artifact == calculated.artifact
