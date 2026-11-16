@@ -245,14 +245,17 @@ def approve_mapping_batch(
             continue
         outcomes = []
         for proposal in proposals:
-            single = AutomaticMappingRequestV1(
-                source_revision=request.source_revision,
-                evaluator_id=request.evaluator_id,
-                original=request.original,
-                integrity=request.integrity,
-                evidence_refs=request.evidence_refs,
-                security_identity=request.security_identity,
-                proposal=proposal,
+            single = AutomaticMappingRequestV1.model_validate(
+                {
+                    "source_revision": request.source_revision,
+                    "evaluator_id": request.evaluator_id,
+                    "original": request.original,
+                    "integrity": request.integrity,
+                    "evidence_refs": request.evidence_refs,
+                    "security_identity": request.security_identity,
+                    "proposal": proposal,
+                },
+                context=evidence_checks.originals,
             )
             receipt = approve_mapping(
                 single,

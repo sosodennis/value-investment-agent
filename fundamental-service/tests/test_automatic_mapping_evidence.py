@@ -3,6 +3,7 @@
 import pytest
 
 from fundamental_service import automatic_mapping_evidence as evidence
+from fundamental_service import original_issuer
 from fundamental_service.automatic_mapping import evaluate_automatic_mapping
 from fundamental_service.automatic_mapping_evidence import (
     AutomaticMappingEvidenceChecks,
@@ -160,19 +161,28 @@ def test_batch_shares_source_checks_but_new_batch_revalidates(tmp_path, monkeypa
     request, store, roots = batch_case(tmp_path)
     original_check = evidence.verify_original_bytes
     calls = []
+    original_digest = original_issuer._issuer_input_digest
+    semantic_calls = []
 
     def observed(*args, **kwargs):
         calls.append(True)
         return original_check(*args, **kwargs)
 
+    def semantic_check(*args, **kwargs):
+        semantic_calls.append(True)
+        return original_digest(*args, **kwargs)
+
     monkeypatch.setattr(evidence, "verify_original_bytes", observed)
+    monkeypatch.setattr(original_issuer, "_issuer_input_digest", semantic_check)
     first = run_batch(request, store, roots)
     assert len(first.mapping_receipts) > 1
     assert len(calls) == 1
+    assert len(semantic_calls) == 1
     decision = read_decision(first, store)
     roles = {x.normalized_field: x.status for x in decision.roles}
     assert roles["revenue"] == "approved"
     assert roles["capital_expenditure"] == "abstain"
     second = run_batch(request, store, roots)
     assert len(calls) == 2
+    assert len(semantic_calls) == 2
     assert not second.wrote and second.output_digest == first.output_digest
