@@ -237,6 +237,17 @@ def correlation_id(request: Request) -> str:
     return str(uuid4())
 
 
+def guard_execution_deadline(deadline_at: datetime | None) -> None:
+    """Stop between execution stages without extending the caller's budget."""
+    if deadline_at is not None and deadline_at <= datetime.now(UTC):
+        raise ServiceError(
+            "REQUEST_DEADLINE_EXCEEDED",
+            "request deadline has expired",
+            status_code=408,
+            retryable=True,
+        )
+
+
 def enforce_deadline(
     deadline_at: datetime,
     config: OperationsConfig,

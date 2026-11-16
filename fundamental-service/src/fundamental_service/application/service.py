@@ -82,6 +82,7 @@ from ..operations import (
     OperationsConfig,
     ServiceError,
     guard_calculation_budget,
+    guard_execution_deadline,
 )
 from ..policies import (
     PolicyError,
@@ -1274,11 +1275,17 @@ class FundamentalApplication:
         )
 
     def prepare_valuation(
-        self, request: ValuationEvidenceReadRequestV1, *, policy_id: str | None = None
+        self,
+        request: ValuationEvidenceReadRequestV1,
+        *,
+        policy_id: str | None = None,
+        deadline_at: datetime | None = None,
     ) -> AutomaticValuationPreparationV1:
         """Prepare one valuation from the pinned release and service policy."""
 
+        guard_execution_deadline(deadline_at)
         evidence = self.read_valuation_evidence(request)
+        guard_execution_deadline(deadline_at)
         snapshot = self.snapshot(request.snapshot_id)
         manifest = self._data_release_manifest(request.data_release_manifest_digest)
         working_capital_inputs = valuation_release_working_capital_inputs(
@@ -1411,7 +1418,8 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
-        return prepare_automatic_valuation(
+        guard_execution_deadline(deadline_at)
+        preparation = prepare_automatic_valuation(
             evidence.facts,
             snapshot=snapshot,
             model_id=request.model_id,
@@ -1433,6 +1441,8 @@ class FundamentalApplication:
             if reinvestment is not None
             else None,
         )
+        guard_execution_deadline(deadline_at)
+        return preparation
 
     def apply_manual_override(
         self, request: ManualValuationOverrideRequestV1
@@ -1786,8 +1796,13 @@ class FundamentalApplication:
         return self.validate_valuation(value.base_input())
 
     def calculate_valuation(
-        self, value: ValuationInputV1, *, correlation_id: str
+        self,
+        value: ValuationInputV1,
+        *,
+        correlation_id: str,
+        deadline_at: datetime | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
         if value.policy_id is None:
             raise ServiceError(
@@ -1798,18 +1813,25 @@ class FundamentalApplication:
             )
         resolved, resolution = self._resolve_policy(value)
         return self._calculate_resolved(
-            resolved, resolution, correlation_id=correlation_id
+            resolved, resolution, correlation_id=correlation_id, deadline_at=deadline_at
         )
 
     def calculate_with_policy(
-        self, value: PolicyValuationInputV1, *, correlation_id: str
+        self,
+        value: PolicyValuationInputV1,
+        *,
+        correlation_id: str,
+        deadline_at: datetime | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        guard_execution_deadline(deadline_at)
         resolved, resolution = self._resolve_policy_overrides(value)
         return self._calculate_resolved(
-            resolved, resolution, correlation_id=correlation_id
+            resolved, resolution, correlation_id=correlation_id, deadline_at=deadline_at
         )
 
-    def _is_released_conditional_input(self, value: ValuationInputV1) -> bool:
+    def _is_released_conditional_input(
+        self, value: ValuationInputV1, *, deadline_at: datetime | None = None
+    ) -> bool:
         manifest = self._data_release_manifest(
             value.valuation_context.data_release_manifest_digest
         )
@@ -1846,6 +1868,7 @@ class FundamentalApplication:
                 model_id=value.model_id,
             ),
             policy_id=value.policy_id,
+            deadline_at=deadline_at,
         )
         if expected.input is not None:
             resolved, _ = self._resolve_policy(expected.input)
@@ -1870,7 +1893,9 @@ class FundamentalApplication:
         resolution: Any,
         *,
         correlation_id: str,
+        deadline_at: datetime | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        guard_execution_deadline(deadline_at)
         if resolution.input_digest != resolved.input_digest:
             raise ServiceError(
                 "INPUT_DIGEST_MISMATCH",
@@ -1882,7 +1907,11 @@ class FundamentalApplication:
         guard_calculation_budget(resolved, self.config)
         snapshot = self.snapshot(resolved.valuation_context.data_snapshot_id)
         self._verify_fact_references(resolved)
-        released_conditional = self._is_released_conditional_input(resolved)
+        guard_execution_deadline(deadline_at)
+        released_conditional = self._is_released_conditional_input(
+            resolved, deadline_at=deadline_at
+        )
+        guard_execution_deadline(deadline_at)
         if released_conditional and resolved.caller_approval is None:
             raise ServiceError(
                 "CALLER_APPROVAL_REQUIRED",
@@ -1927,6 +1956,7 @@ class FundamentalApplication:
             service_owned_uncertainty = (
                 released_conditional or is_service_owned_monte_carlo(resolved)
             )
+            guard_execution_deadline(deadline_at)
             result = calculate(
                 calculation_input,
                 correlation_id=correlation_id,
@@ -1945,12 +1975,14 @@ class FundamentalApplication:
                 update={"policy_resolution": calculation_resolution, "trace": trace}
             )
         )
+        guard_execution_deadline(deadline_at)
         result = self._persist_evidence(calculation_input, result)
         self.metrics.increment("quality_status_total")
         self.metrics.increment(f"quality_status_{result.quality_status.value}_total")
         if not has_uncertainty:
             return result
         try:
+            guard_execution_deadline(deadline_at)
             uncertainty = run_uncertainty(
                 resolved,
                 base_result=result,
@@ -1973,6 +2005,7 @@ class FundamentalApplication:
         uncertainty_request = resolved.model_dump(
             exclude={"input_digest", "caller_approval"}
         )
+        guard_execution_deadline(deadline_at)
         uncertainty = self._persist_uncertainty_evidence(
             uncertainty, uncertainty_request
         )
@@ -2011,7 +2044,10 @@ class FundamentalApplication:
             self.metrics.increment("abstention_total")
         return report
 
-    def uncertainty_valuation(self, value: UncertaintyRequestV1) -> UncertaintyReportV1:
+    def uncertainty_valuation(
+        self, value: UncertaintyRequestV1, *, deadline_at: datetime | None = None
+    ) -> UncertaintyReportV1:
+        guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
         if value.policy_id is None:
             raise ServiceError(
@@ -2087,9 +2123,11 @@ class FundamentalApplication:
             base = self.calculate_valuation(
                 resolved,
                 correlation_id="uncertainty-base",
+                deadline_at=deadline_at,
             )
             if isinstance(base, UncertaintyReportV1):
                 base = base.base
+            guard_execution_deadline(deadline_at)
             result = run_uncertainty(
                 resolved_value,
                 monte_carlo=monte_carlo,
@@ -2116,6 +2154,7 @@ class FundamentalApplication:
         evidence_request = resolved_value.model_dump(
             exclude={"input_digest", "caller_approval"}
         )
+        guard_execution_deadline(deadline_at)
         result = self._persist_uncertainty_evidence(result, evidence_request)
         self.metrics.increment("quality_status_total")
         self.metrics.increment(f"quality_status_{result.status.value}_total")

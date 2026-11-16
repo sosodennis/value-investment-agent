@@ -251,3 +251,36 @@ approval and numerical replay/recovery acceptance.
 
 Failed runs, the signed candidate, deployment policy versions and diagnosis
 remain outside Git under `.audit/issue-361-current-issuer-service/3211068e-*`.
+
+## Bounded HTTP execution and absolute stage deadlines
+
+The installed `13312b0c` real company/date run exceeded its unchanged 900-second
+budget (902.31 seconds including subprocess shutdown). No prepared input or
+numerical result was returned. This is a failed end-to-end run; passing CI and
+the supplemental-membership correction do not establish M1 or M2. Its request,
+receipt and store-state inventory remain outside Git under
+`.audit/issue-361-current-issuer-service/13312b0c-*`.
+
+The HTTP prepare, calculate, policy-calculation and uncertainty routes now share
+one per-application worker slot. Waiting uses the authenticated operation's
+existing absolute deadline; an expired waiter does not start work or occupy the
+slot. Running work stays attached to the worker until completion, so timeout
+handling cannot release capacity while that work is still running. Liveness
+requests remain available while a valuation waits on blocking work.
+
+The application owner propagates that same deadline through conditional input
+recomposition and checks it between source verification, composition, calculation
+and persistence stages. These are cooperative stage checks: they do not kill a
+running Python function or roll back a transaction already started. The caller's
+approval, input identity, released policy and calculator formulas retain their
+existing semantics. This bounds HTTP execution and prevents entering a later
+stage after expiry; it does not resolve the separate issuer CLI performance
+failure or claim a whole-process memory bound.
+
+The increment's owner/PostgreSQL checks passed 270 tests and formal caller
+checks passed 56, with no skipped tests. Ruff 0.14.10, changed-source mypy 1.19.1,
+both architecture guards and diff checks passed. Independent correctness and
+maintainability reviews of the four changed code/test files found no actionable
+findings; this is bounded static coverage, not whole-PR review. Full receipts
+and reviewed file hashes remain Git-external as `wip-http-execution-receipt.json`
+and `http-execution-independent-review.json` in that audit directory.

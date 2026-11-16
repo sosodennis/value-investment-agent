@@ -6,12 +6,15 @@ import json
 import logging
 import os
 import tempfile
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from time import monotonic
-from typing import Any, Literal
+from typing import Any, Literal, ParamSpec, TypeVar
 
+from anyio import CapacityLimiter, fail_after, to_thread
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -81,6 +84,7 @@ from .operations import (
     correlation_id,
     guard_body_size,
     guard_caller_approval,
+    guard_execution_deadline,
 )
 from .policies import (
     MetadataModelRepository,
@@ -118,6 +122,8 @@ from .forward_evidence import (
 )
 
 LOGGER = logging.getLogger("fundamental_service")
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 def _validation_error(
@@ -271,6 +277,29 @@ def create_app(
     sec_acquisition_limiter = RateLimiter(
         runtime_config.ingestion_rate_limit_per_minute
     )
+    valuation_limiter = CapacityLimiter(1)
+
+    async def run_valuation_operation(
+        request: Request, operation: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        deadline_at = request.state.deadline
+        guard_execution_deadline(deadline_at)
+        try:
+            with fail_after((deadline_at - datetime.now(UTC)).total_seconds()) as scope:
+                result = await to_thread.run_sync(
+                    partial(operation, *args, **kwargs), limiter=valuation_limiter
+                )
+        except TimeoutError as error:
+            if not scope.cancel_called:
+                raise
+            raise ServiceError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "request deadline expired while waiting for valuation execution",
+                status_code=408,
+                retryable=True,
+            ) from error
+        guard_execution_deadline(deadline_at)
+        return result
 
     def release_actor(
         request: Request, allowed_organizations: frozenset[str]
@@ -509,7 +538,13 @@ def create_app(
     )
     async def prepare_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationEvidenceReadRequestV1)
-        return success_response(request, application.prepare_valuation(value))
+        result = await run_valuation_operation(
+            request,
+            application.prepare_valuation,
+            value,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
 
     @app.post(
         "/v1/valuation/prepare/override",
@@ -867,8 +902,12 @@ def create_app(
             caller_id=request.state.context.principal.subject_id,
             received_at=datetime.now(UTC),
         )
-        result = application.calculate_valuation(
-            value, correlation_id=request.state.correlation_id
+        result = await run_valuation_operation(
+            request,
+            application.calculate_valuation,
+            value,
+            correlation_id=request.state.correlation_id,
+            deadline_at=request.state.deadline,
         )
         return success_response(request, result)
 
@@ -900,8 +939,12 @@ def create_app(
             caller_id=request.state.context.principal.subject_id,
             received_at=datetime.now(UTC),
         )
-        result = application.calculate_with_policy(
-            value, correlation_id=request.state.correlation_id
+        result = await run_valuation_operation(
+            request,
+            application.calculate_with_policy,
+            value,
+            correlation_id=request.state.correlation_id,
+            deadline_at=request.state.deadline,
         )
         return success_response(request, result)
 
@@ -920,7 +963,13 @@ def create_app(
             caller_id=request.state.context.principal.subject_id,
             received_at=datetime.now(UTC),
         )
-        return success_response(request, application.uncertainty_valuation(value))
+        result = await run_valuation_operation(
+            request,
+            application.uncertainty_valuation,
+            value,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
 
     base_openapi = app.openapi
 
