@@ -45,6 +45,7 @@ from .contracts import (
     CallerApprovalEnvelopeV1,
     QualityStatus,
     SecIntegrityEvidenceV1,
+    SecIngestionResponseV1,
     SecMappingReferenceV1,
     SnapshotResolutionV1,
     SourceRole,
@@ -378,15 +379,22 @@ class SourcePreparationRunner:
         self._automatic_release_policy = automatic_release_policy
 
     def _plan_mappings(
-        self, plan: SourcePreparationPlan
+        self,
+        plan: SourcePreparationPlan,
+        *,
+        acquisitions: tuple[SecIngestionResponseV1 | None, ...] | None = None,
     ) -> tuple[tuple[SecMappingReferenceV1, ...], ...] | None:
         if isinstance(plan, SourcePreparationPlanV2):
             return tuple(request.mappings for request in plan.ingestions)
         if self._acquisition is None:
             return None
         groups = []
-        for request in plan.ingestions:
-            retained = self._acquisition.retained_acquisition(request)
+        if acquisitions is None:
+            acquisitions = tuple(
+                self._acquisition.retained_acquisition(request)
+                for request in plan.ingestions
+            )
+        for request, retained in zip(plan.ingestions, acquisitions, strict=True):
             if (
                 retained is None
                 or retained.snapshot_id is None
@@ -925,15 +933,30 @@ class SourcePreparationRunner:
         publication = self._artifacts.put_with_receipt(
             f"source-preparation-plan:{plan.digest}", plan
         )
-        binding_ref = None
+        binding_snapshot = None
+        binding_facts = None
         if (
             not assembly_failed
-            and plan.valuation_working_capital_recipe is not None
             and evidence.snapshot_id is not None
-            and self._plan_mappings(plan) is not None
+            and (
+                isinstance(plan, AutomaticSourcePreparationPlanV1)
+                or plan.valuation_working_capital_recipe is not None
+                or plan.conditional_capital_recipe is not None
+                or plan.conditional_reinvestment_recipe is not None
+            )
+        ):
+            groups = self._plan_mappings(plan)
+            if groups is not None:
+                binding_snapshot = self._application.snapshot(evidence.snapshot_id)
+                binding_facts = self._plan_facts(plan, binding_snapshot, groups=groups)
+        binding_ref = None
+        if (
+            plan.valuation_working_capital_recipe is not None
+            and binding_snapshot is not None
+            and binding_facts is not None
         ):
             binding = self._bind_working_capital(
-                plan, self._application.snapshot(evidence.snapshot_id)
+                plan, binding_snapshot, facts=binding_facts
             )
             assert binding is not None
             bound = self._artifacts.put_with_receipt(
@@ -949,13 +972,12 @@ class SourcePreparationRunner:
             )
         capital_ref = None
         if (
-            not assembly_failed
-            and plan.conditional_capital_recipe is not None
-            and evidence.snapshot_id is not None
-            and self._plan_mappings(plan) is not None
+            plan.conditional_capital_recipe is not None
+            and binding_snapshot is not None
+            and binding_facts is not None
         ):
             capital = self._bind_conditional_capital(
-                plan, self._application.snapshot(evidence.snapshot_id)
+                plan, binding_snapshot, facts=binding_facts
             )
             assert capital is not None
             bound_capital = self._artifacts.put_with_receipt(
@@ -994,13 +1016,12 @@ class SourcePreparationRunner:
             self._persist_acquisitions(plan, evidence.source_outcomes)
         reinvestment_ref = None
         if (
-            not assembly_failed
-            and plan.conditional_reinvestment_recipe is not None
-            and evidence.snapshot_id is not None
-            and self._plan_mappings(plan) is not None
+            plan.conditional_reinvestment_recipe is not None
+            and binding_snapshot is not None
+            and binding_facts is not None
         ):
             forward = self._bind_conditional_reinvestment(
-                plan, self._application.snapshot(evidence.snapshot_id)
+                plan, binding_snapshot, facts=binding_facts
             )
             assert forward is not None
             bound_forward = self._artifacts.put_with_receipt(
@@ -1042,16 +1063,14 @@ class SourcePreparationRunner:
                 )
         fact_inventory = None
         if (
-            not assembly_failed
-            and isinstance(plan, AutomaticSourcePreparationPlanV1)
-            and evidence.snapshot_id is not None
-            and self._plan_mappings(plan) is not None
+            isinstance(plan, AutomaticSourcePreparationPlanV1)
+            and binding_snapshot is not None
+            and binding_facts is not None
         ):
-            inventory_snapshot = self._application.snapshot(evidence.snapshot_id)
-            if inventory_snapshot.coverage_status is QualityStatus.VERIFIED:
+            if binding_snapshot.coverage_status is QualityStatus.VERIFIED:
                 fact_inventory = build_source_fact_inventory(
-                    self._plan_facts(plan, inventory_snapshot),
-                    snapshot=inventory_snapshot,
+                    binding_facts,
+                    snapshot=binding_snapshot,
                     profile=plan.requirements_profile,
                     mapping_refusals=self._mapping_refusals(evidence.source_outcomes),
                 )
@@ -1242,12 +1261,24 @@ class SourcePreparationRunner:
         return tuple(snapshots), tuple(outcomes)
 
     def _plan_facts(
-        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+        self,
+        plan: SourcePreparationPlan,
+        snapshot: SourceSnapshotV1,
+        *,
+        groups: tuple[tuple[SecMappingReferenceV1, ...], ...] | None = None,
     ) -> tuple[CanonicalFactV1, ...]:
         facts = self._application.fact_repository
         if facts is None:
             raise ValueError("history assessment requires a canonical fact repository")
-        groups = self._plan_mappings(plan)
+        acquisitions = None
+        if isinstance(plan, AutomaticSourcePreparationPlanV1):
+            assert self._acquisition is not None
+            acquisitions = tuple(
+                self._acquisition.retained_acquisition(request)
+                for request in plan.ingestions
+            )
+        if groups is None:
+            groups = self._plan_mappings(plan, acquisitions=acquisitions)
         if groups is None:
             raise SnapshotError(
                 "HISTORY_MAPPING_EVIDENCE_UNAVAILABLE",
@@ -1264,10 +1295,9 @@ class SourcePreparationRunner:
             if source.role is SourceRole.FILING
         }
         if isinstance(plan, AutomaticSourcePreparationPlanV1):
-            assert self._acquisition is not None
+            assert acquisitions is not None
             fact_ids: set[str] = set()
-            for request in plan.ingestions:
-                retained = self._acquisition.retained_acquisition(request)
+            for retained in acquisitions:
                 if retained is None:
                     raise SnapshotError(
                         "HISTORY_MAPPING_EVIDENCE_UNAVAILABLE",
@@ -1291,25 +1321,32 @@ class SourcePreparationRunner:
         )
 
     def _bind_working_capital(
-        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+        self,
+        plan: SourcePreparationPlan,
+        snapshot: SourceSnapshotV1,
+        *,
+        facts: tuple[CanonicalFactV1, ...] | None = None,
     ) -> WorkingCapitalBindingV1 | None:
         recipe = plan.valuation_working_capital_recipe
         if recipe is None:
             return None
         return bind_working_capital_recipe(
-            recipe, self._plan_facts(plan, snapshot), snapshot=snapshot
+            recipe,
+            self._plan_facts(plan, snapshot) if facts is None else facts,
+            snapshot=snapshot,
         )
 
     def _assess_history_requirements(
         self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        capital = self._bind_conditional_capital(plan, snapshot)
+        facts = self._plan_facts(plan, snapshot)
+        capital = self._bind_conditional_capital(plan, snapshot, facts=facts)
         if capital is not None and capital.issue_codes:
             return capital.issue_codes, capital.missing_evidence
-        forward = self._bind_conditional_reinvestment(plan, snapshot)
+        forward = self._bind_conditional_reinvestment(plan, snapshot, facts=facts)
         if forward is not None:
             return forward.issue_codes, forward.missing_evidence
-        binding = self._bind_working_capital(plan, snapshot)
+        binding = self._bind_working_capital(plan, snapshot, facts=facts)
         if binding is not None and binding.missing_evidence:
             return (
                 "SOURCE_PREPARATION_WORKING_CAPITAL_INVALID",
@@ -1322,7 +1359,7 @@ class SourcePreparationRunner:
         profile = plan.requirements_profile
         working_capital_inputs = policy.inputs if policy is not None else ()
         selected = select_released_facts(
-            self._plan_facts(plan, snapshot),
+            facts,
             profile=profile,
             snapshot=snapshot,
             valuation_timestamp=snapshot.valuation_timestamp,
@@ -1360,24 +1397,32 @@ class SourcePreparationRunner:
         return (), ()
 
     def _bind_conditional_capital(
-        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+        self,
+        plan: SourcePreparationPlan,
+        snapshot: SourceSnapshotV1,
+        *,
+        facts: tuple[CanonicalFactV1, ...] | None = None,
     ) -> ConditionalCapitalBindingV1 | None:
         if plan.conditional_capital_recipe is None:
             return None
         return bind_conditional_capital_recipe(
             plan.conditional_capital_recipe,
-            self._plan_facts(plan, snapshot),
+            self._plan_facts(plan, snapshot) if facts is None else facts,
             snapshot=snapshot,
         )
 
     def _bind_conditional_reinvestment(
-        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+        self,
+        plan: SourcePreparationPlan,
+        snapshot: SourceSnapshotV1,
+        *,
+        facts: tuple[CanonicalFactV1, ...] | None = None,
     ) -> ConditionalReinvestmentBindingV1 | None:
         if plan.conditional_reinvestment_recipe is None:
             return None
         return prepare_conditional_reinvestment(
             plan.conditional_reinvestment_recipe,
-            self._plan_facts(plan, snapshot),
+            self._plan_facts(plan, snapshot) if facts is None else facts,
             snapshot=snapshot,
             artifacts=self._application.artifact_store,
             conditional_capital=plan.conditional_capital_recipe is not None,
@@ -1468,9 +1513,10 @@ class SourcePreparationRunner:
                 "AUTOMATIC_PREPARATION_MAPPING_EVIDENCE_MISSING",
                 "release assembly requires retained automatic source mappings",
             )
-        working = self._bind_working_capital(plan, snapshot)
-        capital = self._bind_conditional_capital(plan, snapshot)
-        forward = self._bind_conditional_reinvestment(plan, snapshot)
+        facts = self._plan_facts(plan, snapshot, groups=groups)
+        working = self._bind_working_capital(plan, snapshot, facts=facts)
+        capital = self._bind_conditional_capital(plan, snapshot, facts=facts)
+        forward = self._bind_conditional_reinvestment(plan, snapshot, facts=facts)
         refs = tuple(ref for outcome in admissions for ref in outcome.release_refs)
         if forward is not None and forward.assumption_document_ref is not None:
             refs += (forward.assumption_document_ref,)
@@ -1485,7 +1531,7 @@ class SourcePreparationRunner:
         request = assemble_preparation_release(
             plan=plan,
             snapshot=snapshot,
-            facts=self._plan_facts(plan, snapshot),
+            facts=facts,
             mappings=tuple(
                 self._metadata.get_mapping(key)
                 for key in sorted(

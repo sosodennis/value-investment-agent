@@ -132,6 +132,31 @@ def test_automatic_plan_excludes_unretained_facts_even_with_same_source_and_mapp
     assert calls == (case.state.provider_calls, case.state.parser_calls)
 
 
+def test_fact_selection_validates_each_acquisition_once_and_rechecks_next_read(
+    plan_facts_case, monkeypatch
+):
+    case = plan_facts_case
+    acquisition = case.runner._acquisition
+    retained = acquisition.retained_acquisition
+    requests = []
+
+    def observed(request):
+        requests.append(request)
+        return retained(request)
+
+    monkeypatch.setattr(acquisition, "retained_acquisition", observed)
+    first = case.runner._plan_facts(case.plan, case.snapshot)
+    assert requests == list(case.plan.ingestions)
+    assert first
+    requests.clear()
+    assert case.runner._plan_facts(case.plan, case.snapshot) == first
+    assert requests == list(case.plan.ingestions)
+    case.change_payload(first[0].fact_id, None)
+    with pytest.raises(SnapshotError) as error:
+        case.runner._plan_facts(case.plan, case.snapshot)
+    assert error.value.code == "FACT_NOT_FOUND"
+
+
 @pytest.mark.parametrize("failure", ("missing", "corrupt"))
 def test_selected_missing_or_corrupt_fact_is_refused(plan_facts_case, failure):
     case = plan_facts_case
