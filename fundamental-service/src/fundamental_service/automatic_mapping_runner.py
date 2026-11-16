@@ -37,6 +37,7 @@ from .data_releases import (
     sign_automatic_mapping_approval,
     verify_mapping_review_evidence,
 )
+from .mapping_input_storage import publish_mapping_input
 from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
@@ -47,6 +48,9 @@ class AutomaticMappingReceiptV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     output_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     input_publication: ArtifactPublicationV1
+    parser_report_publication: ArtifactPublicationV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     decision_publication: ArtifactPublicationV1
     approval_publication: ArtifactPublicationV1 | None
 
@@ -117,17 +121,19 @@ def approve_mapping(
                 raise
     decision = evaluate_automatic_mapping(request, contents=contents)
     input_digest, output_digest = sha256_digest(request), sha256_digest(decision)
-    input_publication = artifacts.put_with_receipt(
-        "automatic-mapping-input-" + input_digest,
+    parser_report_publication, input_publication = publish_mapping_input(
         request,
-        dependency_hashes=tuple(
-            sorted({ref.content_hash for ref in request.evidence_refs})
-        ),
+        request.original,
+        artifacts=artifacts,
+        evidence_refs=request.evidence_refs,
     )
     decision_publication = artifacts.put_with_receipt(
         "automatic-mapping-decision-" + output_digest,
         decision,
-        dependency_hashes=(input_digest, decision.policy_digest),
+        dependency_hashes=(
+            input_publication.artifact.content_hash,
+            decision.policy_digest,
+        ),
     )
     approval_publication = None
     if decision.mapping is not None:
@@ -154,13 +160,18 @@ def approve_mapping(
         approval_publication = artifacts.put_with_receipt(
             "automatic-mapping-approval-" + sha256_digest(approval),
             approval,
-            dependency_hashes=(input_digest, output_digest, approval.mapping_digest),
+            dependency_hashes=(
+                input_publication.artifact.content_hash,
+                output_digest,
+                approval.mapping_digest,
+            ),
         )
     return AutomaticMappingReceiptV1(
         source_revision=request.source_revision,
         input_digest=input_digest,
         output_digest=output_digest,
         input_publication=input_publication,
+        parser_report_publication=parser_report_publication,
         decision_publication=decision_publication,
         approval_publication=approval_publication,
     )
@@ -171,6 +182,9 @@ class AutomaticMappingBatchReceiptV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     output_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     input_publication: ArtifactPublicationV1
+    parser_report_publication: ArtifactPublicationV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     decision_publication: ArtifactPublicationV1
     mapping_receipts: tuple[AutomaticMappingReceiptV1, ...]
     wrote: bool
@@ -195,12 +209,12 @@ def approve_mapping_batch(
     """Propose known roles and retain every unsupported/missing-role decision."""
     _require_machine_identity(request, trust_roots=trust_roots, private_key=private_key)
     input_digest = sha256_digest(request)
-    input_publication = artifacts.put_with_receipt(
-        "automatic-mapping-batch-input-" + input_digest,
+    parser_report_publication, input_publication = publish_mapping_input(
         request,
-        dependency_hashes=tuple(
-            sorted({ref.content_hash for ref in request.evidence_refs})
-        ),
+        request.original,
+        artifacts=artifacts,
+        evidence_refs=request.evidence_refs,
+        batch=True,
     )
     roles, receipts = [], []
     for role in sorted(
@@ -284,7 +298,7 @@ def approve_mapping_batch(
     )
     output_digest = sha256_digest(batch_decision)
     dependencies = {
-        input_digest,
+        input_publication.artifact.content_hash,
         batch_decision.policy_digest,
         request.requirements.digest,
     }
@@ -298,8 +312,10 @@ def approve_mapping_batch(
         batch_decision,
         dependency_hashes=tuple(sorted(dependencies)),
     )
-    publications = [input_publication, decision_publication]
+    publications = [parser_report_publication, input_publication, decision_publication]
     for receipt in receipts:
+        if receipt.parser_report_publication is not None:
+            publications.append(receipt.parser_report_publication)
         publications.extend((receipt.input_publication, receipt.decision_publication))
         if receipt.approval_publication is not None:
             publications.append(receipt.approval_publication)
@@ -308,6 +324,7 @@ def approve_mapping_batch(
         input_digest=input_digest,
         output_digest=output_digest,
         input_publication=input_publication,
+        parser_report_publication=parser_report_publication,
         decision_publication=decision_publication,
         mapping_receipts=tuple(receipts),
         wrote=any(publication.wrote for publication in publications),

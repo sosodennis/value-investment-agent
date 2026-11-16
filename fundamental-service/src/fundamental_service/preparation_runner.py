@@ -72,6 +72,7 @@ from .market_policy_deployment import MarketPolicyDeployment
 from .policies import MetadataPolicyRepository, PolicyRecordV1
 from .replay import ArtifactPublicationV1
 from .uncertainty import UncertaintyReportV1
+from .mapping_input_storage import read_mapping_batch_input
 from .serialization import canonical_bytes, sha256_digest
 from .source_acquisition import SecAcquisitionUseCase
 from .snapshots import SnapshotError
@@ -407,8 +408,8 @@ class SourcePreparationRunner:
             batch = AutomaticMappingBatchDecisionV1.model_validate_json(
                 artifacts.read(record.artifact_id)
             )
-            batch_input = AutomaticMappingBatchRequestV1.model_validate_json(
-                artifacts.read("automatic-mapping-batch-input-" + batch.input_digest)
+            _, batch_input = read_mapping_batch_input(
+                batch.input_digest, AutomaticMappingBatchRequestV1, artifacts=artifacts
             )
             if (
                 sha256_digest(batch_input) != batch.input_digest
@@ -1414,10 +1415,10 @@ class SourcePreparationRunner:
                 outcome.mapping_evidence_ref,
                 AutomaticMappingBatchDecisionV1,
             )
-            batch_input = AutomaticMappingBatchRequestV1.model_validate_json(
-                self._application.artifact_store.read(
-                    "automatic-mapping-batch-input-" + batch.input_digest
-                )
+            _, batch_input = read_mapping_batch_input(
+                batch.input_digest,
+                AutomaticMappingBatchRequestV1,
+                artifacts=self._application.artifact_store,
             )
             source = batch_input.original.source
             if (

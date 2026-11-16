@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -59,6 +59,7 @@ from .registered_revenue import (
     registered_revenue_concept,
     select_registered_revenue,
 )
+from .mapping_input_storage import MappingInputReader, resolve_mapping_input
 from .serialization import sha256_digest
 from .sec_rebuild import parsed_facts_to_candidates
 from .snapshots import SnapshotError
@@ -213,6 +214,7 @@ def automatic_mapping_policy_digest() -> str:
                     "automatic_mapping.py",
                     "automatic_mapping_batch.py",
                     "automatic_mapping_runner.py",
+                    "mapping_input_storage.py",
                     "automatic_source_mapping.py",
                     "preparation_runner.py",
                     "source_plan_contracts.py",
@@ -1007,15 +1009,11 @@ def evaluate_automatic_mapping(
     )
 
 
-class MappingEvidenceReader(Protocol):
-    def read(self, artifact_id: str) -> bytes: ...
-
-
 def verify_automatic_mapping_replay(
     approval: AutomaticMappingApprovalV1,
     mapping: CanonicalMappingV1,
     *,
-    artifacts: MappingEvidenceReader,
+    artifacts: MappingInputReader,
 ) -> AutomaticMappingRequestV1:
     """Re-evaluate retained inputs; a trusted signature alone is insufficient."""
     refs = tuple(
@@ -1034,7 +1032,7 @@ def verify_automatic_mapping_replay(
             "DATA_RELEASE_MAPPING_INPUT_HASH_MISMATCH",
             "automatic mapping input changed",
         )
-    request = AutomaticMappingRequestV1.model_validate_json(raw)
+    request = resolve_mapping_input(raw, AutomaticMappingRequestV1, artifacts=artifacts)
     if approval.evidence_refs != (refs[0], *request.evidence_refs):
         raise DataReleaseError(
             "DATA_RELEASE_MAPPING_EVIDENCE_MISMATCH",

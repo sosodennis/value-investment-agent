@@ -31,6 +31,7 @@ from .data_releases import (
 )
 from .equity_dilution import AWARD_FACT_FIELDS
 from .facts import CanonicalMappingV1, canonical_fact_digest, resolve_canonical_facts
+from .mapping_input_storage import read_mapping_batch_input
 from .serialization import sha256_digest
 from .source_plan_contracts import AutomaticSourcePreparationPlanV1
 from .taxonomy_evidence import TAXONOMY_CACHE_ARCHIVE_ROLE
@@ -144,16 +145,8 @@ def assemble_preparation_release(
         batch = read_preparation_release_artifact(
             artifacts, ref, AutomaticMappingBatchDecisionV1
         )
-        input_id = "automatic-mapping-batch-input-" + batch.input_digest
-        record = artifacts.get(input_id)
-        input_ref = ArtifactRefV1(
-            artifact_id=input_id,
-            content_hash=record.content_hash,
-            media_type=record.media_type,
-            role="automatic-mapping-batch-input-v1",
-        )
-        request = read_preparation_release_artifact(
-            artifacts, input_ref, AutomaticMappingBatchRequestV1
+        input_ref, request = read_mapping_batch_input(
+            batch.input_digest, AutomaticMappingBatchRequestV1, artifacts=artifacts
         )
         if (
             sha256_digest(request) != batch.input_digest

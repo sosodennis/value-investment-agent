@@ -304,9 +304,9 @@ def test_diagnostics_refuse_mismatched_batch_input_original_or_snapshot(
 
         def changed_read(artifact_id):
             raw = original_read(artifact_id)
-            if artifact_id == "automatic-mapping-batch-input-" + batch.input_digest:
+            if artifact_id == "automatic-mapping-batch-input-v2-" + batch.input_digest:
                 value = json.loads(raw)
-                value["original"]["source"]["content_hash"] = "f" * 64
+                value["original_ref"]["content_hash"] = "f" * 64
                 return canonical_bytes(value)
             return raw
 

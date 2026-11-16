@@ -18,6 +18,7 @@ from fundamental_service.facts import (
     FilesystemCanonicalFactRepository,
     canonical_fact_digest,
 )
+from fundamental_service.mapping_input_storage import resolve_mapping_input
 from fundamental_service.preparation_release import assemble_preparation_release
 from fundamental_service.preparation_release import select_preparation_release_facts
 from fundamental_service.release_runner import DataReleaseCanaryRunner
@@ -315,15 +316,15 @@ def test_two_original_assembly_keeps_coverage_after_pit_prunes_older_mappings(
     )
     assert len(evidence) == 2
     # The unused original remains required even though none of its mappings do.
-    import json
-
     retained = tuple(
         ref
         for ref in request.content.evidence_refs
         if ref.role != "automatic-mapping-batch-input-v1"
-        or json.loads(latest["artifacts"].read(ref.artifact_id))["original"]["source"][
-            "accession_number"
-        ]
+        or resolve_mapping_input(
+            latest["artifacts"].read(ref.artifact_id),
+            AutomaticMappingBatchRequestV1,
+            artifacts=latest["artifacts"],
+        ).original.source.accession_number
         == latest["plan"].ingestions[0].filing.accession_number
     )
     with pytest.raises(DataReleaseError) as failure:
@@ -365,8 +366,10 @@ def test_retained_original_coverage_refuses_invalid_evidence_without_used_mappin
         ref for ref in refs if ref.role == "automatic-mapping-batch-input-v1"
     )
     store = options["artifacts"]
-    batch = AutomaticMappingBatchRequestV1.model_validate_json(
-        store.read(batch_ref.artifact_id)
+    batch = resolve_mapping_input(
+        store.read(batch_ref.artifact_id),
+        AutomaticMappingBatchRequestV1,
+        artifacts=store,
     )
     snapshot = options["snapshot"]
     profile = options["policy"].validation_profile_digest
@@ -414,9 +417,10 @@ def test_retained_original_coverage_refuses_invalid_evidence_without_used_mappin
             if ref.content_hash == batch.integrity.raw_content_hash
         )
         store = SimpleNamespace(
+            get=options["artifacts"].get,
             read=lambda artifact_id: b"corrupted"
             if artifact_id == raw_ref.artifact_id
-            else options["artifacts"].read(artifact_id)
+            else options["artifacts"].read(artifact_id),
         )
     elif defect == "profile":
         profile = "0" * 64

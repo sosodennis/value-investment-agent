@@ -27,6 +27,7 @@ from .release_runner import (
     ReleaseMappingReader,
     ReleaseSnapshotReader,
 )
+from .mapping_input_storage import resolve_mapping_input
 from .serialization import canonical_bytes, sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
@@ -50,7 +51,9 @@ def _retained_original_inputs(
                 "AUTOMATIC_RELEASE_ORIGINAL_ARTIFACT_MISMATCH",
                 "retained original inputs require exact JSON evidence bytes",
             )
-        source = AutomaticMappingBatchRequestV1.model_validate_json(raw)
+        source = resolve_mapping_input(
+            raw, AutomaticMappingBatchRequestV1, artifacts=artifacts
+        )
         if (
             source.source_revision != request.source_revision
             or source.original.status != "matched"

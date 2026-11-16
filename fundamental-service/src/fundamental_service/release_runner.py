@@ -84,7 +84,7 @@ from .policies import (
 )
 from .source_admission import SourceUsePolicyV1
 from .source_admission_evidence import load_release_source_admissions
-from .replay import ArtifactStore
+from .replay import ArtifactRecordV1, ArtifactStore
 from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import FilesystemSnapshotRepository, SnapshotError
@@ -116,6 +116,8 @@ class ReleaseMappingReader(Protocol):
 
 
 class ReleaseArtifactReader(Protocol):
+    def get(self, artifact_id: str) -> ArtifactRecordV1: ...
+
     def read(self, artifact_id: str) -> bytes: ...
 
 

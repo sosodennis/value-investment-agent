@@ -321,6 +321,20 @@ records deployment-approved rights; it cannot create provider permission.
 
 ## Source preparation command
 
+Mapping input artifacts use `fundamental.mapping-input-artifact.v2`: each field
+and batch retains its request metadata and original evidence metadata, with a
+SHA-256 reference to one immutable parser report. Identical reports are shared
+across fields, code revisions and valuation dates. The receipt's `input_digest`
+is the resolved domain request identity; the input artifact's `content_hash`
+is the stored envelope identity. Signed approvals bind both. The separate
+`parser_report_publication` records report writes/reuse and contributes to the
+batch `wrote` result, including interleaved publication. Replay resolves
+and checks the report, reconstructs the original claim, checks the semantic
+input digest, then reruns the existing mapping policy. Explicitly retained
+inline v1 evidence stays readable. An existing corrupt v2 input cannot fall back
+to v1. Missing, changed or substituted reports are refused. No stored historical
+evidence is rewritten, and no financial formula or source-use entitlement changes.
+
 The acquisition owner also accepts `AutomaticSecIngestionRequestV1` with exact
 model, requirements, executable mapping policy, source revision and evaluator
 pins. It has no manual mapping references. An injected deployment authority
