@@ -829,7 +829,7 @@ class SecAcquisitionUseCase:
                         "CURRENT_CAPTURE_MISMATCH", "current capture differs"
                     )
             selection_at = cutoff.requested_at
-        prepared = originals.read(reference.artifact_id)
+        prepared, validations = originals.read_with_validations(reference.artifact_id)
         runtime = self.original_validation_runtime(
             declared_source_revision=request.source_revision,
             validation_profile_id=request.validation_profile_id,
@@ -845,8 +845,7 @@ class SecAcquisitionUseCase:
             raise SnapshotError(
                 "ORIGINAL_PREPARATION_INVALID", "prepared runtime or outcome differs"
             )
-        for item in prepared.filings:
-            validation = originals.read_validation(item.validation.artifact_id)
+        for item, validation in zip(prepared.filings, validations, strict=True):
             original = validation.request
             if original.filing.accession_number != request.filing.accession_number:
                 continue

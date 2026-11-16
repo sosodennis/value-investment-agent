@@ -11,6 +11,7 @@ from fundamental_service.current_preparation import (
 )
 from fundamental_service.public_acquisition import PublicSourceAcquisition
 from fundamental_service.operations import ServiceError
+from fundamental_service.original_preparation import OriginalPreparation
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.source_plan_contracts import SOURCE_PREPARATION_PLAN
 from test_automatic_mapping import EVALUATOR
@@ -55,6 +56,45 @@ def current_original_case(tmp_path, monkeypatch):
         deadline_at=at + timedelta(minutes=1),
     )
     return value, selected, provider
+
+
+@pytest.mark.parametrize("completed", (False, True))
+def test_retained_selection_reads_each_original_once_and_revalidates_next_call(
+    tmp_path, monkeypatch, completed
+):
+    value, selected, _ = current_original_case(tmp_path, monkeypatch)
+    ingestion = selected.plan.ingestions[0]
+    if completed:
+        acquire(ingestion, value.acquisition)
+    preparation = value.service.read(ingestion.original_preparation.artifact_id)
+    reference = preparation.filings[0].validation
+    validation = value.service.read_validation(reference.artifact_id)
+    calls = []
+    read = OriginalPreparation.read_validation
+
+    def observed(self, artifact_id):
+        calls.append(artifact_id)
+        return read(self, artifact_id)
+
+    monkeypatch.setattr(OriginalPreparation, "read_validation", observed)
+    first = value.acquisition.retained_acquisition(ingestion)
+    assert calls == [reference.artifact_id]
+    assert value.acquisition.retained_acquisition(ingestion) == first
+    assert calls == [reference.artifact_id] * 2
+    content = value.acquisition.content_store
+    get = content.get
+    monkeypatch.setattr(
+        content,
+        "get",
+        lambda digest, **kwargs: b"corrupt"
+        if digest == validation.original.source.content_hash
+        else get(digest, **kwargs),
+    )
+    io = value.state.provider_calls, value.state.parser_calls
+    with pytest.raises(SnapshotError) as failure:
+        value.acquisition.retained_acquisition(ingestion)
+    assert failure.value.code == "ORIGINAL_PREPARATION_INVALID"
+    assert (value.state.provider_calls, value.state.parser_calls) == io
 
 
 def test_compiled_historical_original_executes_at_frozen_current_capture_cutoff(

@@ -496,6 +496,13 @@ class OriginalPreparation:
         )
 
     def read(self, artifact_id: str) -> OriginalPreparationEvidenceV1:
+        evidence, _ = self.read_with_validations(artifact_id)
+        return evidence
+
+    def read_with_validations(
+        self, artifact_id: str
+    ) -> tuple[OriginalPreparationEvidenceV1, tuple[OriginalValidationEvidenceV1, ...]]:
+        """Return preparation and the original validations checked in this read."""
         reference = self.reference(artifact_id, "sec-original-preparation-v1")
         payload = self._bytes(reference)
         try:
@@ -525,7 +532,7 @@ class OriginalPreparation:
             != canonical_bytes(request)
         ):
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "preparation differs")
-        return evidence
+        return evidence, validations
 
     def _completed(
         self, request: OriginalPreparationRequestV1
