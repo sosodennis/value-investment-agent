@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, JsonValue, field_serializer, model_validator
+from pydantic import Field, JsonValue, ValidationInfo, field_serializer, model_validator
 
 from .arelle_parser import ArelleParseReportV1, fact_semantic_digest
 from .contracts import CanonicalFactV1, SourceRole, SourceSnapshotV1, StrictModel
@@ -28,6 +28,19 @@ _REQUIRED_DEI = (
     "dei:EntityRegistrantName",
     "dei:AmendmentFlag",
 )
+
+
+class OriginalIssuerEvidenceChecks:
+    """Reuse exact original semantics within one verifier operation only."""
+
+    def __init__(self) -> None:
+        self._verified: set[str] = set()
+
+    def validate(self, original: OriginalIssuerEvidenceV1) -> None:
+        digest = sha256_digest(original.model_dump(mode="json"))
+        if digest not in self._verified:
+            original.validate_original_evidence()
+            self._verified.add(digest)
 
 
 class OriginalIssuerIdentityV1(StrictModel):
@@ -225,7 +238,16 @@ class OriginalIssuerEvidenceV1(StrictModel):
         return report.model_dump(mode="json")
 
     @model_validator(mode="after")
-    def original_evidence_matches(self) -> OriginalIssuerEvidenceV1:
+    def original_evidence_matches(
+        self, info: ValidationInfo
+    ) -> OriginalIssuerEvidenceV1:
+        if isinstance(info.context, OriginalIssuerEvidenceChecks):
+            info.context.validate(self)
+        else:
+            self.validate_original_evidence()
+        return self
+
+    def validate_original_evidence(self) -> None:
         if self.decision_at.tzinfo is None or self.decision_at.utcoffset() is None:
             raise ValueError("original decision time must include a timezone")
         if (
@@ -270,7 +292,6 @@ class OriginalIssuerEvidenceV1(StrictModel):
             self.model_dump(exclude={"output_digest"})
         ):
             raise ValueError("issuer evidence digest mismatch")
-        return self
 
 
 def parser_input_matches_registered_original(

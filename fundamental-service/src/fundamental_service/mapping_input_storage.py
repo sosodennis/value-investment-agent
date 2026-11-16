@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, JsonValue, model_validator
 
 from .arelle_parser import ArelleParseReportV1
 from .data_releases import ArtifactRefV1, DataReleaseError, ReleaseModel
-from .original_issuer import OriginalIssuerEvidenceV1
+from .original_issuer import OriginalIssuerEvidenceChecks, OriginalIssuerEvidenceV1
 from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
@@ -104,12 +104,16 @@ def mapping_input_id(input_digest: str, *, batch: bool = False) -> str:
 
 
 def resolve_mapping_input(
-    raw: bytes, model: type[ModelT], *, artifacts: MappingInputReader
+    raw: bytes,
+    model: type[ModelT],
+    *,
+    artifacts: MappingInputReader,
+    original_checks: OriginalIssuerEvidenceChecks | None = None,
 ) -> ModelT:
     """Read explicitly retained v1 inputs or resolve and validate a v2 envelope."""
     value = json.loads(raw)
     if not isinstance(value, dict) or value.get("protocol") != PROTOCOL:
-        return model.model_validate_json(raw)
+        return model.model_validate_json(raw, context=original_checks)
     envelope = StoredMappingInputV2.model_validate_json(raw)
     ref = envelope.original_ref
     original_raw = artifacts.read(ref.artifact_id)
@@ -150,7 +154,8 @@ def resolve_mapping_input(
                     "report": report.model_dump(mode="json"),
                 },
             }
-        )
+        ),
+        context=original_checks,
     )
     if sha256_digest(request) != envelope.input_digest:
         raise DataReleaseError(

@@ -22,7 +22,11 @@ from .data_releases import (
     DataReleaseManifestV1,
 )
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
-from .original_issuer import IssuerOperatingSourceV1, OriginalIssuerEvidenceV1
+from .original_issuer import (
+    IssuerOperatingSourceV1,
+    OriginalIssuerEvidenceChecks,
+    OriginalIssuerEvidenceV1,
+)
 from .release_runner import (
     ReleaseArtifactReader,
     ReleaseMappingReader,
@@ -38,6 +42,7 @@ def _retained_original_inputs(
     *,
     artifacts: ReleaseArtifactReader,
     parser_version: str,
+    original_checks: OriginalIssuerEvidenceChecks,
 ) -> tuple[AutomaticMappingBatchRequestV1, ...]:
     sources = []
     for ref in request.evidence_refs:
@@ -53,7 +58,10 @@ def _retained_original_inputs(
                 "retained original inputs require exact JSON evidence bytes",
             )
         source = resolve_mapping_input(
-            raw, AutomaticMappingBatchRequestV1, artifacts=artifacts
+            raw,
+            AutomaticMappingBatchRequestV1,
+            artifacts=artifacts,
+            original_checks=original_checks,
         )
         if (
             source.source_revision != request.source_revision
@@ -117,7 +125,10 @@ def require_automatic_release_sources(
         for review in automatic
     )
     sources += _retained_original_inputs(
-        request, artifacts=artifacts, parser_version=manifest.parser_version
+        request,
+        artifacts=artifacts,
+        parser_version=manifest.parser_version,
+        original_checks=evidence_checks.originals,
     )
     evidence: set[str] = set()
     for reference in manifest.snapshot_refs:

@@ -1007,7 +1007,14 @@ def verify_automatic_mapping_replay(
             "DATA_RELEASE_MAPPING_INPUT_HASH_MISMATCH",
             "automatic mapping input changed",
         )
-    request = resolve_mapping_input(raw, AutomaticMappingRequestV1, artifacts=artifacts)
+    request = resolve_mapping_input(
+        raw,
+        AutomaticMappingRequestV1,
+        artifacts=artifacts,
+        original_checks=evidence_checks.originals
+        if evidence_checks is not None
+        else None,
+    )
     if approval.evidence_refs != (refs[0], *request.evidence_refs):
         raise DataReleaseError(
             "DATA_RELEASE_MAPPING_EVIDENCE_MISMATCH",

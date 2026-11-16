@@ -7,6 +7,135 @@ from fundamental_service.serialization import sha256_digest
 from test_automatic_mapping import case, MACHINE_KEY
 
 
+def test_original_semantics_are_shared_only_within_the_same_resolution_scope(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import original_issuer
+    from fundamental_service.automatic_mapping import AutomaticMappingRequestV1
+    from fundamental_service.mapping_input_storage import resolve_mapping_input
+
+    request, store, roots, _ = case(tmp_path)
+    receipt = approve_mapping(
+        request, artifacts=store, trust_roots=roots, private_key=MACHINE_KEY
+    )
+    raw = store.read(receipt.input_publication.artifact.artifact_id)
+    calls = []
+    original_digest = original_issuer._issuer_input_digest
+
+    def observed(*args, **kwargs):
+        calls.append(True)
+        return original_digest(*args, **kwargs)
+
+    monkeypatch.setattr(original_issuer, "_issuer_input_digest", observed)
+    checks = original_issuer.OriginalIssuerEvidenceChecks()
+    for _ in range(2):
+        replayed = resolve_mapping_input(
+            raw, AutomaticMappingRequestV1, artifacts=store, original_checks=checks
+        )
+        assert replayed == request
+        assert sha256_digest(replayed) == receipt.input_digest
+    assert len(calls) == 1
+    resolve_mapping_input(
+        raw,
+        AutomaticMappingRequestV1,
+        artifacts=store,
+        original_checks=original_issuer.OriginalIssuerEvidenceChecks(),
+    )
+    assert len(calls) == 2
+
+
+def test_a_successful_scope_does_not_admit_changed_original_claims(tmp_path):
+    import pytest
+    from pydantic import ValidationError
+
+    from fundamental_service.original_issuer import (
+        OriginalIssuerEvidenceChecks,
+        OriginalIssuerEvidenceV1,
+    )
+    from fundamental_service.serialization import canonical_bytes
+
+    request, _, _, _ = case(tmp_path)
+    original = request.original
+    checks = OriginalIssuerEvidenceChecks()
+    raw = canonical_bytes(original)
+    assert OriginalIssuerEvidenceV1.model_validate_json(raw, context=checks) == original
+    for mutation in ("identity", "input_digest", "report", "status", "output_digest"):
+        changed = json.loads(raw)
+        if mutation == "identity":
+            changed["identity"]["issuer_id"] = "0000000999"
+        elif mutation == "input_digest":
+            changed["input_digest"] = "0" * 64
+        elif mutation == "report":
+            changed["report"]["facts"][0]["value"] = "changed"
+        elif mutation == "status":
+            changed["status"] = "refused"
+        changed["output_digest"] = sha256_digest(
+            {key: value for key, value in changed.items() if key != "output_digest"}
+        )
+        if mutation == "output_digest":
+            changed["output_digest"] = "0" * 64
+        for _ in range(2):
+            with pytest.raises(ValidationError):
+                OriginalIssuerEvidenceV1.model_validate_json(
+                    canonical_bytes(changed), context=checks
+                )
+    assert OriginalIssuerEvidenceV1.model_validate_json(raw, context=checks) == original
+
+
+def test_serialized_validation_claims_cannot_supply_a_verified_scope(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import original_issuer
+    from fundamental_service.serialization import canonical_bytes
+
+    request, _, _, _ = case(tmp_path)
+    original_digest = original_issuer._issuer_input_digest
+    calls = []
+
+    def observed(*args, **kwargs):
+        calls.append(True)
+        return original_digest(*args, **kwargs)
+
+    monkeypatch.setattr(original_issuer, "_issuer_input_digest", observed)
+    for _ in range(2):
+        original_issuer.OriginalIssuerEvidenceV1.model_validate_json(
+            canonical_bytes(request.original),
+            context={
+                "validated": True,
+                "output_digest": request.original.output_digest,
+            },
+        )
+    assert len(calls) == 2
+
+
+def test_original_scope_preserves_timezone_refusal_after_canonical_digest_match(
+    tmp_path,
+):
+    import pytest
+    from pydantic import ValidationError
+
+    from fundamental_service.original_issuer import (
+        OriginalIssuerEvidenceChecks,
+        OriginalIssuerEvidenceV1,
+    )
+    from fundamental_service.serialization import canonical_bytes
+
+    request, _, _, _ = case(tmp_path)
+    original = request.original
+    checks = OriginalIssuerEvidenceChecks()
+    raw = canonical_bytes(original)
+    OriginalIssuerEvidenceV1.model_validate_json(raw, context=checks)
+    naive = original.model_copy(
+        update={"decision_at": original.decision_at.replace(tzinfo=None)}
+    )
+    assert sha256_digest(naive) == sha256_digest(original)
+    for context in (None, checks):
+        with pytest.raises(ValidationError, match="must include a timezone"):
+            OriginalIssuerEvidenceV1.model_validate_json(
+                naive.model_dump_json(), context=context
+            )
+
+
 def test_resolving_an_envelope_validates_its_complete_original_once(
     tmp_path, monkeypatch
 ):
@@ -258,6 +387,7 @@ def test_invalidated_shared_report_cannot_replay_valid_input(tmp_path):
     from fundamental_service.automatic_mapping import AutomaticMappingRequestV1
     from fundamental_service.data_releases import DataReleaseError
     from fundamental_service.mapping_input_storage import resolve_mapping_input
+    from fundamental_service.original_issuer import OriginalIssuerEvidenceChecks
 
     request, store, roots, _ = case(tmp_path)
     receipt = approve_mapping(
@@ -265,9 +395,15 @@ def test_invalidated_shared_report_cannot_replay_valid_input(tmp_path):
     )
     raw = store.read(receipt.input_publication.artifact.artifact_id)
     reference = json.loads(raw)["original_ref"]
+    checks = OriginalIssuerEvidenceChecks()
+    resolve_mapping_input(
+        raw, AutomaticMappingRequestV1, artifacts=store, original_checks=checks
+    )
     store.invalidate(reference["artifact_id"])
     with pytest.raises(DataReleaseError, match="valid retained"):
-        resolve_mapping_input(raw, AutomaticMappingRequestV1, artifacts=store)
+        resolve_mapping_input(
+            raw, AutomaticMappingRequestV1, artifacts=store, original_checks=checks
+        )
 
 
 def test_interleaved_batch_counts_the_shared_report_write(tmp_path, monkeypatch):

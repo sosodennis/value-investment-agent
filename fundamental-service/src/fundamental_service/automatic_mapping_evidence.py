@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from .data_releases import DataReleaseError
 from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
+from .original_issuer import OriginalIssuerEvidenceChecks
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
@@ -20,6 +21,7 @@ class AutomaticMappingEvidenceChecks:
 
     def __init__(self) -> None:
         self._checked: dict[str, tuple[str, ...]] = {}
+        self.originals = OriginalIssuerEvidenceChecks()
 
     def assess(
         self, request: AutomaticMappingSourceV1, *, contents: dict[str, bytes]
