@@ -348,6 +348,18 @@ fundamental-approve-mapping \
 The command uses configured service PostgreSQL/content storage without
 migrating it. `--artifacts-root` selects an explicit offline evidence store.
 It retains canonical inputs and decisions for both approvals and abstentions.
+
+Mapping input v2 envelopes reference a shared immutable parser report. Within
+one mapping or verifier operation, the owner also reuses that exact frozen
+report's canonical bytes when computing the existing original and request
+digests. Headers, proposals, source references, identities and policies still
+participate in those digests; the wire and signature definitions do not change.
+Current artifact metadata and domain checks remain mandatory. Each independent
+verifier starts its own scope. Retention defaults to eight reports, 64 MiB of
+canonical report bytes and 256 small identity entries per report; this is not a
+bound on total process memory. Copies, eviction and new operations recompute.
+`wrote=false` establishes storage reuse and does not establish reduced parser
+or verification work; measure those separately from end-to-end completion.
 Only approved decisions receive `AutomaticMappingApprovalV1` certificates.
 Receipts record exact `source_revision`, input/output digests and separate
 publication results. Identical inputs and retained evidence return `wrote=false`

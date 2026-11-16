@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from collections import OrderedDict
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .arelle_parser import ArelleParseReportV1
@@ -12,21 +11,14 @@ from .data_releases import DataReleaseError
 from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
 from .mapping_input_storage import MappingInputReader
+from .mapping_input_identity import MappingInputDigests
 from .original_issuer import OriginalIssuerEvidenceChecks
 from .replay import ArtifactRecordV1
-from .serialization import canonical_bytes, sha256_digest
+from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 if TYPE_CHECKING:
     from .automatic_mapping import AutomaticMappingSourceV1
-
-
-@dataclass
-class _ReportDigests:
-    report: ArelleParseReportV1
-    content_digest: str
-    size: int
-    replay_digest: str | None = None
 
 
 class _MappingArtifactReadScope:
@@ -99,38 +91,12 @@ class AutomaticMappingEvidenceChecks:
         self._max_retained_bytes = max_retained_bytes
         self._max_retained_artifacts = max_retained_artifacts
         self._reader: _MappingArtifactReadScope | None = None
-        self._reports: OrderedDict[int, _ReportDigests] = OrderedDict()
-        self._report_bytes = 0
-        self._max_report_bytes = max_retained_report_bytes
-        self._max_reports = max_retained_reports
-
-    def _report_digests(self, report: ArelleParseReportV1) -> _ReportDigests:
-        # Exact frozen instances belong to this operation. A model_copy is a new
-        # instance and cannot inherit fingerprints from its source model.
-        key = id(report)
-        retained = self._reports.pop(key, None)
-        if retained is not None:
-            assert retained.report is report
-            self._reports[key] = retained
-            return retained
-        raw = canonical_bytes(report.model_dump(mode="json"))
-        result = _ReportDigests(report, hashlib.sha256(raw).hexdigest(), len(raw))
-        if self._max_reports and result.size <= self._max_report_bytes:
-            while self._reports and (
-                self._report_bytes + result.size > self._max_report_bytes
-                or len(self._reports) >= self._max_reports
-            ):
-                _, removed = self._reports.popitem(last=False)
-                self._report_bytes -= removed.size
-            self._reports[key] = result
-            self._report_bytes += result.size
-        return result
+        self.identities = MappingInputDigests(
+            max_bytes=max_retained_report_bytes, max_reports=max_retained_reports
+        )
 
     def report_replay_digest(self, report: ArelleParseReportV1) -> str:
-        retained = self._report_digests(report)
-        if retained.replay_digest is None:
-            retained.replay_digest = report.replay_digest()
-        return retained.replay_digest
+        return self.identities.report_replay_digest(report)
 
     def reader(self, artifacts: MappingInputReader) -> MappingInputReader:
         if self._reader is None:
@@ -153,7 +119,7 @@ class AutomaticMappingEvidenceChecks:
                 request.source_revision,
                 request.evaluator_id,
                 request.original.model_dump(mode="json", exclude={"report"}),
-                self._report_digests(request.original.report).content_digest,
+                self.identities.report_content_digest(request.original.report),
                 request.integrity,
                 request.evidence_refs,
                 request.security_identity,

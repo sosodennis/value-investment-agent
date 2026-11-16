@@ -214,6 +214,7 @@ def automatic_mapping_policy_digest() -> str:
                     "automatic_mapping_batch.py",
                     "automatic_mapping_runner.py",
                     "mapping_input_storage.py",
+                    "mapping_input_identity.py",
                     "automatic_source_mapping.py",
                     "preparation_runner.py",
                     "source_plan_contracts.py",
@@ -977,7 +978,7 @@ def evaluate_automatic_mapping(
             {**payload, "decision_id": "automatic-mapping-" + sha256_digest(payload)}
         )
     return AutomaticMappingDecisionV1(
-        input_digest=sha256_digest(request),
+        input_digest=checks.identities.input_digest(request),
         source_revision=request.source_revision,
         evaluator_id=request.evaluator_id,
         policy_digest=policy_digest,
@@ -999,8 +1000,9 @@ def verify_automatic_mapping_replay(
     evidence_checks: AutomaticMappingEvidenceChecks | None = None,
 ) -> AutomaticMappingRequestV1:
     """Re-evaluate retained inputs; a trusted signature alone is insufficient."""
-    if evidence_checks is not None:
-        artifacts = evidence_checks.reader(artifacts)
+    if evidence_checks is None:
+        evidence_checks = AutomaticMappingEvidenceChecks()
+    artifacts = evidence_checks.reader(artifacts)
     refs = tuple(
         ref
         for ref in approval.evidence_refs
@@ -1021,9 +1023,8 @@ def verify_automatic_mapping_replay(
         raw,
         AutomaticMappingRequestV1,
         artifacts=artifacts,
-        original_checks=evidence_checks.originals
-        if evidence_checks is not None
-        else None,
+        original_checks=evidence_checks.originals,
+        input_digests=evidence_checks.identities,
     )
     if approval.evidence_refs != (refs[0], *request.evidence_refs):
         raise DataReleaseError(
@@ -1040,7 +1041,7 @@ def verify_automatic_mapping_replay(
     if (
         request.evaluator_id != approval.evaluator_id
         or request.source_revision != approval.source_revision
-        or sha256_digest(request) != approval.input_digest
+        or decision.input_digest != approval.input_digest
         or sha256_digest(decision) != approval.output_digest
         or decision.policy_digest != approval.policy_digest
         or decision.mapping != mapping

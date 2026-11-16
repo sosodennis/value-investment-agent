@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, JsonValue, model_validator
 
 from .data_releases import ArtifactRefV1, DataReleaseError, ReleaseModel
 from .original_issuer import OriginalIssuerEvidenceChecks, OriginalIssuerEvidenceV1
+from .mapping_input_identity import MappingInputDigests
 from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
@@ -57,14 +58,17 @@ def publish_mapping_input(
     artifacts: EvidenceArtifactStore,
     evidence_refs: tuple[ArtifactRefV1, ...],
     batch: bool = False,
+    input_digests: MappingInputDigests | None = None,
 ) -> tuple[ArtifactPublicationV1, ArtifactPublicationV1]:
     """Return report and envelope publications, preserving both write receipts."""
-    report = original.report.model_dump(mode="json")
-    report_digest = sha256_digest(report)
+    identities = input_digests or MappingInputDigests()
+    report = identities.report_bytes(original.report)
+    report_digest = identities.report_content_digest(original.report)
     dependencies = {ref.content_hash for ref in evidence_refs}
-    publication = artifacts.put_with_receipt(
+    publication = artifacts.put_bytes_with_receipt(
         "automatic-mapping-parser-report-" + report_digest,
         report,
+        media_type="application/json",
         dependency_hashes=tuple(
             sorted(
                 value
@@ -77,7 +81,7 @@ def publish_mapping_input(
         ),
     )
     envelope = StoredMappingInputV2(
-        input_digest=sha256_digest(request),
+        input_digest=identities.input_digest(request),
         original_ref=ArtifactRefV1(
             artifact_id=publication.artifact.artifact_id,
             content_hash=publication.artifact.content_hash,
@@ -108,6 +112,7 @@ def resolve_mapping_input(
     *,
     artifacts: MappingInputReader,
     original_checks: OriginalIssuerEvidenceChecks | None = None,
+    input_digests: MappingInputDigests | None = None,
 ) -> ModelT:
     """Read explicitly retained v1 inputs or resolve and validate a v2 envelope."""
     value = json.loads(raw)
@@ -159,7 +164,9 @@ def resolve_mapping_input(
         ),
         context=resolution,
     )
-    if sha256_digest(request) != envelope.input_digest:
+    if (input_digests or MappingInputDigests()).input_digest(
+        request
+    ) != envelope.input_digest:
         raise DataReleaseError(
             "MAPPING_INPUT_IDENTITY_MISMATCH",
             "resolved mapping input differs from its retained semantic identity",

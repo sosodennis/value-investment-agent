@@ -411,7 +411,7 @@ def test_interleaved_batch_counts_the_shared_report_write(tmp_path, monkeypatch)
     from test_automatic_mapping_batch import batch_case
 
     request, store, roots = batch_case(tmp_path)
-    publish = store.put_with_receipt
+    publish = store.put_bytes_with_receipt
     interleaved = False
 
     def publish_with_contender(artifact_id, *args, **kwargs):
@@ -429,7 +429,7 @@ def test_interleaved_batch_counts_the_shared_report_write(tmp_path, monkeypatch)
             assert other.wrote
         return publication
 
-    monkeypatch.setattr(store, "put_with_receipt", publish_with_contender)
+    monkeypatch.setattr(store, "put_bytes_with_receipt", publish_with_contender)
     receipt = approve_mapping_batch(
         request, artifacts=store, trust_roots=roots, private_key=MACHINE_KEY
     )

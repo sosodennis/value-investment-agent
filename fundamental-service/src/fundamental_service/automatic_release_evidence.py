@@ -22,18 +22,14 @@ from .data_releases import (
     DataReleaseManifestV1,
 )
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
-from .original_issuer import (
-    IssuerOperatingSourceV1,
-    OriginalIssuerEvidenceChecks,
-    OriginalIssuerEvidenceV1,
-)
+from .original_issuer import IssuerOperatingSourceV1, OriginalIssuerEvidenceV1
 from .release_runner import (
     ReleaseArtifactReader,
     ReleaseMappingReader,
     ReleaseSnapshotReader,
 )
 from .mapping_input_storage import resolve_mapping_input
-from .serialization import canonical_bytes, sha256_digest
+from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 
@@ -42,7 +38,7 @@ def _retained_original_inputs(
     *,
     artifacts: ReleaseArtifactReader,
     parser_version: str,
-    original_checks: OriginalIssuerEvidenceChecks,
+    evidence_checks: AutomaticMappingEvidenceChecks,
 ) -> tuple[AutomaticMappingBatchRequestV1, ...]:
     sources = []
     for ref in request.evidence_refs:
@@ -61,7 +57,8 @@ def _retained_original_inputs(
             raw,
             AutomaticMappingBatchRequestV1,
             artifacts=artifacts,
-            original_checks=original_checks,
+            original_checks=evidence_checks.originals,
+            input_digests=evidence_checks.identities,
         )
         if (
             source.source_revision != request.source_revision
@@ -129,8 +126,15 @@ def require_automatic_release_sources(
         request,
         artifacts=artifacts,
         parser_version=manifest.parser_version,
-        original_checks=evidence_checks.originals,
+        evidence_checks=evidence_checks,
     )
+    # Bind each complete original once per verifier operation, even when many
+    # independently checked mappings reference the same report and headers.
+    originals_by_integrity: dict[str, dict[str, OriginalIssuerEvidenceV1]] = {}
+    for source in sources:
+        originals_by_integrity.setdefault(sha256_digest(source.integrity), {})[
+            evidence_checks.identities.original_digest(source.original)
+        ] = source.original
     evidence: set[str] = set()
     for reference in manifest.snapshot_refs:
         snapshot = snapshots.get(reference.snapshot_id)
@@ -203,11 +207,9 @@ def require_automatic_release_sources(
                 )
             pairs = []
             for integrity in expected:
-                original_matches = {
-                    canonical_bytes(source.original): source.original
-                    for source in sources
-                    if source.integrity == integrity
-                }
+                original_matches = originals_by_integrity.get(
+                    sha256_digest(integrity), {}
+                )
                 if len(original_matches) != 1:
                     raise DataReleaseError(
                         "AUTOMATIC_RELEASE_REGULATORY_EVIDENCE_MISSING",
@@ -245,9 +247,13 @@ def require_automatic_release_sources(
                 sha256_digest(
                     {
                         "snapshot_id": reference.snapshot_id,
-                        "original": sha256_digest(original),
+                        "original": evidence_checks.identities.original_digest(
+                            original
+                        ),
                         "integrity": sha256_digest(integrity),
-                        "parser_replay": original.report.replay_digest(),
+                        "parser_replay": evidence_checks.report_replay_digest(
+                            original.report
+                        ),
                     }
                 )
             )

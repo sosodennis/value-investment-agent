@@ -96,6 +96,8 @@ def approve_mapping(
     evidence_checks: AutomaticMappingEvidenceChecks | None = None,
 ) -> AutomaticMappingReceiptV1:
     _require_machine_identity(request, trust_roots=trust_roots, private_key=private_key)
+    if evidence_checks is None:
+        evidence_checks = AutomaticMappingEvidenceChecks()
     contents = {}
     for ref in request.evidence_refs:
         try:
@@ -124,12 +126,13 @@ def approve_mapping(
     decision = evaluate_automatic_mapping(
         request, contents=contents, evidence_checks=evidence_checks
     )
-    input_digest, output_digest = sha256_digest(request), sha256_digest(decision)
+    input_digest, output_digest = decision.input_digest, sha256_digest(decision)
     parser_report_publication, input_publication = publish_mapping_input(
         request,
         request.original,
         artifacts=artifacts,
         evidence_refs=request.evidence_refs,
+        input_digests=evidence_checks.identities,
     )
     decision_publication = artifacts.put_with_receipt(
         "automatic-mapping-decision-" + output_digest,
@@ -212,16 +215,17 @@ def approve_mapping_batch(
 ) -> AutomaticMappingBatchReceiptV1:
     """Propose known roles and retain every unsupported/missing-role decision."""
     _require_machine_identity(request, trust_roots=trust_roots, private_key=private_key)
-    input_digest = sha256_digest(request)
+    evidence_checks = AutomaticMappingEvidenceChecks()
+    input_digest = evidence_checks.identities.input_digest(request)
     parser_report_publication, input_publication = publish_mapping_input(
         request,
         request.original,
         artifacts=artifacts,
         evidence_refs=request.evidence_refs,
         batch=True,
+        input_digests=evidence_checks.identities,
     )
     roles, receipts = [], []
-    evidence_checks = AutomaticMappingEvidenceChecks()
     for role in sorted(
         set(request.requirements.required_fact_fields)
         | set(request.requirements.supporting_fact_fields)
