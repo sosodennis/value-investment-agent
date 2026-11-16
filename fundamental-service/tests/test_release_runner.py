@@ -611,3 +611,122 @@ def test_cli_reads_canonical_json_and_repeats_or_refuses_tampering(
     assert first.out == canonical_bytes(expected).decode() + "\n"
     assert main(argv) == 0
     assert capsys.readouterr() == first
+
+
+@pytest.mark.parametrize("repeats", (1, 4, 16))
+def test_release_verifies_repeated_reference_bytes_once_per_operation(repeats):
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    runner = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=facts,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    )
+    reads = []
+    read = artifacts.read
+
+    def observed(artifact_id):
+        reads.append(artifact_id)
+        return read(artifact_id)
+
+    artifacts.read = observed
+    fanout = verification.model_copy(
+        update={"mapping_reviews": verification.mapping_reviews * repeats}
+    )
+    runner._verify_artifacts(manifest, fanout)
+    assert reads == ["release-evidence"]
+    runner._verify_artifacts(manifest, fanout)
+    assert reads == ["release-evidence", "release-evidence"]
+    artifacts.content = b"damaged immutable evidence"
+    with pytest.raises(DataReleaseError) as error:
+        runner._verify_artifacts(manifest, fanout)
+    assert error.value.code == "DATA_RELEASE_ARTIFACT_HASH_MISMATCH"
+
+
+def test_repeated_release_reference_still_requires_each_declared_media_type():
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    runner = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=facts,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    )
+    wrong = manifest.artifact_refs[0].model_copy(
+        update={"media_type": "application/octet-stream"}
+    )
+    manifest = manifest.model_copy(update={"artifact_refs": (wrong,)})
+    with pytest.raises(DataReleaseError) as error:
+        runner._verify_artifacts(manifest, verification)
+    assert error.value.code == "ARTIFACT_EVIDENCE_INVALID"
+
+
+@pytest.mark.parametrize(
+    "failure", (OSError("metadata unavailable"), RuntimeError("database unavailable"))
+)
+def test_release_retains_adapter_failure_after_byte_verification(monkeypatch, failure):
+    import fundamental_service.release_runner as release
+
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    runner = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=facts,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    )
+    sha256 = release.hashlib.sha256
+
+    def unavailable(_):
+        raise failure
+
+    def observed(raw=b"", *args, **kwargs):
+        result = sha256(raw, *args, **kwargs)
+        if raw is artifacts.content:
+            artifacts.get = unavailable
+        return result
+
+    monkeypatch.setattr(release.hashlib, "sha256", observed)
+    with pytest.raises(DataReleaseError) as error:
+        runner._verify_artifacts(manifest, verification)
+    assert error.value.code == "DATA_RELEASE_ARTIFACT_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("change_at", range(2, 11))
+@pytest.mark.parametrize(
+    "change",
+    (
+        {"status": "invalidated"},
+        {"retention": "operational_cache"},
+        {"dependency_hashes": ("0" * 64,)},
+    ),
+)
+def test_release_refuses_metadata_mutation_at_any_reference_boundary(change_at, change):
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    runner = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=facts,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    )
+    get = artifacts.get
+    calls = 0
+
+    def current(artifact_id):
+        nonlocal calls
+        calls += 1
+        record = get(artifact_id)
+        return record.model_copy(update=change) if calls >= change_at else record
+
+    artifacts.get = current
+    fanout = verification.model_copy(
+        update={"mapping_reviews": verification.mapping_reviews * 16}
+    )
+    with pytest.raises(DataReleaseError) as error:
+        runner._verify_artifacts(manifest, fanout)
+    assert error.value.code in {
+        "ARTIFACT_EVIDENCE_INVALID",
+        "ARTIFACT_EVIDENCE_CHANGED",
+    }

@@ -183,12 +183,12 @@ def parsed_facts_to_candidates(
             security_id=security_id,
         )
     for fact in report.facts:
+        if mapping is not None and fact.concept != mapping.source_concept:
+            continue
         if (
             observation_scope is not None
             and sha256_digest(fact) not in observation_scope.observation_digests
         ):
-            continue
-        if mapping is not None and fact.concept != mapping.source_concept:
             continue
         if (
             fact.entity_identifier is None

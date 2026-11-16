@@ -5,7 +5,7 @@
   "issue": 361,
   "branch": "codex/issue-361-replay-evidence",
   "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-  "status": "VERIFIED",
+  "status": "WIP",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence",
@@ -69,258 +69,104 @@
   "checks": [
     {
       "name": "architecture",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-delivery-checks-receipt.json",
-      "input_digest": "b9aecd2c0336339c1e8c09af28851032a41874f51186d9c583ba5196d679a29f",
-      "output_digest": "bab0c2b39a8b25d4b443382086cdddb950835a0b3f4102c1e8bc954c57027d8b",
-      "evidence_keys": [
-        "checks"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "artifact_retrieval",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json, 47786578-restore-v3-flow-numerical-api-receipt.json",
-      "input_digest": "d0a31ee0de2b553927476cb4f3e8010bc0c0fd9609c34a012a322972c3936dd5",
-      "output_digest": "52890ca5c9748309b11d4264f5c7108617d59d3a0fd4a8c16bca85ad2d51e1dd",
-      "evidence_keys": [
-        "api",
-        "restore_api"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "calculation",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json, 47786578-delivery-contracts-receipt.json",
-      "input_digest": "e1140a0b8b74b295cdea4e9469bf48bce839b8c705ee42cf51aacf1b46c79844",
-      "output_digest": "7916b4bd9d0d4973879deeceec0bb1a5d939ba7830b796a5bddf6e5607aefa3b",
-      "evidence_keys": [
-        "run",
-        "api",
-        "contracts"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "concurrent_deduplication",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-numerical-concurrent-replay-receipt.json, 47786578-numerical-stable-store-receipt.json",
-      "input_digest": "b8384f5fba2ef039cb618dd9dfd02ac1a99a524e4eda0747e8bb582d3016ad99",
-      "output_digest": "bf8ec6b6d5c904cd1f02163c2252cb86d856f1b118fc8fa8c92615fbe37e75be",
-      "evidence_keys": [
-        "concurrent",
-        "stable"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "deterministic_repeat",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-numerical-resumed-replay-receipt.json, 47786578-numerical-stable-store-receipt.json",
-      "input_digest": "95a474abf89dcc6dd789e6c6dd19316d495b44b6ff74c9e638d74343ae642d8b",
-      "output_digest": "929dab77285087a98ed1a3b285afb66f5800713556ad34bb9f8abca5c87cd967",
-      "evidence_keys": [
-        "repeat",
-        "stable"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "diff",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-delivery-checks-receipt.json",
-      "input_digest": "62c7142ec3138b47338a09ec6559605360e93b073880786590c6a59fe12af458",
-      "output_digest": "bab0c2b39a8b25d4b443382086cdddb950835a0b3f4102c1e8bc954c57027d8b",
-      "evidence_keys": [
-        "checks"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "failure_retention",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-m1-insufficient-receipt.json, 47786578-m1-identity-conflict-receipt.json, 47786578-m1-security-ambiguous-receipt.json, 47786578-restored-refusals-v4-numerical-refusals-receipt.json",
-      "input_digest": "8c011b94287421bb0b775a84de2883d4b1fc36ae88dea718dfa9890c41e24e3f",
-      "output_digest": "49eee085ceb729a0c04c5439565c83418d038229287597f373606bc26e7ce3ea",
-      "evidence_keys": [
-        "negative_insufficient",
-        "negative_conflict",
-        "negative_ambiguous",
-        "refusals"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "forecast",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-delivery-contracts-receipt.json, 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json",
-      "input_digest": "2cb138ae06c802679265d8a260372986e348f3d4b60aea16cf8b1aa1aa667356",
-      "output_digest": "7916b4bd9d0d4973879deeceec0bb1a5d939ba7830b796a5bddf6e5607aefa3b",
-      "evidence_keys": [
-        "run",
-        "contracts",
-        "api"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "full_flow_repeat",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-numerical-resumed-replay-receipt.json, 47786578-numerical-concurrent-replay-receipt.json, 47786578-numerical-restart-numerical-restart-receipt.json, 47786578-restore-v3-numerical-restore-receipt.json",
-      "input_digest": "49592e9387d599a27153f71a40abca9d6f5381e1c0b4efc539cedefef4136ebf",
-      "output_digest": "530f4469944af0e1e9ee1dcfa1e1ceec1b5c39c62a9c94bc4cbeef6f4de610c0",
-      "evidence_keys": [
-        "repeat",
-        "concurrent",
-        "restart",
-        "restore"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "mapping",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-delivery-checks-receipt.json",
-      "input_digest": "0cfe84377b5f2b3e5c83ac42fd4d32eafc684663715dc384ca0026ee94b8b9dc",
-      "output_digest": "f8a7c1ddefd217ba8d3bfea72f6fe6634c83d133f393c4513e8559481847579d",
-      "evidence_keys": [
-        "run",
-        "checks"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "preparation",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json",
-      "input_digest": "fecaf079ff7f5969beec392e245904d19f092f594f38a4cf98cd7c0ba3bf65b7",
-      "output_digest": "9da7ac99e6ae5c5296d5e17e75a54e000f13a2a32ad80e3fc93b5ac9daf5ad86",
-      "evidence_keys": [
-        "run",
-        "api"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "restart_restore",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-numerical-restart-numerical-restart-receipt.json, 47786578-numerical-v3-numerical-backup-receipt.json, 47786578-restore-v3-numerical-restore-receipt.json",
-      "input_digest": "fa03f6453521c77dda178f61120e577f5bdb99716556f8cee36694f6b791cff1",
-      "output_digest": "994eea214c1316d607019a7631029240a80638e3b275b2adb93080d9a5d4ba4a",
-      "evidence_keys": [
-        "restart",
-        "backup",
-        "restore"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "review",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-integration-independent-review-receipt.json, 47786578-final-independent-review-receipt.json",
-      "input_digest": "8b6a87abda6fe62c961015b7b1822458cfd8ad3feb5d7c36d00ad21aebea378e",
-      "output_digest": "897c66b8902cdaa53c43760ee225a63e2ea5d05dcd41c22f29627c22ef36216c",
-      "evidence_keys": [
-        "review",
-        "review_scope"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "ruff",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-delivery-checks-receipt.json",
-      "input_digest": "4e6ef0e22bc528e5b5e88ee85ef30600d048d5208ee4b6c358878d14b5d30eeb",
-      "output_digest": "bab0c2b39a8b25d4b443382086cdddb950835a0b3f4102c1e8bc954c57027d8b",
-      "evidence_keys": [
-        "checks"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "service_acceptance",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-numerical-api-receipt.json, 47786578-restore-v3-flow-numerical-api-receipt.json, 47786578-restored-refusals-v4-numerical-refusals-receipt.json",
-      "input_digest": "9dbe199963a47a62c1821119bd6bf79ec341af76c2df5621539888e4003a1065",
-      "output_digest": "17873d34ae288834528e58d517ef53636d22e627e74991d77bb5aeee5d818644",
-      "evidence_keys": [
-        "api",
-        "restore_api",
-        "refusals"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "snapshot_persistence",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-numerical-stable-store-receipt.json, 47786578-restore-v3-numerical-restore-receipt.json",
-      "input_digest": "6a2e5eb3d0e3161713f4c62b343c907ec7a15163fcf109d3e2ed3dbcaa313c6e",
-      "output_digest": "9c867bac7dc6ab6572d1d79a502143e83cb762c03d33f451f0484a6f6818b5dc",
-      "evidence_keys": [
-        "stable",
-        "restore"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "source_acquisition",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-msft-personal-local-retained-batch-cold-1-receipt.json, 47786578-configured-sec-regressions-receipt.json",
-      "input_digest": "54193f7c358d6cc5c5a82e550983ee08bafd247084cb22e5d10a9035202b37ca",
-      "output_digest": "6d7d74438c10a934cbb873421c180b6243f5bff040c0c9e5c26641891335903c",
-      "evidence_keys": [
-        "run",
-        "sec"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "source_reuse",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-numerical-resumed-replay-receipt.json, 47786578-numerical-stable-store-receipt.json",
-      "input_digest": "30912faa849736c9e36dbf35f9bbcc6e4a753c0c77e412f2132ef2eabfa5c43a",
-      "output_digest": "929dab77285087a98ed1a3b285afb66f5800713556ad34bb9f8abca5c87cd967",
-      "evidence_keys": [
-        "repeat",
-        "stable"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     },
     {
       "name": "types",
-      "status": "pass",
-      "commit": "4778657847f946f8dacab0fc44b9e791ac7e8fe8",
-      "exit_code": 0,
-      "command": "See exact commands in Git-external receipts: 47786578-delivery-checks-receipt.json",
-      "input_digest": "b5e1a31b5729a3abfe1c561f2bacf5d5b5cfb5cd64d8c93bbd20bdec4636ba30",
-      "output_digest": "bab0c2b39a8b25d4b443382086cdddb950835a0b3f4102c1e8bc954c57027d8b",
-      "evidence_keys": [
-        "checks"
-      ]
+      "status": "not_run",
+      "command": "New source amplification increment requires exact-head acceptance; prior receipt remains in numerical checkpoint."
     }
   ],
-  "blockers": [],
-  "next_step": "Ordinary merge PR370 only after exact delivery-head CI passes; verify main merge SHA and back up new main evidence before issue closure and owned-resource cleanup.",
+  "blockers": [
+    "Post-research amplification correction: exact new implementation runtime, numerical replay/recovery and CI acceptance pending. Prior47786578 numerical evidence remains separately pinned."
+  ],
+  "next_step": "Commit checked source fingerprint/release reference/concept-filter increment, measure fixed real work counts, install exact source and repeat real numerical acceptance before merge.",
   "checkpoint": "docs/acceptance/issue-361-numerical-delivery-checkpoint.json",
   "checkpoint_digest": "5d7c28905af6fe7f7f1a46e33341c9d9ff41d9dc4ad1262548e6bc67ee011e8f",
   "limitations": [
@@ -331,5 +177,5 @@
   ],
   "supported_history_threshold": null,
   "skipped_legacy_gate": "not_passed; applicability and actual Service gate evidence in checkpoint",
-  "scope": "Branch implementation runtime acceptance only. M3 main delivery and cleanup remain pending."
+  "scope": "Current development WIP; committed47786578 checkpoint retains its prior successful scope, not acceptance of subsequent code."
 }

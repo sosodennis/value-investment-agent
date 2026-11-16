@@ -91,12 +91,36 @@ class AutomaticMappingEvidenceChecks:
         self._max_retained_bytes = max_retained_bytes
         self._max_retained_artifacts = max_retained_artifacts
         self._reader: _MappingArtifactReadScope | None = None
+        self._fingerprints: OrderedDict[int, tuple[bytes, str]] = OrderedDict()
+        self._fingerprint_bytes = 0
         self.identities = MappingInputDigests(
             max_bytes=max_retained_report_bytes, max_reports=max_retained_reports
         )
 
     def report_replay_digest(self, report: ArelleParseReportV1) -> str:
         return self.identities.report_replay_digest(report)
+
+    def _content_digest(self, raw: bytes) -> str:
+        retained = self._fingerprints.pop(id(raw), None)
+        if retained is not None:
+            assert retained[0] is raw
+            self._fingerprints[id(raw)] = retained
+            return retained[1]
+        digest = hashlib.sha256(raw).hexdigest()
+        if (
+            type(raw) is bytes
+            and self._max_retained_artifacts
+            and len(raw) <= self._max_retained_bytes
+        ):
+            while self._fingerprints and (
+                self._fingerprint_bytes + len(raw) > self._max_retained_bytes
+                or len(self._fingerprints) >= self._max_retained_artifacts
+            ):
+                _, (removed, _) = self._fingerprints.popitem(last=False)
+                self._fingerprint_bytes -= len(removed)
+            self._fingerprints[id(raw)] = raw, digest
+            self._fingerprint_bytes += len(raw)
+        return digest
 
     def reader(self, artifacts: MappingInputReader) -> MappingInputReader:
         if self._reader is None:
@@ -124,7 +148,7 @@ class AutomaticMappingEvidenceChecks:
                 request.evidence_refs,
                 request.security_identity,
                 tuple(
-                    (name, hashlib.sha256(raw).hexdigest())
+                    (name, self._content_digest(raw))
                     for name, raw in sorted(contents.items())
                 ),
             )

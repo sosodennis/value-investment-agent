@@ -15,7 +15,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .artifact_evidence import read_retained_artifact
+from .artifact_evidence import read_retained_artifact, require_retained_artifact
 from .contracts import (
     CanonicalFactV1,
     SecIntegrityEvidenceV1,
@@ -690,6 +690,7 @@ class DataReleaseCanaryRunner:
             for evidence_ref in review.evidence_refs
         )
         expected: dict[str, str] = {}
+        checked: dict[str, ArtifactRecordV1] = {}
         for reference in refs:
             previous = expected.setdefault(
                 reference.artifact_id, reference.content_hash
@@ -700,7 +701,27 @@ class DataReleaseCanaryRunner:
                     "candidate references one artifact ID with different hashes",
                 )
             try:
+                record = require_retained_artifact(self._artifacts, reference)
+                previous_record = checked.get(reference.artifact_id)
+                if previous_record is not None:
+                    if record != previous_record:
+                        raise DataReleaseError(
+                            "ARTIFACT_EVIDENCE_CHANGED",
+                            "release artifact metadata changed during verification",
+                        )
+                    continue
                 content = read_retained_artifact(self._artifacts, reference)
+                actual = hashlib.sha256(content).hexdigest()
+                if actual != reference.content_hash:
+                    raise DataReleaseError(
+                        "DATA_RELEASE_ARTIFACT_HASH_MISMATCH",
+                        f"release artifact {reference.artifact_id} failed hash verification",
+                    )
+                if self._artifacts.get(reference.artifact_id) != record:
+                    raise DataReleaseError(
+                        "ARTIFACT_EVIDENCE_CHANGED",
+                        "release artifact metadata changed during verification",
+                    )
             except DataReleaseError:
                 raise
             except Exception as exc:  # pragma: no cover - adapter boundary
@@ -708,12 +729,7 @@ class DataReleaseCanaryRunner:
                     "DATA_RELEASE_ARTIFACT_UNAVAILABLE",
                     f"release artifact {reference.artifact_id} is unavailable",
                 ) from exc
-            actual = hashlib.sha256(content).hexdigest()
-            if actual != reference.content_hash:
-                raise DataReleaseError(
-                    "DATA_RELEASE_ARTIFACT_HASH_MISMATCH",
-                    f"release artifact {reference.artifact_id} failed hash verification",
-                )
+            checked[reference.artifact_id] = record
 
     def _artifact_digests(
         self,

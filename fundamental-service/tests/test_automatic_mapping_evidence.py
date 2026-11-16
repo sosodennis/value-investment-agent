@@ -307,3 +307,63 @@ def test_batch_shares_source_checks_but_new_batch_revalidates(tmp_path, monkeypa
     assert len(calls) == 2
     assert len(semantic_calls) == 2
     assert not second.wrote and second.output_digest == first.output_digest
+
+
+def test_source_reuse_does_not_rehash_exact_immutable_bytes(tmp_path, monkeypatch):
+    request, store, _, _ = case(tmp_path)
+    contents = contents_for(request, store)
+    expected = AutomaticMappingEvidenceChecks().assess(request, contents=contents)
+    hashed = []
+    real_sha256 = evidence.hashlib.sha256
+
+    def observed(raw=b"", *args, **kwargs):
+        if any(raw is item for item in contents.values()):
+            hashed.append(id(raw))
+        return real_sha256(raw, *args, **kwargs)
+
+    monkeypatch.setattr(evidence.hashlib, "sha256", observed)
+    checks = AutomaticMappingEvidenceChecks()
+    assert checks.assess(request, contents=contents) == expected
+    first_work = len(hashed)
+    assert first_work > 0
+    for _ in range(16):
+        assert checks.assess(request, contents=dict(contents)) == expected
+    assert len(hashed) == first_work
+    changed = dict(contents)
+    key = request.evidence_refs[0].content_hash
+    changed[key] = b"!" + changed[key][1:]
+    assert "MAPPING_SOURCE_ARTIFACT_UNAVAILABLE" in checks.assess(
+        request, contents=changed
+    )
+    assert checks.assess(request, contents=contents) == expected
+    assert (
+        AutomaticMappingEvidenceChecks().assess(request, contents=contents) == expected
+    )
+    assert len(hashed) > first_work
+
+
+@pytest.mark.parametrize(
+    "limits",
+    (
+        {"max_retained_bytes": 0},
+        {"max_retained_artifacts": 0},
+        {"max_retained_artifacts": 1},
+    ),
+)
+def test_source_fingerprint_eviction_or_disabled_retention_preserves_refusals(
+    tmp_path, limits
+):
+    request, store, _, _ = case(tmp_path)
+    contents = contents_for(request, store)
+    checks = AutomaticMappingEvidenceChecks(**limits)
+    expected = AutomaticMappingEvidenceChecks().assess(request, contents=contents)
+    for _ in range(4):
+        assert checks.assess(request, contents=contents) == expected
+    key = request.evidence_refs[0].content_hash
+    mutable = bytearray(contents[key])
+    supplied = {**contents, key: mutable}
+    assert checks.assess(request, contents=supplied) == expected
+    mutable[0] ^= 1
+    assert "MAPPING_SOURCE_ARTIFACT_UNAVAILABLE" in checks.assess(
+        request, contents=supplied
+    )

@@ -938,3 +938,36 @@ def test_parser_xbrli_share_units_are_approved_without_relabelling_periods(
     refused = evaluate(request, store)
     assert refused.status == "abstain"
     assert refused.rejected_observations[0].reason_code == "MAPPING_UNIT_UNSUPPORTED"
+
+
+def test_scoped_rebuild_hashes_only_the_mapped_concept(tmp_path, monkeypatch):
+    import fundamental_service.sec_rebuild as rebuild
+    from fundamental_service.arelle_parser import ParsedXbrlFactV1
+
+    request, store, _, _ = case(tmp_path)
+    mapping = evaluate(request, store).mapping
+    expected = parsed_facts_to_candidates(
+        request.original.report,
+        source=request.original.source,
+        issuer_id=request.original.source.cik,
+        normalized_field=mapping.normalized_field,
+        mapping=mapping,
+    )
+    hashed_facts = []
+    original_digest = rebuild.sha256_digest
+
+    def observed(value):
+        if isinstance(value, ParsedXbrlFactV1):
+            hashed_facts.append(value.concept)
+        return original_digest(value)
+
+    monkeypatch.setattr(rebuild, "sha256_digest", observed)
+    actual = parsed_facts_to_candidates(
+        request.original.report,
+        source=request.original.source,
+        issuer_id=request.original.source.cik,
+        normalized_field=mapping.normalized_field,
+        mapping=mapping,
+    )
+    assert actual == expected and actual
+    assert hashed_facts and set(hashed_facts) == {mapping.source_concept}

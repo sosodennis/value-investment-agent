@@ -1,3 +1,14 @@
+# Research follow-up in progress
+
+A subsequent bounded amplification correction is under development: immutable
+source-byte fingerprints within one operation, repeated release-reference byte
+checks, and concept filtering before observation hashing. The independent
+investigation at9d1dd00d uses1b9ec129 as its baseline; these three paths were also
+confirmed in47786578. Taxonomy closure reduction and cross-restart action identity
+are not changed without their own dependency proof. The prior numerical evidence
+below remains pinned to47786578; it is not acceptance of the newer correction.
+PR370 remains draft until new exact-head full-flow/recovery/CI checks pass.
+
 # #361 numerical delivery acceptance
 
 Implementation `4778657847f946f8dacab0fc44b9e791ac7e8fe8` has passed the real

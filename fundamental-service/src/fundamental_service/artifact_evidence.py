@@ -27,13 +27,13 @@ def retained_artifact_operation(
         yield artifacts
 
 
-def read_retained_artifact(
+def require_retained_artifact(
     artifacts: EvidenceArtifactReader,
     ref: ArtifactRefV1,
     *,
     dependency_hashes: tuple[str, ...] | None = None,
-) -> bytes:
-    """Check exact, stable metadata; the consumer checks bytes and domain meaning."""
+) -> ArtifactRecordV1:
+    """Require current exact metadata even when immutable bytes are already checked."""
     record = artifacts.get(ref.artifact_id)
     if (
         record.artifact_id != ref.artifact_id
@@ -48,6 +48,19 @@ def read_retained_artifact(
             "ARTIFACT_EVIDENCE_INVALID",
             "release inputs require exact valid retained artifact evidence",
         )
+    return record
+
+
+def read_retained_artifact(
+    artifacts: EvidenceArtifactReader,
+    ref: ArtifactRefV1,
+    *,
+    dependency_hashes: tuple[str, ...] | None = None,
+) -> bytes:
+    """Check exact, stable metadata; the consumer checks bytes and domain meaning."""
+    record = require_retained_artifact(
+        artifacts, ref, dependency_hashes=dependency_hashes
+    )
     raw = artifacts.read(ref.artifact_id)
     if artifacts.get(ref.artifact_id) != record:
         raise DataReleaseError(
