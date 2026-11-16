@@ -991,6 +991,8 @@ def verify_automatic_mapping_replay(
     evidence_checks: AutomaticMappingEvidenceChecks | None = None,
 ) -> AutomaticMappingRequestV1:
     """Re-evaluate retained inputs; a trusted signature alone is insufficient."""
+    if evidence_checks is not None:
+        artifacts = evidence_checks.reader(artifacts)
     refs = tuple(
         ref
         for ref in approval.evidence_refs

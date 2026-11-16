@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 from .data_releases import DataReleaseError
 from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
+from .mapping_input_storage import MappingInputReader
 from .original_issuer import OriginalIssuerEvidenceChecks
+from .replay import ArtifactRecordV1
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
@@ -16,12 +19,79 @@ if TYPE_CHECKING:
     from .automatic_mapping import AutomaticMappingSourceV1
 
 
+class _MappingArtifactReadScope:
+    """Pin checked immutable bytes; recheck metadata on every scoped read."""
+
+    def __init__(
+        self, reader: MappingInputReader, *, max_bytes: int, max_entries: int
+    ) -> None:
+        self.reader = reader
+        self._max_bytes = max_bytes
+        self._max_entries = max_entries
+        self._size = 0
+        self._retained: OrderedDict[str, tuple[ArtifactRecordV1, bytes]] = OrderedDict()
+
+    def get(self, artifact_id: str) -> ArtifactRecordV1:
+        return self.reader.get(artifact_id)
+
+    def read(self, artifact_id: str) -> bytes:
+        record = self.reader.get(artifact_id)
+        previous = self._retained.pop(artifact_id, None)
+        if previous is not None:
+            if previous[0] == record:
+                self._retained[artifact_id] = previous
+                return previous[1]
+            self._size -= len(previous[1])
+        raw = self.reader.read(artifact_id)
+        if record.artifact_id != artifact_id or self.reader.get(artifact_id) != record:
+            raise DataReleaseError(
+                "MAPPING_SOURCE_ARTIFACT_CHANGED",
+                "source bytes and metadata must identify one fixed artifact",
+            )
+        if hashlib.sha256(raw).hexdigest() != record.content_hash:
+            # Keep the owning validator's existing corruption error and never reuse it.
+            return raw
+        if self._max_entries and len(raw) <= self._max_bytes:
+            while self._retained and (
+                self._size + len(raw) > self._max_bytes
+                or len(self._retained) >= self._max_entries
+            ):
+                _, (_, removed) = self._retained.popitem(last=False)
+                self._size -= len(removed)
+            self._retained[artifact_id] = record, raw
+            self._size += len(raw)
+        return raw
+
+
 class AutomaticMappingEvidenceChecks:
     """Share source checks, never proposal decisions or cross-operation state."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        max_retained_bytes: int = 256 * 1024 * 1024,
+        max_retained_artifacts: int = 128,
+    ) -> None:
+        if max_retained_bytes < 0 or max_retained_artifacts < 0:
+            raise ValueError("mapping evidence retention limits must be nonnegative")
         self._checked: dict[str, tuple[str, ...]] = {}
         self.originals = OriginalIssuerEvidenceChecks()
+        self._max_retained_bytes = max_retained_bytes
+        self._max_retained_artifacts = max_retained_artifacts
+        self._reader: _MappingArtifactReadScope | None = None
+
+    def reader(self, artifacts: MappingInputReader) -> MappingInputReader:
+        if self._reader is None:
+            self._reader = _MappingArtifactReadScope(
+                artifacts,
+                max_bytes=self._max_retained_bytes,
+                max_entries=self._max_retained_artifacts,
+            )
+        elif artifacts is not self._reader and artifacts is not self._reader.reader:
+            raise ValueError(
+                "one mapping evidence operation requires one artifact store"
+            )
+        return self._reader
 
     def assess(
         self, request: AutomaticMappingSourceV1, *, contents: dict[str, bytes]

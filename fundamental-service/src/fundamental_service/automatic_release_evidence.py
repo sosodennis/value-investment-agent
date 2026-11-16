@@ -115,6 +115,7 @@ def require_automatic_release_sources(
         if isinstance(review, AutomaticMappingApprovalV1)
     )
     evidence_checks = AutomaticMappingEvidenceChecks()
+    artifacts = evidence_checks.reader(artifacts)
     sources: tuple[AutomaticMappingSourceV1, ...] = tuple(
         verify_automatic_mapping_replay(
             review,
@@ -134,13 +135,17 @@ def require_automatic_release_sources(
     for reference in manifest.snapshot_refs:
         snapshot = snapshots.get(reference.snapshot_id)
         if isinstance(snapshot, IssuerOperatingSourceV1):
-            integrities = tuple(
-                SecIntegrityEvidenceV1.model_validate_json(
-                    artifacts.read(ref.artifact_id)
-                )
-                for ref in manifest.artifact_refs
-                if ref.role == "sec-issuer-integrity-v1"
-            )
+            integrities = []
+            for ref in manifest.artifact_refs:
+                if ref.role != "sec-issuer-integrity-v1":
+                    continue
+                raw = artifacts.read(ref.artifact_id)
+                if hashlib.sha256(raw).hexdigest() != ref.content_hash:
+                    raise DataReleaseError(
+                        "AUTOMATIC_RELEASE_ORIGINAL_ARTIFACT_MISMATCH",
+                        "issuer integrity requires its exact referenced bytes",
+                    )
+                integrities.append(SecIntegrityEvidenceV1.model_validate_json(raw))
             originals = snapshot.originals
             pairs: list[tuple[OriginalIssuerEvidenceV1, SecIntegrityEvidenceV1]] = []
             for original in originals:

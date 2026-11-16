@@ -176,3 +176,56 @@ review receipts remain outside Git under
 trusted release, authentic caller approval, numerical replay/restart/restore
 and main delivery remain outstanding. The history threshold stays null and
 #376's fixed cohort is unchanged.
+
+## Bounded mapping artifact reads
+
+Mapping replay and automatic release source checks now pin hash-checked bytes
+in an owner-local LRU scope. The default retains at most 256 MiB of raw payload
+and 128 artifacts. Each read still checks the complete current artifact record;
+changed metadata evicts the pinned value, and a metadata change during a cold
+read refuses. Corrupt bytes are never retained and reach the existing owning
+validator so its refusal code is preserved. Issuer-integrity parsing also
+checks its exact reference hash independently of the reader implementation.
+
+Each operation uses one store. A new operation and the independent content
+verifier establish fresh scopes. This is neither a serialized validation flag
+nor a process-wide cache. The bound excludes transient reads, parsed models,
+metadata and other owner structures; it is not a process memory bound.
+Request identities, proposal decisions and signing semantics are unchanged.
+
+The read-only experiment replays the same 55 approved real MSFT mappings in
+one installed `3963dafc` process, injecting only the candidate reader. Its
+83-artifact working set contains 259,032,283 bytes. The baseline reads 605
+objects and 6,308,575,018 bytes per sample. A 64 MiB limit thrashes and saves
+no reads; its two samples are slower. At 128 MiB, 398 reads and 2,756,436,309
+bytes remain per sample. A 256 MiB limit retains the complete measured set and
+reads each of its 83 objects once. All samples reproduce semantic digest
+`579318c887cb9330d8d882a4cd4029702e97835f056a8f0e1556f5af8fe1483c`.
+The failed and intermediate capacity experiments remain retained.
+
+Five baseline and five 256 MiB samples, interleaving ABBA and three additional
+AB pairs, have median wall times 81.33 and 75.80 seconds respectively; ranges
+are 80.38–82.95 and 74.98–77.79 seconds. Process high-water RSS reaches
+521,252 KiB across the samples. The shared host has ten logical CPUs; load
+observed after the first ABBA was 4.96/5.03/5.11, without CPU isolation.
+All fifteen retained PostgreSQL table inventories are unchanged. Measurement
+summary input/output digests are
+`a9bc71e213871fabd16c5d9273ab20512c78e245a440d0399afb473712b086ef` /
+`a7f2ac5ca6cc4e117c01c6b631b3a9fddbedb3ea373deaa0dcdf6c54969359d3`.
+
+These counts establish bounded reuse of this working set, not a numerical
+valuation or successful release. The experiment excludes discovery, parser
+subprocesses, history and other release work. RSS is a cumulative process
+high-water mark, not an independent per-mode memory comparison. Timings must
+not be presented as end-to-end speedup: decoding reports, rebuilding mapping
+requests and canonical input digests still traverse large evidence. Their
+cost and duplicate parser work remain separate owning-layer work.
+
+Independent static review found no new scoped findings. It covers metadata,
+hash/error ownership, eviction and verifier separation only; it does not
+establish whole-PR, runtime or performance acceptance. Boundary tests cover
+cross-mapping reuse, fresh-operation corruption, invalidation, changed metadata,
+eviction, oversized objects and issuer-integrity reference corruption.
+All raw measurements and review receipts remain Git-external under
+`.audit/issue-361-current-issuer-service/3963dafc-scoped-bytes-*` and
+`scoped-artifact-bytes-independent-review-final.json`.
