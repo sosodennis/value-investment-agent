@@ -227,7 +227,18 @@ class _CanonicalFactRepository(_FactRepository):
         return _canonical_fact(fact_id, "revenue")
 
 
-def _release_manifest_for(snapshot, facts):
+def _release_manifest_for(snapshot, facts, *, artifacts=None):
+    contents = {
+        "taxonomy-v1": (b"synthetic taxonomy", "application/zip"),
+        "quality-v1": (b'{"synthetic_quality":true}', "application/json"),
+        "release-api-evidence": (
+            b'{"synthetic_verification":true}',
+            "application/json",
+        ),
+    }
+    if artifacts is not None:
+        for name, (raw, media_type) in contents.items():
+            artifacts.put_bytes_with_receipt(name, raw, media_type=media_type)
     fact_refs = tuple(
         FactRefV1(
             fact_id=fact.fact_id,
@@ -252,7 +263,7 @@ def _release_manifest_for(snapshot, facts):
         "taxonomy_refs": (
             ArtifactRefV1(
                 artifact_id="taxonomy-v1",
-                content_hash="d" * 64,
+                content_hash=hashlib.sha256(contents["taxonomy-v1"][0]).hexdigest(),
                 media_type="application/zip",
                 role="taxonomy",
             ),
@@ -263,7 +274,7 @@ def _release_manifest_for(snapshot, facts):
         "artifact_refs": (
             ArtifactRefV1(
                 artifact_id="quality-v1",
-                content_hash="f" * 64,
+                content_hash=hashlib.sha256(contents["quality-v1"][0]).hexdigest(),
                 media_type="application/json",
                 role="quality-evidence",
             ),
@@ -289,7 +300,9 @@ def _release_verification_for(
         "evidence_refs": (
             ArtifactRefV1(
                 artifact_id="release-api-evidence",
-                content_hash="3" * 64,
+                content_hash=hashlib.sha256(
+                    b'{"synthetic_verification":true}'
+                ).hexdigest(),
                 media_type="application/json",
                 role="verification-evidence",
             ),
@@ -333,6 +346,10 @@ class _DataReleaseMetadata:
     ) -> DataReleaseManifestV1 | None:
         candidate = self.candidates.get(manifest_digest)
         return None if candidate is None else candidate[0]
+
+    def get_data_release_verification(self, manifest_digest):
+        candidate = self.candidates.get(manifest_digest)
+        return None if candidate is None else candidate[1]
 
     def compare_and_swap_data_release(
         self, command: DataReleaseActivationCommandV1
@@ -1833,15 +1850,19 @@ def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(
 ):
     snapshot = _SnapshotRepository().snapshot
     fact = _canonical_fact("fact-revenue", "revenue")
-    manifest = _release_manifest_for(snapshot, (fact,))
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    manifest = _release_manifest_for(snapshot, (fact,), artifacts=artifacts)
     metadata = SimpleNamespace(
         get_data_release_manifest=lambda digest: (
             manifest if digest == manifest.manifest_digest else None
-        )
+        ),
+        get_data_release_verification=lambda digest: _release_verification_for(manifest)
+        if digest == manifest.manifest_digest
+        else None,
     )
     app = create_app(
         snapshot_repository=_SnapshotRepository(),
-        artifact_store=ArtifactStore(tmp_path / "artifacts"),
+        artifact_store=artifacts,
         content_store=FilesystemContentStore(tmp_path / "content"),
         fact_repository=_CanonicalFactRepository(),
         metadata_store=metadata,
@@ -1898,20 +1919,91 @@ def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(
     assert replay.dependency_versions["data_release"] == manifest.manifest_digest
 
 
+@pytest.mark.parametrize(
+    "role", ("taxonomy", "quality-evidence", "verification-evidence")
+)
+def test_direct_calculation_rejects_withdrawn_release_dependencies(tmp_path, role):
+    snapshot = _SnapshotRepository().snapshot
+    fact = _canonical_fact("fact-revenue", "revenue")
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    manifest = _release_manifest_for(snapshot, (fact,), artifacts=artifacts)
+    verification = _release_verification_for(manifest)
+    metadata = SimpleNamespace(
+        get_data_release_manifest=lambda digest: manifest
+        if digest == manifest.manifest_digest
+        else None,
+        get_data_release_verification=lambda digest: verification
+        if digest == manifest.manifest_digest
+        else None,
+    )
+    app = create_app(
+        snapshot_repository=_SnapshotRepository(),
+        artifact_store=artifacts,
+        fact_repository=_CanonicalFactRepository(),
+        metadata_store=metadata,
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+    )
+    valuation = make_valuation()
+    request = _bind_initial_policy(
+        valuation.model_copy(
+            update={
+                "historical_facts": (fact.fact_id,),
+                "valuation_context": valuation.valuation_context.model_copy(
+                    update={"data_release_manifest_digest": manifest.manifest_digest}
+                ),
+                "provenance": valuation.provenance.model_copy(
+                    update={"fact_ids": (fact.fact_id,)}
+                ),
+                "input_digest": None,
+            }
+        ).with_digest()
+    )
+    client = TestClient(app)
+
+    def execute():
+        return client.post(
+            "/v1/valuation/calculate",
+            headers=auth_headers(),
+            json=make_internal_envelope(request.model_dump(mode="json")),
+        )
+
+    first = execute()
+    assert first.status_code == 200, first.text
+    ref = next(
+        ref
+        for ref in (
+            *manifest.taxonomy_refs,
+            *manifest.artifact_refs,
+            *verification.evidence_refs,
+        )
+        if ref.role == role
+    )
+    retained = artifacts.read(ref.artifact_id)
+    artifacts.invalidate(ref.artifact_id)
+    assert artifacts.read(ref.artifact_id) == retained
+    response = execute()
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "ARTIFACT_EVIDENCE_INVALID"
+
+
 def test_valuation_evidence_read_uses_profile_roles_and_abstains_on_missing_facts(
     tmp_path: Path,
 ):
     snapshot = _SnapshotRepository().snapshot
     fact = _canonical_fact("fact-revenue", "revenue")
-    manifest = _release_manifest_for(snapshot, (fact,))
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    manifest = _release_manifest_for(snapshot, (fact,), artifacts=artifacts)
     metadata = SimpleNamespace(
         get_data_release_manifest=lambda digest: (
             manifest if digest == manifest.manifest_digest else None
-        )
+        ),
+        get_data_release_verification=lambda digest: _release_verification_for(manifest)
+        if digest == manifest.manifest_digest
+        else None,
     )
     app = create_app(
         snapshot_repository=_SnapshotRepository(),
-        artifact_store=ArtifactStore(tmp_path / "artifacts"),
+        artifact_store=artifacts,
         content_store=FilesystemContentStore(tmp_path / "content"),
         fact_repository=_CanonicalFactRepository(),
         metadata_store=metadata,

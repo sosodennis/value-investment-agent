@@ -65,7 +65,7 @@ from equity_award_fixtures import (
     quote_source_payload,
 )
 from fundamental_service.valuation_requirements import valuation_requirements_profile
-from test_api import _release_manifest_for
+from test_api import _release_manifest_for, _release_verification_for
 from test_postgres_metadata import DATABASE_URL, _sec_ingestion_request, _snapshot
 from test_release_runner import _candidate
 from test_history_composition import _changed, _original
@@ -222,7 +222,7 @@ def _fixture(
         artifacts=artifacts,
         base_policy=base_source_policy,
     )
-    manifest = _release_manifest_for(snapshot, stored)
+    manifest = _release_manifest_for(snapshot, stored, artifacts=artifacts)
     payload = manifest.model_dump(exclude={"manifest_digest"})
     payload.update(
         profile_id=plan.release_profile_id,
@@ -264,6 +264,9 @@ def _fixture(
         get_data_release_manifest=lambda digest: (
             manifest if digest == manifest.manifest_digest else None
         ),
+        get_data_release_verification=lambda digest: _release_verification_for(current)
+        if (current := metadata.get_data_release_manifest(digest)) is not None
+        else None,
         get_mapping=mappings.__getitem__,
     )
     artifacts.put_with_receipt(f"equity-dilution:{dilution.digest}", dilution)
@@ -366,6 +369,11 @@ def _acquisition(fixture, *, quality=QualityStatus.VERIFIED):
 
 def _reviewed_candidate(fixture, *, quote_providers=None):
     seed_manifest, verification, _, _, _, artifacts, roots = _candidate()
+    fixture.artifacts.put_bytes_with_receipt(
+        "release-evidence",
+        artifacts.read("release-evidence"),
+        media_type=artifacts.get("release-evidence").media_type,
+    )
     manifest_payload = fixture.manifest.model_dump(exclude={"manifest_digest"})
     manifest_payload.update(
         taxonomy_refs=seed_manifest.taxonomy_refs,
@@ -448,6 +456,9 @@ def _reviewed_candidate(fixture, *, quote_providers=None):
     fixture.metadata.compare_and_swap_data_release = activate
     fixture.metadata.get_data_release_manifest = lambda digest: (
         manifest if digest == manifest.manifest_digest else None
+    )
+    fixture.metadata.get_data_release_verification = lambda digest: (
+        verification if digest == manifest.manifest_digest else None
     )
     canary = DataReleaseCanaryRunner(
         snapshot_repository=fixture.snapshots,

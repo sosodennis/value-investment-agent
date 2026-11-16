@@ -58,9 +58,17 @@ def _load(fixture, **changes):
 
 
 def _manifest(fixture, references):
+    from test_api import _release_verification_for
+
     payload = fixture.manifest.model_dump(exclude={"manifest_digest"})
     payload["artifact_refs"] = references
-    return DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
+    manifest = DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
+    fixture.metadata.get_data_release_verification = lambda digest: (
+        _release_verification_for(current)
+        if (current := fixture.metadata.get_data_release_manifest(digest)) is not None
+        else None
+    )
+    return manifest
 
 
 def _prepare(fixture, evidence):
@@ -172,6 +180,13 @@ def _with_historical_awards(fixture):
     )
     fixture.metadata.get_data_release_manifest = lambda digest: (
         fixture.manifest if digest == fixture.manifest.manifest_digest else None
+    )
+    from test_api import _release_verification_for
+
+    fixture.metadata.get_data_release_verification = lambda digest: (
+        _release_verification_for(fixture.manifest)
+        if digest == fixture.manifest.manifest_digest
+        else None
     )
     return historical
 
@@ -493,6 +508,8 @@ def test_quote_security_must_match_the_snapshot_identity(tmp_path):
 
 
 def test_legacy_release_without_award_artifact_cannot_prepare_per_share_value(tmp_path):
+    from test_api import _release_verification_for
+
     fixture = _fixture(tmp_path)
     manifest = _manifest(
         fixture,
@@ -507,6 +524,11 @@ def test_legacy_release_without_award_artifact_cannot_prepare_per_share_value(tm
         fixture.application,
         metadata_store=SimpleNamespace(
             get_data_release_manifest=lambda digest: manifest,
+            get_data_release_verification=lambda digest: _release_verification_for(
+                manifest
+            )
+            if digest == manifest.manifest_digest
+            else None,
             get_mapping=fixture.mappings.__getitem__,
         ),
     )

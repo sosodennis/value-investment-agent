@@ -87,6 +87,99 @@ def test_automatic_calculation_rejects_withdrawn_quote_bytes(tmp_path, role):
 
 
 @pytest.mark.parametrize(
+    "dependency", ("taxonomy", "original", "verification", "mapping")
+)
+def test_automatic_calculation_rejects_withdrawn_release_dependencies(
+    tmp_path, dependency
+):
+    fixture, client, _, request = _case(tmp_path)
+    digest = request["preparation"]["data_release_manifest_digest"]
+    manifest = fixture.metadata.get_data_release_manifest(digest)
+    verification = fixture.metadata.get_data_release_verification(digest)
+    ref = (
+        manifest.taxonomy_refs[0]
+        if dependency == "taxonomy"
+        else manifest.artifact_refs[0]
+        if dependency == "original"
+        else verification.evidence_refs[0]
+        if dependency == "verification"
+        else verification.mapping_reviews[0].evidence_refs[0]
+    )
+    # Use a distinct retained artifact for each dependency class. The seed
+    # canary shares one fixture artifact across several references.
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from fundamental_service.data_releases import (
+        DataReleaseManifestV1,
+        sign_data_release_verification,
+        sign_mapping_review_evidence,
+    )
+    from fundamental_service.serialization import sha256_digest
+
+    separate = ref.model_copy(update={"artifact_id": "withdraw-" + dependency})
+    fixture.artifacts.put_bytes_with_receipt(
+        separate.artifact_id,
+        fixture.artifacts.read(ref.artifact_id),
+        media_type=ref.media_type,
+    )
+    manifest_payload = manifest.model_dump(exclude={"manifest_digest"})
+    if dependency in {"taxonomy", "original"}:
+        field = "taxonomy_refs" if dependency == "taxonomy" else "artifact_refs"
+        manifest_payload[field] = tuple(
+            separate if item == ref else item for item in getattr(manifest, field)
+        )
+    manifest = DataReleaseManifestV1(
+        **manifest_payload, manifest_digest=sha256_digest(manifest_payload)
+    )
+    verification_payload = verification.model_dump(
+        exclude={"signature", "verification_digest"}
+    )
+    verification_payload["manifest_digest"] = manifest.manifest_digest
+    if dependency == "verification":
+        verification_payload["evidence_refs"] = tuple(
+            separate if item == ref else item for item in verification.evidence_refs
+        )
+    elif dependency == "mapping":
+        reviews = list(verification.mapping_reviews)
+        review = reviews[0].model_dump(exclude={"signature"})
+        review["evidence_refs"] = tuple(
+            separate if item == ref else item for item in reviews[0].evidence_refs
+        )
+        reviews[0] = sign_mapping_review_evidence(
+            review,
+            Ed25519PrivateKey.from_private_bytes(b"reviewer-key".ljust(32, b"0")),
+        )
+        verification_payload["mapping_reviews"] = tuple(reviews)
+    verification = sign_data_release_verification(
+        verification_payload,
+        Ed25519PrivateKey.from_private_bytes(b"verifier-key".ljust(32, b"0")),
+    )
+    fixture.metadata.get_data_release_manifest = (
+        lambda digest: manifest if digest == manifest.manifest_digest else None
+    )
+    fixture.metadata.get_data_release_verification = (
+        lambda digest: verification if digest == manifest.manifest_digest else None
+    )
+    request["preparation"]["data_release_manifest_digest"] = manifest.manifest_digest
+    prepared = client.app.state.application.prepare_valuation(
+        ValuationEvidenceReadRequestV1.model_validate(request["preparation"])
+    )
+    assert prepared.status == "prepared"
+    request["expected_input_digest"] = prepared.input.input_digest
+    ref = separate
+    retained = fixture.artifacts.read(ref.artifact_id)
+    fixture.artifacts.invalidate(ref.artifact_id)
+    assert fixture.artifacts.read(ref.artifact_id) == retained
+    response = _execute(client, request)
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "ARTIFACT_EVIDENCE_INVALID"
+    assert not any(
+        json.loads(path.read_bytes()).get("protocol")
+        == "automatic-valuation-execution-v1"
+        for path in fixture.artifacts.root.glob("*.json.artifact")
+    )
+
+
+@pytest.mark.parametrize(
     "role",
     (
         "market_source_admission",

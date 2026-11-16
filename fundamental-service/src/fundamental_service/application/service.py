@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import datetime
+from hashlib import sha256
 from typing import Any, overload
 
 from pydantic import model_validator
@@ -48,6 +49,7 @@ from ..data_releases import (
     DataReleaseVerificationV1,
     ReleaseResolutionCacheKeyV1,
 )
+from ..artifact_evidence import read_retained_artifact
 from ..facts import (
     CanonicalFactRepository,
     canonical_fact_digest,
@@ -539,6 +541,87 @@ class FundamentalApplication:
                 retryable=False,
             )
         return manifest
+
+    def _verify_current_release_artifacts(
+        self, manifest: DataReleaseManifestV1, *, deadline_at: datetime | None = None
+    ) -> None:
+        """Re-check every retained release dependency before serving valuation.
+
+        Canary validation establishes that a candidate was publishable. Serving
+        must also observe later invalidation or metadata substitution; otherwise
+        retained snapshot/fact rows could outlive the evidence that authorized
+        them. This boundary only reads the pinned bytes and current metadata. The
+        domain consumers below continue to validate their own evidence semantics.
+        """
+        if self.artifact_store is None:
+            raise ServiceError(
+                "ARTIFACT_UNAVAILABLE",
+                "release dependencies are unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        verification_reader = getattr(
+            self.metadata_store, "get_data_release_verification", None
+        )
+        if not callable(verification_reader):
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_UNAVAILABLE",
+                "release dependency verification is unavailable",
+            )
+        guard_execution_deadline(deadline_at)
+        try:
+            verification = verification_reader(manifest.manifest_digest)
+        except Exception as error:  # pragma: no cover - adapter boundary
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_UNAVAILABLE",
+                "release dependency verification is unavailable",
+            ) from error
+        if (
+            not isinstance(verification, DataReleaseVerificationV1)
+            or verification.manifest_digest != manifest.manifest_digest
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_MISMATCH",
+                "release dependency verification differs from its manifest",
+            )
+        refs = (
+            *manifest.taxonomy_refs,
+            *manifest.artifact_refs,
+            *verification.evidence_refs,
+            *(
+                ref
+                for review in verification.mapping_reviews
+                for ref in review.evidence_refs
+            ),
+        )
+        seen: dict[str, tuple[str, str]] = {}
+        for reference in refs:
+            guard_execution_deadline(deadline_at)
+            identity = (reference.content_hash, reference.media_type)
+            previous = seen.get(reference.artifact_id)
+            if previous is not None and previous != identity:
+                raise DataReleaseError(
+                    "DATA_RELEASE_ARTIFACT_REFERENCE_CONFLICT",
+                    "release references one artifact ID with different content",
+                )
+            if previous is not None:
+                continue
+            seen[reference.artifact_id] = identity
+            try:
+                raw = read_retained_artifact(self.artifact_store, reference)
+            except DataReleaseError:
+                raise
+            except Exception as error:  # pragma: no cover - adapter boundary
+                raise DataReleaseError(
+                    "DATA_RELEASE_ARTIFACT_UNAVAILABLE",
+                    f"release artifact {reference.artifact_id} is unavailable",
+                ) from error
+            if sha256(raw).hexdigest() != reference.content_hash:
+                raise DataReleaseError(
+                    "DATA_RELEASE_ARTIFACT_HASH_MISMATCH",
+                    f"release artifact {reference.artifact_id} failed hash verification",
+                )
+        guard_execution_deadline(deadline_at)
 
     def publish_data_release_candidate(
         self, manifest: DataReleaseManifestV1, verification: DataReleaseVerificationV1
@@ -1288,6 +1371,13 @@ class FundamentalApplication:
         guard_execution_deadline(deadline_at)
         snapshot = self.snapshot(request.snapshot_id)
         manifest = self._data_release_manifest(request.data_release_manifest_digest)
+        assert manifest is not None
+        try:
+            self._verify_current_release_artifacts(manifest, deadline_at=deadline_at)
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
         working_capital_inputs = valuation_release_working_capital_inputs(
             manifest, snapshot
         )
@@ -1906,6 +1996,18 @@ class FundamentalApplication:
         self._require_released_calculator_model(resolved)
         guard_calculation_budget(resolved, self.config)
         snapshot = self.snapshot(resolved.valuation_context.data_snapshot_id)
+        manifest = self._data_release_manifest(
+            resolved.valuation_context.data_release_manifest_digest
+        )
+        if manifest is not None:
+            try:
+                self._verify_current_release_artifacts(
+                    manifest, deadline_at=deadline_at
+                )
+            except DataReleaseError as error:
+                raise ServiceError(
+                    error.code, str(error), status_code=422, retryable=False
+                ) from error
         self._verify_fact_references(resolved)
         guard_execution_deadline(deadline_at)
         released_conditional = self._is_released_conditional_input(

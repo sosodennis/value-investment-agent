@@ -423,4 +423,4 @@ def test_corrupt_quote_bytes_refuse_before_preparation_or_calculation(
     assert error.value.code == "DATA_RELEASE_ARTIFACT_HASH_MISMATCH"
     response = _prepare(_client(fixture), fixture, candidate)
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "DILUTION_QUOTE_SOURCE_MISMATCH"
+    assert response.json()["error"]["code"] == "DATA_RELEASE_ARTIFACT_HASH_MISMATCH"

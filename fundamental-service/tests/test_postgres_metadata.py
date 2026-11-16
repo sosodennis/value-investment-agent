@@ -652,6 +652,10 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
     metadata.publish_data_release_candidate(manifest, verification)
     metadata.publish_data_release_candidate(manifest, verification)
     assert metadata.get_data_release_manifest(manifest.manifest_digest) == manifest
+    assert (
+        metadata.get_data_release_verification(manifest.manifest_digest) == verification
+    )
+    assert metadata.get_data_release_verification("0" * 64) is None
     command = _activation_command(manifest)
 
     active = metadata.compare_and_swap_data_release(command)

@@ -78,6 +78,10 @@ def _deployment_fixture(tmp_path):
         for item in (fixture.active.manifest, original.manifest, manifest)
     }
     fixture.metadata.get_data_release_manifest = manifests.get
+    fixture.metadata.get_data_release_verification = {
+        original.manifest.manifest_digest: original.verification,
+        manifest.manifest_digest: verification,
+    }.get
     application = replace(
         application, policy_registry=registry, metadata_store=fixture.metadata
     )

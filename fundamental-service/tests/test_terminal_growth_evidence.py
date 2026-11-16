@@ -104,10 +104,14 @@ def _bound(fixture):
 
 def replace_metadata(fixture, manifest):
     from types import SimpleNamespace
+    from test_api import _release_verification_for
 
     return SimpleNamespace(
         get_mapping=fixture.metadata.get_mapping,
         get_data_release_manifest=lambda digest: manifest
+        if digest == manifest.manifest_digest
+        else None,
+        get_data_release_verification=lambda digest: _release_verification_for(manifest)
         if digest == manifest.manifest_digest
         else None,
     )
