@@ -525,7 +525,9 @@ class OriginalSourcePlan:
             != reference
         ):
             raise SnapshotError("ORIGINAL_SOURCE_PLAN_INVALID", "original differs")
-        prepared = self._originals.read(reference.artifact_id)
+        prepared, validations = self._originals.read_with_validations(
+            reference.artifact_id
+        )
         codes = set(prepared.issue_codes)
         if not prepared.filings:
             codes.add("ORIGINAL_SOURCE_PLAN_FILINGS_MISSING")
@@ -574,8 +576,7 @@ class OriginalSourcePlan:
             recipe_filings: list[tuple[str, date]] = []
             market_context = None
             market_original: tuple[str, date] | None = None
-            for item in prepared.filings:
-                validated = self._originals.read_validation(item.validation.artifact_id)
+            for item, validated in zip(prepared.filings, validations, strict=True):
                 original = validated.request
                 identity = item.identity
                 if identity is None:

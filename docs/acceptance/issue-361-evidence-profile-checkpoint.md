@@ -318,3 +318,13 @@ Raw comparisons remain outside Git as
 Input/output digests are
 `5366567bd261eed8e33bddd98ae261650a8d5761ad1e5ab1cc76a71c9850b6da` /
 `054bafb357fe2191b755c6f7ec401999774e86f3f7c8871fbd66ecf24af3c263`.
+
+## Source compiler consumes checked originals
+
+OriginalSourcePlan now consumes the preparation and ordered validations returned
+by one `read_with_validations` call. It no longer discards those validations and
+then reloads each selected filing. Exact reference checks and the preparation
+owner's complete validation remain. Every subsequent compile rechecks storage;
+there is no cross-operation state. Compiler regressions preserve historical
+identity conflicts, publication/reuse and corruption refusal. This removes one
+known duplicate read per filing per compile; full-flow timing remains unverified.

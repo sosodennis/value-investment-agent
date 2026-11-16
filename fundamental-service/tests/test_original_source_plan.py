@@ -361,6 +361,33 @@ def test_compiled_historical_annual_executes_and_reuses_the_frozen_selection(
     assert (value.state.provider_calls, value.state.parser_calls) == calls
 
 
+def test_compile_consumes_checked_originals_and_next_compile_rechecks_storage(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch, historical_annual=True)
+    prepared, _ = execute(value)
+    compiler, request = compiler_case(value, prepared)
+    read_validation = value.service.read_validation
+    checked = []
+
+    def read(artifact_id):
+        checked.append(artifact_id)
+        return read_validation(artifact_id)
+
+    monkeypatch.setattr(value.service, "read_validation", read)
+    compiled = compiler._compile(request)
+    assert compiled.plan is not None
+    assert checked == [f.validation.artifact_id for f in prepared.filings]
+    assert compiler._compile(request) == compiled
+    assert checked == [f.validation.artifact_id for f in prepared.filings] * 2
+
+    record = value.artifacts.get(prepared.filings[0].validation.artifact_id)
+    path = value.artifacts._artifact_path(record.content_hash, record.media_type)
+    path.write_bytes(b"corrupt original validation")
+    with pytest.raises(SnapshotError):
+        compiler._compile(request)
+
+
 @pytest.mark.parametrize(
     "change",
     ("reference", "cik", "cutoff", "security", "accession", "runtime", "source"),
@@ -473,13 +500,16 @@ def test_history_compiler_retains_names_and_uses_latest_original_for_common_iden
         }
     )
     # The compiler boundary consumes already-validated original evidence.
-    monkeypatch.setattr(value.service, "read", lambda _: prepared)
     monkeypatch.setattr(
         value.service,
-        "read_validation",
-        lambda artifact_id: older_validation
-        if artifact_id == older.validation.artifact_id
-        else validation,
+        "read_with_validations",
+        lambda _: (
+            prepared,
+            tuple(
+                older_validation if item == older else validation
+                for item in prepared.filings
+            ),
+        ),
     )
     compiler, request = compiler_case(value, saved)
     result = compiler._compile(request)
