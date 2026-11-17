@@ -29,18 +29,23 @@ v=json.loads(Path(sys.argv[1]).read_bytes());e=v['automatic_execution']
 caller=DeploymentAutomaticCaller.from_env();rows=[]
 def read(ref):
  raw=caller._request('/v1/artifacts/'+urllib.parse.quote(ref['artifact_id'],safe='')+'/content',{},method='GET',caller_id=sys.argv[2],organization_id=sys.argv[3],deadline_at=datetime.now(UTC)+timedelta(seconds=5))
- assert hashlib.sha256(raw).hexdigest()==ref['content_hash']
+ if hashlib.sha256(raw).hexdigest()!=ref['content_hash']:
+  raise ValueError('retrieved artifact hash differs')
  rows.append({'artifact_id':ref['artifact_id'],'content_hash':ref['content_hash']})
  return json.loads(raw)
 execution=read(e['execution_publication']['artifact'])
-assert execution['input_digest']==e['decision']['input_digest']
-assert execution['result_digest']==sha256_digest(AutomaticValuationResponseV1.model_validate_json(json.dumps(e)).calculation)
+if execution['input_digest']!=e['decision']['input_digest']:
+ raise ValueError('retrieved exact input differs')
+if execution['result_digest']!=sha256_digest(AutomaticValuationResponseV1.model_validate_json(json.dumps(e)).calculation):
+ raise ValueError('retrieved calculation digest differs')
 for ref in e['calculation']['artifact_references']:
  artifact=read(ref)
  if ref['artifact_type']=='uncertainty_evidence':
   base=artifact['report']['base'];result=e['calculation']['base']
-  assert {k:v for k,v in base.items() if k not in {'artifact_references','correlation_id'}}=={k:v for k,v in result.items() if k not in {'artifact_references','correlation_id'}}
-  assert all(item in result['artifact_references'] for item in base['artifact_references'])
+  if {k:v for k,v in base.items() if k not in {'artifact_references','correlation_id'}}!={k:v for k,v in result.items() if k not in {'artifact_references','correlation_id'}}:
+   raise ValueError('retrieved numerical provenance differs')
+  if not all(item in result['artifact_references'] for item in base['artifact_references']):
+   raise ValueError('retrieved source provenance differs')
 print(json.dumps({'authenticated':True,'input_digest':execution['input_digest'],'result_digest':execution['result_digest'],'provenance_equal':True,'artifacts':rows}))
 """
 
