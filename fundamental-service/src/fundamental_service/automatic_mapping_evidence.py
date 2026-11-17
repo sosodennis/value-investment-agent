@@ -122,6 +122,7 @@ class AutomaticMappingEvidenceChecks:
                 artifacts=artifacts,
                 delivery_revision=request.source_revision,
                 evidence_refs=request.evidence_refs,
+                original_checks=self.originals,
             )
         for identity, metadata in previous:
             if artifacts.get(identity) != metadata or metadata.status != "valid":

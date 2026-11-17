@@ -72,3 +72,54 @@ Agent skill review covered `agent-implementation-extractor`,
 `agent-debug-review-playbook` and `architecture-standard-enforcer`. No agent
 topology, graph/state contract, capability ownership or cross-agent import changed;
 their guidance remains applicable and no skill change was needed.
+
+## Measured delivery-scoped action checkpoint
+
+Exact implementation `3d6153e7a8b4dd1208b6ed169ea28dec003391bb` completed
+the real SEC-enabled MSFT numerical flow, deployment-authorized exact-input
+caller, calculator, persistence and authenticated API/provenance retrieval.
+Six normalized/archive bodies each had one miss and one reuse; the retained
+content hash and genuine original `parsed_at` matched on reuse.
+
+This increment **regressed warm replay**. Five alternating unprofiled successful
+complete runs per side, under the same one-CPU/3-GiB issue-owned runtime:
+
+| Metric | Operation context `7713fb26` | Parser actions `3d6153e7` |
+| --- | --- | --- |
+| Wall median (seconds) | 39.75097 | 57.34497 |
+| Wall range (seconds) | 39.09325–40.02983 | 57.04024–58.08314 |
+| CPU median (seconds) | 36.43208 | 53.68925 |
+| CPU range (seconds) | 36.06742–36.53301 | 53.40302–54.33619 |
+
+All ten runs calculated successfully, retrieved equal numerical results and
+provenance through authenticated API, retained stable applicable artifacts
+within each version, reported lineage/execution `wrote=false`, and left domain
+row counts unchanged. Full receipts include sampled memory and host load.
+Existing-source first preparation was one unprofiled 703.3000-second sample
+(CPU 633.1909 seconds, sampled peak 2,853,634,048 bytes); it does not establish
+improvement over the prior 664.5843-second sample. New-original execution has
+not been measured in this checkpoint.
+
+Separate attribution, excluded from timings, found nine action checks and nine
+`evaluate_original_issuer` calls across the producer and independent canary.
+Those calls rebuilt full issuer claims from raw normalized reports even after
+the consumer validated its original claim. Nested durations are not summed.
+The next correction shares the consumer's existing bounded claim checks and
+compares the exact existing v1 canonical report transformation separately.
+It preserves full claim validation, raw-body equivalence, live metadata/content
+checks, independent scopes and all original canonical/digest algorithms.
+Its performance remains unmeasured until a new exact-image run.
+
+Commands: `benchmark_parser_warm.py` and `run_diagnostics_parser.py`, each exit
+zero, in the ignored `.audit/issue-445-evidence-reuse/` directory. First-preparation
+receipt, parser-action body/time summary, API receipt, per-run outputs and failed
+startup attempts remain there outside Git. MSFT remains provisional uncalibrated
+what-if; the history threshold remains null. V1 still includes delivery revision;
+cross-delivery identity, final restart/restore/refusal acceptance and merge
+verification remain incomplete.
+
+Evidence SHA-256:
+
+- `stage2-final-benchmark.json`: `101b2ebf62d39e909fbeaa3d555a39eaa3ff1b1733388ffeba05a5761b7e15be`.
+- `parser-3d6153e7-first-receipt.json`: `85fb3473581dbf5ecd90dab8a24a40bbeeba7de526994789c09be68f43c00a3f`.
+- `parser-3d6153e7-first-actions.json`: `a53fc9ef58ec7b0c0cbc4fd7ef88e8763bf51af97ab57912070e3adfa866e526`.

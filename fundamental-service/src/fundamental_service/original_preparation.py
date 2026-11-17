@@ -33,7 +33,7 @@ from .issuer_identity import (
     original_history_identity_key,
     resolve_original_filing_identity,
 )
-from .original_issuer import OriginalIssuerEvidenceV1
+from .original_issuer import OriginalIssuerEvidenceChecks, OriginalIssuerEvidenceV1
 from .parser_action_evidence import require_parser_action_evidence
 from .parser_action_contracts import parser_action_markers
 from .regulatory_validation import require_sec_validation_evidence
@@ -338,8 +338,11 @@ class OriginalPreparation:
     def read_validation(self, artifact_id: str) -> OriginalValidationEvidenceV1:
         reference = self.reference(artifact_id, "sec-original-validation-v1")
         payload = self._bytes(reference)
+        original_checks = OriginalIssuerEvidenceChecks()
         try:
-            evidence = OriginalValidationEvidenceV1.model_validate_json(payload)
+            evidence = OriginalValidationEvidenceV1.model_validate_json(
+                payload, context=original_checks
+            )
         except ValueError as error:
             raise SnapshotError(
                 "ORIGINAL_PREPARATION_INVALID", "invalid retained validation"
@@ -381,6 +384,7 @@ class OriginalPreparation:
                     evidence.original,
                     artifacts=self._artifacts,
                     delivery_revision=evidence.request.runtime.declared_source_revision,
+                    original_checks=original_checks,
                 )
             for digest in evidence.integrity.parser_content_hashes:
                 payload = self._content.get(

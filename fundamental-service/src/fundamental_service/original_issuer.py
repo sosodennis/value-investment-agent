@@ -22,7 +22,7 @@ from pydantic import (
 
 from .arelle_parser import ArelleParseReportV1, fact_semantic_digest
 from .contracts import CanonicalFactV1, SourceRole, SourceSnapshotV1, StrictModel
-from .serialization import sha256_digest
+from .serialization import canonical_bytes, sha256_digest
 
 ORIGINAL_ISSUER_POLICY: Literal["original-issuer-operating-v1"] = (
     "original-issuer-operating-v1"
@@ -61,9 +61,16 @@ class OriginalIssuerEvidenceChecks:
         self._report_facts = 0
 
     def validate(self, original: OriginalIssuerEvidenceV1) -> None:
-        self._validate(
-            original, ("embedded", sha256_digest(original.model_dump(mode="json")))
-        )
+        # Referenced reports have already been decoded from owner-checked bytes.
+        # Match exact frozen objects, while binding every mutable claim header.
+        for digest, (report, _) in self._reports.items():
+            if original.report is report:
+                _OriginalReportResolution(self, report, digest).validate(original)
+                return
+        raw = canonical_bytes(original.report.model_dump(mode="json"))
+        digest = hashlib.sha256(raw).hexdigest()
+        _OriginalReportResolution(self, original.report, digest).validate(original)
+        self._retain_report(original.report, digest, len(raw))
 
     def _validate(
         self, original: OriginalIssuerEvidenceV1, key: tuple[str, str]
@@ -80,12 +87,22 @@ class OriginalIssuerEvidenceChecks:
             self._reports[digest] = retained
             return _OriginalReportResolution(self, retained[0], digest)
         report = ArelleParseReportV1.model_validate_json(raw)
-        size, count = len(raw), len(report.facts)
+        self._retain_report(report, digest, len(raw))
+        return _OriginalReportResolution(self, report, digest)
+
+    def _retain_report(
+        self, report: ArelleParseReportV1, digest: str, size: int
+    ) -> None:
+        count = len(report.facts)
         if (
             self._max_reports
             and size <= self._max_report_bytes
             and count <= self._max_report_facts
         ):
+            previous = self._reports.pop(digest, None)
+            if previous is not None:
+                self._report_bytes -= previous[1]
+                self._report_facts -= len(previous[0].facts)
             while self._reports and (
                 self._report_bytes + size > self._max_report_bytes
                 or self._report_facts + count > self._max_report_facts
@@ -97,7 +114,6 @@ class OriginalIssuerEvidenceChecks:
             self._reports[digest] = report, size
             self._report_bytes += size
             self._report_facts += count
-        return _OriginalReportResolution(self, report, digest)
 
 
 @dataclass(frozen=True)
@@ -110,6 +126,16 @@ class _OriginalReportResolution:
         if original.report is not self.report:
             self.owner.validate(original)
             return
+        if not isinstance(original.source, OriginalOperatingSourceV1) or (
+            original.identity is not None
+            and not isinstance(original.identity, OriginalIssuerIdentityV1)
+        ):
+            raise ValueError("original issuer headers require typed contracts")
+        # model_copy does not validate. Check small headers even when their JSON
+        # matches a prior claim. Pydantic report resolution also enters here.
+        _OriginalIssuerClaimV1.model_validate(
+            original.model_dump(mode="python", exclude={"report"})
+        )
         key = sha256_digest(
             (original.model_dump(mode="json", exclude={"report"}), self.content_digest)
         )
@@ -282,8 +308,8 @@ def _issuer_result(
     )
 
 
-class OriginalIssuerEvidenceV1(StrictModel):
-    """A replayable issuer claim, including original observations and refusals."""
+class _OriginalIssuerClaimV1(StrictModel):
+    """Small claim structure, validated independently of large frozen reports."""
 
     contract_version: Literal["fundamental.original-issuer-evidence.v1"] = (
         "fundamental.original-issuer-evidence.v1"
@@ -291,7 +317,6 @@ class OriginalIssuerEvidenceV1(StrictModel):
     policy_version: Literal["original-issuer-operating-v1"] = ORIGINAL_ISSUER_POLICY
     source: OriginalOperatingSourceV1
     decision_at: datetime
-    report: ArelleParseReportV1
     identity: OriginalIssuerIdentityV1 | None
     report_period_end: date | None
     status: Literal["matched", "refused"]
@@ -305,6 +330,12 @@ class OriginalIssuerEvidenceV1(StrictModel):
     )
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     output_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class OriginalIssuerEvidenceV1(_OriginalIssuerClaimV1):
+    """A replayable issuer claim, including original observations and refusals."""
+
+    report: ArelleParseReportV1
 
     @field_serializer("report")
     def serialize_report(self, report: ArelleParseReportV1) -> dict[str, JsonValue]:
@@ -410,15 +441,12 @@ def _issuer_input_digest(
     )
 
 
-def evaluate_original_issuer(
+def canonical_original_report(
     report: ArelleParseReportV1,
     *,
     source: OriginalOperatingSourceV1,
-    decision_at: datetime,
-) -> OriginalIssuerEvidenceV1:
-    """Validate issuer scope without approving regulatory or financial evidence."""
-    if decision_at.tzinfo is None or decision_at.utcoffset() is None:
-        raise ValueError("original decision time must include a timezone")
+) -> ArelleParseReportV1:
+    """Apply the v1 retained-report transformation; grant no issuer claims."""
     profile = report.validation_profile
     profile = profile.model_copy(
         update={
@@ -432,7 +460,7 @@ def evaluate_original_issuer(
             if (value := getattr(profile, name)) is not None
         }
     )
-    report = report.model_copy(
+    return report.model_copy(
         update={
             "filing_path": source.uri,
             "parsed_at": source.captured_at,
@@ -442,6 +470,18 @@ def evaluate_original_issuer(
             "validation_profile": profile,
         }
     )
+
+
+def evaluate_original_issuer(
+    report: ArelleParseReportV1,
+    *,
+    source: OriginalOperatingSourceV1,
+    decision_at: datetime,
+) -> OriginalIssuerEvidenceV1:
+    """Validate issuer scope without approving regulatory or financial evidence."""
+    if decision_at.tzinfo is None or decision_at.utcoffset() is None:
+        raise ValueError("original decision time must include a timezone")
+    report = canonical_original_report(report, source=source)
     identity, period_end, codes = _issuer_result(source, decision_at, report)
     payload = {
         "source": source,

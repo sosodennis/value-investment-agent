@@ -819,3 +819,97 @@ def test_postgres_single_flight_restart_and_empty_store_restore(
         assert run(restored, restored_root) == reports[0] and len(c.calls) == 1
     finally:
         restored.close()
+
+
+@pytest.mark.parametrize(
+    "limits", ({}, {"max_reports": 0}, {"max_report_bytes": 0}, {"max_reports": 1})
+)
+@pytest.mark.parametrize(
+    "field", ("input_digest", "output_digest", "status", "decision_at", "source")
+)
+def test_checked_claim_reuse_rejects_forged_headers_even_after_eviction(
+    tmp_path, limits, field
+):
+    from fundamental_service.original_issuer import OriginalIssuerEvidenceChecks
+
+    c = case(tmp_path)
+    original = issuer(c, c.run())
+    checks = OriginalIssuerEvidenceChecks(**limits)
+    arguments = dict(
+        artifacts=c.artifacts,
+        delivery_revision=c.request.delivery_revision,
+        original_checks=checks,
+    )
+    require_parser_action_evidence(original, **arguments)
+    if limits.get("max_reports") == 1:
+        other = issuer(
+            c,
+            c.execute().model_copy(update={"validation_evidence": ("different-body",)}),
+        )
+        checks.validate(other)
+    changed = {
+        "input_digest": "0" * 64,
+        "output_digest": "0" * 64,
+        "status": "matched" if original.status == "refused" else "refused",
+        "decision_at": original.decision_at + timedelta(seconds=1),
+        "source": original.source.model_copy(
+            update={"uri": original.source.uri + "changed"}
+        ),
+    }[field]
+    with pytest.raises(SnapshotError, match="normalized report differs"):
+        require_parser_action_evidence(
+            original.model_copy(update={field: changed}), **arguments
+        )
+    require_parser_action_evidence(original, **arguments)
+
+
+@pytest.mark.parametrize("field", ("decision_at", "source"))
+def test_claim_cache_rejects_same_json_but_unvalidated_header_type(tmp_path, field):
+    from fundamental_service.original_issuer import OriginalIssuerEvidenceChecks
+
+    c = case(tmp_path)
+    original = issuer(c, c.run())
+    checks = OriginalIssuerEvidenceChecks()
+    arguments = dict(
+        artifacts=c.artifacts,
+        delivery_revision=c.request.delivery_revision,
+        original_checks=checks,
+    )
+    require_parser_action_evidence(original, **arguments)
+    replacement = original.model_dump(mode="json")[field]
+    if field == "source":
+        replacement = original.source.model_copy(
+            update={"captured_at": replacement["captured_at"]}
+        )
+    forged = original.model_copy(update={field: replacement})
+    with pytest.raises(SnapshotError, match="normalized report differs"):
+        require_parser_action_evidence(forged, **arguments)
+
+
+def test_report_equivalence_requires_exact_canonical_values(tmp_path):
+    from fundamental_service.original_issuer import _issuer_input_digest
+    from fundamental_service.serialization import sha256_digest
+
+    c = case(tmp_path)
+    original = issuer(c, c.run())
+    changed_report = original.report.model_copy(update={"offline": 1})
+    assert (
+        changed_report == original.report
+    )  # Python bool/int equality is insufficient.
+    forged = original.model_copy(
+        update={
+            "report": changed_report,
+            "input_digest": _issuer_input_digest(
+                original.source, original.decision_at, changed_report
+            ),
+        }
+    )
+    forged = forged.model_copy(
+        update={
+            "output_digest": sha256_digest(forged.model_dump(exclude={"output_digest"}))
+        }
+    )
+    with pytest.raises(SnapshotError, match="normalized report differs"):
+        require_parser_action_evidence(
+            forged, artifacts=c.artifacts, delivery_revision=c.request.delivery_revision
+        )

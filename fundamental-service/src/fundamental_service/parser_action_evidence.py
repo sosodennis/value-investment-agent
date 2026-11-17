@@ -10,7 +10,11 @@ from .arelle_parser import ArelleParseReportV1, fact_semantic_digest
 from .artifact_evidence import read_retained_artifact, require_retained_artifact
 from .mapping_input_storage import MappingInputReader
 from .data_releases import ArtifactRefV1
-from .original_issuer import OriginalIssuerEvidenceV1, evaluate_original_issuer
+from .original_issuer import (
+    OriginalIssuerEvidenceChecks,
+    OriginalIssuerEvidenceV1,
+    canonical_original_report,
+)
 from .parser_action_contracts import ParserActionResultV1, parser_action_markers
 from .regulatory_validation import (
     bind_dqc_filing_context,
@@ -117,6 +121,7 @@ def require_parser_action_evidence(
     artifacts: MappingInputReader,
     delivery_revision: str,
     evidence_refs: tuple[ArtifactRefV1, ...] | None = None,
+    original_checks: OriginalIssuerEvidenceChecks | None = None,
 ) -> tuple[tuple[str, ArtifactRecordV1], ...]:
     """Independent consumers recheck immutable action provenance and live status.
 
@@ -127,6 +132,16 @@ def require_parser_action_evidence(
     markers = parser_action_markers(report.validation_evidence)
     if not markers:
         return ()
+    # Claim validity and raw-body equivalence are separate predicates. Reuse
+    # this consumer's full claim check, not a producer's claim or a bool flag.
+    if original_checks is None:
+        original_checks = OriginalIssuerEvidenceChecks()
+    try:
+        original_checks.validate(original_evidence)
+    except ValueError as error:
+        raise SnapshotError(
+            "PARSER_ACTION_EVIDENCE_INVALID", "normalized report differs"
+        ) from error
     consumed = []
     for representation, key, digest in markers:
         artifact_id = f"sec-parser-action-result-v1:{key}:{digest}"
@@ -193,12 +208,13 @@ def require_parser_action_evidence(
                     )
                 }
             )
-            expected = evaluate_original_issuer(
+            expected = canonical_original_report(
                 original,
                 source=original_evidence.source,
-                decision_at=original_evidence.decision_at,
             )
-            if expected != original_evidence:
+            if expected != report or canonical_bytes(
+                expected.model_dump(mode="json")
+            ) != canonical_bytes(report.model_dump(mode="json")):
                 raise SnapshotError(
                     "PARSER_ACTION_EVIDENCE_INVALID", "normalized report differs"
                 )
