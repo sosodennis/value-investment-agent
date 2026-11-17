@@ -57,6 +57,7 @@ from .inline_xbrl import (
 )
 from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
 from .parser_actions import ParserActions
+from .parser_action_identity import ParserBuildChecks
 from .replay import ArtifactRecordV1
 from .sec_integrity import assess_filing_response, extract_referenced_graphics
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
@@ -607,6 +608,8 @@ class SecIngestionService:
                     raw_manifest, media_type="application/json"
                 )
 
+            build_checks = ParserBuildChecks()
+
             def parse_representation(
                 path: Path,
                 representation: Literal["normalized", "archive"],
@@ -641,6 +644,7 @@ class SecIngestionService:
                     taxonomy_cache_dir=taxonomy_cache_dir,
                     source_content_hash=content_hash,
                     deadline_at=deadline_at,
+                    build_checks=build_checks,
                 )
 
             report = parse_representation(
@@ -681,7 +685,12 @@ class SecIngestionService:
                 archive_markers = tuple(
                     value
                     for value in archive_report.validation_evidence
-                    if value.startswith("sec-parser-action-v1:archive:")
+                    if value.startswith(
+                        (
+                            "sec-parser-action-v1:archive:",
+                            "sec-parser-action-v2:archive:",
+                        )
+                    )
                 )
                 if archive_markers:
                     payload = report.model_dump(mode="json")

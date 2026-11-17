@@ -14,6 +14,7 @@ from .mapping_input_storage import MappingInputReader
 from .mapping_input_identity import MappingInputDigests
 from .original_issuer import OriginalIssuerEvidenceChecks
 from .parser_action_evidence import require_parser_action_evidence
+from .parser_action_identity import ParserBuildChecks
 from .replay import ArtifactRecordV1
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
@@ -89,6 +90,7 @@ class AutomaticMappingEvidenceChecks:
             raise ValueError("mapping evidence retention limits must be nonnegative")
         self._checked: dict[str, tuple[str, ...]] = {}
         self.originals = OriginalIssuerEvidenceChecks()
+        self.builds = ParserBuildChecks()
         self._max_retained_bytes = max_retained_bytes
         self._max_retained_artifacts = max_retained_artifacts
         self._reader: _MappingArtifactReadScope | None = None
@@ -123,12 +125,14 @@ class AutomaticMappingEvidenceChecks:
                 delivery_revision=request.source_revision,
                 evidence_refs=request.evidence_refs,
                 original_checks=self.originals,
+                build_checks=self.builds,
             )
         for identity, metadata in previous:
             if artifacts.get(identity) != metadata or metadata.status != "valid":
                 raise DataReleaseError(
                     "PARSER_ACTION_EVIDENCE_INVALID", "action metadata changed"
                 )
+        self.builds.verify()
         if self._max_parser_checks:
             while len(self._parser_checked) >= self._max_parser_checks:
                 self._parser_checked.popitem(last=False)

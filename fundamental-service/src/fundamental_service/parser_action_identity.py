@@ -15,8 +15,14 @@ from .arelle_parser import (
     _directory_hash,
     parser_worker_import_paths,
 )
-from .parser_action_contracts import ParserActionInputV1
+from .parser_action_contracts import (
+    ParserActionInput,
+    ParserActionInputV1,
+    ParserActionInputV2,
+    ParserBuildIdentityV1,
+)
 from .serialization import sha256_digest
+from .parser_native_closure import NativeClosureError, native_closure
 from .snapshots import SnapshotError
 
 
@@ -56,9 +62,20 @@ def _files(root: Path) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(result))
 
 
-def _runtime_tree(path: Path, active: set[Path], memo: dict[Path, str]) -> str:
+def _runtime_tree(
+    path: Path,
+    active: set[Path],
+    memo: dict[Path, str],
+    *,
+    image_mounts: tuple[Path, ...] | None = None,
+) -> str:
     """Content closure including native libraries and resolved image symlinks."""
     resolved = path.resolve(strict=True)
+    if image_mounts is not None:
+        if any(
+            resolved == mount or mount in resolved.parents for mount in image_mounts
+        ):
+            raise IncompleteParserClosure("build closure escapes the immutable image")
     if resolved in active or any(
         p in resolved.parents for p in (Path("/proc"), Path("/sys"), Path("/dev"))
     ):
@@ -100,7 +117,7 @@ def _runtime_tree(path: Path, active: set[Path], memo: dict[Path, str]) -> str:
                     (
                         child.name,
                         str(child.resolve()) if child.is_symlink() else "",
-                        _runtime_tree(child, active, memo),
+                        _runtime_tree(child, active, memo, image_mounts=image_mounts),
                     )
                     for child in children
                 )
@@ -113,7 +130,7 @@ def _runtime_tree(path: Path, active: set[Path], memo: dict[Path, str]) -> str:
     return result
 
 
-def _runtime_identity() -> str:
+def _runtime_identity(*, image_mounts: tuple[Path, ...] | None = None) -> str:
     """Conservative image-only Python closure; unsupported installations miss.
 
     This initial protocol stays delivery-scoped. Cross-delivery reuse requires
@@ -148,19 +165,41 @@ def _runtime_identity() -> str:
             "only the controlled Linux service image is supported"
         )
     memo: dict[Path, str] = {}
-    executable = _runtime_tree(Path(sys.executable), set(), memo)
+    executable = _runtime_tree(
+        Path(sys.executable), set(), memo, image_mounts=image_mounts
+    )
+    roots_digest = tuple(
+        (str(root), _runtime_tree(root, set(), memo, image_mounts=image_mounts))
+        for root in roots
+    )
+    try:
+        native = native_closure(memo, image_mounts) if image_mounts is not None else ()
+    except NativeClosureError as error:
+        raise IncompleteParserClosure(str(error)) from error
     return sha256_digest(
         {
+            **(
+                {"execution_flags": (repr(sys.flags), sys._xoptions)}
+                if image_mounts is not None
+                else {}
+            ),
             "python": sys.version,
             "platform": platform.platform(),
             "executable": executable,
             "worker_import_paths": parser_worker_import_paths(),
-            "roots": tuple(
-                (str(root), _runtime_tree(root, set(), memo)) for root in roots
-            ),
+            "roots": roots_digest,
+            **({"native_dependencies": native} if image_mounts is not None else {}),
             "loader_config": tuple(
-                (str(path), _runtime_tree(path, set(), memo))
-                for path in (Path("/etc/ld.so.cache"), Path("/etc/localtime"))
+                (str(path), _runtime_tree(path, set(), memo, image_mounts=image_mounts))
+                for path in (
+                    Path("/etc/ld.so.cache"),
+                    Path("/etc/localtime"),
+                    *(
+                        (Path("/etc/ld.so.preload"),)
+                        if image_mounts is not None
+                        else ()
+                    ),
+                )
                 if path.exists()
             ),
             "environment": sha256_digest(
@@ -186,6 +225,118 @@ def _runtime_identity() -> str:
     )
 
 
+def _immutable_build_configuration() -> tuple[str, tuple[Path, ...]]:
+    """Establish the image boundary from kernel state, not deployment claims.
+
+    A read-only image root predates Python startup. No writable/bind descendant
+    in the resolved build closure is allowed; source mounts are keyed separately.
+    """
+    if sys.platform != "linux" or os.geteuid() == 0:
+        raise IncompleteParserClosure("immutable parser image is unavailable")
+    if any(os.getenv(name) for name in ("XML_CATALOG_FILES", "SGML_CATALOG_FILES")):
+        raise IncompleteParserClosure("external XML catalogs are unsupported")
+    if any(
+        os.getenv(name) for name in ("GCONV_PATH", "LOCPATH", "TZDIR", "GLIBC_TUNABLES")
+    ):
+        raise IncompleteParserClosure(
+            "external native runtime configuration is unsupported"
+        )
+    if any(name.startswith("LD_") and value for name, value in os.environ.items()):
+        raise IncompleteParserClosure(
+            "external native loader configuration is unsupported"
+        )
+    if any(
+        Path(name).exists() for name in ("/etc/xml", "/etc/sgml", "/etc/ld.so.preload")
+    ):
+        raise IncompleteParserClosure(
+            "external native/XML configuration is unsupported"
+        )
+    status = dict(
+        line.split(":", 1)
+        for line in Path("/proc/self/status").read_text().splitlines()
+        if ":" in line
+    )
+    if (
+        any(
+            int(status.get(name, "0").strip(), 16)
+            for name in ("CapEff", "CapPrm", "CapAmb")
+        )
+        or status.get("NoNewPrivs", "0").strip() != "1"
+    ):
+        raise IncompleteParserClosure("parser may change its image boundary")
+    mounts = Path("/proc/self/mountinfo").read_text()
+    parsed = [line.split() for line in mounts.splitlines()]
+    roots = [fields for fields in parsed if fields[4] == "/"]
+    if (
+        len(roots) != 1
+        or "ro" not in roots[0][5].split(",")
+        or not os.statvfs("/").f_flag & os.ST_RDONLY
+    ):
+        raise IncompleteParserClosure("parser image root is writable")
+    if roots[0][roots[0].index("-") + 1] != "overlay":
+        raise IncompleteParserClosure("parser root is not the controlled image")
+    # Mountinfo escapes whitespace and backslashes with octal codes.
+    mounts_below = tuple(
+        Path(replace_mount_escapes(fields[4])) for fields in parsed if fields[4] != "/"
+    )
+    configuration = sha256_digest(
+        (
+            mounts,
+            tuple(sorted(os.environ.items())),
+            tuple(sys.path),
+            sys.executable,
+            os.geteuid(),
+            os.getegid(),
+            tuple(sorted(os.getgroups())),
+        )
+    )
+    return configuration, mounts_below
+
+
+def replace_mount_escapes(value: str) -> str:
+    for escaped, char in (
+        ("\\040", " "),
+        ("\\011", "\t"),
+        ("\\012", "\n"),
+        ("\\134", "\\"),
+    ):
+        value = value.replace(escaped, char)
+    return value
+
+
+class ParserBuildChecks:
+    """One independent operation's owner-computed immutable image identity."""
+
+    def __init__(self) -> None:
+        self._configuration: str | None = None
+        self._build: ParserBuildIdentityV1 | None = None
+
+    def current(self) -> ParserBuildIdentityV1:
+        configuration, mounts = _immutable_build_configuration()
+        if self._configuration is not None and self._configuration != configuration:
+            raise IncompleteParserClosure("parser image configuration changed")
+        if self._build is None:
+            implementation = sha256_digest(_files(Path(__file__).parent))
+            runtime = _runtime_identity(image_mounts=mounts)
+            if _immutable_build_configuration()[0] != configuration:
+                raise IncompleteParserClosure(
+                    "parser image changed during verification"
+                )
+            self._build = ParserBuildIdentityV1(
+                implementation_digest=implementation,
+                runtime_digest=runtime,
+                output_schema_digest=sha256_digest(
+                    ArelleParseReportV1.model_json_schema()
+                ),
+            )
+            self._configuration = configuration
+        return self._build
+
+    def verify(self) -> None:
+        if self._build is not None:
+            self.current()
+
+
 def parser_action_input(
     path: Path,
     *,
@@ -196,7 +347,8 @@ def parser_action_input(
     taxonomy_version: str,
     taxonomy_cache_dir: Path,
     source_content_hash: str,
-) -> ParserActionInputV1:
+    build_checks: ParserBuildChecks | None = None,
+) -> ParserActionInput:
     resources = [
         ("taxonomy", _directory_hash(taxonomy_cache_dir)),
         ("taxonomy-closure", sha256_digest(_files(taxonomy_cache_dir))),
@@ -221,17 +373,31 @@ def parser_action_input(
     staged = _files(path.parent)
     if dict(staged).get(path.name) != source_content_hash:
         raise SnapshotError("SOURCE_HASH_MISMATCH", "parser action input differs")
-    return ParserActionInputV1(
-        delivery_revision=delivery_revision,
+    fields = dict(
         representation=representation,
         entrypoint=path.name,
         files=staged,
         normalization_inputs=tuple(sorted(set(normalization_inputs))),
-        implementation_digest=sha256_digest(_files(Path(__file__).parent)),
-        runtime_digest=_runtime_identity(),
         resources=tuple(sorted(dict(resources).items())),
         profile_digest=profile.digest(),
         taxonomy_version=taxonomy_version,
         source_content_hash=source_content_hash,
-        output_schema_digest=sha256_digest(ArelleParseReportV1.model_json_schema()),
+    )
+    if build_checks is not None:
+        try:
+            build = build_checks.current()
+        except IncompleteParserClosure:
+            pass
+        else:
+            return ParserActionInputV2.model_validate({**fields, "build": build})
+    return ParserActionInputV1.model_validate(
+        {
+            **fields,
+            "delivery_revision": delivery_revision,
+            "implementation_digest": sha256_digest(_files(Path(__file__).parent)),
+            "runtime_digest": _runtime_identity(),
+            "output_schema_digest": sha256_digest(
+                ArelleParseReportV1.model_json_schema()
+            ),
+        }
     )

@@ -36,6 +36,7 @@ from .issuer_identity import (
 from .original_issuer import OriginalIssuerEvidenceChecks, OriginalIssuerEvidenceV1
 from .parser_action_evidence import require_parser_action_evidence
 from .parser_action_contracts import parser_action_markers
+from .parser_action_identity import ParserBuildChecks
 from .regulatory_validation import require_sec_validation_evidence
 from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .sec_capture import (
@@ -211,9 +212,16 @@ class OriginalValidationEvidenceV1(StrictModel):
         if self.original is not None:
             values.update(
                 digest
-                for _, _, digest in parser_action_markers(
+                for _, _, _, digest, _ in parser_action_markers(
                     self.original.report.validation_evidence
                 )
+            )
+            values.update(
+                use
+                for _, _, _, _, use in parser_action_markers(
+                    self.original.report.validation_evidence
+                )
+                if use is not None
             )
         if self.failure_evidence is not None:
             values.add(self.failure_evidence.content_hash)
@@ -300,12 +308,14 @@ class OriginalPreparation:
         artifacts: EvidenceArtifactStore,
         content: ContentAddressedStore,
         capture_lock: Callable[[str], AbstractContextManager[None]],
+        build_checks: ParserBuildChecks | None = None,
     ) -> None:
         self._discovery = discovery
         self._validator = validator
         self._artifacts = artifacts
         self._content = content
         self._lock = capture_lock
+        self._build_checks = build_checks
 
     def reference(self, artifact_id: str, role: str) -> ArtifactRefV1:
         record = self._artifacts.get(artifact_id)
@@ -335,7 +345,9 @@ class OriginalPreparation:
         self._bytes(request.annual)
         return self._discovery.read(request.annual.artifact_id)
 
-    def read_validation(self, artifact_id: str) -> OriginalValidationEvidenceV1:
+    def read_validation(
+        self, artifact_id: str, *, build_checks: ParserBuildChecks | None = None
+    ) -> OriginalValidationEvidenceV1:
         reference = self.reference(artifact_id, "sec-original-validation-v1")
         payload = self._bytes(reference)
         original_checks = OriginalIssuerEvidenceChecks()
@@ -385,6 +397,7 @@ class OriginalPreparation:
                     artifacts=self._artifacts,
                     delivery_revision=evidence.request.runtime.declared_source_revision,
                     original_checks=original_checks,
+                    build_checks=build_checks,
                 )
             for digest in evidence.integrity.parser_content_hashes:
                 payload = self._content.get(
@@ -537,8 +550,10 @@ class OriginalPreparation:
             ) from error
         request = evidence.request
         annual = self._annual(request)
+        build_checks = self._build_checks or ParserBuildChecks()
         validations = tuple(
-            self.read_validation(f.validation.artifact_id) for f in evidence.filings
+            self.read_validation(f.validation.artifact_id, build_checks=build_checks)
+            for f in evidence.filings
         )
         record = self._artifacts.get(artifact_id)
         if (
@@ -749,11 +764,13 @@ class OriginalPreparationReads:
         self.closed = False
         # Stream consumed dependency sets independently of the bounded model cache.
         self._journal = tempfile.TemporaryFile()
+        self._build_checks = ParserBuildChecks()
 
     def _current(self, entry: _CheckedPreparation | _PreparationReadSetV1) -> None:
         for record in entry.records:
             if self.owner._artifacts.get(record.artifact_id) != record:
                 raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "metadata changed")
+        self._build_checks.verify()
 
     def _read(self, artifact_id: str) -> _CheckedPreparation:
         if self.closed:
@@ -772,6 +789,7 @@ class OriginalPreparationReads:
             artifacts=artifacts,
             content=content,
             capture_lock=self.owner._lock,
+            build_checks=self._build_checks,
         )
         evidence, validations = reader.read_with_validations(artifact_id)
         index = {

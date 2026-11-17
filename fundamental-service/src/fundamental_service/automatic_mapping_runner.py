@@ -146,7 +146,11 @@ def approve_mapping(
     )
     approval_publication = None
     if decision.mapping is not None:
-        require_current_parser_action_refs(request.evidence_refs, artifacts=artifacts)
+        require_current_parser_action_refs(
+            request.evidence_refs,
+            artifacts=artifacts,
+            build_checks=evidence_checks.builds,
+        )
         input_ref = ArtifactRefV1(
             artifact_id=input_publication.artifact.artifact_id,
             content_hash=input_publication.artifact.content_hash,
@@ -176,7 +180,9 @@ def approve_mapping(
                 approval.mapping_digest,
             ),
         )
-    require_current_parser_action_refs(request.evidence_refs, artifacts=artifacts)
+    require_current_parser_action_refs(
+        request.evidence_refs, artifacts=artifacts, build_checks=evidence_checks.builds
+    )
     return AutomaticMappingReceiptV1(
         source_revision=request.source_revision,
         input_digest=input_digest,

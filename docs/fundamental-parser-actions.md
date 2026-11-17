@@ -156,3 +156,53 @@ the ignored issue audit directory. The first run's raw stdout and receipt are
 
 - `claim-final-benchmark.json` SHA-256: `cd8ea564bd8bd80a2d1df8c8b488549bb9ec80118a9f46f996034e7ca20c9273`.
 - `claim-21514a51-first-receipt.json` SHA-256: `0a6daad2af21dcc13f4ee170c8b3b028189285ee11ab681e6a0105efd156a4c3`.
+
+## Cross-delivery protocol
+
+The additive V2 action separates the delivery revision from an owner-computed
+`sec-parser-build-v1`. V1 identities and readers retain their original canonical
+meaning. V2 still hashes the complete first-party implementation and controlled
+image Python/native/runtime trees, output schema, staged DTS/IXDS and normalized
+bytes, captured normalization dependencies, taxonomy/plugins/rules/catalogs and
+validation profile. This is conservative invalidation, not a minimal parser
+closure. No taxonomy directories or large text evidence are removed.
+
+V2 requires a non-root Linux image whose root was read-only before Python
+started, no effective/permitted/ambient capabilities and no-new-privileges.
+The optional `compose/verification/docker-compose.parser-actions.yml` supplies
+that boundary and project-owned writable scratch. The owner reads kernel mount
+and credential state; dependencies on descendant mounts cannot establish the
+image build. Source/resource mounts are still separately read and hashed.
+Each independent operation computes its own expected build and rechecks the
+configuration after slow I/O and before successful output. A producer's cached
+validation or approval is never sufficient for a consumer.
+
+Native admission inspects ELF architecture, executable interpreter, explicit
+library search paths, loader-cache destinations and resolved linked libraries.
+Only fixed hashed image paths can support an unresolved optional library.
+Foreign-architecture bundled libraries remain byte-hashed. External loader,
+XML/SGML catalog, conversion/locale/timezone and glibc-tunable overrides are
+unsupported; unknown formats or closures fall back to delivery-scoped V1 or
+ordinary parsing. V2 evidence consumers refuse an unestablished current build.
+The implementation intentionally supports the controlled image rather than
+attempting a general native-loader framework.
+
+A deterministic retained `sec-parser-action-delivery-v2` record binds the
+current delivery/build to the exact action, result and body. The V2 report
+marker references this record. Fresh `sec-parser-action-use-v2` audit events
+separately retain genuine use time and hit/miss, referencing that binding.
+Thus same-delivery reuses preserve report/issuer/mapping identity; new delivery
+bindings remain distinguishable while the body keeps its original `parsed_at`.
+Neither record grants source-use permission or exact-input approval. Existing
+PostgreSQL exact-key locking, recoverable attempts and atomic result indexing
+remain the only parser action coordination mechanism.
+
+Pre-deployment checks on this increment: 297 owner/integration tests passed,
+two resource-dependent cases skipped; isolated PostgreSQL V1/V2 single-flight,
+new-owner and empty-store recovery are included. Types on 13 changed source
+files, pinned Ruff/format, architecture guard and diff check passed. Independent
+read-only review found and corrected native/catalog closure, final-check ordering
+and timestamp identity drift; it did not execute tests or runtime. A WIP image
+probe established the immutable build in about nine seconds; that is a local
+capability probe, not an end-to-end performance claim. Full exact-image numerical,
+parser-hit, restart/restore and alternating timing acceptance remain pending.

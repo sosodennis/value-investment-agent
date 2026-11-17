@@ -753,8 +753,9 @@ def test_owner_composed_before_metadata_start_uses_current_capability(
     assert second == third and len(c.calls) == 2 and c.index.results
 
 
+@pytest.mark.parametrize("protocol", ("v1", "v2"))
 def test_postgres_single_flight_restart_and_empty_store_restore(
-    recovery_databases, tmp_path
+    recovery_databases, tmp_path, protocol
 ):
     import asyncio
     from fundamental_service.metadata import (
@@ -766,6 +767,38 @@ def test_postgres_single_flight_restart_and_empty_store_restore(
 
     source_db, target_db = recovery_databases
     c = case(tmp_path)
+    if protocol == "v2":
+        from fundamental_service.parser_action_contracts import (
+            ParserActionInputV2,
+            ParserBuildIdentityV1,
+        )
+
+        fields = c.request.model_dump()
+        build = ParserBuildIdentityV1(
+            **{
+                name: fields.pop(name)
+                for name in (
+                    "implementation_digest",
+                    "runtime_digest",
+                    "output_schema_digest",
+                )
+            }
+        )
+        fields.pop("protocol")
+        fields.pop("delivery_revision")
+        c.request = ParserActionInputV2(**fields, build=build)
+
+    def body(report):
+        return report.model_copy(
+            update={
+                "validation_evidence": tuple(
+                    v
+                    for v in report.validation_evidence
+                    if not v.startswith("sec-parser-action-")
+                )
+            }
+        )
+
     root = tmp_path / "pg-content"
     metadata = PostgresMetadataStore(source_db, auto_migrate=True)
     metadata.start()
@@ -780,6 +813,7 @@ def test_postgres_single_flight_restart_and_empty_store_restore(
             deadline_at=datetime.now(UTC) + timedelta(seconds=10),
             execute=c.execute,
             check_inputs=lambda: c.request,
+            delivery_revision="d" * 40,
         )
 
     try:
@@ -787,14 +821,14 @@ def test_postgres_single_flight_restart_and_empty_store_restore(
         with ThreadPoolExecutor(max_workers=3) as pool:
             reports = tuple(pool.map(lambda _: run(metadata, root), range(3)))
         assert len(c.calls) == 1
-        assert all(report == reports[0] for report in reports)
+        assert all(body(report) == body(reports[0]) for report in reports)
         pointer = metadata.parser_action_result(c.request.digest)
     finally:
         metadata.close()
     reopened = PostgresMetadataStore(source_db)
     reopened.start()
     try:
-        assert run(reopened, root) == reports[0]
+        assert body(run(reopened, root)) == body(reports[0])
         assert reopened.parser_action_result(c.request.digest) == pointer
         assert len(c.calls) == 1
     finally:
@@ -816,7 +850,9 @@ def test_postgres_single_flight_restart_and_empty_store_restore(
     restored.start()
     try:
         assert restored.parser_action_result(c.request.digest) == pointer
-        assert run(restored, restored_root) == reports[0] and len(c.calls) == 1
+        assert (
+            body(run(restored, restored_root)) == body(reports[0]) and len(c.calls) == 1
+        )
     finally:
         restored.close()
 

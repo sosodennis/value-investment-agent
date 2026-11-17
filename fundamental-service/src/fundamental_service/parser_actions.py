@@ -19,11 +19,20 @@ from .arelle_parser import (
 from .command_artifacts import EvidenceArtifactStore
 from .metadata import IngestionLockLease, PostgresMetadataStore
 from .parser_action_evidence import read_parser_action_result
-from .parser_action_identity import IncompleteParserClosure, parser_action_input
+from .parser_action_identity import (
+    IncompleteParserClosure,
+    ParserBuildChecks,
+    parser_action_input,
+)
 from .parser_action_contracts import (
+    ParserActionInput,
     ParserActionInputV1,
+    ParserActionResult,
     ParserActionResultV1,
+    ParserActionResultV2,
     ParserActionUseV1,
+    ParserActionUseV2,
+    ParserActionDeliveryV2,
 )
 from .regulatory_validation import (
     require_sec_validation_evidence,
@@ -76,10 +85,10 @@ class ParserActions:
 
     def _read(
         self,
-        request: ParserActionInputV1,
+        request: ParserActionInput,
         artifact_id: str,
         profile: ArelleValidationProfileV1,
-    ) -> tuple[ArelleParseReportV1, ParserActionResultV1]:
+    ) -> tuple[ArelleParseReportV1, ParserActionResult]:
         report, result, _ = read_parser_action_result(
             artifact_id,
             artifacts=self.artifacts,
@@ -102,6 +111,7 @@ class ParserActions:
         taxonomy_cache_dir: Path,
         source_content_hash: str,
         deadline_at: datetime,
+        build_checks: ParserBuildChecks | None = None,
     ) -> ArelleParseReportV1:
         """Derive the work identity from actual owner-read dependencies."""
 
@@ -115,7 +125,7 @@ class ParserActions:
                 deadline_at=deadline_at,
             )
 
-        def identity() -> ParserActionInputV1:
+        def identity() -> ParserActionInput:
             return parser_action_input(
                 path,
                 representation=representation,
@@ -125,6 +135,7 @@ class ParserActions:
                 taxonomy_version=taxonomy_version,
                 taxonomy_cache_dir=taxonomy_cache_dir,
                 source_content_hash=source_content_hash,
+                build_checks=build_checks or ParserBuildChecks(),
             )
 
         # Acquisition is composed before the metadata lifespan starts. Decide
@@ -145,16 +156,18 @@ class ParserActions:
             deadline_at=deadline_at,
             execute=execute,
             check_inputs=identity,
+            delivery_revision=delivery_revision,
         )
 
     def _perform(
         self,
         *,
-        request: ParserActionInputV1,
+        request: ParserActionInput,
         profile: ArelleValidationProfileV1,
         deadline_at: datetime,
         execute: Callable[[], ArelleParseReportV1],
-        check_inputs: Callable[[], ParserActionInputV1],
+        check_inputs: Callable[[], ParserActionInput],
+        delivery_revision: str | None = None,
     ) -> ArelleParseReportV1:
         self._deadline(deadline_at)
         lease = self.index.try_acquire_ingestion_lock(request.digest)
@@ -207,8 +220,14 @@ class ParserActions:
                         body,
                         media_type="application/json",
                     )
-                    result = ParserActionResultV1(
-                        request=request, report_content_hash=body_hash
+                    result = (
+                        ParserActionResultV1(
+                            request=request, report_content_hash=body_hash
+                        )
+                        if isinstance(request, ParserActionInputV1)
+                        else ParserActionResultV2(
+                            request=request, report_content_hash=body_hash
+                        )
                     )
                     self.artifacts.put_with_receipt(
                         result.artifact_id,
@@ -244,22 +263,66 @@ class ParserActions:
                 # Recheck after slow input verification; no TTL grants validity.
                 report, result = self._read(request, result.artifact_id, profile)
             self._deadline(deadline_at)
-            use = ParserActionUseV1(
-                action_key=request.digest,
-                result_artifact_id=result.artifact_id,
-                report_content_hash=result.report_content_hash,
-                delivery_revision=request.delivery_revision,
-                used_at=datetime.now(UTC),
-                reused=reused,
-            )
+            if isinstance(request, ParserActionInputV1):
+                use: ParserActionUseV1 | ParserActionUseV2 = ParserActionUseV1(
+                    action_key=request.digest,
+                    result_artifact_id=result.artifact_id,
+                    report_content_hash=result.report_content_hash,
+                    delivery_revision=request.delivery_revision,
+                    used_at=datetime.now(UTC),
+                    reused=reused,
+                )
+            else:
+                if delivery_revision is None:
+                    raise ValueError(
+                        "v2 parser action requires its delivery attestation"
+                    )
+                binding = ParserActionDeliveryV2(
+                    action_key=request.digest,
+                    result_artifact_id=result.artifact_id,
+                    report_content_hash=result.report_content_hash,
+                    delivery_revision=delivery_revision,
+                    build=request.build,
+                )
+                binding_digest = sha256_digest(binding)
+                self.artifacts.put_with_receipt(
+                    f"sec-parser-action-delivery-v2:{binding_digest}",
+                    binding,
+                    (request.digest, result.report_content_hash, sha256_digest(result)),
+                )
+                use = ParserActionUseV2(
+                    action_key=request.digest,
+                    result_artifact_id=result.artifact_id,
+                    report_content_hash=result.report_content_hash,
+                    delivery_revision=delivery_revision,
+                    build=request.build,
+                    delivery_binding_digest=binding_digest,
+                    used_at=datetime.now(UTC),
+                    reused=reused,
+                )
+            use_version = "v1" if isinstance(use, ParserActionUseV1) else "v2"
             self.artifacts.put_with_receipt(
-                f"sec-parser-action-use-v1:{sha256_digest(use)}",
+                f"sec-parser-action-use-{use_version}:{sha256_digest(use)}",
                 use,
-                (request.digest, result.report_content_hash, sha256_digest(result)),
+                (
+                    request.digest,
+                    result.report_content_hash,
+                    sha256_digest(result),
+                    *(
+                        (use.delivery_binding_digest,)
+                        if isinstance(use, ParserActionUseV2)
+                        else ()
+                    ),
+                ),
             )
             report, result = self._read(request, result.artifact_id, profile)
             payload = report.model_dump(mode="json")
-            payload["validation_evidence"].append(result.evidence_marker())
+            marker = (
+                result.evidence_marker()
+                if isinstance(result, ParserActionResultV1)
+                else result.evidence_marker(binding_digest)
+            )
+            payload["validation_evidence"].append(marker)
             bound = ArelleParseReportV1.model_validate(payload)
             self._deadline(deadline_at)
             return bound

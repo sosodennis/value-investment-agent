@@ -15,6 +15,7 @@ from pydantic import Field
 
 from .automatic_release_evidence import require_automatic_release_sources
 from .parser_action_evidence import require_current_parser_action_refs
+from .parser_action_identity import ParserBuildChecks
 from .automatic_market_authority import (
     AutomaticMarketAuthorityRuntime,
     AutomaticMarketPolicyAuthorizationV1,
@@ -384,6 +385,7 @@ class AutomaticDataReleaseService:
         deadline_at: datetime | None = None,
     ) -> AutomaticDataReleaseReceiptV1:
         guard_execution_deadline(deadline_at)
+        build_checks = ParserBuildChecks()
         request = AutomaticDataReleaseRequestV1.model_validate_json(
             canonical_bytes(request)
         )
@@ -506,6 +508,7 @@ class AutomaticDataReleaseService:
                     ),
                 ),
                 artifacts=self._artifacts,
+                build_checks=build_checks,
             )
             guard_execution_deadline(deadline_at)
             verification = sign_data_release_verification(
@@ -541,6 +544,7 @@ class AutomaticDataReleaseService:
                     for ref in review.evidence_refs
                 ),
                 artifacts=self._artifacts,
+                build_checks=build_checks,
             )
             guard_execution_deadline(deadline_at)
             if staged_policies:
@@ -572,6 +576,7 @@ class AutomaticDataReleaseService:
                     for ref in review.evidence_refs
                 ),
                 artifacts=self._artifacts,
+                build_checks=build_checks,
             )
             guard_execution_deadline(deadline_at)
         except (DataReleaseError, SnapshotError, ValueError) as error:

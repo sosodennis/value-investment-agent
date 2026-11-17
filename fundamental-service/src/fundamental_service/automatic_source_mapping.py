@@ -234,9 +234,7 @@ class _AutomaticSourceMappingResolver:
                     artifact_id=identity,
                     content_hash=record.content_hash,
                     media_type=record.media_type,
-                    role="sec-parser-action-report-v1"
-                    if identity.startswith("sec-parser-action-report-v1:")
-                    else "sec-parser-action-result-v1",
+                    role=identity.split(":", 1)[0],
                 )
             )
         for source in validated.captured_sources:

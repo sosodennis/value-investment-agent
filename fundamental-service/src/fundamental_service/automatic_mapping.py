@@ -231,6 +231,7 @@ def automatic_mapping_policy_digest() -> str:
                     "arelle_parser.py",
                     "parser_action_contracts.py",
                     "parser_action_identity.py",
+                    "parser_native_closure.py",
                     "parser_action_evidence.py",
                     "parser_actions.py",
                     "inline_xbrl.py",
@@ -1059,5 +1060,7 @@ def verify_automatic_mapping_replay(
             "DATA_RELEASE_MAPPING_REPLAY_MISMATCH",
             "automatic approval differs from its retained policy evaluation",
         )
-    require_current_parser_action_refs(request.evidence_refs, artifacts=artifacts)
+    require_current_parser_action_refs(
+        request.evidence_refs, artifacts=artifacts, build_checks=evidence_checks.builds
+    )
     return request

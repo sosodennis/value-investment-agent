@@ -1,0 +1,12 @@
+# Enforce build immutability before Python imports. Source/resource mounts remain
+# separately content-verified; writable scratch is outside the image closure.
+services:
+  fundamental-service:
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - fundamental-parser-scratch:/tmp
+
+volumes:
+  fundamental-parser-scratch:

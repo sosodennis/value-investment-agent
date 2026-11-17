@@ -27,7 +27,7 @@ from .facts import (
 )
 from .history_composition import verify_history_components
 from .metadata import SCHEMA_VERSION, PostgresMetadataStore
-from .parser_action_contracts import ParserActionResultV1
+from .parser_action_contracts import read_action_result
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 
@@ -361,9 +361,7 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
                     )
                 item = require_content(*reference)
                 try:
-                    result = ParserActionResultV1.model_validate_json(
-                        (root / item.path).read_bytes()
-                    )
+                    result = read_action_result((root / item.path).read_bytes())
                 except ValueError as error:
                     raise RecoveryError(
                         "parser action result contract differs"

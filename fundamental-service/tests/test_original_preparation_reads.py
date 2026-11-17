@@ -15,9 +15,9 @@ def test_filing_lookup_reuses_one_complete_owner_validation(tmp_path, monkeypatc
     calls = []
     original = type(value.service).read_validation
 
-    def read_validation(owner, artifact_id):
+    def read_validation(owner, artifact_id, **kwargs):
         calls.append(artifact_id)
-        return original(owner, artifact_id)
+        return original(owner, artifact_id, **kwargs)
 
     monkeypatch.setattr(type(value.service), "read_validation", read_validation)
     scope = OriginalPreparationReads(value.service)
