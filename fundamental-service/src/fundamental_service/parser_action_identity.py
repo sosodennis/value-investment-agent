@@ -6,13 +6,13 @@ import hashlib
 import os
 import platform
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Literal
 
 from .arelle_parser import (
     ArelleParseReportV1,
     ArelleValidationProfileV1,
-    _directory_hash,
     parser_worker_import_paths,
 )
 from .parser_action_contracts import (
@@ -30,14 +30,12 @@ class IncompleteParserClosure(ValueError):
     """An unaccounted runtime input requires an ordinary parse."""
 
 
-def _files(root: Path) -> tuple[tuple[str, str], ...]:
-    """Hash exact file contents; never admit based on stat data or a supplied hash."""
+def _regular_files(root: Path) -> Iterator[Path]:
     if not root.is_dir() or root.is_symlink():
         raise IncompleteParserClosure("parser input root is not a regular directory")
     # Explicit traversal propagates unreadable-directory errors. Path.rglob can
     # suppress them and silently omit runtime dependencies.
     pending = [root]
-    result = []
     count = 0
     while pending:
         path = pending.pop()
@@ -56,10 +54,46 @@ def _files(root: Path) -> tuple[tuple[str, str], ...]:
             continue
         if not path.is_file():
             raise IncompleteParserClosure("parser dependency is not a regular file")
+        yield path
+
+
+def _files(root: Path) -> tuple[tuple[str, str], ...]:
+    """Hash exact file contents; never admit based on stat data or a supplied hash."""
+    result = []
+    for path in _regular_files(root):
         with path.open("rb") as handle:
             digest = hashlib.file_digest(handle, "sha256").hexdigest()
         result.append((path.relative_to(root).as_posix(), digest))
     return tuple(sorted(result))
+
+
+def _resource_digests(root: Path) -> tuple[str, str]:
+    """Compute the existing directory and complete closure identities in one read."""
+    directory = hashlib.sha256()
+    files = []
+    for path in sorted(_regular_files(root)):
+        if path.is_symlink():
+            raise IncompleteParserClosure(
+                "symlinked parser dependencies are unsupported"
+            )
+        if not path.is_file():
+            raise IncompleteParserClosure("parser dependency is not a regular file")
+        relative = path.relative_to(root)
+        included = "__pycache__" not in relative.parts and path.suffix not in {
+            ".pyc",
+            ".pyo",
+        }
+        if included:
+            directory.update(str(relative).encode("utf-8"))
+            directory.update(b"\0")
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+                if included:
+                    directory.update(chunk)
+        files.append((relative.as_posix(), digest.hexdigest()))
+    return directory.hexdigest(), sha256_digest(tuple(sorted(files)))
 
 
 def _runtime_tree(
@@ -349,18 +383,16 @@ def parser_action_input(
     source_content_hash: str,
     build_checks: ParserBuildChecks | None = None,
 ) -> ParserActionInput:
-    resources = [
-        ("taxonomy", _directory_hash(taxonomy_cache_dir)),
-        ("taxonomy-closure", sha256_digest(_files(taxonomy_cache_dir))),
-    ]
+    resources: list[tuple[str, str]] = []
     for name, directory in (
+        ("taxonomy", taxonomy_cache_dir),
         ("edgar", profile.edgar_plugin_dir),
         ("xule", profile.xule_plugin_dir),
         ("historical", profile.historical_dqc_dir),
     ):
         if directory is not None:
-            resources.append((name, _directory_hash(directory)))
-            resources.append((name + "-closure", sha256_digest(_files(directory))))
+            content, closure = _resource_digests(directory)
+            resources.extend(((name, content), (name + "-closure", closure)))
     resource_trees = tuple(resources)
     files = [
         ("dqc-primary", profile.dqc_ruleset_path),
