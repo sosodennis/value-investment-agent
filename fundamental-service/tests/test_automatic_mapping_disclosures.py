@@ -440,3 +440,23 @@ def test_unsupported_option_cost_sentences_retain_abstention(
     assert result.status == "abstain" and result.mapping is None
     assert result.rejected_observations
     assert approve(request, store, roots).approval_publication is None
+
+
+def test_disclosure_ordering_keeps_all_related_candidates_without_hashing_others(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import automatic_mapping_disclosures as policy
+
+    request, _, _, _ = expense_case(tmp_path)
+    expected = policy.select_stock_compensation_disclosure(request.original)
+    digest = policy.sha256_digest
+    observed = []
+
+    def record(fact):
+        if hasattr(fact, "concept"):
+            observed.append(fact.concept)
+        return digest(fact)
+
+    monkeypatch.setattr(policy, "sha256_digest", record)
+    assert policy.select_stock_compensation_disclosure(request.original) == expected
+    assert observed and set(observed) == {STOCK_COMPENSATION_DISCLOSURE}

@@ -533,3 +533,25 @@ def test_component_evaluation_uses_formal_decimal_context_and_security_binding(
         assert evaluate_period_rule(
             selection.rules, selection.rules.periods[0], selection.selected
         ) == Decimal("80")
+
+
+def test_lease_selection_hashes_only_related_candidates_for_ordering(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import lease_liability_mapping as policy
+
+    request, _, _, role, total, _ = lease_case(tmp_path, noncurrent=True)
+    expected = select_lease_liability(request.original, role)
+    digest = policy.sha256_digest
+    observed = []
+
+    def record(fact):
+        observed.append(fact.concept)
+        return digest(fact)
+
+    monkeypatch.setattr(policy, "sha256_digest", record)
+    assert select_lease_liability(request.original, role) == expected
+    assert observed and set(observed) == {total.concept}
+    assert expected.rules.parser_fact_digest == fact_semantic_digest(
+        request.original.report
+    )

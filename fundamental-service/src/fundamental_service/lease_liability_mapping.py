@@ -122,7 +122,17 @@ def select_lease_liability(
         )
     concept = _CONCEPTS[normalized_field]
     noncurrent = normalized_field.startswith("long_term_")
-    facts = tuple(sorted(original.report.facts, key=sha256_digest))
+    direct_concept = concept + ("Noncurrent" if noncurrent else "Current")
+    facts = tuple(
+        sorted(
+            (
+                fact
+                for fact in original.report.facts
+                if fact.concept in {concept, direct_concept}
+            ),
+            key=sha256_digest,
+        )
+    )
     current_facts = tuple(
         fact
         for fact in facts
@@ -205,7 +215,6 @@ def select_lease_liability(
         currency="USD",
         periods=tuple(periods),
     )
-    direct_concept = concept + ("Noncurrent" if noncurrent else "Current")
     for period in periods:
         refs = set(period.source_references())
         observations_for_period = tuple(f for f in selected if sha256_digest(f) in refs)
