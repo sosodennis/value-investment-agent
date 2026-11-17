@@ -77,6 +77,7 @@ class AutomaticMappingEvidenceChecks:
         max_retained_artifacts: int = 128,
         max_retained_report_bytes: int = 64 * 1024 * 1024,
         max_retained_reports: int = 8,
+        build_checks: ParserBuildChecks | None = None,
     ) -> None:
         if (
             min(
@@ -90,7 +91,7 @@ class AutomaticMappingEvidenceChecks:
             raise ValueError("mapping evidence retention limits must be nonnegative")
         self._checked: dict[str, tuple[str, ...]] = {}
         self.originals = OriginalIssuerEvidenceChecks()
-        self.builds = ParserBuildChecks()
+        self.builds = build_checks if build_checks is not None else ParserBuildChecks()
         self.taxonomies = TaxonomyArchiveChecks()
         self._max_retained_bytes = max_retained_bytes
         self._max_retained_artifacts = max_retained_artifacts

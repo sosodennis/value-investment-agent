@@ -1180,8 +1180,14 @@ class SecAcquisitionUseCase:
         validation_profile: ArelleValidationProfileV1,
         prepared_filing: _SelectedFiling | None = None,
     ) -> SecIngestionResponseV1:
+        original_reads = self._original_reads.get()
         mapping_resolver = (
-            self._automatic_authority().resolver_for(request)
+            self._automatic_authority().resolver_for(
+                request,
+                build_checks=original_reads.builds
+                if original_reads is not None
+                else None,
+            )
             if isinstance(request, AutomaticSecIngestionRequestV1)
             else None
         )
@@ -1262,7 +1268,6 @@ class SecAcquisitionUseCase:
             if isinstance(adapter, RetainedSecSourceAdapter)
             else datetime.now(UTC)
         )
-        original_reads = self._original_reads.get()
         preparation = self.ingestion.prepare_filing(
             build_checks=original_reads.builds if original_reads is not None else None,
             parser_delivery_revision=request.source_revision

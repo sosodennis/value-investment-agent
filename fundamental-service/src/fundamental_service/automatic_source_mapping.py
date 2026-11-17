@@ -34,6 +34,7 @@ from .ingestion_mapping import (
 from .policies import initial_model_specs
 from .public_acquisition import PublicSourceCutoffV1
 from .parser_action_evidence import require_parser_action_evidence
+from .parser_action_identity import ParserBuildChecks
 from .serialization import sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
 from .taxonomy_evidence import (
@@ -141,10 +142,17 @@ class AutomaticSourceMappingAuthority:
         )
 
     def resolver_for(
-        self, request: AutomaticSecIngestionRequestV1
+        self,
+        request: AutomaticSecIngestionRequestV1,
+        *,
+        build_checks: ParserBuildChecks | None = None,
     ) -> IngestionMappingResolverPort:
         self.runtime_pin(request)
-        return _AutomaticSourceMappingResolver(self, request)
+        return _AutomaticSourceMappingResolver(
+            self,
+            request,
+            build_checks if build_checks is not None else ParserBuildChecks(),
+        )
 
     def _retain_bytes(
         self, digest: str, *, media_type: str, role: str
@@ -207,6 +215,7 @@ class AutomaticSourceMappingAuthority:
 class _AutomaticSourceMappingResolver:
     authority: AutomaticSourceMappingAuthority
     request: AutomaticSecIngestionRequestV1
+    build_checks: ParserBuildChecks
 
     def resolve(self, validated: ValidatedOriginalV1) -> IngestionMappingResolutionV1:
         authority, request = self.authority, self.request
@@ -228,6 +237,7 @@ class _AutomaticSourceMappingResolver:
             original,
             artifacts=authority.artifacts,
             delivery_revision=request.source_revision,
+            build_checks=self.build_checks,
         ):
             refs.append(
                 ArtifactRefV1(
@@ -291,6 +301,7 @@ class _AutomaticSourceMappingResolver:
             artifacts=authority.artifacts,
             trust_roots=authority.trust_roots,
             private_key=authority.private_key,
+            build_checks=self.build_checks,
         )
         raw = authority.artifacts.read(
             receipt.decision_publication.artifact.artifact_id
@@ -327,8 +338,10 @@ class _AutomaticSourceMappingResolver:
                     )
                 decision = AutomaticMappingDecisionV1.model_validate_json(raw)
                 assert decision.mapping is not None
+                self.build_checks.verify()
                 authority.metadata.publish_mapping(decision.mapping)
                 mappings.append(decision.mapping)
+        self.build_checks.verify()
         return IngestionMappingResolutionV1(
             mappings=tuple(mappings),
             evidence_ref=receipt.decision_publication.artifact.artifact_id,
