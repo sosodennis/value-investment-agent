@@ -123,3 +123,36 @@ Evidence SHA-256:
 - `stage2-final-benchmark.json`: `101b2ebf62d39e909fbeaa3d555a39eaa3ff1b1733388ffeba05a5761b7e15be`.
 - `parser-3d6153e7-first-receipt.json`: `85fb3473581dbf5ecd90dab8a24a40bbeeba7de526994789c09be68f43c00a3f`.
 - `parser-3d6153e7-first-actions.json`: `a53fc9ef58ec7b0c0cbc4fd7ef88e8763bf51af97ab57912070e3adfa866e526`.
+
+## Claim-verification correction checkpoint
+
+Exact implementation `21514a513d44a71f576e6c5f0d2a2e9a2ccc543f` completed
+one existing-source first preparation in675.2820 seconds (CPU605.1935 seconds,
+sampled peak2,923,130,880 bytes), with equal numerical results and authenticated
+API provenance. This is a single differing-store sample, not a controlled
+first-preparation improvement claim.
+
+Five alternating unprofiled successful full warm numerical/API runs per side
+compared this correction with `7713fb26`: wall median40.07213→50.63608 seconds,
+ranges39.76563–40.99818 /49.59784–51.60319; CPU median36.77068→46.91078 seconds,
+ranges36.59630–37.73863 /46.04335–47.50688. All ten runs preserved numerical
+equality, within-version applicable artifact equality, wrote=false, unchanged
+domain row counts and authenticated result/provenance retrieval. The correction
+reduces the preceding parser-action regression, but remains slower than the
+operation-context version without action evidence.
+
+Final focused checks:271 passed (55.07 seconds), mypy1.19.1 on four changed
+source files, pinned Ruff/format, architecture guard and diff check passed.
+Independent read-only review found no remaining concrete correction blocker.
+Three deliberately malformed model-copy cases emit expected serializer warnings.
+Required CI passed, including the service release gate; legacy
+fundamental-release-gate skipped and is not treated as a pass. This checkpoint
+still does not establish cross-delivery reuse or final restart/restore delivery.
+
+Command: `benchmark_claim_warm.py`, exit0. Raw originals, per-run receipts,
+profiles, row counts, limits/load samples, failures and API evidence remain in
+the ignored issue audit directory. The first run's raw stdout and receipt are
+`claim-21514a51-first.*`; the five-pair output is `claim-final-benchmark.json`.
+
+- `claim-final-benchmark.json` SHA-256: `cd8ea564bd8bd80a2d1df8c8b488549bb9ec80118a9f46f996034e7ca20c9273`.
+- `claim-21514a51-first-receipt.json` SHA-256: `0a6daad2af21dcc13f4ee170c8b3b028189285ee11ab681e6a0105efd156a4c3`.
