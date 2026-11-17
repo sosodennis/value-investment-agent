@@ -171,8 +171,12 @@ V2 requires a non-root Linux image whose root was read-only before Python
 started, no effective/permitted/ambient capabilities and no-new-privileges.
 The optional `compose/verification/docker-compose.parser-actions.yml` supplies
 that boundary and project-owned writable scratch. The owner reads kernel mount
-and credential state; dependencies on descendant mounts cannot establish the
-image build. Source/resource mounts are still separately read and hashed.
+and credential state. The overlay disables Docker's injected init helper mount
+inside `/usr`; Uvicorn receives signals directly as PID 1, while parser and
+native-inspection owners explicitly wait for their subprocesses. Restart and
+interruption acceptance must exercise this deployment configuration. Dependencies
+on descendant mounts cannot establish the image build. Source/resource mounts
+are still separately read and hashed.
 Each independent operation computes its own expected build and rechecks the
 configuration after slow I/O and before successful output. A producer's cached
 validation or approval is never sufficient for a consumer.

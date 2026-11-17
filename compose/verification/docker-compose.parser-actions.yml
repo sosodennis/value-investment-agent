@@ -2,6 +2,9 @@
 # separately content-verified; writable scratch is outside the image closure.
 services:
   fundamental-service:
+    # Docker's init helper is an external mount inside /usr. Uvicorn runs as
+    # PID 1 here; parser subprocesses are explicitly waited by their owner.
+    init: false
     read_only: true
     security_opt:
       - no-new-privileges:true
