@@ -254,3 +254,19 @@ peaked at 2,914,050,048 bytes. Raw receipt and failure output remain outside Git
 in `.audit/issue-445-evidence-reuse/build-c2077b8b-first.*`. Identity correctness
 checks do not resolve or conceal this timeout; diagnostic attribution and a fresh
 exact-image successful numerical/API run remain required.
+
+### Runtime closure ancestry correction
+
+A diagnostic profile of deployed `c2077b8b` exposed repeated creation of the same
+`Path.parents` sequence for every mount predicate at each image node. The owner
+now computes the resolved node's ancestor set once. It retains all mount,
+cycle/dynamic-path, file-content, directory and native closure checks, producing
+byte-identical runtime digests in the controlled image.
+
+Five alternating algorithm-only runs on the same read-only image, one CPU/1GiB,
+measured runtime-identity wall median8.14549→4.77925 seconds (ranges7.89370–8.43554 /
+4.50180–4.84643). All ten digests matched; peak RSS97,356KiB. This is a helper
+measurement with full native scanning; it does not establish whole-flow speed or
+resolve repeated independent verification costs. The driver and raw output remain
+outside Git: `benchmark_build_ancestry.py`, `build-ancestry-five-pairs.jsonl`
+(SHA-256 `759874b47cba274e2d22423717275a612d336e6726c56570df1dc89daecc94f7`).

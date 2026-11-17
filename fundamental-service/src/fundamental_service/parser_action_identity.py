@@ -71,13 +71,12 @@ def _runtime_tree(
 ) -> str:
     """Content closure including native libraries and resolved image symlinks."""
     resolved = path.resolve(strict=True)
+    ancestors = frozenset(resolved.parents)
     if image_mounts is not None:
-        if any(
-            resolved == mount or mount in resolved.parents for mount in image_mounts
-        ):
+        if any(resolved == mount or mount in ancestors for mount in image_mounts):
             raise IncompleteParserClosure("build closure escapes the immutable image")
     if resolved in active or any(
-        p in resolved.parents for p in (Path("/proc"), Path("/sys"), Path("/dev"))
+        p in ancestors for p in (Path("/proc"), Path("/sys"), Path("/dev"))
     ):
         raise IncompleteParserClosure("cyclic or dynamic runtime dependency")
     if resolved in memo:
