@@ -147,3 +147,22 @@ def test_many_mapping_inputs_serialize_their_shared_report_once(tmp_path, monkey
     assert len(reports) == 2
     assert MappingInputDigests().input_digest(request) == sha256_digest(request)
     assert len(reports) == 3
+
+
+def test_accounting_observation_index_preserves_ids_and_retention_budget(tmp_path):
+    request = case(tmp_path)[0]
+    report = request.original.report
+    checks = MappingInputDigests()
+    observed = checks.report_facts(report)
+    assert dict(observed) == {sha256_digest(fact): fact for fact in report.facts}
+    assert checks.report_facts(report) is observed
+    assert checks.report_fact_digest(report) == identity.fact_semantic_digest(report)
+    with pytest.raises(TypeError):
+        observed["0" * 64] = report.facts[0]
+    # A replacement is a new input, even if its claimed source identity matches.
+    changed = report.model_copy(update={"facts": report.facts[:-1]})
+    assert checks.report_fact_digest(changed) != checks.report_fact_digest(report)
+    tiny = MappingInputDigests(max_bytes=1)
+    assert dict(tiny.report_facts(report)) == dict(observed)
+    assert tiny.report_facts(report) is not tiny.report_facts(report)
+    assert tiny._size <= tiny._max_bytes and not tiny._reports

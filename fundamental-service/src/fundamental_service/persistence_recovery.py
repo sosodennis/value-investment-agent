@@ -27,6 +27,7 @@ from .facts import (
 )
 from .history_composition import verify_history_components
 from .metadata import SCHEMA_VERSION, PostgresMetadataStore
+from .parser_action_contracts import read_action_result
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 
@@ -332,6 +333,7 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
     snapshots = _BackupSnapshots()
     accounting_facts: list[CanonicalFactV1] = []
     mappings: dict[str, CanonicalMappingV1] = {}
+    artifacts: dict[str, tuple[str, str]] = {}
 
     def require_content(content_hash: str, media_type: str) -> BackupFileV1:
         suffix = ".json" if media_type == "application/json" else ".bin"
@@ -350,6 +352,30 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
                     raise RecoveryError("registered content size does not match bytes")
             elif table.name == "artifact_references":
                 require_content(row["content_hash"], row["media_type"])
+                artifacts[row["artifact_id"]] = (row["content_hash"], row["media_type"])
+            elif table.name == "parser_action_results":
+                reference = artifacts.get(row["artifact_id"])
+                if reference is None or reference[1] != "application/json":
+                    raise RecoveryError(
+                        "parser action index references absent evidence"
+                    )
+                item = require_content(*reference)
+                try:
+                    result = read_action_result((root / item.path).read_bytes())
+                except ValueError as error:
+                    raise RecoveryError(
+                        "parser action result contract differs"
+                    ) from error
+                if (
+                    result.request.digest != row["action_key"]
+                    or result.artifact_id != row["artifact_id"]
+                ):
+                    raise RecoveryError("parser action index identity differs")
+                require_content(result.report_content_hash, "application/json")
+                if artifacts.get(
+                    f"sec-parser-action-report-v1:{result.report_content_hash}"
+                ) != (result.report_content_hash, "application/json"):
+                    raise RecoveryError("parser action report reference is absent")
             elif table.name == "snapshot_manifests":
                 snapshot = _validate_backup_record(
                     SourceSnapshotV1,

@@ -15,6 +15,7 @@ from .accounting_roles import (
     evaluate_period_rule,
 )
 from .serialization import sha256_digest
+from .mapping_input_identity import MappingInputDigests
 from .contracts import (
     CandidateRejectionV1,
     DimensionV1,
@@ -91,6 +92,7 @@ def parsed_facts_to_candidates(
     normalized_field: str,
     mapping: CanonicalMappingV1 | None = None,
     security_id: str | None = None,
+    input_digests: MappingInputDigests | None = None,
 ) -> tuple[FactCandidateV1, ...]:
     """Convert numeric facts and explicitly scoped operating text to candidates.
 
@@ -154,7 +156,11 @@ def parsed_facts_to_candidates(
             or observation_scope.parser_input_hash != expected_parser_hash
         ):
             return ()
-        if observation_scope.parser_replay_digest != report.replay_digest():
+        if observation_scope.parser_replay_digest != (
+            input_digests.report_replay_digest(report)
+            if input_digests is not None
+            else report.replay_digest()
+        ):
             raise SnapshotError(
                 "MAPPING_REPORT_MISMATCH",
                 "scoped mapping requires its exact approved parser report",
@@ -181,6 +187,7 @@ def parsed_facts_to_candidates(
             mapping=mapping,
             issuer_id=issuer_id,
             security_id=security_id,
+            input_digests=input_digests,
         )
     for fact in report.facts:
         if mapping is not None and fact.concept != mapping.source_concept:
@@ -294,6 +301,7 @@ def _accounting_candidates(
     mapping: CanonicalMappingV1,
     issuer_id: str,
     security_id: str | None,
+    input_digests: MappingInputDigests | None = None,
 ) -> tuple[FactCandidateV1, ...]:
     rules = mapping.accounting_rules
     assert rules is not None
@@ -305,7 +313,12 @@ def _accounting_candidates(
         or rules.accession_number != source.accession_number
         or rules.raw_content_hash != source.content_hash
         or rules.parser_input_hash != report.source_content_hash
-        or rules.parser_fact_digest != fact_semantic_digest(report)
+        or rules.parser_fact_digest
+        != (
+            input_digests.report_fact_digest(report)
+            if input_digests is not None
+            else fact_semantic_digest(report)
+        )
         or source.is_amendment
         or source.form != "10-K"
         or report.validation_profile.validation_mode != "sec-efm-dqc"
@@ -315,7 +328,11 @@ def _accounting_candidates(
             "ACCOUNTING_ROLE_SOURCE_MISMATCH",
             "accounting rules require their exact validated original and issuer",
         )
-    by_digest = {sha256_digest(fact): fact for fact in report.facts}
+    by_digest = (
+        input_digests.report_facts(report)
+        if input_digests is not None
+        else {sha256_digest(fact): fact for fact in report.facts}
+    )
     candidates = []
     for rule in rules.periods:
         if rule.period.period_end > source.available_at.date():

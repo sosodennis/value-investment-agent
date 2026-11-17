@@ -806,6 +806,13 @@ class SourcePreparationRunner:
                 return False
         return True
 
+    def _verify_original_boundary(self, plan: SourcePreparationPlan) -> None:
+        if (
+            isinstance(plan, AutomaticSourcePreparationPlanV1)
+            and self._acquisition is not None
+        ):
+            self._acquisition.verify_original_boundary()
+
     def _activate(
         self,
         candidate: DataReleaseCandidatePublishRequestV1,
@@ -852,6 +859,8 @@ class SourcePreparationRunner:
                 "candidate does not match the requested source, date and fact mappings"
             )
         guard_execution_deadline(deadline_at)
+        self._verify_original_boundary(plan)
+        guard_execution_deadline(deadline_at)
         self._application.publish_data_release_candidate(
             manifest, candidate.verification
         )
@@ -882,6 +891,8 @@ class SourcePreparationRunner:
             reason="validated source preparation candidate",
         )
         try:
+            guard_execution_deadline(deadline_at)
+            self._verify_original_boundary(plan)
             guard_execution_deadline(deadline_at)
             self._application.change_active_data_release(
                 manifest.profile_id,
@@ -1020,6 +1031,7 @@ class SourcePreparationRunner:
             != plan.public_sources
         ):
             raise ValueError("preparation must retain every planned public source")
+        self._verify_original_boundary(plan)
         publication = self._artifacts.put_with_receipt(
             f"source-preparation-plan:{plan.digest}", plan
         )
@@ -1706,6 +1718,8 @@ class SourcePreparationRunner:
             else None,
             prepared_refs=refs,
         )
+        if self._acquisition is not None:
+            self._acquisition.verify_original_boundary()
         receipt = self._automatic_release.verify_and_sign(
             request, deadline_at=deadline_at
         )
@@ -1716,7 +1730,7 @@ class SourcePreparationRunner:
             media_type=decision.media_type,
             role="automatic-release-decision-v1",
         )
-        if receipt.candidate_publication is None:
+        if receipt.decision.status != "passed" or receipt.candidate_publication is None:
             return None, ref, receipt.decision.issue_codes
         candidate_record = receipt.candidate_publication.artifact
         candidate = read_preparation_release_artifact(
@@ -1849,6 +1863,46 @@ class SourcePreparationRunner:
             )
 
     def run(
+        self,
+        plan: SourcePreparationPlan,
+        *,
+        actor_id: str,
+        organization_id: str,
+        correlation_id: str,
+        deadline_at: datetime,
+        candidate: DataReleaseCandidatePublishRequestV1 | None = None,
+        approval: CallerApprovalEnvelopeV1 | None = None,
+        market_policy_authorization: PolicyRecordV1 | None = None,
+        market_policy_authorization_digest: str | None = None,
+    ) -> ArtifactPublicationV1:
+        if self._acquisition is None or not isinstance(
+            plan, AutomaticSourcePreparationPlanV1
+        ):
+            return self._run(
+                plan,
+                actor_id=actor_id,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                deadline_at=deadline_at,
+                candidate=candidate,
+                approval=approval,
+                market_policy_authorization=market_policy_authorization,
+                market_policy_authorization_digest=market_policy_authorization_digest,
+            )
+        with self._acquisition.evidence_operation():
+            return self._run(
+                plan,
+                actor_id=actor_id,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                deadline_at=deadline_at,
+                candidate=candidate,
+                approval=approval,
+                market_policy_authorization=market_policy_authorization,
+                market_policy_authorization_digest=market_policy_authorization_digest,
+            )
+
+    def _run(
         self,
         plan: SourcePreparationPlan,
         *,
@@ -2487,6 +2541,7 @@ class SourcePreparationRunner:
                 ),
                 prepared_facts=prepared_facts,
             )
+        self._verify_original_boundary(plan)
         calculation = self._application.calculate_valuation(
             preparation.input.model_copy(update={"caller_approval": approval}),
             correlation_id=correlation_id,

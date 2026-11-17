@@ -142,6 +142,10 @@ class PostgresMetadataStore:
         return self._ready
 
     @property
+    def parser_action_reuse_configured(self) -> bool:
+        return self.ready and "sec-parser-actions-v1" in self._schema_capabilities
+
+    @property
     def health(self) -> MetadataHealth:
         return self._health
 
@@ -1550,6 +1554,40 @@ class PostgresMetadataStore:
                 "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
             )
         return ArtifactRecordV1.model_validate_json(canonical_bytes(payload))
+
+    def parser_action_result(self, action_key: str) -> str | None:
+        """Read a disposable index; callers must verify its immutable evidence."""
+        self._require_ready()
+        return self._runner.run(self._parser_action_result(action_key))
+
+    async def _parser_action_result(self, action_key: str) -> str | None:
+        async with self._runner._engine.connect() as connection:
+            result = await connection.execute(
+                text(
+                    "SELECT artifact_id FROM fundamental.parser_action_results "
+                    "WHERE action_key=:key"
+                ),
+                {"key": action_key},
+            )
+            return result.scalar_one_or_none()
+
+    def publish_parser_action_result(self, action_key: str, artifact_id: str) -> None:
+        """Publish only after the owner has persisted the immutable result body."""
+        self._require_ready()
+        self._runner.run(self._publish_parser_action_result(action_key, artifact_id))
+
+    async def _publish_parser_action_result(
+        self, action_key: str, artifact_id: str
+    ) -> None:
+        async with self._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.parser_action_results(action_key, artifact_id) "
+                    "VALUES (:key, :artifact_id) ON CONFLICT (action_key) DO UPDATE "
+                    "SET artifact_id=EXCLUDED.artifact_id"
+                ),
+                {"key": action_key, "artifact_id": artifact_id},
+            )
 
     def retained_artifact_records(
         self, artifact_ids: tuple[str, ...]

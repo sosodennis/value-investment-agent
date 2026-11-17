@@ -13,6 +13,8 @@ from .issuer_release_evidence import verify_original_bytes, verify_original_inte
 from .mapping_input_storage import MappingInputReader
 from .mapping_input_identity import MappingInputDigests
 from .original_issuer import OriginalIssuerEvidenceChecks
+from .parser_action_evidence import require_parser_action_evidence
+from .parser_action_identity import ParserBuildChecks
 from .replay import ArtifactRecordV1
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
@@ -88,17 +90,53 @@ class AutomaticMappingEvidenceChecks:
             raise ValueError("mapping evidence retention limits must be nonnegative")
         self._checked: dict[str, tuple[str, ...]] = {}
         self.originals = OriginalIssuerEvidenceChecks()
+        self.builds = ParserBuildChecks()
         self._max_retained_bytes = max_retained_bytes
         self._max_retained_artifacts = max_retained_artifacts
         self._reader: _MappingArtifactReadScope | None = None
         self._fingerprints: OrderedDict[int, tuple[bytes, str]] = OrderedDict()
         self._fingerprint_bytes = 0
+        self._parser_checked: OrderedDict[
+            str, tuple[tuple[str, ArtifactRecordV1], ...]
+        ] = OrderedDict()
+        self._max_parser_checks = max_retained_reports
         self.identities = MappingInputDigests(
             max_bytes=max_retained_report_bytes, max_reports=max_retained_reports
         )
 
     def report_replay_digest(self, report: ArelleParseReportV1) -> str:
         return self.identities.report_replay_digest(report)
+
+    def require_parser_actions(
+        self, request: AutomaticMappingSourceV1, *, artifacts: MappingInputReader
+    ) -> None:
+        key = sha256_digest(
+            (
+                self.identities.original_digest(request.original),
+                request.source_revision,
+                request.evidence_refs,
+            )
+        )
+        previous = self._parser_checked.pop(key, None)
+        if previous is None:
+            previous = require_parser_action_evidence(
+                request.original,
+                artifacts=artifacts,
+                delivery_revision=request.source_revision,
+                evidence_refs=request.evidence_refs,
+                original_checks=self.originals,
+                build_checks=self.builds,
+            )
+        for identity, metadata in previous:
+            if artifacts.get(identity) != metadata or metadata.status != "valid":
+                raise DataReleaseError(
+                    "PARSER_ACTION_EVIDENCE_INVALID", "action metadata changed"
+                )
+        self.builds.verify()
+        if self._max_parser_checks:
+            while len(self._parser_checked) >= self._max_parser_checks:
+                self._parser_checked.popitem(last=False)
+            self._parser_checked[key] = previous
 
     def _content_digest(self, raw: bytes) -> str:
         retained = self._fingerprints.pop(id(raw), None)

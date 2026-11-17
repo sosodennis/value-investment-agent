@@ -16,6 +16,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .artifact_evidence import read_retained_artifact, require_retained_artifact
+from .parser_action_evidence import require_current_parser_action_refs
 from .contracts import (
     CanonicalFactV1,
     SecIntegrityEvidenceV1,
@@ -472,6 +473,18 @@ class DataReleaseCanaryRunner:
             self._verify_snapshots_and_facts(manifest, mappings)
         )
         self._verify_equity_dilution(manifest)
+        require_current_parser_action_refs(
+            (
+                *manifest.artifact_refs,
+                *request.evidence_refs,
+                *(
+                    ref
+                    for review in request.mapping_reviews
+                    for ref in review.evidence_refs
+                ),
+            ),
+            artifacts=self._artifacts,
+        )
 
         return DataReleaseContentReportV1(
             candidate_manifest_digest=manifest.manifest_digest,
@@ -565,6 +578,7 @@ class DataReleaseCanaryRunner:
                     security_id=security_id,
                     normalized_field=mapping.normalized_field,
                     mapping=mapping,
+                    input_digests=evidence_checks.identities,
                 )
                 expected = {
                     canonical_fact_digest(selection.fact)

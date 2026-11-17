@@ -8,6 +8,7 @@ import logging
 import platform
 import re
 from contextlib import contextmanager
+from contextvars import ContextVar
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
@@ -43,6 +44,7 @@ from .data_releases import ArtifactRefV1, DataReleaseError
 from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .historical_dqc import historical_profile
 from .ingestion import SecIngestionService
+from .parser_actions import postgres_parser_actions
 from .inline_xbrl import (
     InlineDocumentSetError,
     inline_document_metadata,
@@ -58,6 +60,7 @@ from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetad
 from .operations import ServiceError
 from .original_preparation import (
     OriginalPreparation,
+    OriginalPreparationReads,
     OriginalValidationEvidenceV1,
     OriginalValidationRequestV1,
     OriginalValidationRuntimeV1,
@@ -483,6 +486,9 @@ class SecAcquisitionUseCase:
         capture_store: AnnualDiscoveryArtifacts | None = None,
         automatic_mapping_authority: AutomaticSourceMappingAuthority | None = None,
     ) -> None:
+        self._original_reads: ContextVar[OriginalPreparationReads | None] = ContextVar(
+            "original_preparation_reads", default=None
+        )
         self.adapter = adapter
         self.ingestion = ingestion
         self.metadata = metadata
@@ -661,6 +667,7 @@ class SecAcquisitionUseCase:
                     "SEC_CAPTURE_IDENTITY_MISMATCH", "missing capture timestamp"
                 )
             validated = self.ingestion.validate_filing(
+                parser_delivery_revision=runtime.declared_source_revision,
                 source_adapter=adapter,
                 cik=request.cik,
                 accession_number=filing.accession_number,
@@ -786,6 +793,42 @@ class SecAcquisitionUseCase:
             is_inline_xbrl=annual.is_inline_xbrl,
         )
 
+    def _original_preparation(self) -> OriginalPreparation:
+        if self.capture_store is None:
+            raise SnapshotError("SEC_CAPTURE_STORE_UNAVAILABLE", "evidence unavailable")
+        return OriginalPreparation(
+            discovery=AnnualDiscovery(
+                provider=self.adapter,
+                artifacts=self.capture_store,
+                content=self.content_store,
+                capture_lock=self._capture_lock,
+            ),
+            validator=self,
+            artifacts=self.capture_store,
+            content=self.content_store,
+            capture_lock=self._capture_lock,
+        )
+
+    @contextmanager
+    def evidence_operation(self) -> Iterator[None]:
+        """Start a fresh validation scope; callers never inherit another verifier."""
+        if self.capture_store is None:
+            yield
+            return
+        scope = OriginalPreparationReads(self._original_preparation())
+        token = self._original_reads.set(scope)
+        try:
+            yield
+            scope.finish()
+        finally:
+            scope.clear()
+            self._original_reads.reset(token)
+
+    def verify_original_boundary(self) -> None:
+        scope = self._original_reads.get()
+        if scope is not None:
+            scope.verify()
+
     def _prepared_filing(
         self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
     ) -> _SelectedFiling | None:
@@ -799,18 +842,8 @@ class SecAcquisitionUseCase:
                 "SEC_CAPTURE_STORE_UNAVAILABLE",
                 "original evidence store is unavailable",
             )
-        originals = OriginalPreparation(
-            discovery=AnnualDiscovery(
-                provider=self.adapter,
-                artifacts=self.capture_store,
-                content=self.content_store,
-                capture_lock=self._capture_lock,
-            ),
-            validator=self,
-            artifacts=self.capture_store,
-            content=self.content_store,
-            capture_lock=self._capture_lock,
-        )
+        scope = self._original_reads.get()
+        originals = scope.owner if scope is not None else self._original_preparation()
         if originals.reference(reference.artifact_id, reference.role) != reference:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "reference differs")
         cutoff = request.public_source_cutoff
@@ -829,7 +862,13 @@ class SecAcquisitionUseCase:
                         "CURRENT_CAPTURE_MISMATCH", "current capture differs"
                     )
             selection_at = cutoff.requested_at
-        prepared, validations = originals.read_with_validations(reference.artifact_id)
+        if scope is None:
+            # A direct API acquisition is its own independent operation.
+            with self.evidence_operation():
+                return self._prepared_filing(request)
+        prepared, item, validation = scope.filing(
+            reference.artifact_id, request.filing.accession_number or ""
+        )
         runtime = self.original_validation_runtime(
             declared_source_revision=request.source_revision,
             validation_profile_id=request.validation_profile_id,
@@ -845,30 +884,23 @@ class SecAcquisitionUseCase:
             raise SnapshotError(
                 "ORIGINAL_PREPARATION_INVALID", "prepared runtime or outcome differs"
             )
-        for item, validation in zip(prepared.filings, validations, strict=True):
-            original = validation.request
-            if original.filing.accession_number != request.filing.accession_number:
-                continue
-            policy = prepared.request.history_identity_policy
-            if (
-                original.cik != request.cik
-                or original.valuation_timestamp != selection_at
-                or original.source_selection_policy != request.source_selection_policy
-                or item.identity is None
-                or original_history_identity_key(item.identity, policy)
-                != original_history_identity_key(request.identity, policy)
-                or original.filing.filing_date
-                < request.valuation_timestamp.date()
-                - timedelta(days=request.filing.lookback_days)
-            ):
-                raise SnapshotError(
-                    "ORIGINAL_PREPARATION_INVALID", "pinned original scope differs"
-                )
-            return self._catalog_filing(original)
-        raise SnapshotError(
-            "ORIGINAL_PREPARATION_INVALID",
-            "pinned accession is absent from preparation",
-        )
+        original = validation.request
+        policy = prepared.request.history_identity_policy
+        if (
+            original.cik != request.cik
+            or original.valuation_timestamp != selection_at
+            or original.source_selection_policy != request.source_selection_policy
+            or item.identity is None
+            or original_history_identity_key(item.identity, policy)
+            != original_history_identity_key(request.identity, policy)
+            or original.filing.filing_date
+            < request.valuation_timestamp.date()
+            - timedelta(days=request.filing.lookback_days)
+        ):
+            raise SnapshotError(
+                "ORIGINAL_PREPARATION_INVALID", "pinned original scope differs"
+            )
+        return self._catalog_filing(original)
 
     def retained_acquisition(
         self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
@@ -1225,6 +1257,9 @@ class SecAcquisitionUseCase:
             else datetime.now(UTC)
         )
         preparation = self.ingestion.prepare_filing(
+            parser_delivery_revision=request.source_revision
+            if isinstance(request, AutomaticSecIngestionRequestV1)
+            else None,
             source_adapter=adapter,
             identity=request.identity,
             identity_basis=request.identity_basis,
@@ -2251,6 +2286,10 @@ def build_runtime_sec_acquisition(
         snapshot_repository=snapshot_repository,
         audit_store=PostgresArtifactStore(metadata, content_store),
         fact_repository=fact_repository,
+        parser_actions=postgres_parser_actions(
+            metadata,
+            PostgresArtifactStore(metadata, content_store),
+        ),
     )
     return SecAcquisitionUseCase(
         adapter=adapter,

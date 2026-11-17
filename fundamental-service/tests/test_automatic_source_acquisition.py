@@ -95,7 +95,14 @@ def acquisition_case(
         authority, metadata=metadata, artifacts=artifacts, content=content
     )
     original = validated.original
-    report = original.report
+    report = original.report.model_copy(
+        update={
+            "validation_evidence": original.report.execution_evidence
+            or original.report.validation_evidence,
+            "execution_evidence": (),
+            "identity_protocol": None,
+        }
+    )
     raw = content.get(original.source.content_hash, media_type="application/xml")
     primary = original.source.uri.rsplit("/", 1)[1]
     schema = Path(primary).stem + ".xsd"

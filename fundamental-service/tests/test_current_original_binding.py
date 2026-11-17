@@ -72,9 +72,9 @@ def test_retained_selection_reads_each_original_once_and_revalidates_next_call(
     calls = []
     read = OriginalPreparation.read_validation
 
-    def observed(self, artifact_id):
+    def observed(self, artifact_id, **kwargs):
         calls.append(artifact_id)
-        return read(self, artifact_id)
+        return read(self, artifact_id, **kwargs)
 
     monkeypatch.setattr(OriginalPreparation, "read_validation", observed)
     first = value.acquisition.retained_acquisition(ingestion)
