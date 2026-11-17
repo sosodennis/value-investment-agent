@@ -26,6 +26,8 @@ from fundamental_service.snapshots import FilesystemContentStore, SnapshotError
 
 
 class Index:
+    parser_action_reuse_configured = True
+
     def __init__(self):
         self.results, self.locks, self.held = {}, {}, {}
         self.guard = Lock()
@@ -719,6 +721,36 @@ def test_public_owner_falls_back_when_dependency_closure_is_unknown(
         value.startswith("sec-parser-action-v1:")
         for value in report.validation_evidence
     )
+
+
+def test_owner_composed_before_metadata_start_uses_current_capability(
+    tmp_path, monkeypatch
+):
+    import fundamental_service.parser_actions as actions
+
+    c = case(tmp_path)
+    c.index.parser_action_reuse_configured = False
+    owner = actions.postgres_parser_actions(c.index, c.artifacts)
+    monkeypatch.setattr(actions, "parser_action_input", lambda *a, **k: c.request)
+    monkeypatch.setattr(actions, "parse_filing_offline", lambda *a, **k: c.execute())
+    arguments = dict(
+        representation="normalized",
+        delivery_revision=c.request.delivery_revision,
+        normalization_inputs=c.request.normalization_inputs,
+        profile=c.profile,
+        taxonomy_version=c.request.taxonomy_version,
+        taxonomy_cache_dir=tmp_path,
+        source_content_hash=c.request.source_content_hash,
+        deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+    )
+    first = owner.parse(tmp_path / "filing.htm", **arguments)
+    assert not c.index.results and not any(
+        v.startswith("sec-parser-action-v1:") for v in first.validation_evidence
+    )
+    c.index.parser_action_reuse_configured = True
+    second = owner.parse(tmp_path / "filing.htm", **arguments)
+    third = owner.parse(tmp_path / "filing.htm", **arguments)
+    assert second == third and len(c.calls) == 2 and c.index.results
 
 
 def test_postgres_single_flight_restart_and_empty_store_restore(

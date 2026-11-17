@@ -35,6 +35,9 @@ _LOG = logging.getLogger(__name__)
 
 
 class ParserActionIndex(Protocol):
+    @property
+    def parser_action_reuse_configured(self) -> bool: ...
+
     def parser_action_result(self, action_key: str) -> str | None: ...
 
     def publish_parser_action_result(
@@ -124,6 +127,10 @@ class ParserActions:
                 source_content_hash=source_content_hash,
             )
 
+        # Acquisition is composed before the metadata lifespan starts. Decide
+        # from current schema capability at execution, never at construction.
+        if not self.index.parser_action_reuse_configured:
+            return execute()
         try:
             request = identity()
         except (IncompleteParserClosure, OSError):
@@ -263,7 +270,5 @@ class ParserActions:
 def postgres_parser_actions(
     metadata: PostgresMetadataStore,
     artifacts: EvidenceArtifactStore,
-) -> ParserActions | None:
-    if not metadata.parser_action_reuse_configured:
-        return None
+) -> ParserActions:
     return ParserActions(index=metadata, artifacts=artifacts)
