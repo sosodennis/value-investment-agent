@@ -8,6 +8,160 @@ from fundamental_service.snapshots import SnapshotError
 from test_original_preparation import case, execute
 
 
+def test_original_producer_shares_build_proof_only_within_one_operation(
+    tmp_path, monkeypatch
+):
+    import fundamental_service.parser_action_identity as identity
+
+    proofs = []
+    monkeypatch.setattr(
+        identity, "_immutable_build_configuration", lambda: ("image", ())
+    )
+    monkeypatch.setattr(
+        identity, "_runtime_identity", lambda **kwargs: proofs.append(True) or "2" * 64
+    )
+    for number in range(2):
+        value = case(tmp_path / str(number), monkeypatch, multiple_originals=True)
+        validate = value.acquisition.validate_original_filing
+        ingest = value.acquisition.ingestion.validate_filing
+        consumed = []
+        ingestion_builds = []
+
+        def validate_original(request, **kwargs):
+            builds = kwargs["build_checks"]
+            builds.current()
+            consumed.append(builds)
+            return validate(request, **kwargs)
+
+        def validate_filing(**kwargs):
+            ingestion_builds.append(kwargs["build_checks"])
+            return ingest(**kwargs)
+
+        monkeypatch.setattr(
+            value.acquisition, "validate_original_filing", validate_original
+        )
+        monkeypatch.setattr(
+            value.acquisition.ingestion, "validate_filing", validate_filing
+        )
+        with value.service.evidence_operation() as reads:
+            result, receipt = value.service.execute(
+                value.request, deadline_at=value.deadline, reads=reads
+            )
+            assert receipt.wrote and len(result.filings) == 2
+            assert consumed == [reads.builds, reads.builds]
+            assert ingestion_builds and all(b is reads.builds for b in ingestion_builds)
+            assert len(proofs) == number + 1
+        assert reads.closed
+        with pytest.raises(RuntimeError, match="scope has ended"):
+            value.service.execute(
+                value.request, deadline_at=value.deadline, reads=reads
+            )
+
+
+@pytest.mark.parametrize("scoped", (False, True))
+def test_original_build_configuration_change_refuses_before_publication(
+    tmp_path, monkeypatch, scoped
+):
+    import fundamental_service.parser_action_identity as identity
+
+    value = case(tmp_path, monkeypatch, multiple_originals=True)
+    configuration = ["original image"]
+    monkeypatch.setattr(
+        identity, "_immutable_build_configuration", lambda: (configuration[0], ())
+    )
+    monkeypatch.setattr(identity, "_runtime_identity", lambda **kwargs: "2" * 64)
+    validate = value.acquisition.ingestion.validate_filing
+
+    def validate_filing(**kwargs):
+        kwargs["build_checks"].current()
+        result = validate(**kwargs)
+        configuration[0] = "changed image configuration"
+        return result
+
+    monkeypatch.setattr(value.acquisition.ingestion, "validate_filing", validate_filing)
+    scope = OriginalPreparationReads(value.service) if scoped else None
+    try:
+        with pytest.raises(
+            identity.IncompleteParserClosure, match="configuration changed"
+        ):
+            value.service.execute(
+                value.request, deadline_at=value.deadline, reads=scope
+            )
+        with pytest.raises(SnapshotError) as missing:
+            value.artifacts.get(f"original-preparation:{value.request.digest}")
+        assert missing.value.code == "ARTIFACT_NOT_FOUND"
+    finally:
+        if scope is not None:
+            scope.clear()
+
+
+@pytest.mark.parametrize("change_before_publication", (False, True))
+def test_acquisition_build_scope_is_rechecked_before_domain_publication(
+    tmp_path, monkeypatch, change_before_publication
+):
+    import fundamental_service.parser_action_identity as identity
+    from test_automatic_source_acquisition import acquisition_case, acquire
+
+    request, acquisition, _, metadata, _ = acquisition_case(tmp_path, monkeypatch)
+    configuration = ["image"]
+    monkeypatch.setattr(
+        identity, "_immutable_build_configuration", lambda: (configuration[0], ())
+    )
+    monkeypatch.setattr(identity, "_runtime_identity", lambda **kwargs: "2" * 64)
+    prepare = acquisition.ingestion.prepare_filing
+
+    def prepare_filing(**kwargs):
+        builds = kwargs["build_checks"]
+        assert builds is acquisition._original_reads.get().builds
+        builds.current()
+        result = prepare(**kwargs)
+        if change_before_publication:
+            configuration[0] = "changed image configuration"
+        return result
+
+    monkeypatch.setattr(acquisition.ingestion, "prepare_filing", prepare_filing)
+    if change_before_publication:
+        with pytest.raises(
+            identity.IncompleteParserClosure, match="configuration changed"
+        ):
+            with acquisition.evidence_operation():
+                acquire(request, acquisition)
+        assert not metadata.acquisitions and not metadata.snapshots
+    else:
+        with acquisition.evidence_operation():
+            result = acquire(request, acquisition)
+        assert result.snapshot_id in metadata.snapshots and metadata.acquisitions
+    assert acquisition._original_reads.get() is None
+
+
+def test_producer_only_scope_rechecks_build_at_exit_with_an_empty_read_journal(
+    tmp_path, monkeypatch
+):
+    import fundamental_service.parser_action_identity as identity
+
+    value = case(tmp_path, monkeypatch)
+    configuration = ["image"]
+    monkeypatch.setattr(
+        identity, "_immutable_build_configuration", lambda: (configuration[0], ())
+    )
+    monkeypatch.setattr(identity, "_runtime_identity", lambda **kwargs: "2" * 64)
+    validate = value.acquisition.ingestion.validate_filing
+
+    def validate_filing(**kwargs):
+        kwargs["build_checks"].current()
+        return validate(**kwargs)
+
+    monkeypatch.setattr(value.acquisition.ingestion, "validate_filing", validate_filing)
+    with pytest.raises(identity.IncompleteParserClosure, match="configuration changed"):
+        with value.service.evidence_operation() as reads:
+            _, receipt = value.service.execute(
+                value.request, deadline_at=value.deadline, reads=reads
+            )
+            assert receipt.wrote and reads._journal.tell() == 0
+            configuration[0] = "changed after producer returned"
+    assert reads.closed
+
+
 def test_filing_lookup_reuses_one_complete_owner_validation(tmp_path, monkeypatch):
     value = case(tmp_path, monkeypatch, multiple_originals=True)
     prepared, _ = execute(value)
