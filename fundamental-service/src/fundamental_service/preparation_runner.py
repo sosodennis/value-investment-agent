@@ -860,6 +860,7 @@ class SourcePreparationRunner:
             )
         guard_execution_deadline(deadline_at)
         self._verify_original_boundary(plan)
+        guard_execution_deadline(deadline_at)
         self._application.publish_data_release_candidate(
             manifest, candidate.verification
         )
@@ -892,6 +893,7 @@ class SourcePreparationRunner:
         try:
             guard_execution_deadline(deadline_at)
             self._verify_original_boundary(plan)
+            guard_execution_deadline(deadline_at)
             self._application.change_active_data_release(
                 manifest.profile_id,
                 command,

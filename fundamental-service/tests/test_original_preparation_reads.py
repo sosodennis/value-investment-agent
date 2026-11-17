@@ -177,3 +177,31 @@ def test_evicted_or_unretained_consumed_evidence_is_checked_at_publication(
         scope.verify()
     scope.clear()
     assert scope._journal.closed
+
+
+def test_revocation_during_later_content_read_refuses_all_consumed_evidence(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch)
+    first, _ = execute(value)
+    second, _ = execute(
+        value,
+        value.request.model_copy(
+            update={"ticker": value.expected_identity.security_id}
+        ),
+    )
+    scope = OriginalPreparationReads(value.service)
+    scope.read(first.artifact_id)
+    scope.read(second.artifact_id)
+    read = value.artifacts.read
+
+    def while_reading_later(key):
+        raw = read(key)
+        if key == second.artifact_id:
+            value.artifacts.invalidate(first.artifact_id)
+        return raw
+
+    monkeypatch.setattr(value.artifacts, "read", while_reading_later)
+    with pytest.raises(SnapshotError, match="metadata changed"):
+        scope.verify()
+    scope.clear()

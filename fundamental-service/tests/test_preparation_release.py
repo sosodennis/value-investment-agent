@@ -805,3 +805,60 @@ def test_consumed_original_revocation_prevents_the_next_release_side_effect(
             )
     assert effects == ([] if revoke_at == "canary" else ["published"])
     assert original.acquisition._original_reads.get() is None
+
+
+@pytest.mark.parametrize("expire_at_check", (1, 2))
+def test_deadline_expiring_during_boundary_check_prevents_next_release_mutation(
+    tmp_path, monkeypatch, expire_at_check
+):
+    from datetime import UTC, datetime
+    from fundamental_service.operations import ServiceError
+    from test_automatic_source_preparation import runner_case
+
+    plan, runner, _, _, _ = runner_case(tmp_path, monkeypatch)
+    now = datetime.now(UTC)
+    deadline = now + timedelta(minutes=1)
+    clock = {"now": now, "checks": 0}
+    effects = []
+
+    def inactive(_):
+        raise ServiceError(
+            "DATA_RELEASE_NOT_ACTIVE", "empty", status_code=404, retryable=False
+        )
+
+    def boundary():
+        clock["checks"] += 1
+        if clock["checks"] == expire_at_check:
+            clock["now"] = deadline
+
+    runner._acquisition = SimpleNamespace(verify_original_boundary=boundary)
+    runner._application = SimpleNamespace(
+        config=SimpleNamespace(
+            release_publish_authorized_organizations={"org"},
+            release_activation_authorized_organizations={"org"},
+        ),
+        active_data_release=inactive,
+        publish_data_release_candidate=lambda *a: effects.append("published"),
+        change_active_data_release=lambda *a, **kw: effects.append("activated"),
+    )
+    runner._canary = SimpleNamespace(validate=lambda *a: None)
+    monkeypatch.setattr(runner, "_candidate_snapshot_available", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "fundamental_service.operations.datetime",
+        SimpleNamespace(now=lambda *_: clock["now"]),
+    )
+    candidate = SimpleNamespace(
+        manifest=SimpleNamespace(profile_id="profile", manifest_digest="a" * 64),
+        verification=object(),
+    )
+    with pytest.raises(ServiceError) as error:
+        runner._activate(
+            candidate,
+            actor_id="caller",
+            organization_id="org",
+            correlation_id="deadline",
+            plan=plan,
+            deadline_at=deadline,
+        )
+    assert error.value.code == "REQUEST_DEADLINE_EXCEEDED"
+    assert effects == ([] if expire_at_check == 1 else ["published"])

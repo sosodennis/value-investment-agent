@@ -834,6 +834,10 @@ class OriginalPreparationReads:
         self._journal.seek(0)
         for raw in self._journal:
             self._verify_bytes(_PreparationReadSetV1.model_validate_json(raw))
+        # No earlier read set may become stale during another set's slow I/O.
+        self._journal.seek(0)
+        for raw in self._journal:
+            self._current(_PreparationReadSetV1.model_validate_json(raw))
 
     def finish(self) -> None:
         try:
