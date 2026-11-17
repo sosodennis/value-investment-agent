@@ -1,0 +1,248 @@
+{
+  "schema_version": 2,
+  "acceptance_scope": "fundamental-service",
+  "acceptance_profile": "persistent-valuation-flow-v1",
+  "issue": 447,
+  "branch": "codex/issue-447-fundamental-performance",
+  "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+  "status": "VERIFIED",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-447-fundamental-performance/value-investment-agent",
+    "allowed_untracked_paths": [],
+    "fundamental": {
+      "compose_project": "value-investment-agent-447-performance",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-447-fundamental-performance/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-447-fundamental-performance/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-447-fundamental-performance/compose-overlay.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-447-fundamental-performance/compose-candidate-ee533672.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-447-fundamental-performance/compose-trust-ee533672.json"
+      ],
+      "env_files": [
+        {
+          "path": "/Users/denniswong/.codex/diagnostics/issue-447-fundamental-performance/runtime.env",
+          "sha256": "7e1b60acbbf42dec80baaaa0dae2050cdbfb4f88be936a3b9276b389f5ccdcc2"
+        }
+      ],
+      "image_id": "sha256:a172d8c0b7ddb17a46f0102e32d728b8fd0fa6c0bebb711ba0e1a5306a2da6c0",
+      "runtime_pins": {
+        "python": "3.12.16",
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2"
+      },
+      "published_host": "127.0.0.1",
+      "published_port": 21541,
+      "container_port": 8080,
+      "service": "fundamental-service",
+      "url": "http://127.0.0.1:21541",
+      "dependencies": [
+        {
+          "service": "fundamental-postgres",
+          "published_host": "127.0.0.1",
+          "published_port": 21542,
+          "container_port": 5432
+        }
+      ],
+      "networks": [
+        "value-investment-agent-447-performance_default"
+      ],
+      "volumes": [
+        "value-investment-agent-447-performance_fundamental-postgres-data",
+        "value-investment-agent-447-performance_fundamental-cand-ee533672",
+        "value-investment-agent-447-performance_fundamental-scratch-ee533672"
+      ],
+      "source": {
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 183,
+        "sha256": "88e40fe777b1f9d749efad5487f1e178e14459915df983e9862b66acefc22cff"
+      }
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "architecture",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "python3 scripts/architecture_guard.py --exceptions-dir scripts/architecture_guard_exceptions; required contract-policy CI on exact head",
+      "exit_code": 0,
+      "input_digest": "1ec82a444375f5107562a3479cf96715154056ec2201fc10b83fc4715b80daa5",
+      "output_digest": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+    },
+    {
+      "name": "artifact_retrieval",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "Authenticated numerical/provenance API retrieval in every formal and restore sample",
+      "exit_code": 0,
+      "input_digest": "f2bf0879182da944c56b51b6065f3af36b4f99f29ebfe109dbdcd8c6c3be65ce",
+      "output_digest": "1d66c7127d0e23438b03e2e7bc69cce6e0572737aaf6831739de58dcb7cde624"
+    },
+    {
+      "name": "calculation",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "run_restore_numerical_ee533672.py; exact-input deployment caller and all three scenarios",
+      "exit_code": 0,
+      "input_digest": "8dde9250f24a7b525cd15774a5732e149de8682acb426bbf89f198ed7f6d7d98",
+      "output_digest": "1d66c7127d0e23438b03e2e7bc69cce6e0572737aaf6831739de58dcb7cde624"
+    },
+    {
+      "name": "concurrent_deduplication",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "run_parallel_capacity2_ee533672.py under explicit 2worker capacity, same 1CPU/3GiB; retained 1worker HTTP408 failure excluded from pass claim",
+      "exit_code": 0,
+      "input_digest": "05edd6e7fed3071d4ccb7f80864c7eaf8fd592b0116d2e2f39c2a9999d16fb93",
+      "output_digest": "998f363320147d1ea1d169dbe6a131a0e5cef7083d9ea3e268bad76cbbc813d9"
+    },
+    {
+      "name": "deterministic_repeat",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "formal_warm_pairs_ee533672.py; C stable signatures, wrote=false, full table contents equal",
+      "exit_code": 0,
+      "input_digest": "b0d915c80cfbd1bb95c97513103990b49b2bb6895128de3a455a0ac9e94db24e",
+      "output_digest": "0bd4efffadbb09b8ada032151ad1729923b5f3600fe03e3059ce652b70237fff"
+    },
+    {
+      "name": "diff",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "git diff --check ef254896f67979e712abb8e289cfa3b2d0297881 ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "exit_code": 0,
+      "input_digest": "8c8588ee18425d260f279e2dbcfe436ac7130df9854448e5160a4458aabb6b15",
+      "output_digest": "95fc153e90584659e2fb253739ae4fc05acace2d909d994fe5dbdbbcabc9739d"
+    },
+    {
+      "name": "failure_retention",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "verify_restored_refusals_ee533672.py; queue_deadline_revocation_runtime_ee533672_checked.py; run_additional_parser_faults_ee533672.py; verify_final_retained_rows_ee533672.py",
+      "exit_code": 0,
+      "input_digest": "497b70bbf3352914f2e5a4296c625e5401649b7fcd115e38bf870f2af3f16be2",
+      "output_digest": "d02f6bda74438972795dca27cd67120aceb73716c779676b26284e0d74a8c145"
+    },
+    {
+      "name": "forecast",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "Formal composer and unchanged calculator exercised in all 30 full flow samples",
+      "exit_code": 0,
+      "input_digest": "512ecf0f89a3e37a9cffc27ad489bf27bebea6915e90be1ab1ee3c23e08adf95",
+      "output_digest": "0bd4efffadbb09b8ada032151ad1729923b5f3600fe03e3059ce652b70237fff"
+    },
+    {
+      "name": "full_flow_repeat",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "All five alternating successful A/B/C pairs under fixed 1CPU/3GiB/1worker and frozen seeds/inputs",
+      "exit_code": 0,
+      "input_digest": "1b171aa165fbc377c700320f1586b9694509ff1bde7136b61eee738d3af8592a",
+      "output_digest": "0bd4efffadbb09b8ada032151ad1729923b5f3600fe03e3059ce652b70237fff"
+    },
+    {
+      "name": "mapping",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "Retained failed finish_diagnostics_ee533672.py; successful A/B recovery in resume_diagnostics_after_sampler_ee533672.py; C in resume_C_fresh_scratch_ee533672.py; summarize_latest_diagnostics_ee533672.py",
+      "exit_code": 0,
+      "input_digest": "75484aa543958e50e7a56cb5627c585270ba4a081dc769ccc084705dbebf8f7a",
+      "output_digest": "186c15d196340bc346f88eda89f2a13c7c419057d8a3915678975c49bdedf321"
+    },
+    {
+      "name": "preparation",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "formal_preparation_pairs_ee533672.py A/B; all formal receipts and full table exports retained",
+      "exit_code": 0,
+      "input_digest": "062487085986e9772be434a9e5b9e17b6122132e2a2f7deecc25a2eea01bed6a",
+      "output_digest": "0bd4efffadbb09b8ada032151ad1729923b5f3600fe03e3059ce652b70237fff"
+    },
+    {
+      "name": "restart_restore",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "run_fault_replays_ee533672_checked.py restart/interrupt; prepare_restore_runtime_ee533672.py; run_restore_numerical_ee533672.py",
+      "exit_code": 0,
+      "input_digest": "afaef7f516cf27ee2d679d3fde72bc4186b2929d8671339ccabc223131ca0b42",
+      "output_digest": "d02f6bda74438972795dca27cd67120aceb73716c779676b26284e0d74a8c145"
+    },
+    {
+      "name": "review",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "Independent read-only source and retained-evidence review; implementation/tests/runtime/GitHub executed by primary agent",
+      "exit_code": 0,
+      "input_digest": "f46697ab990deea289b8a1d7d704ab4922c94db57dc1d6ef80acab0bc066e204",
+      "output_digest": "98ef3e4639a0906275e45ad2d946b5aeb21ad0a24dfd2106cd8d8fff62dfdb6e"
+    },
+    {
+      "name": "ruff",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "uvx --from ruff==0.14.10 ruff check fundamental-service; changed-file ruff format --check in exact-head CI",
+      "exit_code": 0,
+      "input_digest": "5a64ee5a68de844d588d8a578876989ea5863ad2b6d5971bd3bbf5be8d5cb9cb",
+      "output_digest": "fb1822f0c972cfa8f7683b0d0c627b9062c9b9ae8608d2736cc787e719eb2f90"
+    },
+    {
+      "name": "service_acceptance",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "SEC-enabled exact image preflight and 30 successful formal full flows; actual service release gate SUCCESS, skipped legacy gate excluded",
+      "exit_code": 0,
+      "input_digest": "75d59eddbf65bd34b2ebbf5297a52861a9005fcd05d493ca99c67b268c0cba44",
+      "output_digest": "0bd4efffadbb09b8ada032151ad1729923b5f3600fe03e3059ce652b70237fff"
+    },
+    {
+      "name": "snapshot_persistence",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "run_restore_numerical_ee533672.py restore-ee533672-numerical candidate-A-ee533672-qualification-1",
+      "exit_code": 0,
+      "input_digest": "066bff1ab79bacd0fbcd6db9c25266baf21fb994c3d8183512361636d7f4f13b",
+      "output_digest": "1d66c7127d0e23438b03e2e7bc69cce6e0572737aaf6831739de58dcb7cde624"
+    },
+    {
+      "name": "source_acquisition",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "scripts/benchmarks/fundamental_flow.py --manifest <frozen A manifest> --label <each formal A label>",
+      "exit_code": 0,
+      "input_digest": "94d9523d4eb5081a14ec2098ee1d4c120b1ef37811fa617b8641bc73952cc5ab",
+      "output_digest": "0bd4efffadbb09b8ada032151ad1729923b5f3600fe03e3059ce652b70237fff"
+    },
+    {
+      "name": "source_reuse",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "scripts/benchmarks/fundamental_flow.py --manifest <frozen B/C manifest> --label <each formal label>",
+      "exit_code": 0,
+      "input_digest": "1b77dac7a6744c39ccc7c70336573639f4d86a5bbe6e89a806800f419d38b2ed",
+      "output_digest": "0bd4efffadbb09b8ada032151ad1729923b5f3600fe03e3059ce652b70237fff"
+    },
+    {
+      "name": "types",
+      "status": "pass",
+      "commit": "ee5336728ee40bb87bcbe55b94a6a33cedbc3075",
+      "command": "mypy==1.19.1 with CI flags on all changed owning-layer Python paths; exact-head fundamental-service-contract-gate",
+      "exit_code": 0,
+      "input_digest": "b6c0fe98f713daf5054c74536c81229dc8654747e8a19ea3bbd45f23a9ee1b39",
+      "output_digest": "fb1822f0c972cfa8f7683b0d0c627b9062c9b9ae8608d2736cc787e719eb2f90"
+    }
+  ],
+  "next_step": "Ordinary guarded PR448 merge, then merge-SHA image/preflight/numerical/API/replay verification, recoverable backup and issue-owned cleanup. This manifest records premerge acceptance.",
+  "blockers": [],
+  "evidence_root": "/Users/denniswong/.codex/diagnostics/issue-447-fundamental-performance",
+  "performance_summary_sha256": "0bd4efffadbb09b8ada032151ad1729923b5f3600fe03e3059ce652b70237fff",
+  "capacity_limitation": "Reference performance is 1worker. Two simultaneous full flows passed at explicitly configured 2workers under the same 1CPU/3GiB; one reference-worker request timed out and is retained.",
+  "quality_limitation": "MSFT remains provisional, uncalibrated what-if; capital, awards and reinvestment assumptions remain unobserved. supported_history_threshold=null."
+}
