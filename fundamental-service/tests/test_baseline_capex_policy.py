@@ -202,7 +202,18 @@ def unknown_baseline(req):
     return OperatingScenarioRequestV1.model_validate_json(canonical_bytes(changed))
 
 
-def test_v1_wire_and_all_digests_remain_exact():
+def test_v1_wire_and_all_digests_remain_exact(monkeypatch):
+    def legacy_original(*args, **kwargs):
+        return evaluate_original_issuer(
+            *args, **kwargs, policy_version="original-issuer-operating-v1"
+        )
+
+    monkeypatch.setattr(
+        "test_operating_scenarios.evaluate_original_issuer", legacy_original
+    )
+    monkeypatch.setattr(
+        "test_operating_labels.evaluate_original_issuer", legacy_original
+    )
     req = comparison_request()
     assert (
         sha256_digest(req)
