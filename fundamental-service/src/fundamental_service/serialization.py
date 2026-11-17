@@ -11,8 +11,12 @@ from typing import Any
 
 from pydantic import BaseModel
 
+_JSON_SCALAR_TYPES = frozenset((str, int, float, bool, type(None)))
+
 
 def _canonical(value: Any) -> Any:
+    if type(value) in _JSON_SCALAR_TYPES:
+        return value
     if isinstance(value, BaseModel):
         return _canonical(value.model_dump(mode="python", exclude_none=False))
     if isinstance(value, Enum):
@@ -25,10 +29,7 @@ def _canonical(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, dict):
-        return {
-            str(key): _canonical(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-        }
+        return {str(key): _canonical(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_canonical(item) for item in value]
     return value
