@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import io
 import stat
+import sys
 import zlib
+from collections import OrderedDict
 from pathlib import Path, PurePosixPath
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -14,6 +16,37 @@ from .data_releases import ArtifactRefV1, DataReleaseError
 TAXONOMY_CACHE_ARCHIVE_ROLE = "sec-taxonomy-cache-archive-v1"
 _MAX_ENTRIES = 10_000
 _MAX_UNCOMPRESSED_BYTES = 1_024 * 1_024 * 1_024
+
+
+class TaxonomyArchiveChecks:
+    """One operation's bounded results of complete archive validation."""
+
+    def __init__(
+        self, *, max_entries: int = 64, max_retained_bytes: int = 64 * 1024
+    ) -> None:
+        if min(max_entries, max_retained_bytes) < 0:
+            raise ValueError("taxonomy retention limits must be nonnegative")
+        self._max_entries = max_entries
+        self._max_retained_bytes = max_retained_bytes
+        self._digests: OrderedDict[str, str] = OrderedDict()
+        self._size = 0
+
+    def digest(self, raw: bytes) -> str:
+        content_digest = hashlib.sha256(raw).hexdigest()
+        retained = self._digests.get(content_digest)
+        if retained is not None:
+            self._digests.move_to_end(content_digest)
+            return retained
+        result = taxonomy_cache_archive_digest(raw)
+        self._digests[content_digest] = result
+        self._size += sys.getsizeof(content_digest) + sys.getsizeof(result)
+        while self._digests and (
+            len(self._digests) > self._max_entries
+            or self._size + sys.getsizeof(self._digests) > self._max_retained_bytes
+        ):
+            key, value = self._digests.popitem(last=False)
+            self._size -= sys.getsizeof(key) + sys.getsizeof(value)
+        return result
 
 
 def _member_name_is_safe(name: str) -> bool:
@@ -109,6 +142,8 @@ def require_original_taxonomy(
     expected_digest: str,
     references: tuple[ArtifactRefV1, ...],
     contents: dict[str, bytes],
+    *,
+    archive_checks: TaxonomyArchiveChecks | None = None,
 ) -> None:
     """Accept the exact original manifest or replay its pinned cache archive."""
     for reference in references:
@@ -119,7 +154,12 @@ def require_original_taxonomy(
             return
         if (
             reference.role == TAXONOMY_CACHE_ARCHIVE_ROLE
-            and taxonomy_cache_archive_digest(raw) == expected_digest
+            and (
+                archive_checks.digest(raw)
+                if archive_checks is not None
+                else taxonomy_cache_archive_digest(raw)
+            )
+            == expected_digest
         ):
             return
     raise DataReleaseError(

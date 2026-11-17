@@ -17,7 +17,7 @@ from .parser_action_evidence import require_parser_action_evidence
 from .parser_action_identity import ParserBuildChecks
 from .replay import ArtifactRecordV1
 from .serialization import sha256_digest
-from .taxonomy_evidence import require_original_taxonomy
+from .taxonomy_evidence import TaxonomyArchiveChecks, require_original_taxonomy
 
 if TYPE_CHECKING:
     from .automatic_mapping import AutomaticMappingSourceV1
@@ -91,6 +91,7 @@ class AutomaticMappingEvidenceChecks:
         self._checked: dict[str, tuple[str, ...]] = {}
         self.originals = OriginalIssuerEvidenceChecks()
         self.builds = ParserBuildChecks()
+        self.taxonomies = TaxonomyArchiveChecks()
         self._max_retained_bytes = max_retained_bytes
         self._max_retained_artifacts = max_retained_artifacts
         self._reader: _MappingArtifactReadScope | None = None
@@ -192,12 +193,17 @@ class AutomaticMappingEvidenceChecks:
             )
         )
         if key not in self._checked:
-            self._checked[key] = _source_reasons(request, contents=contents)
+            self._checked[key] = _source_reasons(
+                request, contents=contents, taxonomy_checks=self.taxonomies
+            )
         return self._checked[key]
 
 
 def _source_reasons(
-    request: AutomaticMappingSourceV1, *, contents: dict[str, bytes]
+    request: AutomaticMappingSourceV1,
+    *,
+    contents: dict[str, bytes],
+    taxonomy_checks: TaxonomyArchiveChecks,
 ) -> tuple[str, ...]:
     original = request.original
     reasons = set(original.issue_codes) if original.status != "matched" else set()
@@ -213,7 +219,10 @@ def _source_reasons(
                     "automatic mapping requires its retained evidence bytes",
                 )
         require_original_taxonomy(
-            original.report.taxonomy_cache_hash or "", request.evidence_refs, contents
+            original.report.taxonomy_cache_hash or "",
+            request.evidence_refs,
+            contents,
+            archive_checks=taxonomy_checks,
         )
         verify_original_integrity(
             original, request.integrity, parser_version=original.report.parser_version

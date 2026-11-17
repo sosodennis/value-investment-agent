@@ -92,7 +92,7 @@ from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import FilesystemSnapshotRepository, SnapshotError
 from .sec_rebuild import parsed_facts_to_candidates
-from .taxonomy_evidence import require_original_taxonomy
+from .taxonomy_evidence import TaxonomyArchiveChecks, require_original_taxonomy
 from .original_issuer import IssuerOperatingSourceV1, OriginalOperatingSourceV1
 from .issuer_release_evidence import (
     require_issuer_release_profile,
@@ -473,7 +473,9 @@ class DataReleaseCanaryRunner:
             manifest, request, mappings, evidence_checks=evidence_checks
         )
         checked_snapshots, checked_facts, checked_forecasts = (
-            self._verify_snapshots_and_facts(manifest, mappings)
+            self._verify_snapshots_and_facts(
+                manifest, mappings, taxonomy_checks=evidence_checks.taxonomies
+            )
         )
         self._verify_equity_dilution(manifest)
         require_current_parser_action_refs(
@@ -826,7 +828,11 @@ class DataReleaseCanaryRunner:
         return tuple(sorted({reference.content_hash for reference in refs}))
 
     def _verify_snapshots_and_facts(
-        self, manifest: DataReleaseManifestV1, mappings: dict[str, CanonicalMappingV1]
+        self,
+        manifest: DataReleaseManifestV1,
+        mappings: dict[str, CanonicalMappingV1],
+        *,
+        taxonomy_checks: TaxonomyArchiveChecks,
     ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
         snapshot_ids: list[str] = []
         fact_digests: list[str] = []
@@ -871,7 +877,9 @@ class DataReleaseCanaryRunner:
             try:
                 if isinstance(snapshot, IssuerOperatingSourceV1):
                     assert isinstance(manifest, IssuerOperatingReleaseManifestV1)
-                    self._verify_issuer_originals(snapshot, manifest)
+                    self._verify_issuer_originals(
+                        snapshot, manifest, taxonomy_checks=taxonomy_checks
+                    )
                 else:
                     verify_history_components(
                         snapshot, _SecuritySnapshots(self._snapshots)
@@ -1129,6 +1137,8 @@ class DataReleaseCanaryRunner:
         self,
         snapshot: IssuerOperatingSourceV1,
         manifest: IssuerOperatingReleaseManifestV1,
+        *,
+        taxonomy_checks: TaxonomyArchiveChecks,
     ) -> None:
         try:
             integrities = tuple(
@@ -1168,7 +1178,10 @@ class DataReleaseCanaryRunner:
                 original, integrity, parser_version=manifest.parser_version
             )
             require_original_taxonomy(
-                integrity.taxonomy_manifest_hash, manifest.taxonomy_refs, contents
+                integrity.taxonomy_manifest_hash,
+                manifest.taxonomy_refs,
+                contents,
+                archive_checks=taxonomy_checks,
             )
             verify_original_bytes(integrity, contents)
 

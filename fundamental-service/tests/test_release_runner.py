@@ -747,6 +747,7 @@ def test_one_canary_reuses_build_proof_but_the_next_verifier_is_independent(
     )
     consume = runner._verify_automatic_mappings
     current = owner.require_current_parser_action_refs
+    snapshots = runner._verify_snapshots_and_facts
     scopes = []
 
     def mapping(*args, evidence_checks):
@@ -757,8 +758,13 @@ def test_one_canary_reuses_build_proof_but_the_next_verifier_is_independent(
         assert build_checks is scopes[-1].builds
         return current(*args, build_checks=build_checks, **kwargs)
 
+    def snapshot_checks(*args, taxonomy_checks):
+        assert taxonomy_checks is scopes[-1].taxonomies
+        return snapshots(*args, taxonomy_checks=taxonomy_checks)
+
     monkeypatch.setattr(runner, "_verify_automatic_mappings", mapping)
     monkeypatch.setattr(owner, "require_current_parser_action_refs", boundary)
+    monkeypatch.setattr(runner, "_verify_snapshots_and_facts", snapshot_checks)
     assert runner.validate(manifest, verification) == runner.validate(
         manifest, verification
     )
