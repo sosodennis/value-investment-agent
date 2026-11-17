@@ -1020,6 +1020,11 @@ class SourcePreparationRunner:
             != plan.public_sources
         ):
             raise ValueError("preparation must retain every planned public source")
+        if (
+            isinstance(plan, AutomaticSourcePreparationPlanV1)
+            and self._acquisition is not None
+        ):
+            self._acquisition.verify_original_boundary()
         publication = self._artifacts.put_with_receipt(
             f"source-preparation-plan:{plan.digest}", plan
         )
@@ -1706,6 +1711,8 @@ class SourcePreparationRunner:
             else None,
             prepared_refs=refs,
         )
+        if self._acquisition is not None:
+            self._acquisition.verify_original_boundary()
         receipt = self._automatic_release.verify_and_sign(
             request, deadline_at=deadline_at
         )
@@ -1849,6 +1856,46 @@ class SourcePreparationRunner:
             )
 
     def run(
+        self,
+        plan: SourcePreparationPlan,
+        *,
+        actor_id: str,
+        organization_id: str,
+        correlation_id: str,
+        deadline_at: datetime,
+        candidate: DataReleaseCandidatePublishRequestV1 | None = None,
+        approval: CallerApprovalEnvelopeV1 | None = None,
+        market_policy_authorization: PolicyRecordV1 | None = None,
+        market_policy_authorization_digest: str | None = None,
+    ) -> ArtifactPublicationV1:
+        if self._acquisition is None or not isinstance(
+            plan, AutomaticSourcePreparationPlanV1
+        ):
+            return self._run(
+                plan,
+                actor_id=actor_id,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                deadline_at=deadline_at,
+                candidate=candidate,
+                approval=approval,
+                market_policy_authorization=market_policy_authorization,
+                market_policy_authorization_digest=market_policy_authorization_digest,
+            )
+        with self._acquisition.evidence_operation():
+            return self._run(
+                plan,
+                actor_id=actor_id,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                deadline_at=deadline_at,
+                candidate=candidate,
+                approval=approval,
+                market_policy_authorization=market_policy_authorization,
+                market_policy_authorization_digest=market_policy_authorization_digest,
+            )
+
+    def _run(
         self,
         plan: SourcePreparationPlan,
         *,

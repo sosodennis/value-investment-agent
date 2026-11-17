@@ -281,6 +281,9 @@ def original_rebuilt_facts(
     snapshot: IssuerOperatingSourceV1, mappings: dict[str, CanonicalMappingV1]
 ) -> tuple[CanonicalFactV1, ...]:
     """Use the ingestion mapper and selector; no caller-authored normalization."""
+    from .mapping_input_identity import MappingInputDigests
+
+    identities = MappingInputDigests()
     facts = []
     for original in snapshot.originals:
         for mapping in sorted(mappings.values(), key=lambda item: item.decision_id):
@@ -297,6 +300,7 @@ def original_rebuilt_facts(
                 normalized_field=mapping.normalized_field,
                 mapping=mapping,
                 security_id=None,
+                input_digests=identities,
             )
             for selection in select_fact_groups(
                 candidates, snapshot.valuation_timestamp

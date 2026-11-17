@@ -565,6 +565,7 @@ class DataReleaseCanaryRunner:
                     security_id=security_id,
                     normalized_field=mapping.normalized_field,
                     mapping=mapping,
+                    input_digests=evidence_checks.identities,
                 )
                 expected = {
                     canonical_fact_digest(selection.fact)

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import sys
+from collections import OrderedDict
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol
+from typing import Literal, Protocol, TypeVar
 
-from pydantic import AwareDatetime, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 from .annual_discovery import AnnualFilingV1
 from .annual_discovery_service import AnnualDiscovery, AnnualDiscoveryEvidenceV1
@@ -30,7 +34,7 @@ from .issuer_identity import (
 )
 from .original_issuer import OriginalIssuerEvidenceV1
 from .regulatory_validation import require_sec_validation_evidence
-from .replay import ArtifactPublicationV1
+from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .sec_capture import (
     SecCaptureScopeV1,
     SecResponseReceiptV1,
@@ -585,3 +589,267 @@ class OriginalPreparation:
                 evidence.artifact_id, evidence, evidence.dependencies
             )
             return evidence, publication
+
+
+@dataclass(frozen=True)
+class _CheckedPreparation:
+    evidence: OriginalPreparationEvidenceV1
+    validations: tuple[OriginalValidationEvidenceV1, ...]
+    by_accession: dict[
+        str, tuple[OriginalPreparedFilingV1, OriginalValidationEvidenceV1]
+    ]
+    records: tuple[ArtifactRecordV1, ...]
+    content: tuple[tuple[str, str], ...]
+    weight: int
+
+
+class _PreparationReadArtifacts:
+    def __init__(self, store: EvidenceArtifactStore) -> None:
+        self.store = store
+        self.records: dict[str, ArtifactRecordV1] = {}
+
+    def get(self, artifact_id: str) -> ArtifactRecordV1:
+        record = self.store.get(artifact_id)
+        previous = self.records.setdefault(artifact_id, record)
+        if previous != record:
+            raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "metadata changed")
+        return record
+
+    def read(self, artifact_id: str) -> bytes:
+        record = self.get(artifact_id)
+        raw = self.store.read(artifact_id)
+        if hashlib.sha256(raw).hexdigest() != record.content_hash:
+            raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "artifact differs")
+        self.get(artifact_id)
+        return raw
+
+    def put(
+        self,
+        artifact_id: str,
+        value: object,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/json",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactRecordV1:
+        return self.put_with_receipt(
+            artifact_id,
+            value,
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        ).artifact
+
+    def put_with_receipt(
+        self,
+        artifact_id: str,
+        value: object,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/json",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
+        return self.store.put_with_receipt(
+            artifact_id,
+            value,
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        )
+
+    def put_bytes_with_receipt(
+        self,
+        artifact_id: str,
+        payload: bytes,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/octet-stream",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
+        return self.store.put_bytes_with_receipt(
+            artifact_id,
+            payload,
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        )
+
+
+class _PreparationReadContent:
+    def __init__(self, store: ContentAddressedStore) -> None:
+        self.store = store
+        self.reads: set[tuple[str, str]] = set()
+
+    def get(self, content_hash: str, *, media_type: str) -> bytes:
+        raw = self.store.get(content_hash, media_type=media_type)
+        if hashlib.sha256(raw).hexdigest() != content_hash:
+            raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "source differs")
+        self.reads.add((content_hash, media_type))
+        return raw
+
+    def put(self, content: bytes, *, media_type: str) -> str:
+        return self.store.put(content, media_type=media_type)
+
+
+_Copied = TypeVar("_Copied")
+
+
+class OriginalPreparationReads:
+    """Owner-issued checked preparations for one bounded independent operation.
+
+    Cached models come exclusively from a full owner read of hash-checked bytes.
+    Mutable headers are copied on return; only frozen parser reports are shared.
+    Metadata is current at each use. Store bytes are checked again at the closing
+    boundary; a failed boundary must not be treated as a successful operation.
+    No caller-supplied digest, path, mtime or validation flag admits a cache entry.
+    """
+
+    def __init__(
+        self,
+        owner: OriginalPreparation,
+        *,
+        max_entries: int = 8,
+        max_retained_bytes: int = 128 * 1024 * 1024,
+    ) -> None:
+        if min(max_entries, max_retained_bytes) < 0:
+            raise ValueError("preparation retention limits must be nonnegative")
+        self.owner = owner
+        self.max_entries = max_entries
+        self.max_retained_bytes = max_retained_bytes
+        self.retained_bytes = 0
+        self.entries: OrderedDict[str, _CheckedPreparation] = OrderedDict()
+        self.closed = False
+
+    def _current(self, entry: _CheckedPreparation) -> None:
+        for record in entry.records:
+            if self.owner._artifacts.get(record.artifact_id) != record:
+                raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "metadata changed")
+
+    def _read(self, artifact_id: str) -> _CheckedPreparation:
+        if self.closed:
+            raise RuntimeError("preparation read scope has ended")
+        entry = self.entries.get(artifact_id)
+        if entry is not None:
+            self._current(entry)
+            self.entries.move_to_end(artifact_id)
+            return entry
+        artifacts = _PreparationReadArtifacts(self.owner._artifacts)
+        content = _PreparationReadContent(self.owner._content)
+        discovery = self.owner._discovery.with_readers(artifacts, content)
+        reader = OriginalPreparation(
+            discovery=discovery,
+            validator=self.owner._validator,
+            artifacts=artifacts,
+            content=content,
+            capture_lock=self.owner._lock,
+        )
+        evidence, validations = reader.read_with_validations(artifact_id)
+        index = {
+            validation.request.filing.accession_number: (filing, validation)
+            for filing, validation in zip(evidence.filings, validations, strict=True)
+        }
+        if len(index) != len(validations):
+            raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "duplicate accession")
+        records = tuple(artifacts.records.values())
+        sources = tuple(sorted(content.reads))
+        # Charge the reachable Python object graph, including model dictionaries.
+        # This bounds retained objects, not transient parsing peaks or allocator RSS.
+        weight = _retained_size((evidence, validations, index, records, sources))
+        entry = _CheckedPreparation(
+            evidence, validations, index, records, sources, weight
+        )
+        self._current(entry)
+        if self.max_entries and weight <= self.max_retained_bytes:
+            while self.entries and (
+                len(self.entries) >= self.max_entries
+                or self.retained_bytes + weight > self.max_retained_bytes
+            ):
+                removed = self.entries.popitem(last=False)[1]
+                self.retained_bytes -= removed.weight
+                self._verify_bytes(removed)
+            self.entries[artifact_id] = entry
+            self.retained_bytes += weight
+        return entry
+
+    @staticmethod
+    def _copy(entry: _CheckedPreparation, value: _Copied) -> _Copied:
+        # Reports and their nested contracts are frozen. Copy every mutable header
+        # without duplicating the large report or exposing the retained models.
+        memo = {
+            id(v.original.report): v.original.report
+            for v in entry.validations
+            if v.original is not None
+        }
+        return deepcopy(value, memo)
+
+    def read(
+        self, artifact_id: str
+    ) -> tuple[OriginalPreparationEvidenceV1, tuple[OriginalValidationEvidenceV1, ...]]:
+        entry = self._read(artifact_id)
+        return self._copy(entry, (entry.evidence, entry.validations))
+
+    def filing(
+        self, artifact_id: str, accession: str
+    ) -> tuple[
+        OriginalPreparationEvidenceV1,
+        OriginalPreparedFilingV1,
+        OriginalValidationEvidenceV1,
+    ]:
+        entry = self._read(artifact_id)
+        selected = entry.by_accession.get(accession)
+        if selected is None:
+            raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "accession absent")
+        return self._copy(entry, (entry.evidence, *selected))
+
+    def _verify_bytes(self, entry: _CheckedPreparation) -> None:
+        self._current(entry)
+        for record in entry.records:
+            raw = self.owner._artifacts.read(record.artifact_id)
+            if hashlib.sha256(raw).hexdigest() != record.content_hash:
+                raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "artifact differs")
+        for content_hash, media_type in entry.content:
+            raw = self.owner._content.get(content_hash, media_type=media_type)
+            if hashlib.sha256(raw).hexdigest() != content_hash:
+                raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "source differs")
+        self._current(entry)
+
+    def verify(self) -> None:
+        if self.closed:
+            raise RuntimeError("preparation read scope has ended")
+        for entry in self.entries.values():
+            self._verify_bytes(entry)
+
+    def finish(self) -> None:
+        try:
+            self.verify()
+        finally:
+            self.entries.clear()
+            self.retained_bytes = 0
+            self.closed = True
+
+    def clear(self) -> None:
+        self.entries.clear()
+        self.retained_bytes = 0
+        self.closed = True
+
+
+def _retained_size(root: object) -> int:
+    """Count an owned evidence graph once, without following class metadata."""
+    seen: set[int] = set()
+    pending = [root]
+    total = 0
+    while pending:
+        value = pending.pop()
+        if id(value) in seen:
+            continue
+        seen.add(id(value))
+        total += sys.getsizeof(value)
+        if isinstance(value, BaseModel):
+            pending.extend((value.__dict__, value.__pydantic_fields_set__))
+            pending.extend((value.__pydantic_extra__, value.__pydantic_private__))
+        elif isinstance(value, dict):
+            pending.extend(value.keys())
+            pending.extend(value.values())
+        elif isinstance(value, (tuple, list, set, frozenset)):
+            pending.extend(value)
+    return total

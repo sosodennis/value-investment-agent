@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any
 
 from pydantic import BaseModel
 
-from .arelle_parser import ArelleParseReportV1
+from .arelle_parser import ArelleParseReportV1, ParsedXbrlFactV1, fact_semantic_digest
 from .original_issuer import OriginalIssuerEvidenceV1
 from .serialization import canonical_bytes, sha256_digest
 
@@ -41,6 +44,14 @@ class _ReportIdentity:
     canonical: bytes
     content_digest: str
     replay_digest: str | None = None
+    semantic_digest: str | None = None
+    facts: Mapping[str, ParsedXbrlFactV1] | None = None
+    index_bytes: int = 0
+
+    @property
+    def retained_bytes(self) -> int:
+        return len(self.canonical) + self.index_bytes
+
     identities: OrderedDict[tuple[str, str], str] = field(default_factory=OrderedDict)
 
     def remember(self, key: tuple[str, str], digest: str) -> str:
@@ -81,7 +92,7 @@ class MappingInputDigests:
                 or len(self._reports) >= self._max_reports
             ):
                 _, removed = self._reports.popitem(last=False)
-                self._size -= len(removed.canonical)
+                self._size -= removed.retained_bytes
             self._reports[id(report)] = result
             self._size += len(raw)
         return result
@@ -97,6 +108,32 @@ class MappingInputDigests:
         if retained.replay_digest is None:
             retained.replay_digest = report.replay_digest()
         return retained.replay_digest
+
+    def report_fact_digest(self, report: ArelleParseReportV1) -> str:
+        retained = self._report(report)
+        if retained.semantic_digest is None:
+            retained.semantic_digest = fact_semantic_digest(report)
+        return retained.semantic_digest
+
+    def report_facts(
+        self, report: ArelleParseReportV1
+    ) -> Mapping[str, ParsedXbrlFactV1]:
+        """Reuse the existing exact-observation index; retain all report facts."""
+        retained = self._report(report)
+        if retained.facts is not None:
+            return retained.facts
+        facts = {sha256_digest(fact): fact for fact in report.facts}
+        immutable = MappingProxyType(facts)
+        if self._reports.get(id(report)) is retained:
+            retained.facts = immutable
+            retained.index_bytes = sys.getsizeof(facts) + sum(
+                sys.getsizeof(key) for key in facts
+            )
+            self._size += retained.index_bytes
+            while self._reports and self._size > self._max_bytes:
+                _, removed = self._reports.popitem(last=False)
+                self._size -= removed.retained_bytes
+        return immutable
 
     @staticmethod
     def _original(

@@ -1,5 +1,6 @@
 """Compile retained source identities without implying complete source coverage."""
 
+from contextlib import nullcontext
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import timedelta
@@ -598,6 +599,8 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
         return result
 
     acquisition.execute = capture
+    acquisition.evidence_operation = nullcontext
+    acquisition.verify_original_boundary = lambda: None
     acquisition.retained_acquisition = lambda _: completed[-1] if completed else None
     runner = SourcePreparationRunner(
         application=fixture.application,

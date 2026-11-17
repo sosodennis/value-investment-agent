@@ -110,6 +110,18 @@ class AnnualDiscovery:
         self._capture_lock = capture_lock
         self._clock = clock
 
+    def with_readers(
+        self, artifacts: AnnualDiscoveryArtifacts, content: ContentAddressedStore
+    ) -> AnnualDiscovery:
+        """Use operation-owned readers without inheriting a verification result."""
+        return AnnualDiscovery(
+            provider=self._provider,
+            artifacts=artifacts,
+            content=content,
+            capture_lock=self._capture_lock,
+            clock=self._clock,
+        )
+
     def _adapter(self, request: AnnualDiscoveryRequestV1) -> RetainedSecSourceAdapter:
         return RetainedSecSourceAdapter(
             self._provider,
