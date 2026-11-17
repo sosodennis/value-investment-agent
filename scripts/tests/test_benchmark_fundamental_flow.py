@@ -102,6 +102,58 @@ exec({benchmark.API_RETRIEVAL!r})
         assert not result.stdout
 
 
+@pytest.mark.parametrize("selected", ("", "b" * 64, "a" * 64 + "\n" + "b" * 64))
+def test_mismatched_compose_target_is_rejected_before_execution(
+    tmp_path, monkeypatch, selected
+):
+    path = Path(__file__).parents[1] / "benchmarks" / "fundamental_flow.py"
+    spec = importlib.util.spec_from_file_location("full_flow_benchmark", path)
+    benchmark = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(benchmark)
+    reference = tmp_path / "reference.json"
+    reference.write_text("{}")
+    manifest = {
+        "output_directory": str(tmp_path),
+        "compose_command": ["docker", "compose", "-p", "other-stack"],
+        "container": "declared-stack-service",
+        "image": "sha256:image",
+        "resources": {"cpus": 1, "memory_bytes": 3221225472, "workers": 1},
+        "reference_flow": str(reference),
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    container = {
+        "Id": "a" * 64,
+        "Image": manifest["image"],
+        "HostConfig": {"NanoCpus": 1000000000, "Memory": 3221225472},
+        "Config": {"Cmd": ["uvicorn"], "Env": []},
+    }
+
+    def output(command, **kwargs):
+        if command[:2] == ["docker", "inspect"]:
+            return json.dumps([container]).encode()
+        assert command == [
+            *manifest["compose_command"],
+            "ps",
+            "-q",
+            "fundamental-service",
+        ]
+        return selected
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("mismatched target reached timed execution or statistics")
+
+    monkeypatch.setattr(benchmark.subprocess, "check_output", output)
+    monkeypatch.setattr(benchmark.subprocess, "run", unexpected)
+    monkeypatch.setattr(benchmark, "statistics", unexpected)
+    with pytest.raises(
+        ValueError, match="Compose service differs from manifest container"
+    ):
+        benchmark.run(manifest_path, "mismatch")
+    assert not (tmp_path / "mismatch.stdout").exists()
+    assert not (tmp_path / "mismatch-receipt.json").exists()
+
+
 def test_container_exit_does_not_erase_failed_attempt(tmp_path, monkeypatch):
     path = Path(__file__).parents[1] / "benchmarks" / "fundamental_flow.py"
     spec = importlib.util.spec_from_file_location("full_flow_benchmark", path)
@@ -126,21 +178,39 @@ def test_container_exit_does_not_erase_failed_attempt(tmp_path, monkeypatch):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest))
     container = {
+        "Id": "a" * 64,
         "Image": manifest["image"],
         "HostConfig": {"NanoCpus": 1000000000, "Memory": 3221225472},
         "Config": {"Cmd": ["uvicorn"], "Env": []},
     }
-    monkeypatch.setattr(
-        benchmark.subprocess,
-        "check_output",
-        lambda *a, **kw: json.dumps([container]).encode(),
-    )
-    monkeypatch.setattr(
-        benchmark.subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=137)
-    )
+
+    def output(command, **kwargs):
+        if command[:2] == ["docker", "inspect"]:
+            return json.dumps([container]).encode()
+        assert command == [
+            *manifest["compose_command"],
+            "ps",
+            "-q",
+            "fundamental-service",
+        ]
+        return container["Id"] + "\n"
+
+    def execute(command, **kwargs):
+        assert command == [
+            "docker",
+            "exec",
+            "-i",
+            container["Id"],
+            *manifest["issuer_arguments"],
+        ]
+        return SimpleNamespace(returncode=137)
+
+    monkeypatch.setattr(benchmark.subprocess, "check_output", output)
+    monkeypatch.setattr(benchmark.subprocess, "run", execute)
     calls = []
 
-    def stats(_):
+    def stats(identity):
+        assert identity == container["Id"]
         calls.append(True)
         if len(calls) > 1:
             raise subprocess.CalledProcessError(1, ["docker", "exec"])
@@ -150,6 +220,7 @@ def test_container_exit_does_not_erase_failed_attempt(tmp_path, monkeypatch):
     assert benchmark.run(manifest_path, "interrupted") is False
     receipt = json.loads((tmp_path / "interrupted-receipt.json").read_bytes())
     assert receipt["success"] is False and receipt["exit_code"] == 137
+    assert receipt["container_id"] == container["Id"]
     assert "issuer command failed" in receipt["failure"]
     assert receipt["cpu_seconds"] is None and receipt["cgroup_peak_bytes"] is None
     assert receipt["sampling_errors"] == ["final:CalledProcessError"]

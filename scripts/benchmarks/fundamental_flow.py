@@ -150,6 +150,13 @@ def run(manifest_path: Path, label: str) -> bool:
     compose = manifest["compose_command"]
     container = manifest["container"]
     inspected = json.loads(subprocess.check_output(["docker", "inspect", container]))[0]
+    selected = subprocess.check_output(
+        [*compose, "ps", "-q", "fundamental-service"], text=True, timeout=30
+    ).splitlines()
+    if selected != [inspected["Id"]]:
+        raise ValueError("Compose service differs from manifest container")
+    container = inspected["Id"]
+    execute = ["docker", "exec", "-i", container]
     actual_image = inspected["Image"]
     if actual_image != manifest["image"]:
         raise ValueError("running image differs from benchmark manifest")
@@ -189,6 +196,7 @@ def run(manifest_path: Path, label: str) -> bool:
         "side": manifest["side"],
         "manifest_sha256": hashlib.sha256(raw).hexdigest(),
         "image": actual_image,
+        "container_id": container,
         "delivery_sha": manifest["delivery_sha"],
         "seed_manifest": manifest["seed_manifest"],
         "resources": manifest["resources"],
@@ -200,10 +208,7 @@ def run(manifest_path: Path, label: str) -> bool:
         with stdout.open("xb") as out, stderr.open("xb") as err:
             result = subprocess.run(
                 [
-                    *compose,
-                    "exec",
-                    "-T",
-                    "fundamental-service",
+                    *execute,
                     *manifest["issuer_arguments"],
                 ],
                 stdout=out,
@@ -219,10 +224,7 @@ def run(manifest_path: Path, label: str) -> bool:
             raise ValueError("issuer flow did not calculate")
         api = subprocess.check_output(
             [
-                *compose,
-                "exec",
-                "-T",
-                "fundamental-service",
+                *execute,
                 "python",
                 "-c",
                 API_RETRIEVAL,
