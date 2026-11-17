@@ -77,7 +77,12 @@ class ParserActionInputV2(_ParserActionInput):
     build: ParserBuildIdentityV1
 
 
-ParserActionInput = ParserActionInputV1 | ParserActionInputV2
+class ParserActionInputV3(_ParserActionInput):
+    protocol: Literal["sec-parser-action-input-v3"] = "sec-parser-action-input-v3"
+    build: ParserBuildIdentityV1
+
+
+ParserActionInput = ParserActionInputV1 | ParserActionInputV2 | ParserActionInputV3
 
 
 class ParserActionResultV1(BaseModel):
@@ -113,7 +118,7 @@ class ParserActionResultV2(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     protocol: Literal["sec-parser-action-result-v2"] = "sec-parser-action-result-v2"
-    request: ParserActionInputV2
+    request: ParserActionInputV2 | ParserActionInputV3
     report_content_hash: Digest
 
     @property

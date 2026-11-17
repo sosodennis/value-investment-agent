@@ -210,3 +210,47 @@ and timestamp identity drift; it did not execute tests or runtime. A WIP image
 probe established the immutable build in about nine seconds; that is a local
 capability probe, not an end-to-end performance claim. Full exact-image numerical,
 parser-hit, restart/restore and alternating timing acceptance remain pending.
+
+## Stable computation and exact execution identities
+
+The next identity revision separates equivalent computation from retained proof:
+
+- `sec-parser-action-input-v3` uses resource roles, logical filenames, taxonomy
+  namespaces and exact hashes, so relocating identical mounted resources leaves
+  the work key unchanged. Immutable build and full source/resource closure remain
+  required. V1 fallback and existing V2 readers keep their original meanings.
+- Raw result artifacts retain genuine parser timestamps, paths and exact bytes.
+  Rebuilding a missing body can produce a different execution artifact even when
+  its work key and semantic output match. Delivery/use attestations still name
+  that exact execution; they are never rewritten to imitate an earlier run.
+- `original-issuer-operating-v2` retains the complete ordered raw validation
+  evidence separately from deterministic computation markers, normalizes catalog
+  paths and equivalent UTC instants, and retains full facts, finding text,
+  severities, validation profile and source dependencies. Both computation markers
+  bind the full normalized report and their respective action keys. An archive
+  marker is not a hash of the archive report's complete output. The archive body
+  remains independently read, validated and compared under the existing dual-side
+  semantic rules. The original exact evidence binds both bodies.
+- `fundamental.mapping-computation.v1` composes a full report projection digest
+  with small mapping parameters and policy identity. The existing bounded
+  `MappingInputDigests` context computes the projection once per retained report
+  in each operation. It authorizes no admission, release or approval. It also
+  accompanies abstentions. Mapping signatures bind this additional identity and
+  the unchanged exact request digest. Missing or altered fingerprints fail replay.
+
+A reparse may preserve domain mapping/computation identities while changing exact
+input, proof and approval artifacts. Fixed retained-input replays still require
+exact applicable digests and `wrote=false`; cross-execution evidence equality is
+not claimed. Legacy v1 proof digests are preserved, including their previous JSON
+handling of timezone offsets. V1 originals and raw parser bodies reject the new
+representations; new originals reject missing raw action closure and unsupported
+computation versions. Ingestion rebuilds mapped facts from the report actually
+admitted by the mapping owner, while source integrity retains raw execution proof.
+
+The deployed `c2077b8b` cold preparation failed at 902.720909 seconds (830.260509
+CPU seconds), with six parser misses and six hits. This is counterevidence to
+whole-flow performance acceptance, despite successful parser reuse. Sampled memory
+peaked at 2,914,050,048 bytes. Raw receipt and failure output remain outside Git
+in `.audit/issue-445-evidence-reuse/build-c2077b8b-first.*`. Identity correctness
+checks do not resolve or conceal this timeout; diagnostic attribution and a fresh
+exact-image successful numerical/API run remain required.

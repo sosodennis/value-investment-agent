@@ -18,6 +18,7 @@ from .original_issuer import (
 from .parser_action_contracts import (
     ParserActionInputV1,
     ParserActionInputV2,
+    ParserActionInputV3,
     ParserActionResult,
     ParserActionDeliveryV2,
     parser_action_markers,
@@ -70,7 +71,9 @@ def require_current_parser_action_refs(
                 request = read_action_result(raw).request
                 try:
                     if (
-                        not isinstance(request, ParserActionInputV2)
+                        not isinstance(
+                            request, (ParserActionInputV2, ParserActionInputV3)
+                        )
                         or request.build != build_checks.current()
                     ):
                         raise SnapshotError(
@@ -131,6 +134,12 @@ def read_parser_action_result(
         or report.taxonomy_cache_hash != dict(request.resources).get("taxonomy")
         or report.source_content_hash != request.source_content_hash
         or report.dqc_filing_context is not None
+        or report.execution_evidence
+        or report.identity_protocol is not None
+        or any(
+            value.startswith(("sec-parser-action-", "sec-parser-computation-"))
+            for value in report.validation_evidence
+        )
         or report.parsed_at.tzinfo is None
         or report.parsed_at > datetime.now(UTC)
     ):
@@ -160,9 +169,8 @@ def require_parser_action_evidence(
     also remain in its consumed dependency set until publication.
     """
     report = original_evidence.report
-    markers = parser_action_markers(report.validation_evidence)
-    if not markers:
-        return ()
+    action_evidence = (*report.validation_evidence, *report.execution_evidence)
+    markers = parser_action_markers(action_evidence)
     # Claim validity and raw-body equivalence are separate predicates. Reuse
     # this consumer's full claim check, not a producer's claim or a bool flag.
     if original_checks is None:
@@ -173,6 +181,8 @@ def require_parser_action_evidence(
         raise SnapshotError(
             "PARSER_ACTION_EVIDENCE_INVALID", "normalized report differs"
         ) from error
+    if not markers:
+        return ()
     consumed = []
     if build_checks is None:
         build_checks = ParserBuildChecks()
@@ -187,7 +197,7 @@ def require_parser_action_evidence(
             (artifact_id, f"sec-parser-action-result-{version}"),
             (body_id, "sec-parser-action-report-v1"),
         ]
-        if isinstance(result.request, ParserActionInputV2):
+        if isinstance(result.request, (ParserActionInputV2, ParserActionInputV3)):
             if version != "v2" or binding_digest is None:
                 raise SnapshotError(
                     "PARSER_ACTION_EVIDENCE_INVALID", "action protocol differs"
@@ -265,7 +275,7 @@ def require_parser_action_evidence(
                         *original.validation_evidence,
                         next(
                             value
-                            for value in report.validation_evidence
+                            for value in action_evidence
                             if value.startswith(
                                 f"sec-parser-action-{version}:normalized:"
                             )
@@ -281,7 +291,7 @@ def require_parser_action_evidence(
                         *original.validation_evidence,
                         *(
                             v
-                            for v in report.validation_evidence
+                            for v in action_evidence
                             if v.startswith(
                                 (
                                     "sec-parser-action-v1:archive:",
@@ -295,6 +305,7 @@ def require_parser_action_evidence(
             expected = canonical_original_report(
                 original,
                 source=original_evidence.source,
+                policy_version=original_evidence.policy_version,
             )
             if expected != report or canonical_bytes(
                 expected.model_dump(mode="json")

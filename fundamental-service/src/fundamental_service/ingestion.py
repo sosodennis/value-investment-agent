@@ -968,6 +968,7 @@ class SecIngestionService:
                 ) from identity_failure
 
         mapping_evidence_ref = None
+        mapping_report = report
         mapping_issues: tuple[IssueV1, ...] = ()
         mapping_missing: tuple[str, ...] = ()
         if mapping_resolver is not None:
@@ -996,6 +997,7 @@ class SecIngestionService:
                     primary_media_type=source.media_type,
                 )
             )
+            mapping_report = original.report
             mappings = resolved.mappings
             mapping_evidence_ref = resolved.evidence_ref
             mapping_issues = resolved.issues
@@ -1050,7 +1052,7 @@ class SecIngestionService:
                             )
                         )
             candidates = parsed_facts_to_candidates(
-                report,
+                mapping_report,
                 source=source_record,
                 issuer_id=identity.issuer_id,
                 security_id=identity.security_id,

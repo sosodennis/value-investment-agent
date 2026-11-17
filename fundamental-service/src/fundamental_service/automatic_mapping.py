@@ -28,6 +28,10 @@ from .data_releases import (
 from .facts import CanonicalMappingV1, MappingObservationScopeV1, select_fact
 from .automatic_mapping_evidence import AutomaticMappingEvidenceChecks
 from .parser_action_evidence import require_current_parser_action_refs
+from .mapping_computation import (
+    MappingComputationIdentityV1,
+    mapping_computation_digest,
+)
 from .original_issuer import OriginalIssuerEvidenceV1
 from .registered_capital_expenditure import (
     CAPITAL_EXPENDITURE,
@@ -66,8 +70,8 @@ from .snapshots import SnapshotError
 from .standard_accounting_representations import standard_accounting_representation
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v41"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v41"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v42"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v42"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -232,6 +236,8 @@ def automatic_mapping_policy_digest() -> str:
                     "parser_action_contracts.py",
                     "parser_action_identity.py",
                     "parser_native_closure.py",
+                    "parser_computation.py",
+                    "mapping_computation.py",
                     "parser_action_evidence.py",
                     "parser_actions.py",
                     "inline_xbrl.py",
@@ -461,6 +467,9 @@ class AutomaticMappingDecisionV1(ReleaseModel):
         "fundamental.automatic-mapping-decision.v1"
     )
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    computation: MappingComputationIdentityV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
     policy_version: AutomaticMappingPolicyVersion = AUTOMATIC_MAPPING_POLICY
@@ -985,6 +994,13 @@ def evaluate_automatic_mapping(
         )
     return AutomaticMappingDecisionV1(
         input_digest=checks.identities.input_digest(request),
+        computation=MappingComputationIdentityV1(
+            digest=mapping_computation_digest(
+                request, policy_digest, input_digests=checks.identities
+            )
+        )
+        if original.policy_version == "original-issuer-operating-v2"
+        else None,
         source_revision=request.source_revision,
         evaluator_id=request.evaluator_id,
         policy_digest=policy_digest,
@@ -1049,6 +1065,7 @@ def verify_automatic_mapping_replay(
         request.evaluator_id != approval.evaluator_id
         or request.source_revision != approval.source_revision
         or decision.input_digest != approval.input_digest
+        or decision.computation != approval.computation
         or sha256_digest(decision) != approval.output_digest
         or decision.policy_digest != approval.policy_digest
         or decision.mapping != mapping

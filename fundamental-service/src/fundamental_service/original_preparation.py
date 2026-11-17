@@ -44,6 +44,7 @@ from .sec_capture import (
     SecResponseReceiptV1,
     sec_response_artifact_id,
 )
+from .parser_computation import execution_validation_evidence
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
 
@@ -158,7 +159,7 @@ class OriginalValidationEvidenceV1(StrictModel):
                 or report.dqc_filing_context.filing_date != request.filing.filing_date
             )
             or report.validation_engines != integrity.validation_engines
-            or report.validation_evidence != integrity.validation_evidence
+            or execution_validation_evidence(report) != integrity.validation_evidence
         ):
             raise ValueError("original validation differs from its source/runtime")
         responses = {response.uri: response for response in self.responses}
@@ -213,13 +214,19 @@ class OriginalValidationEvidenceV1(StrictModel):
             values.update(
                 digest
                 for _, _, _, digest, _ in parser_action_markers(
-                    self.original.report.validation_evidence
+                    (
+                        *self.original.report.validation_evidence,
+                        *self.original.report.execution_evidence,
+                    )
                 )
             )
             values.update(
                 use
                 for _, _, _, _, use in parser_action_markers(
-                    self.original.report.validation_evidence
+                    (
+                        *self.original.report.validation_evidence,
+                        *self.original.report.execution_evidence,
+                    )
                 )
                 if use is not None
             )

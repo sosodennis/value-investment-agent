@@ -27,6 +27,7 @@ from .parser_action_identity import (
 from .parser_action_contracts import (
     ParserActionInput,
     ParserActionInputV1,
+    ParserActionInputV3,
     ParserActionResult,
     ParserActionResultV1,
     ParserActionResultV2,
@@ -93,7 +94,14 @@ class ParserActions:
             artifact_id,
             artifacts=self.artifacts,
         )
-        if result.request != request or report.validation_profile != profile:
+        from .parser_computation import logical_profile
+
+        same_profile = (
+            logical_profile(report.validation_profile) == logical_profile(profile)
+            if isinstance(request, ParserActionInputV3)
+            else report.validation_profile == profile
+        )
+        if result.request != request or not same_profile:
             raise SnapshotError(
                 "PARSER_ACTION_EVIDENCE_INVALID", "parser action request differs"
             )

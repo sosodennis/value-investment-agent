@@ -24,7 +24,7 @@ from multiprocessing.connection import Connection, wait as wait_for_process
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from .historical_dqc import (
     HistoricalDqcExecution,
@@ -447,6 +447,12 @@ class ArelleParseReportV1(BaseModel):
     finding_codes: tuple[str, ...] = ()
     validation_engines: tuple[str, ...] = ()
     validation_evidence: tuple[str, ...] = ()
+    execution_evidence: tuple[str, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
+    identity_protocol: Literal["parser-report-computation-v1"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     parsed_at: datetime
     offline: bool = True
     network_attempt_count: int = Field(default=0, ge=0)
@@ -455,6 +461,12 @@ class ArelleParseReportV1(BaseModel):
     dqc_filing_context: DqcFilingContextV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+
+    @field_serializer("parsed_at", when_used="json")
+    def serialize_parse_time(self, value: datetime) -> str:
+        if self.identity_protocol == "parser-report-computation-v1":
+            return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return value.isoformat().replace("+00:00", "Z")
 
     @model_validator(mode="after")
     def bound_dqc_filing_context(self) -> "ArelleParseReportV1":

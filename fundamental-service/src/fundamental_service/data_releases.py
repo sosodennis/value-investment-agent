@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .mapping_computation import MappingComputationIdentityV1
 from .serialization import canonical_bytes, sha256_digest
 from .conditional_capital_contracts import ConditionalCapitalPolicyV1
 from .conditional_reinvestment_contracts import ConditionalReinvestmentPolicyV1
@@ -214,6 +215,9 @@ class AutomaticMappingApprovalV1(ReleaseModel):
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    computation: MappingComputationIdentityV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     output_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
     signature: str = Field(pattern=r"^[0-9a-f]{128}$")

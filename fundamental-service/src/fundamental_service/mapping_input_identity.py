@@ -45,6 +45,7 @@ class _ReportIdentity:
     content_digest: str
     replay_digest: str | None = None
     semantic_digest: str | None = None
+    computation_digest: str | None = None
     facts: Mapping[str, ParsedXbrlFactV1] | None = None
     index_bytes: int = 0
 
@@ -114,6 +115,14 @@ class MappingInputDigests:
         if retained.semantic_digest is None:
             retained.semantic_digest = fact_semantic_digest(report)
         return retained.semantic_digest
+
+    def report_computation_digest(self, report: ArelleParseReportV1) -> str:
+        retained = self._report(report)
+        if retained.computation_digest is None:
+            fields = report.model_dump(mode="json", exclude={"execution_evidence"})
+            fields["parsed_at"] = report.parsed_at
+            retained.computation_digest = sha256_digest(fields)
+        return retained.computation_digest
 
     def report_facts(
         self, report: ArelleParseReportV1

@@ -18,7 +18,7 @@ from .arelle_parser import (
 from .parser_action_contracts import (
     ParserActionInput,
     ParserActionInputV1,
-    ParserActionInputV2,
+    ParserActionInputV3,
     ParserBuildIdentityV1,
 )
 from .serialization import sha256_digest
@@ -361,15 +361,23 @@ def parser_action_input(
         if directory is not None:
             resources.append((name, _directory_hash(directory)))
             resources.append((name + "-closure", sha256_digest(_files(directory))))
-    files = [profile.dqc_ruleset_path, profile.historical_dqc_axis_config]
+    resource_trees = tuple(resources)
+    files = [
+        ("dqc-primary", profile.dqc_ruleset_path),
+        ("historical-axis", profile.historical_dqc_axis_config),
+    ]
     if profile.dqc_ruleset_catalog is not None:
-        files.extend(binding.path for binding in profile.dqc_ruleset_catalog.bindings)
-    for item in files:
+        files.extend(
+            ("dqc-catalog:" + binding.taxonomy_namespace, binding.path)
+            for binding in profile.dqc_ruleset_catalog.bindings
+        )
+    logical_files = []
+    for role, item in files:
         if item is not None:
             with item.open("rb") as handle:
-                resources.append(
-                    (str(item), hashlib.file_digest(handle, "sha256").hexdigest())
-                )
+                digest = hashlib.file_digest(handle, "sha256").hexdigest()
+                resources.append((str(item), digest))
+                logical_files.append((role + ":" + item.name, digest))
     staged = _files(path.parent)
     if dict(staged).get(path.name) != source_content_hash:
         raise SnapshotError("SOURCE_HASH_MISMATCH", "parser action input differs")
@@ -389,7 +397,13 @@ def parser_action_input(
         except IncompleteParserClosure:
             pass
         else:
-            return ParserActionInputV2.model_validate({**fields, "build": build})
+            return ParserActionInputV3.model_validate(
+                {
+                    **fields,
+                    "resources": tuple(sorted((*resource_trees, *logical_files))),
+                    "build": build,
+                }
+            )
     return ParserActionInputV1.model_validate(
         {
             **fields,

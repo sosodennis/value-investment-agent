@@ -6,7 +6,7 @@ import hashlib
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal
@@ -24,9 +24,10 @@ from .arelle_parser import ArelleParseReportV1, fact_semantic_digest
 from .contracts import CanonicalFactV1, SourceRole, SourceSnapshotV1, StrictModel
 from .serialization import canonical_bytes, sha256_digest
 
-ORIGINAL_ISSUER_POLICY: Literal["original-issuer-operating-v1"] = (
-    "original-issuer-operating-v1"
-)
+OriginalIssuerPolicy = Literal[
+    "original-issuer-operating-v1", "original-issuer-operating-v2"
+]
+ORIGINAL_ISSUER_POLICY: OriginalIssuerPolicy = "original-issuer-operating-v2"
 _DEI_NAMESPACE = re.compile(r"http://xbrl\.(?:sec\.gov|us)/dei/\d{4}(?:-\d{2}-\d{2})?")
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
@@ -314,7 +315,7 @@ class _OriginalIssuerClaimV1(StrictModel):
     contract_version: Literal["fundamental.original-issuer-evidence.v1"] = (
         "fundamental.original-issuer-evidence.v1"
     )
-    policy_version: Literal["original-issuer-operating-v1"] = ORIGINAL_ISSUER_POLICY
+    policy_version: OriginalIssuerPolicy = ORIGINAL_ISSUER_POLICY
     source: OriginalOperatingSourceV1
     decision_at: datetime
     identity: OriginalIssuerIdentityV1 | None
@@ -363,6 +364,26 @@ class OriginalIssuerEvidenceV1(_OriginalIssuerClaimV1):
     def validate_original_evidence(self) -> None:
         if self.decision_at.tzinfo is None or self.decision_at.utcoffset() is None:
             raise ValueError("original decision time must include a timezone")
+        _require_report_policy(self.report, self.policy_version)
+        if self.policy_version == "original-issuer-operating-v2":
+            raw = self.report.model_copy(
+                update={
+                    "validation_evidence": self.report.execution_evidence
+                    or tuple(
+                        v
+                        for v in self.report.validation_evidence
+                        if not v.startswith("sec-parser-computation-")
+                    ),
+                    "execution_evidence": (),
+                }
+            )
+            if (
+                canonical_original_report(
+                    raw, source=self.source, policy_version=self.policy_version
+                )
+                != self.report
+            ):
+                raise ValueError("original issuer computation representation differs")
         if (
             self.report.filing_path != self.source.uri
             or self.report.parsed_at != self.source.captured_at
@@ -382,7 +403,9 @@ class OriginalIssuerEvidenceV1(_OriginalIssuerClaimV1):
         ):
             raise ValueError("original issuer report must be canonically retained")
         identity, period_end, codes = _issuer_result(
-            self.source, self.decision_at, self.report
+            self.source,
+            self.decision_at,
+            self.report,
         )
         if (
             self.identity != identity
@@ -400,7 +423,10 @@ class OriginalIssuerEvidenceV1(_OriginalIssuerClaimV1):
         ):
             raise ValueError("issuer claim differs from its exact original evidence")
         if self.input_digest != _issuer_input_digest(
-            self.source, self.decision_at, self.report
+            self.source,
+            self.decision_at,
+            self.report,
+            policy_version=self.policy_version,
         ) or self.output_digest != sha256_digest(
             self.model_dump(exclude={"output_digest"})
         ):
@@ -428,10 +454,12 @@ def _issuer_input_digest(
     source: OriginalOperatingSourceV1,
     decision_at: datetime,
     report: ArelleParseReportV1,
+    *,
+    policy_version: OriginalIssuerPolicy = "original-issuer-operating-v1",
 ) -> str:
     return sha256_digest(
         {
-            "policy_version": ORIGINAL_ISSUER_POLICY,
+            "policy_version": policy_version,
             "source": source,
             "decision_at": decision_at,
             "parser_replay_digest": report.replay_digest(),
@@ -445,8 +473,10 @@ def canonical_original_report(
     report: ArelleParseReportV1,
     *,
     source: OriginalOperatingSourceV1,
+    policy_version: OriginalIssuerPolicy = "original-issuer-operating-v1",
 ) -> ArelleParseReportV1:
-    """Apply the v1 retained-report transformation; grant no issuer claims."""
+    """Apply the selected retained-report policy; grant no issuer claims."""
+    _require_report_policy(report, policy_version)
     profile = report.validation_profile
     profile = profile.model_copy(
         update={
@@ -460,7 +490,7 @@ def canonical_original_report(
             if (value := getattr(profile, name)) is not None
         }
     )
-    return report.model_copy(
+    canonical = report.model_copy(
         update={
             "filing_path": source.uri,
             "parsed_at": source.captured_at,
@@ -470,6 +500,25 @@ def canonical_original_report(
             "validation_profile": profile,
         }
     )
+    if policy_version == "original-issuer-operating-v2":
+        from .parser_computation import canonical_computation_report
+
+        canonical = canonical_computation_report(canonical)
+    return canonical
+
+
+def _require_report_policy(
+    report: ArelleParseReportV1, policy_version: OriginalIssuerPolicy
+) -> None:
+    if policy_version == "original-issuer-operating-v1" and (
+        report.execution_evidence
+        or report.identity_protocol is not None
+        or any(
+            value.startswith("sec-parser-computation-")
+            for value in report.validation_evidence
+        )
+    ):
+        raise ValueError("v1 original cannot contain computation representations")
 
 
 def evaluate_original_issuer(
@@ -477,11 +526,16 @@ def evaluate_original_issuer(
     *,
     source: OriginalOperatingSourceV1,
     decision_at: datetime,
+    policy_version: OriginalIssuerPolicy = ORIGINAL_ISSUER_POLICY,
 ) -> OriginalIssuerEvidenceV1:
     """Validate issuer scope without approving regulatory or financial evidence."""
     if decision_at.tzinfo is None or decision_at.utcoffset() is None:
         raise ValueError("original decision time must include a timezone")
-    report = canonical_original_report(report, source=source)
+    if policy_version == "original-issuer-operating-v2":
+        decision_at = decision_at.astimezone(UTC)
+    report = canonical_original_report(
+        report, source=source, policy_version=policy_version
+    )
     identity, period_end, codes = _issuer_result(source, decision_at, report)
     payload = {
         "source": source,
@@ -491,13 +545,15 @@ def evaluate_original_issuer(
         "report_period_end": period_end,
         "status": "refused" if codes else "matched",
         "issue_codes": codes,
-        "input_digest": _issuer_input_digest(source, decision_at, report),
+        "input_digest": _issuer_input_digest(
+            source, decision_at, report, policy_version=policy_version
+        ),
     }
     # Include strict contract defaults before calculating the complete digest.
     payload.update(
         {
             "contract_version": "fundamental.original-issuer-evidence.v1",
-            "policy_version": ORIGINAL_ISSUER_POLICY,
+            "policy_version": policy_version,
             "unestablished_claims": (
                 "security_identity",
                 "domicile",

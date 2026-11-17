@@ -370,9 +370,9 @@ def test_compile_consumes_checked_originals_and_next_compile_rechecks_storage(
     read_validation = value.service.read_validation
     checked = []
 
-    def read(artifact_id):
+    def read(artifact_id, **kwargs):
         checked.append(artifact_id)
-        return read_validation(artifact_id)
+        return read_validation(artifact_id, **kwargs)
 
     monkeypatch.setattr(value.service, "read_validation", read)
     compiled = compiler._compile(request)

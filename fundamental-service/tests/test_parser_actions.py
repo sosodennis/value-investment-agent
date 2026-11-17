@@ -479,6 +479,7 @@ def test_original_preparation_reads_verify_real_issuer_transformation(
     prepared, _ = execute(value)
     validation_id = prepared.filings[0].validation.artifact_id
     evidence = value.service.read_validation(validation_id)
+    assert evidence.original is not None, evidence.model_dump()
     assert evidence.original.status == "matched" and index.results
     scope = OriginalPreparationReads(value.service)
     scope.read(prepared.artifact_id)

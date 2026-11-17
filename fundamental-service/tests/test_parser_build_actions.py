@@ -170,7 +170,7 @@ def test_v2_use_attestation_revocation_and_bytes_are_checked_at_output(
     v.c.artifacts.invalidate(use)
     with pytest.raises(DataReleaseError, match="exact valid retained"):
         require_current_parser_action_refs(refs, artifacts=v.c.artifacts)
-    assert parser_action_markers(original.report.validation_evidence)
+    assert parser_action_markers(original.report.execution_evidence)
 
 
 def test_build_scope_hashes_once_but_rejects_configuration_changes(

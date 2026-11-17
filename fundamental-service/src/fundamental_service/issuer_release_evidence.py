@@ -19,6 +19,7 @@ from .original_issuer import IssuerOperatingSourceV1, OriginalIssuerEvidenceV1
 from .regulatory_validation import require_sec_validation_evidence
 from .sec_rebuild import parsed_facts_to_candidates
 from .sec_integrity import assess_filing_response
+from .parser_computation import execution_validation_evidence
 from .serialization import canonical_bytes, sha256_digest
 from .valuation_requirements import (
     operating_forecast_requirements_profile,
@@ -100,7 +101,7 @@ def verify_original_integrity(
         or integrity.normalized_fact_count != len(report.facts)
         or integrity.validation_profile_digest != report.validation_profile_digest
         or integrity.validation_engines != report.validation_engines
-        or integrity.validation_evidence != report.validation_evidence
+        or integrity.validation_evidence != execution_validation_evidence(report)
         or integrity.taxonomy_manifest_hash != report.taxonomy_cache_hash
         or integrity.arelle_version != report.parser_version
         or integrity.efm_profile != report.validation_profile.efm_profile

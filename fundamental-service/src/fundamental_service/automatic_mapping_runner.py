@@ -165,6 +165,11 @@ def approve_mapping(
                 "policy_digest": decision.policy_digest,
                 "source_revision": request.source_revision,
                 "input_digest": input_digest,
+                **(
+                    {"computation": decision.computation}
+                    if decision.computation is not None
+                    else {}
+                ),
                 "output_digest": output_digest,
                 "evidence_refs": (input_ref, *request.evidence_refs),
             },
