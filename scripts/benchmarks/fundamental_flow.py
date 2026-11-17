@@ -261,6 +261,7 @@ def run(manifest_path: Path, label: str) -> bool:
         receipt.setdefault("wall_seconds", time.monotonic() - start)
         stop.set()
         thread.join(timeout=12)
+        after: dict[str, int] | None
         try:
             after = statistics(container)
             samples.append(after)
