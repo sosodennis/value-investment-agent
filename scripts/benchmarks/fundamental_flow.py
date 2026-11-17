@@ -261,14 +261,22 @@ def run(manifest_path: Path, label: str) -> bool:
         receipt.setdefault("wall_seconds", time.monotonic() - start)
         stop.set()
         thread.join(timeout=12)
-        after = statistics(container)
-        samples.append(after)
+        try:
+            after = statistics(container)
+            samples.append(after)
+        except (OSError, subprocess.SubprocessError, ValueError) as error:
+            after = None
+            sampling_errors.append("final:" + type(error).__name__)
+            receipt["success"] = False
+            receipt.setdefault("failure", "final container statistics unavailable")
         receipt.update(
-            cpu_seconds=(after["cpu_us"] - before["cpu_us"]) / 1e6,
+            cpu_seconds=(after["cpu_us"] - before["cpu_us"]) / 1e6
+            if after is not None
+            else None,
             max_sampled_cgroup_memory_bytes=max(
                 row["memory_current"] for row in samples
             ),
-            cgroup_peak_bytes=after["memory_peak"],
+            cgroup_peak_bytes=after["memory_peak"] if after is not None else None,
             memory_scope="sampled cgroup usage and container lifetime peak; neither is process RSS",
             sampling_errors=sampling_errors,
             host_load_after=os.getloadavg(),
