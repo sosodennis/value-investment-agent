@@ -152,3 +152,28 @@ def test_mutable_returned_headers_cannot_change_the_retained_handle(
     assert checked[0].original.source.cik != "9999999999"
     assert checked[0].original.report is original_report
     scope.finish()
+
+
+@pytest.mark.parametrize(
+    "limits", ({"max_entries": 0}, {"max_retained_bytes": 1}, {"max_entries": 1})
+)
+def test_evicted_or_unretained_consumed_evidence_is_checked_at_publication(
+    tmp_path, monkeypatch, limits
+):
+    value = case(tmp_path, monkeypatch)
+    prepared, _ = execute(value)
+    scope = OriginalPreparationReads(value.service, **limits)
+    scope.read(prepared.artifact_id)
+    different, _ = execute(
+        value,
+        value.request.model_copy(
+            update={"ticker": value.expected_identity.security_id}
+        ),
+    )
+    scope.read(different.artifact_id)
+    assert prepared.artifact_id not in scope.entries
+    value.artifacts.invalidate(prepared.artifact_id)
+    with pytest.raises(SnapshotError, match="metadata changed"):
+        scope.verify()
+    scope.clear()
+    assert scope._journal.closed

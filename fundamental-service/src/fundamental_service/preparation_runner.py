@@ -806,6 +806,13 @@ class SourcePreparationRunner:
                 return False
         return True
 
+    def _verify_original_boundary(self, plan: SourcePreparationPlan) -> None:
+        if (
+            isinstance(plan, AutomaticSourcePreparationPlanV1)
+            and self._acquisition is not None
+        ):
+            self._acquisition.verify_original_boundary()
+
     def _activate(
         self,
         candidate: DataReleaseCandidatePublishRequestV1,
@@ -852,6 +859,7 @@ class SourcePreparationRunner:
                 "candidate does not match the requested source, date and fact mappings"
             )
         guard_execution_deadline(deadline_at)
+        self._verify_original_boundary(plan)
         self._application.publish_data_release_candidate(
             manifest, candidate.verification
         )
@@ -883,6 +891,7 @@ class SourcePreparationRunner:
         )
         try:
             guard_execution_deadline(deadline_at)
+            self._verify_original_boundary(plan)
             self._application.change_active_data_release(
                 manifest.profile_id,
                 command,
@@ -1020,11 +1029,7 @@ class SourcePreparationRunner:
             != plan.public_sources
         ):
             raise ValueError("preparation must retain every planned public source")
-        if (
-            isinstance(plan, AutomaticSourcePreparationPlanV1)
-            and self._acquisition is not None
-        ):
-            self._acquisition.verify_original_boundary()
+        self._verify_original_boundary(plan)
         publication = self._artifacts.put_with_receipt(
             f"source-preparation-plan:{plan.digest}", plan
         )
@@ -2534,6 +2539,7 @@ class SourcePreparationRunner:
                 ),
                 prepared_facts=prepared_facts,
             )
+        self._verify_original_boundary(plan)
         calculation = self._application.calculate_valuation(
             preparation.input.model_copy(update={"caller_approval": approval}),
             correlation_id=correlation_id,

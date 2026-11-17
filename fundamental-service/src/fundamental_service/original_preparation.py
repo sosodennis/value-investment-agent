@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+import tempfile
 from collections import OrderedDict
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -591,6 +592,11 @@ class OriginalPreparation:
             return evidence, publication
 
 
+class _PreparationReadSetV1(StrictModel):
+    records: tuple[ArtifactRecordV1, ...]
+    content: tuple[tuple[str, str], ...]
+
+
 @dataclass(frozen=True)
 class _CheckedPreparation:
     evidence: OriginalPreparationEvidenceV1
@@ -701,7 +707,10 @@ class OriginalPreparationReads:
     Mutable headers are copied on return; only frozen parser reports are shared.
     Metadata is current at each use. Store bytes are checked again at the closing
     boundary; a failed boundary must not be treated as a successful operation.
-    No caller-supplied digest, path, mtime or validation flag admits a cache entry.
+    Consumed dependency sets are streamed to a temporary journal so eviction never
+    drops publication checks or grows the retained model graph. The journal closes
+    with the operation. No caller-supplied digest, path, mtime or validation flag
+    admits a cache entry.
     """
 
     def __init__(
@@ -719,8 +728,10 @@ class OriginalPreparationReads:
         self.retained_bytes = 0
         self.entries: OrderedDict[str, _CheckedPreparation] = OrderedDict()
         self.closed = False
+        # Stream consumed dependency sets independently of the bounded model cache.
+        self._journal = tempfile.TemporaryFile()
 
-    def _current(self, entry: _CheckedPreparation) -> None:
+    def _current(self, entry: _CheckedPreparation | _PreparationReadSetV1) -> None:
         for record in entry.records:
             if self.owner._artifacts.get(record.artifact_id) != record:
                 raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "metadata changed")
@@ -759,6 +770,10 @@ class OriginalPreparationReads:
             evidence, validations, index, records, sources, weight
         )
         self._current(entry)
+        self._journal.seek(0, 2)
+        self._journal.write(
+            canonical_bytes({"records": records, "content": sources}) + b"\n"
+        )
         if self.max_entries and weight <= self.max_retained_bytes:
             while self.entries and (
                 len(self.entries) >= self.max_entries
@@ -801,7 +816,7 @@ class OriginalPreparationReads:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "accession absent")
         return self._copy(entry, (entry.evidence, *selected))
 
-    def _verify_bytes(self, entry: _CheckedPreparation) -> None:
+    def _verify_bytes(self, entry: _CheckedPreparation | _PreparationReadSetV1) -> None:
         self._current(entry)
         for record in entry.records:
             raw = self.owner._artifacts.read(record.artifact_id)
@@ -816,18 +831,18 @@ class OriginalPreparationReads:
     def verify(self) -> None:
         if self.closed:
             raise RuntimeError("preparation read scope has ended")
-        for entry in self.entries.values():
-            self._verify_bytes(entry)
+        self._journal.seek(0)
+        for raw in self._journal:
+            self._verify_bytes(_PreparationReadSetV1.model_validate_json(raw))
 
     def finish(self) -> None:
         try:
             self.verify()
         finally:
-            self.entries.clear()
-            self.retained_bytes = 0
-            self.closed = True
+            self.clear()
 
     def clear(self) -> None:
+        self._journal.close()
         self.entries.clear()
         self.retained_bytes = 0
         self.closed = True
