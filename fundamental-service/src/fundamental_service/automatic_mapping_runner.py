@@ -252,6 +252,7 @@ def approve_mapping_batch(
             mapping_version=request.mapping_version,
             original=request.original,
             observed_only=True,
+            input_digests=evidence_checks.identities,
         )
         if not proposals:
             roles.append(
