@@ -208,6 +208,44 @@ def test_runtime_build_refuses_external_mount_inside_image_closure(tmp_path):
         _runtime_tree(tmp_path, set(), {}, image_mounts=(tmp_path / "package",))
 
 
+@pytest.mark.parametrize("mount_kind", ("root", "self", "ancestor"))
+def test_runtime_mount_boundaries_reject_even_previously_hashed_paths(
+    tmp_path, mount_kind
+):
+    from fundamental_service.parser_action_identity import IncompleteParserClosure
+
+    package = tmp_path / "package"
+    package.mkdir()
+    source = package / "code.py"
+    source.write_bytes(b"runtime dependency")
+    memo = {}
+    _runtime_tree(source, set(), memo)
+    mount = {"root": Path("/"), "self": source, "ancestor": package}[mount_kind]
+    with pytest.raises(IncompleteParserClosure, match="escapes the immutable image"):
+        _runtime_tree(source, set(), memo, image_mounts=(mount,))
+
+
+def test_runtime_mount_scope_resolves_links_without_matching_sibling_prefixes(tmp_path):
+    from fundamental_service.parser_action_identity import IncompleteParserClosure
+    from fundamental_service.serialization import sha256_digest
+    import hashlib
+
+    mount = tmp_path / "mounted"
+    mount.mkdir()
+    (mount / "external").write_bytes(b"outside image")
+    package = tmp_path / "mounted-sibling"
+    package.mkdir()
+    source = package / "code.py"
+    source.write_bytes(b"inside image")
+    expected = sha256_digest(
+        (("code.py", "", hashlib.sha256(b"inside image").hexdigest()),)
+    )
+    assert _runtime_tree(package, set(), {}, image_mounts=(mount,)) == expected
+    (package / "external-link").symlink_to(mount / "external")
+    with pytest.raises(IncompleteParserClosure, match="escapes the immutable image"):
+        _runtime_tree(package, set(), {}, image_mounts=(mount,))
+
+
 @pytest.mark.parametrize(
     "marker",
     (

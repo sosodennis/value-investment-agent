@@ -1,8 +1,10 @@
 """Typed dispatch for standard source-bound accounting representations."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from .accounting_roles import AccountingRoleRules
 from .arelle_parser import ParsedXbrlFactV1
@@ -20,6 +22,9 @@ from .current_debt_mapping import (
 )
 from .lease_liability_mapping import lease_liability_concept, select_lease_liability
 from .original_issuer import OriginalIssuerEvidenceV1
+
+if TYPE_CHECKING:
+    from .mapping_input_identity import MappingInputDigests
 
 
 class AccountingSelection(Protocol):
@@ -39,7 +44,10 @@ class AccountingRepresentation:
 
 
 def standard_accounting_representation(
-    original: OriginalIssuerEvidenceV1, normalized_field: str
+    original: OriginalIssuerEvidenceV1,
+    normalized_field: str,
+    *,
+    input_digests: MappingInputDigests | None = None,
 ) -> AccountingRepresentation | None:
     if normalized_field in AWARD_DISCLOSURE_ROLES:
         return AccountingRepresentation(
@@ -76,6 +84,7 @@ def standard_accounting_representation(
                 evidence,
                 normalized_field,
                 security_id=security,
+                input_digests=input_digests,
             ),
             direct_overlap_exclusion=True,
         )

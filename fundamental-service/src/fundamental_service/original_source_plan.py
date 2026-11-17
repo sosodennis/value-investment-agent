@@ -38,7 +38,7 @@ from .automatic_market_policy import AutomaticMarketPolicyPolicyV1
 from .market_source_selection import DailyMarketRatePolicyV1
 from .public_acquisition import PublicSourceAcquisitionRequestV1
 from .public_admission import PublicSourceAdmissionRequestV1
-from .original_preparation import OriginalPreparation
+from .original_preparation import OriginalPreparation, OriginalPreparationReads
 from .quote_admission import QUOTE_METRIC
 from .quote_source_plan import AutomaticDailyQuoteRequestTemplateV1
 from .policies import ModelSpecV1, initial_model_specs
@@ -511,8 +511,12 @@ class OriginalSourcePlan:
         originals: OriginalPreparation,
         artifacts: EvidenceArtifactStore,
         compilation_lock: Callable[[str], AbstractContextManager[None]],
+        original_reads: OriginalPreparationReads | None = None,
     ) -> None:
+        if original_reads is not None and original_reads.owner is not originals:
+            raise ValueError("source compiler reads belong to a different owner")
         self._originals = originals
+        self._original_reads = original_reads
         self._artifacts = artifacts
         self._lock = compilation_lock
 
@@ -525,8 +529,10 @@ class OriginalSourcePlan:
             != reference
         ):
             raise SnapshotError("ORIGINAL_SOURCE_PLAN_INVALID", "original differs")
-        prepared, validations = self._originals.read_with_validations(
-            reference.artifact_id
+        prepared, validations = (
+            self._original_reads.read(reference.artifact_id)
+            if self._original_reads is not None
+            else self._originals.read_with_validations(reference.artifact_id)
         )
         codes = set(prepared.issue_codes)
         if not prepared.filings:
@@ -807,6 +813,8 @@ class OriginalSourcePlan:
             raise SnapshotError(
                 "ORIGINAL_SOURCE_PLAN_INVALID", "source compilation does not reproduce"
             )
+        if self._original_reads is not None:
+            self._original_reads.verify()
         return evidence
 
     def _completed(
@@ -838,6 +846,8 @@ class OriginalSourcePlan:
             if completed := self._completed(request):
                 return completed
             evidence = self._compile(request)
+            if self._original_reads is not None:
+                self._original_reads.verify()
             self._artifacts.put_with_receipt(
                 f"original-source-plan-request:{request.digest}", request
             )

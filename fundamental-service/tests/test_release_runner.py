@@ -730,3 +730,42 @@ def test_release_refuses_metadata_mutation_at_any_reference_boundary(change_at, 
         "ARTIFACT_EVIDENCE_INVALID",
         "ARTIFACT_EVIDENCE_CHANGED",
     }
+
+
+def test_one_canary_reuses_build_proof_but_the_next_verifier_is_independent(
+    monkeypatch,
+):
+    from fundamental_service import release_runner as owner
+
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    runner = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=facts,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    )
+    consume = runner._verify_automatic_mappings
+    current = owner.require_current_parser_action_refs
+    snapshots = runner._verify_snapshots_and_facts
+    scopes = []
+
+    def mapping(*args, evidence_checks):
+        scopes.append(evidence_checks)
+        return consume(*args, evidence_checks=evidence_checks)
+
+    def boundary(*args, build_checks, **kwargs):
+        assert build_checks is scopes[-1].builds
+        return current(*args, build_checks=build_checks, **kwargs)
+
+    def snapshot_checks(*args, taxonomy_checks):
+        assert taxonomy_checks is scopes[-1].taxonomies
+        return snapshots(*args, taxonomy_checks=taxonomy_checks)
+
+    monkeypatch.setattr(runner, "_verify_automatic_mappings", mapping)
+    monkeypatch.setattr(owner, "require_current_parser_action_refs", boundary)
+    monkeypatch.setattr(runner, "_verify_snapshots_and_facts", snapshot_checks)
+    assert runner.validate(manifest, verification) == runner.validate(
+        manifest, verification
+    )
+    assert len(scopes) == 2 and scopes[0] is not scopes[1]

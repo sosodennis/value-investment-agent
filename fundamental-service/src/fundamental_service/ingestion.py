@@ -304,6 +304,7 @@ class SecIngestionService:
         amends_accession: str | None = None,
         amendment_scope: str | None = None,
         parser_delivery_revision: str | None = None,
+        build_checks: ParserBuildChecks | None = None,
     ) -> ValidatedSecFiling:
         """Validate original bytes and regulatory evidence before identity/publication."""
         adapter = source_adapter or self.source_adapter
@@ -608,7 +609,7 @@ class SecIngestionService:
                     raw_manifest, media_type="application/json"
                 )
 
-            build_checks = ParserBuildChecks()
+            build_checks = build_checks or ParserBuildChecks()
 
             def parse_representation(
                 path: Path,
@@ -810,6 +811,8 @@ class SecIngestionService:
         if not report.facts:
             raise SnapshotError("PARSER_FACTS_MISSING", "Arelle produced no XBRL facts")
 
+        if build_checks is not None:
+            build_checks.verify()
         return ValidatedSecFiling(
             source=source,
             archive_source=archive_source,
@@ -858,6 +861,7 @@ class SecIngestionService:
         identity_basis: SecIdentityBasis = "current-sec-ticker-v1",
         identity_ticker: str | None = None,
         parser_delivery_revision: str | None = None,
+        build_checks: ParserBuildChecks | None = None,
     ) -> SecIngestionResult:
         if mapping_resolver is not None and (
             mappings or identity_basis != "original-filing-dei-v1"
@@ -874,6 +878,7 @@ class SecIngestionService:
                 "original identity requires a pinned original 10-K, acceptance and ticker",
             )
         validated = self.validate_filing(
+            build_checks=build_checks,
             parser_delivery_revision=parser_delivery_revision,
             cik=cik,
             accession_number=accession_number,

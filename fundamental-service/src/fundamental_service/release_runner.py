@@ -92,7 +92,7 @@ from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import FilesystemSnapshotRepository, SnapshotError
 from .sec_rebuild import parsed_facts_to_candidates
-from .taxonomy_evidence import require_original_taxonomy
+from .taxonomy_evidence import TaxonomyArchiveChecks, require_original_taxonomy
 from .original_issuer import IssuerOperatingSourceV1, OriginalOperatingSourceV1
 from .issuer_release_evidence import (
     require_issuer_release_profile,
@@ -468,9 +468,14 @@ class DataReleaseCanaryRunner:
                 except (PolicyError, MarketSourceError) as error:
                     raise DataReleaseError(error.code, str(error)) from error
         mappings = self._verify_mappings(manifest.mapping_refs)
-        self._verify_automatic_mappings(manifest, request, mappings)
+        evidence_checks = AutomaticMappingEvidenceChecks()
+        self._verify_automatic_mappings(
+            manifest, request, mappings, evidence_checks=evidence_checks
+        )
         checked_snapshots, checked_facts, checked_forecasts = (
-            self._verify_snapshots_and_facts(manifest, mappings)
+            self._verify_snapshots_and_facts(
+                manifest, mappings, taxonomy_checks=evidence_checks.taxonomies
+            )
         )
         self._verify_equity_dilution(manifest)
         require_current_parser_action_refs(
@@ -484,6 +489,7 @@ class DataReleaseCanaryRunner:
                 ),
             ),
             artifacts=self._artifacts,
+            build_checks=evidence_checks.builds,
         )
 
         return DataReleaseContentReportV1(
@@ -501,8 +507,17 @@ class DataReleaseCanaryRunner:
         manifest: DataReleaseManifestV1,
         verification: DataReleaseContentRequestV1,
         mappings: dict[str, CanonicalMappingV1],
+        *,
+        evidence_checks: AutomaticMappingEvidenceChecks,
     ) -> None:
-        evidence_checks = AutomaticMappingEvidenceChecks()
+        indexed = (
+            self._mapping_fact_references(manifest)
+            if any(
+                isinstance(review, AutomaticMappingApprovalV1)
+                for review in verification.mapping_reviews
+            )
+            else None
+        )
         for review in verification.mapping_reviews:
             mapping = mappings[review.mapping_id]
             if not isinstance(review, AutomaticMappingApprovalV1):
@@ -519,11 +534,16 @@ class DataReleaseCanaryRunner:
                 evidence_checks=evidence_checks,
             )
             used = False
-            for ref in manifest.snapshot_refs:
+            for index, ref in enumerate(manifest.snapshot_refs):
+                references = (
+                    indexed[index].get(mapping.decision_id, ())
+                    if indexed is not None
+                    else ref.facts
+                )
                 declared = tuple(
-                    self._facts.get(item.fact_id)
-                    for item in ref.facts
-                    if self._facts.get(item.fact_id).mapping_decision_id
+                    fact
+                    for item in references
+                    if (fact := self._read_declared_fact(item)).mapping_decision_id
                     == mapping.decision_id
                 )
                 if not declared:
@@ -599,6 +619,51 @@ class DataReleaseCanaryRunner:
                     "DATA_RELEASE_MAPPING_UNUSED",
                     "automatic mapping has no released facts",
                 )
+
+    def _read_declared_fact(self, reference: FactRefV1) -> CanonicalFactV1:
+        fact = self._facts.get(reference.fact_id)
+        if canonical_fact_digest(fact) != reference.fact_digest:
+            raise DataReleaseError(
+                "DATA_RELEASE_FACT_MISMATCH",
+                f"release fact {reference.fact_id} has a different digest",
+            )
+        return fact
+
+    def _mapping_fact_references(
+        self,
+        manifest: DataReleaseManifestV1,
+        *,
+        max_entries: int = 8192,
+        max_retained_bytes: int = 2 * 1024 * 1024,
+    ) -> tuple[dict[str, list[FactRefV1]], ...] | None:
+        if sum(len(ref.facts) for ref in manifest.snapshot_refs) > max_entries:
+            return None
+        indexed: list[dict[str, list[FactRefV1]]] = []
+        retained = sys.getsizeof(indexed)
+        for ref in manifest.snapshot_refs:
+            groups: dict[str, list[FactRefV1]] = {}
+            previous = sys.getsizeof(indexed)
+            indexed.append(groups)
+            retained += sys.getsizeof(groups) + sys.getsizeof(indexed) - previous
+            for item in ref.facts:
+                fact = self._read_declared_fact(item)
+                decision = fact.mapping_decision_id or ""
+                if decision not in groups:
+                    previous = sys.getsizeof(groups)
+                    groups[decision] = []
+                    retained += (
+                        sys.getsizeof(groups)
+                        - previous
+                        + sys.getsizeof(decision)
+                        + sys.getsizeof(groups[decision])
+                    )
+                values = groups[decision]
+                previous = sys.getsizeof(values)
+                values.append(item)
+                retained += sys.getsizeof(values) - previous + sys.getsizeof(item)
+                if retained > max_retained_bytes:
+                    return None
+        return tuple(indexed)
 
     def _verify_equity_dilution(self, manifest: DataReleaseManifestV1) -> None:
         references = tuple(
@@ -763,7 +828,11 @@ class DataReleaseCanaryRunner:
         return tuple(sorted({reference.content_hash for reference in refs}))
 
     def _verify_snapshots_and_facts(
-        self, manifest: DataReleaseManifestV1, mappings: dict[str, CanonicalMappingV1]
+        self,
+        manifest: DataReleaseManifestV1,
+        mappings: dict[str, CanonicalMappingV1],
+        *,
+        taxonomy_checks: TaxonomyArchiveChecks,
     ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
         snapshot_ids: list[str] = []
         fact_digests: list[str] = []
@@ -808,7 +877,9 @@ class DataReleaseCanaryRunner:
             try:
                 if isinstance(snapshot, IssuerOperatingSourceV1):
                     assert isinstance(manifest, IssuerOperatingReleaseManifestV1)
-                    self._verify_issuer_originals(snapshot, manifest)
+                    self._verify_issuer_originals(
+                        snapshot, manifest, taxonomy_checks=taxonomy_checks
+                    )
                 else:
                     verify_history_components(
                         snapshot, _SecuritySnapshots(self._snapshots)
@@ -1066,6 +1137,8 @@ class DataReleaseCanaryRunner:
         self,
         snapshot: IssuerOperatingSourceV1,
         manifest: IssuerOperatingReleaseManifestV1,
+        *,
+        taxonomy_checks: TaxonomyArchiveChecks,
     ) -> None:
         try:
             integrities = tuple(
@@ -1105,7 +1178,10 @@ class DataReleaseCanaryRunner:
                 original, integrity, parser_version=manifest.parser_version
             )
             require_original_taxonomy(
-                integrity.taxonomy_manifest_hash, manifest.taxonomy_refs, contents
+                integrity.taxonomy_manifest_hash,
+                manifest.taxonomy_refs,
+                contents,
+                archive_checks=taxonomy_checks,
             )
             verify_original_bytes(integrity, contents)
 

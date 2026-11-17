@@ -86,6 +86,7 @@ def _retained_original_inputs(
             source.original.report.taxonomy_cache_hash or "",
             source.evidence_refs,
             contents,
+            archive_checks=evidence_checks.taxonomies,
         )
         verify_original_bytes(source.integrity, contents)
         sources.append(source)

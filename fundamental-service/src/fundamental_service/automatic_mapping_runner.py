@@ -40,6 +40,7 @@ from .data_releases import (
 )
 from .mapping_input_storage import publish_mapping_input
 from .parser_action_evidence import require_current_parser_action_refs
+from .parser_action_identity import ParserBuildChecks
 from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
@@ -227,10 +228,11 @@ def approve_mapping_batch(
     artifacts: EvidenceArtifactStore,
     trust_roots: DataReleaseTrustRootsV1,
     private_key: Ed25519PrivateKey,
+    build_checks: ParserBuildChecks | None = None,
 ) -> AutomaticMappingBatchReceiptV1:
     """Propose known roles and retain every unsupported/missing-role decision."""
     _require_machine_identity(request, trust_roots=trust_roots, private_key=private_key)
-    evidence_checks = AutomaticMappingEvidenceChecks()
+    evidence_checks = AutomaticMappingEvidenceChecks(build_checks=build_checks)
     input_digest = evidence_checks.identities.input_digest(request)
     parser_report_publication, input_publication = publish_mapping_input(
         request,
@@ -250,6 +252,7 @@ def approve_mapping_batch(
             mapping_version=request.mapping_version,
             original=request.original,
             observed_only=True,
+            input_digests=evidence_checks.identities,
         )
         if not proposals:
             roles.append(

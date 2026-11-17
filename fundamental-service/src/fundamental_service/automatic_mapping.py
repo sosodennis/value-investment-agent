@@ -64,6 +64,7 @@ from .registered_revenue import (
     select_registered_revenue,
 )
 from .mapping_input_storage import MappingInputReader, resolve_mapping_input
+from .mapping_input_identity import MappingInputDigests
 from .serialization import sha256_digest
 from .sec_rebuild import parsed_facts_to_candidates
 from .snapshots import SnapshotError
@@ -394,6 +395,7 @@ def automatic_mapping_proposals(
     mapping_version: str,
     original: OriginalIssuerEvidenceV1,
     observed_only: bool = False,
+    input_digests: MappingInputDigests | None = None,
 ) -> tuple[CanonicalMappingV1, ...]:
     """Expose declared alternatives for review without approving observations."""
     primary = automatic_mapping_proposal(
@@ -407,7 +409,9 @@ def automatic_mapping_proposals(
         if rule is not None and primary.source_concept == rule.concept
         else (primary.source_concept,)
     )
-    representation = standard_accounting_representation(original, normalized_field)
+    representation = standard_accounting_representation(
+        original, normalized_field, input_digests=input_digests
+    )
     if (
         rule is not None
         and representation is not None
@@ -669,7 +673,7 @@ def evaluate_automatic_mapping(
         and proposal.source_concept == NONCONTROLLING_EQUITY
     )
     representation = standard_accounting_representation(
-        original, proposal.normalized_field
+        original, proposal.normalized_field, input_digests=checks.identities
     )
     standard = (
         representation is not None

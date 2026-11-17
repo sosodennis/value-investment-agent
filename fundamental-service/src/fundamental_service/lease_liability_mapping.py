@@ -1,9 +1,11 @@
 """Select standard current-location lease facts without discarding their scope."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import re
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .accounting_roles import (
     AccountingComponentV1,
@@ -18,6 +20,9 @@ from .accounting_roles import (
 from .arelle_parser import fact_semantic_digest, ParsedXbrlFactV1
 from .original_issuer import OriginalIssuerEvidenceV1
 from .serialization import sha256_digest
+
+if TYPE_CHECKING:
+    from .mapping_input_identity import MappingInputDigests
 
 _CURRENT_LOCATION = (
     ("us-gaap:BalanceSheetLocationAxis", "us-gaap:OtherCurrentLiabilitiesMember"),
@@ -115,6 +120,7 @@ def select_lease_liability(
     normalized_field: str,
     *,
     security_id: str | None = None,
+    input_digests: MappingInputDigests | None = None,
 ) -> LeaseLiabilitySelection:
     if lease_liability_concept(original, normalized_field) is None:
         return LeaseLiabilitySelection(
@@ -122,7 +128,17 @@ def select_lease_liability(
         )
     concept = _CONCEPTS[normalized_field]
     noncurrent = normalized_field.startswith("long_term_")
-    facts = tuple(sorted(original.report.facts, key=sha256_digest))
+    direct_concept = concept + ("Noncurrent" if noncurrent else "Current")
+    facts = tuple(
+        sorted(
+            (
+                fact
+                for fact in original.report.facts
+                if fact.concept in {concept, direct_concept}
+            ),
+            key=sha256_digest,
+        )
+    )
     current_facts = tuple(
         fact
         for fact in facts
@@ -200,12 +216,15 @@ def select_lease_liability(
         accession_number=original.source.accession_number,
         raw_content_hash=original.source.content_hash,
         parser_input_hash=original.source.parser_input_hash,
-        parser_fact_digest=fact_semantic_digest(original.report),
+        parser_fact_digest=(
+            input_digests.report_fact_digest(original.report)
+            if input_digests is not None
+            else fact_semantic_digest(original.report)
+        ),
         unit="iso4217:USD",
         currency="USD",
         periods=tuple(periods),
     )
-    direct_concept = concept + ("Noncurrent" if noncurrent else "Current")
     for period in periods:
         refs = set(period.source_references())
         observations_for_period = tuple(f for f in selected if sha256_digest(f) in refs)

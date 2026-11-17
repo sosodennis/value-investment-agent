@@ -45,6 +45,7 @@ from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .historical_dqc import historical_profile
 from .ingestion import SecIngestionService
 from .parser_actions import postgres_parser_actions
+from .parser_action_identity import ParserBuildChecks
 from .inline_xbrl import (
     InlineDocumentSetError,
     inline_document_metadata,
@@ -626,7 +627,11 @@ class SecAcquisitionUseCase:
         )
 
     def validate_original_filing(
-        self, request: OriginalValidationRequestV1, *, deadline_at: datetime
+        self,
+        request: OriginalValidationRequestV1,
+        *,
+        deadline_at: datetime,
+        build_checks: ParserBuildChecks | None = None,
     ) -> OriginalValidationEvidenceV1:
         """Validate a frozen catalog original without assuming security identity."""
         if self.capture_store is None:
@@ -667,6 +672,7 @@ class SecAcquisitionUseCase:
                     "SEC_CAPTURE_IDENTITY_MISMATCH", "missing capture timestamp"
                 )
             validated = self.ingestion.validate_filing(
+                build_checks=build_checks,
                 parser_delivery_revision=runtime.declared_source_revision,
                 source_adapter=adapter,
                 cik=request.cik,
@@ -1174,8 +1180,14 @@ class SecAcquisitionUseCase:
         validation_profile: ArelleValidationProfileV1,
         prepared_filing: _SelectedFiling | None = None,
     ) -> SecIngestionResponseV1:
+        original_reads = self._original_reads.get()
         mapping_resolver = (
-            self._automatic_authority().resolver_for(request)
+            self._automatic_authority().resolver_for(
+                request,
+                build_checks=original_reads.builds
+                if original_reads is not None
+                else None,
+            )
             if isinstance(request, AutomaticSecIngestionRequestV1)
             else None
         )
@@ -1257,6 +1269,7 @@ class SecAcquisitionUseCase:
             else datetime.now(UTC)
         )
         preparation = self.ingestion.prepare_filing(
+            build_checks=original_reads.builds if original_reads is not None else None,
             parser_delivery_revision=request.source_revision
             if isinstance(request, AutomaticSecIngestionRequestV1)
             else None,
@@ -1367,6 +1380,8 @@ class SecAcquisitionUseCase:
             correlation_id=correlation_id,
         )
         self._require_before_deadline(deadline_at)
+        if original_reads is not None:
+            original_reads.builds.verify()
         return self.metadata.publish_sec_ingestion(
             acquisition_key=acquisition_key,
             acquisition_payload=key_payload,

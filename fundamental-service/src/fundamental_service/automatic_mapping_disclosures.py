@@ -83,9 +83,14 @@ def select_option_compensation_disclosure(
     rejected = []
     reasons = set()
     periods = []
-    for fact in sorted(original.report.facts, key=sha256_digest):
-        if fact.concept != STOCK_COMPENSATION_DISCLOSURE:
-            continue
+    for fact in sorted(
+        (
+            fact
+            for fact in original.report.facts
+            if fact.concept == STOCK_COMPENSATION_DISCLOSURE
+        ),
+        key=sha256_digest,
+    ):
         reason = _source_rejection(fact, original)
         matches = tuple(_OPTION_COST.finditer(fact.value)) if reason is None else ()
         if reason is None and len(matches) != 1:
@@ -194,9 +199,14 @@ def select_stock_compensation_disclosure(
         if not fact.is_numeric
     ):
         reasons.append("MAPPING_DISCLOSURE_SCALE_UNRESOLVED")
-    for fact in sorted(original.report.facts, key=sha256_digest):
-        if fact.concept != STOCK_COMPENSATION_DISCLOSURE:
-            continue
+    for fact in sorted(
+        (
+            fact
+            for fact in original.report.facts
+            if fact.concept == STOCK_COMPENSATION_DISCLOSURE
+        ),
+        key=sha256_digest,
+    ):
         reason = _source_rejection(fact, original)
         matches = tuple(_EXPENSE.finditer(fact.value)) if reason is None else ()
         if reason is None and len(matches) != 1:

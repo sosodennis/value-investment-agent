@@ -533,3 +533,143 @@ def test_component_evaluation_uses_formal_decimal_context_and_security_binding(
         assert evaluate_period_rule(
             selection.rules, selection.rules.periods[0], selection.selected
         ) == Decimal("80")
+
+
+def test_lease_selection_hashes_only_related_candidates_for_ordering(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import lease_liability_mapping as policy
+
+    request, _, _, role, total, _ = lease_case(tmp_path, noncurrent=True)
+    expected = select_lease_liability(request.original, role)
+    digest = policy.sha256_digest
+    observed = []
+
+    def record(fact):
+        observed.append(fact.concept)
+        return digest(fact)
+
+    monkeypatch.setattr(policy, "sha256_digest", record)
+    assert select_lease_liability(request.original, role) == expected
+    assert observed and set(observed) == {total.concept}
+    assert expected.rules.parser_fact_digest == fact_semantic_digest(
+        request.original.report
+    )
+
+
+@pytest.mark.parametrize("kind", ["finance", "operating"])
+def test_lease_roles_share_report_identity_without_sharing_rule_decisions(
+    tmp_path, monkeypatch, kind
+):
+    from fundamental_service import mapping_input_identity as identity
+    from fundamental_service.standard_accounting_representations import (
+        standard_accounting_representation,
+    )
+
+    request, _, _, _, _, _ = lease_case(tmp_path, kind=kind)
+    roles = (
+        f"current_{kind}_lease_liabilities",
+        f"long_term_{kind}_lease_liabilities",
+    )
+    expected = tuple(select_lease_liability(request.original, role) for role in roles)
+    semantic_digest = identity.fact_semantic_digest
+    calls = []
+
+    def observed(report):
+        calls.append(report)
+        return semantic_digest(report)
+
+    monkeypatch.setattr(identity, "fact_semantic_digest", observed)
+    for operation in range(2):
+        digests = identity.MappingInputDigests()
+        for role, selection in zip(roles, expected, strict=True):
+            representation = standard_accounting_representation(
+                request.original, role, input_digests=digests
+            )
+            assert representation is not None
+            assert representation.select(request.original, None) == selection
+        assert len(calls) == operation + 1
+
+
+def test_lease_identity_eviction_and_changed_reports_preserve_full_selection(
+    tmp_path,
+):
+    from fundamental_service.mapping_input_identity import MappingInputDigests
+
+    request, _, _, role, _, _ = lease_case(tmp_path)
+    unrelated = next(f for f in request.original.report.facts if not f.is_numeric)
+    changed = request.original.model_copy(
+        update={
+            "report": request.original.report.model_copy(
+                update={
+                    "facts": tuple(
+                        f.model_copy(update={"value": f.value + " changed"})
+                        if f is unrelated
+                        else f
+                        for f in request.original.report.facts
+                    )
+                }
+            )
+        }
+    )
+    expected = [
+        select_lease_liability(value, role) for value in (request.original, changed)
+    ]
+    assert expected[0].rules is not None and expected[1].rules is not None
+    assert expected[0].rules.parser_fact_digest != expected[1].rules.parser_fact_digest
+    for digests in (MappingInputDigests(), MappingInputDigests(max_bytes=0)):
+        for original, selection in zip(
+            (request.original, changed, request.original),
+            (*expected, expected[0]),
+            strict=True,
+        ):
+            assert (
+                select_lease_liability(original, role, input_digests=digests)
+                == selection
+            )
+
+
+def test_mapping_proposals_and_evaluation_use_their_existing_report_scope(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import lease_liability_mapping as leases
+    from fundamental_service.automatic_mapping import (
+        automatic_mapping_proposals,
+        evaluate_automatic_mapping,
+    )
+    from fundamental_service.automatic_mapping_evidence import (
+        AutomaticMappingEvidenceChecks,
+    )
+
+    request, store, _, role, _, _ = lease_case(tmp_path)
+    contents = {
+        ref.content_hash: store.read(ref.artifact_id) for ref in request.evidence_refs
+    }
+    expected = evaluate_automatic_mapping(request, contents=contents)
+    proposals = automatic_mapping_proposals(
+        role,
+        mapping_version=request.proposal.mapping_version,
+        original=request.original,
+    )
+
+    def unscoped(report):
+        pytest.fail("lease selection must use the operation's report identities")
+
+    monkeypatch.setattr(leases, "fact_semantic_digest", unscoped)
+    checks = AutomaticMappingEvidenceChecks()
+    assert (
+        automatic_mapping_proposals(
+            role,
+            mapping_version=request.proposal.mapping_version,
+            original=request.original,
+            input_digests=checks.identities,
+        )
+        == proposals
+    )
+    for _ in range(2):
+        assert (
+            evaluate_automatic_mapping(
+                request, contents=contents, evidence_checks=checks
+            )
+            == expected
+        )

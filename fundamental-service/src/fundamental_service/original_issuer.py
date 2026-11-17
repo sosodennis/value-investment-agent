@@ -50,10 +50,15 @@ class OriginalIssuerEvidenceChecks:
         max_report_bytes: int = 64 * 1024 * 1024,
         max_reports: int = 8,
         max_report_facts: int = 50_000,
+        max_verified_entries: int = 256,
     ) -> None:
-        if min(max_report_bytes, max_reports, max_report_facts) < 0:
+        if (
+            min(max_report_bytes, max_reports, max_report_facts, max_verified_entries)
+            < 0
+        ):
             raise ValueError("original report retention limits must be nonnegative")
-        self._verified: set[tuple[str, str]] = set()
+        self._verified: OrderedDict[tuple[str, str], None] = OrderedDict()
+        self._max_verified_entries = max_verified_entries
         self._reports: OrderedDict[str, tuple[ArelleParseReportV1, int]] = OrderedDict()
         self._max_report_bytes = max_report_bytes
         self._max_reports = max_reports
@@ -78,7 +83,12 @@ class OriginalIssuerEvidenceChecks:
     ) -> None:
         if key not in self._verified:
             original.validate_original_evidence()
-            self._verified.add(key)
+            if self._max_verified_entries:
+                while len(self._verified) >= self._max_verified_entries:
+                    self._verified.popitem(last=False)
+                self._verified[key] = None
+        elif self._max_verified_entries:
+            self._verified.move_to_end(key)
 
     def resolve_report(self, raw: bytes) -> _OriginalReportResolution:
         """Decode exact report content once; artifact checks remain with the reader."""

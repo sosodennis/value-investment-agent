@@ -6,8 +6,8 @@ import hashlib
 import sys
 import tempfile
 from collections import OrderedDict
-from collections.abc import Callable
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
@@ -237,7 +237,11 @@ class OriginalValidationEvidenceV1(StrictModel):
 
 class OriginalValidationPort(Protocol):
     def validate_original_filing(
-        self, request: OriginalValidationRequestV1, *, deadline_at: datetime
+        self,
+        request: OriginalValidationRequestV1,
+        *,
+        deadline_at: datetime,
+        build_checks: ParserBuildChecks | None = None,
     ) -> OriginalValidationEvidenceV1: ...
 
 
@@ -323,6 +327,15 @@ class OriginalPreparation:
         self._content = content
         self._lock = capture_lock
         self._build_checks = build_checks
+
+    @contextmanager
+    def evidence_operation(self) -> Iterator[OriginalPreparationReads]:
+        reads = OriginalPreparationReads(self)
+        try:
+            yield reads
+            reads.finish()
+        finally:
+            reads.clear()
 
     def reference(self, artifact_id: str, role: str) -> ArtifactRefV1:
         record = self._artifacts.get(artifact_id)
@@ -423,7 +436,7 @@ class OriginalPreparation:
         return evidence
 
     def _completed_validation(
-        self, request: OriginalValidationRequestV1
+        self, request: OriginalValidationRequestV1, build_checks: ParserBuildChecks
     ) -> OriginalValidationEvidenceV1 | None:
         artifact_id = f"original-validation:{request.digest}"
         try:
@@ -432,25 +445,30 @@ class OriginalPreparation:
             if error.code != "ARTIFACT_NOT_FOUND":
                 raise
             return None
-        evidence = self.read_validation(artifact_id)
+        evidence = self.read_validation(artifact_id, build_checks=build_checks)
+        build_checks.verify()
         if evidence.request != request:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "request differs")
         return evidence
 
     def _validation(
-        self, request: OriginalValidationRequestV1, deadline_at: datetime
+        self,
+        request: OriginalValidationRequestV1,
+        deadline_at: datetime,
+        build_checks: ParserBuildChecks,
     ) -> OriginalValidationEvidenceV1:
-        if completed := self._completed_validation(request):
+        if completed := self._completed_validation(request, build_checks):
             return completed
         with self._lock(sha256_digest(("original-validation", request.digest))):
-            if completed := self._completed_validation(request):
+            if completed := self._completed_validation(request, build_checks):
                 return completed
             self._artifacts.put_with_receipt(
                 f"original-validation-request:{request.digest}", request
             )
             evidence = self._validator.validate_original_filing(
-                request, deadline_at=deadline_at
+                request, deadline_at=deadline_at, build_checks=build_checks
             )
+            build_checks.verify()
             if evidence.request != request:
                 raise SnapshotError(
                     "ORIGINAL_PREPARATION_INVALID", "validator request differs"
@@ -458,7 +476,7 @@ class OriginalPreparation:
             self._artifacts.put_with_receipt(
                 evidence.artifact_id, evidence, evidence.dependencies
             )
-            return self.read_validation(evidence.artifact_id)
+            return self.read_validation(evidence.artifact_id, build_checks=build_checks)
 
     @staticmethod
     def _selection_issues(
@@ -581,7 +599,9 @@ class OriginalPreparation:
         return evidence, validations
 
     def _completed(
-        self, request: OriginalPreparationRequestV1
+        self,
+        request: OriginalPreparationRequestV1,
+        reads: OriginalPreparationReads | None = None,
     ) -> tuple[OriginalPreparationEvidenceV1, ArtifactPublicationV1] | None:
         artifact_id = f"original-preparation:{request.digest}"
         try:
@@ -590,22 +610,33 @@ class OriginalPreparation:
             if error.code != "ARTIFACT_NOT_FOUND":
                 raise
             return None
-        evidence = self.read(artifact_id)
+        evidence = (
+            reads.read(artifact_id)[0] if reads is not None else self.read(artifact_id)
+        )
         if evidence.request != request:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "request differs")
         return evidence, ArtifactPublicationV1(artifact=record, wrote=False)
 
     def execute(
-        self, request: OriginalPreparationRequestV1, *, deadline_at: datetime
+        self,
+        request: OriginalPreparationRequestV1,
+        *,
+        deadline_at: datetime,
+        reads: OriginalPreparationReads | None = None,
     ) -> tuple[OriginalPreparationEvidenceV1, ArtifactPublicationV1]:
+        if reads is not None and reads.owner is not self:
+            raise ValueError("preparation reads belong to a different owner")
+        if reads is not None and reads.closed:
+            raise RuntimeError("preparation read scope has ended")
+        build_checks = reads.builds if reads is not None else ParserBuildChecks()
         request = OriginalPreparationRequestV1.model_validate_json(
             canonical_bytes(request)
         )
-        if completed := self._completed(request):
+        if completed := self._completed(request, reads):
             return completed
         with self._lock(sha256_digest(("original-preparation", request.digest))):
             annual = self._annual(request)
-            if completed := self._completed(request):
+            if completed := self._completed(request, reads):
                 return completed
             self._artifacts.put_with_receipt(
                 f"original-preparation-request:{request.digest}", request
@@ -619,6 +650,7 @@ class OriginalPreparation:
                         runtime=request.runtime,
                     ),
                     deadline_at,
+                    build_checks,
                 )
                 for filing in (
                     ()
@@ -627,6 +659,7 @@ class OriginalPreparation:
                 )
             )
             evidence = self._assess(request, annual, validations)
+            build_checks.verify()
             publication = self._artifacts.put_with_receipt(
                 evidence.artifact_id, evidence, evidence.dependencies
             )
@@ -771,13 +804,13 @@ class OriginalPreparationReads:
         self.closed = False
         # Stream consumed dependency sets independently of the bounded model cache.
         self._journal = tempfile.TemporaryFile()
-        self._build_checks = ParserBuildChecks()
+        self.builds = ParserBuildChecks()
 
     def _current(self, entry: _CheckedPreparation | _PreparationReadSetV1) -> None:
         for record in entry.records:
             if self.owner._artifacts.get(record.artifact_id) != record:
                 raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "metadata changed")
-        self._build_checks.verify()
+        self.builds.verify()
 
     def _read(self, artifact_id: str) -> _CheckedPreparation:
         if self.closed:
@@ -796,7 +829,7 @@ class OriginalPreparationReads:
             artifacts=artifacts,
             content=content,
             capture_lock=self.owner._lock,
-            build_checks=self._build_checks,
+            build_checks=self.builds,
         )
         evidence, validations = reader.read_with_validations(artifact_id)
         index = {
@@ -882,6 +915,7 @@ class OriginalPreparationReads:
         self._journal.seek(0)
         for raw in self._journal:
             self._current(_PreparationReadSetV1.model_validate_json(raw))
+        self.builds.verify()
 
     def finish(self) -> None:
         try:
