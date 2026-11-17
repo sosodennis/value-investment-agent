@@ -270,3 +270,10 @@ measurement with full native scanning; it does not establish whole-flow speed or
 resolve repeated independent verification costs. The driver and raw output remain
 outside Git: `benchmark_build_ancestry.py`, `build-ancestry-five-pairs.jsonl`
 (SHA-256 `759874b47cba274e2d22423717275a612d336e6726c56570df1dc89daecc94f7`).
+# Build context and host bytecode
+
+The application context and the `internal-contracts` named context exclude
+Python bytecode and `__pycache__`. Host test execution must not inject its
+interpreter, checkout paths or compilation timestamps into the immutable
+runtime tree. Runtime identity still hashes every shipped dependency; these
+exclusions fix the build input boundary rather than weakening that identity.
