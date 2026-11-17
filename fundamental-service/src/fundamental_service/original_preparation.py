@@ -6,8 +6,8 @@ import hashlib
 import sys
 import tempfile
 from collections import OrderedDict
-from collections.abc import Callable
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
@@ -324,6 +324,15 @@ class OriginalPreparation:
         self._lock = capture_lock
         self._build_checks = build_checks
 
+    @contextmanager
+    def evidence_operation(self) -> Iterator[OriginalPreparationReads]:
+        reads = OriginalPreparationReads(self)
+        try:
+            yield reads
+            reads.finish()
+        finally:
+            reads.clear()
+
     def reference(self, artifact_id: str, role: str) -> ArtifactRefV1:
         record = self._artifacts.get(artifact_id)
         return ArtifactRefV1(
@@ -581,7 +590,9 @@ class OriginalPreparation:
         return evidence, validations
 
     def _completed(
-        self, request: OriginalPreparationRequestV1
+        self,
+        request: OriginalPreparationRequestV1,
+        reads: OriginalPreparationReads | None = None,
     ) -> tuple[OriginalPreparationEvidenceV1, ArtifactPublicationV1] | None:
         artifact_id = f"original-preparation:{request.digest}"
         try:
@@ -590,22 +601,30 @@ class OriginalPreparation:
             if error.code != "ARTIFACT_NOT_FOUND":
                 raise
             return None
-        evidence = self.read(artifact_id)
+        evidence = (
+            reads.read(artifact_id)[0] if reads is not None else self.read(artifact_id)
+        )
         if evidence.request != request:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "request differs")
         return evidence, ArtifactPublicationV1(artifact=record, wrote=False)
 
     def execute(
-        self, request: OriginalPreparationRequestV1, *, deadline_at: datetime
+        self,
+        request: OriginalPreparationRequestV1,
+        *,
+        deadline_at: datetime,
+        reads: OriginalPreparationReads | None = None,
     ) -> tuple[OriginalPreparationEvidenceV1, ArtifactPublicationV1]:
+        if reads is not None and reads.owner is not self:
+            raise ValueError("preparation reads belong to a different owner")
         request = OriginalPreparationRequestV1.model_validate_json(
             canonical_bytes(request)
         )
-        if completed := self._completed(request):
+        if completed := self._completed(request, reads):
             return completed
         with self._lock(sha256_digest(("original-preparation", request.digest))):
             annual = self._annual(request)
-            if completed := self._completed(request):
+            if completed := self._completed(request, reads):
                 return completed
             self._artifacts.put_with_receipt(
                 f"original-preparation-request:{request.digest}", request

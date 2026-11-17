@@ -17,7 +17,7 @@ from .original_issuer import (
 )
 from .mapping_input_identity import MappingInputDigests
 from .replay import ArtifactPublicationV1, ArtifactRecordV1
-from .serialization import canonical_bytes, sha256_digest
+from .serialization import canonical_bytes
 from .snapshots import SnapshotError
 
 if TYPE_CHECKING:
@@ -221,6 +221,8 @@ def read_mapping_batch_input(
     model: type[ModelT],
     *,
     artifacts: EvidenceArtifactStore,
+    original_checks: OriginalIssuerEvidenceChecks | None = None,
+    input_digests: MappingInputDigests | None = None,
 ) -> tuple[ArtifactRefV1, ModelT]:
     """Prefer the new envelope; only an absent envelope permits a retained v1 read."""
     artifact_id = mapping_input_id(input_digest, batch=True)
@@ -242,8 +244,15 @@ def read_mapping_batch_input(
             "MAPPING_INPUT_ARTIFACT_MISMATCH",
             "mapping input requires exact retained JSON evidence",
         )
-    request = resolve_mapping_input(raw, model, artifacts=artifacts)
-    if sha256_digest(request) != input_digest:
+    identities = input_digests or MappingInputDigests()
+    request = resolve_mapping_input(
+        raw,
+        model,
+        artifacts=artifacts,
+        original_checks=original_checks,
+        input_digests=identities,
+    )
+    if identities.input_digest(request) != input_digest:
         raise DataReleaseError(
             "MAPPING_INPUT_IDENTITY_MISMATCH", "mapping batch input identity differs"
         )

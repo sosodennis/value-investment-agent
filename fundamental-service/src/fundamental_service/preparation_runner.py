@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import os
 import sys
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -75,6 +76,8 @@ from .policies import MetadataPolicyRepository, PolicyRecordV1
 from .replay import ArtifactPublicationV1
 from .uncertainty import UncertaintyReportV1
 from .mapping_input_storage import read_mapping_batch_input
+from .mapping_input_identity import MappingInputDigests
+from .original_issuer import OriginalIssuerEvidenceChecks
 from .serialization import canonical_bytes, sha256_digest
 from .source_acquisition import SecAcquisitionUseCase
 from .snapshots import SnapshotError
@@ -395,6 +398,9 @@ class SourcePreparationRunner:
             raise ValueError("automatic release requires its deployment policy")
         self._automatic_release = automatic_release
         self._automatic_release_policy = automatic_release_policy
+        self._mapping_inputs: ContextVar[
+            tuple[OriginalIssuerEvidenceChecks, MappingInputDigests] | None
+        ] = ContextVar("source-preparation-mapping-inputs", default=None)
 
     def _plan_mappings(
         self,
@@ -406,6 +412,7 @@ class SourcePreparationRunner:
             return tuple(request.mappings for request in plan.ingestions)
         if self._acquisition is None:
             return None
+        originals, identities = self._mapping_inputs.get() or (None, None)
         groups = []
         if acquisitions is None:
             acquisitions = tuple(
@@ -435,11 +442,14 @@ class SourcePreparationRunner:
                 artifacts.read(record.artifact_id)
             )
             _, batch_input = read_mapping_batch_input(
-                batch.input_digest, AutomaticMappingBatchRequestV1, artifacts=artifacts
+                batch.input_digest,
+                AutomaticMappingBatchRequestV1,
+                artifacts=artifacts,
+                original_checks=originals,
+                input_digests=identities,
             )
             if (
-                sha256_digest(batch_input) != batch.input_digest
-                or batch_input.original.source.cik != request.cik
+                batch_input.original.source.cik != request.cik
                 or batch_input.original.source.accession_number
                 != request.filing.accession_number
                 or batch_input.original.decision_at != request.valuation_timestamp
@@ -1616,6 +1626,7 @@ class SourcePreparationRunner:
         self, outcomes: tuple[SourceAcquisitionOutcomeV1, ...]
     ) -> tuple[SourceMappingRefusalV1, ...]:
         """Project retained batch reasons after the plan-mapping boundary validates pins."""
+        originals, identities = self._mapping_inputs.get() or (None, None)
         refusals = []
         for outcome in outcomes:
             if outcome.mapping_evidence_ref is None or outcome.snapshot_id is None:
@@ -1630,11 +1641,12 @@ class SourcePreparationRunner:
                 batch.input_digest,
                 AutomaticMappingBatchRequestV1,
                 artifacts=self._application.artifact_store,
+                original_checks=originals,
+                input_digests=identities,
             )
             source = batch_input.original.source
             if (
                 snapshot.manifest_digest != outcome.manifest_digest
-                or sha256_digest(batch_input) != batch.input_digest
                 or source.cik != snapshot.identity.issuer_id
                 or source.accession_number != outcome.accession_number
                 or not any(
@@ -1875,32 +1887,38 @@ class SourcePreparationRunner:
         market_policy_authorization: PolicyRecordV1 | None = None,
         market_policy_authorization_digest: str | None = None,
     ) -> ArtifactPublicationV1:
-        if self._acquisition is None or not isinstance(
-            plan, AutomaticSourcePreparationPlanV1
-        ):
-            return self._run(
-                plan,
-                actor_id=actor_id,
-                organization_id=organization_id,
-                correlation_id=correlation_id,
-                deadline_at=deadline_at,
-                candidate=candidate,
-                approval=approval,
-                market_policy_authorization=market_policy_authorization,
-                market_policy_authorization_digest=market_policy_authorization_digest,
-            )
-        with self._acquisition.evidence_operation():
-            return self._run(
-                plan,
-                actor_id=actor_id,
-                organization_id=organization_id,
-                correlation_id=correlation_id,
-                deadline_at=deadline_at,
-                candidate=candidate,
-                approval=approval,
-                market_policy_authorization=market_policy_authorization,
-                market_policy_authorization_digest=market_policy_authorization_digest,
-            )
+        token = self._mapping_inputs.set(
+            (OriginalIssuerEvidenceChecks(), MappingInputDigests())
+        )
+        try:
+            if self._acquisition is None or not isinstance(
+                plan, AutomaticSourcePreparationPlanV1
+            ):
+                return self._run(
+                    plan,
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    deadline_at=deadline_at,
+                    candidate=candidate,
+                    approval=approval,
+                    market_policy_authorization=market_policy_authorization,
+                    market_policy_authorization_digest=market_policy_authorization_digest,
+                )
+            with self._acquisition.evidence_operation():
+                return self._run(
+                    plan,
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    deadline_at=deadline_at,
+                    candidate=candidate,
+                    approval=approval,
+                    market_policy_authorization=market_policy_authorization,
+                    market_policy_authorization_digest=market_policy_authorization_digest,
+                )
+        finally:
+            self._mapping_inputs.reset(token)
 
     def _run(
         self,

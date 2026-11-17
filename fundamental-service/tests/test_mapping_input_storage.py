@@ -338,6 +338,126 @@ def test_batch_children_share_the_report_and_repeat_without_writes(tmp_path):
     assert inventory(store.root) == before
 
 
+def test_batch_reader_shares_semantics_and_v1_identity_only_in_its_operation(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import original_issuer
+    from fundamental_service.automatic_mapping_batch import (
+        AutomaticMappingBatchRequestV1,
+    )
+    from fundamental_service.mapping_input_identity import MappingInputDigests
+    from fundamental_service.mapping_input_storage import read_mapping_batch_input
+    from test_automatic_mapping_batch import batch_case, run_batch
+
+    request, store, roots = batch_case(tmp_path)
+    receipt = run_batch(request, store, roots)
+    digest_original = original_issuer._issuer_input_digest
+    calls = []
+
+    def observed(*args, **kwargs):
+        calls.append(True)
+        return digest_original(*args, **kwargs)
+
+    monkeypatch.setattr(original_issuer, "_issuer_input_digest", observed)
+    for operation in range(2):
+        originals = original_issuer.OriginalIssuerEvidenceChecks()
+        identities = MappingInputDigests()
+        reports = []
+        for _ in range(3):
+            ref, actual = read_mapping_batch_input(
+                receipt.input_digest,
+                AutomaticMappingBatchRequestV1,
+                artifacts=store,
+                original_checks=originals,
+                input_digests=identities,
+            )
+            assert actual == request
+            assert ref.artifact_id == receipt.input_publication.artifact.artifact_id
+            assert ref.content_hash == receipt.input_publication.artifact.content_hash
+            assert identities.input_digest(actual) == sha256_digest(request)
+            reports.append(actual.original.report)
+        assert all(report is reports[0] for report in reports)
+        assert len(calls) == operation + 1
+
+
+def test_warm_batch_reader_rejects_changed_report_bytes_and_metadata(tmp_path):
+    import pytest
+
+    from fundamental_service.automatic_mapping_batch import (
+        AutomaticMappingBatchRequestV1,
+    )
+    from fundamental_service.data_releases import DataReleaseError
+    from fundamental_service.mapping_input_identity import MappingInputDigests
+    from fundamental_service.mapping_input_storage import read_mapping_batch_input
+    from fundamental_service.original_issuer import OriginalIssuerEvidenceChecks
+    from fundamental_service.snapshots import SnapshotError
+    from test_automatic_mapping_batch import batch_case, run_batch
+
+    request, store, roots = batch_case(tmp_path)
+    receipt = run_batch(request, store, roots)
+    originals, identities = OriginalIssuerEvidenceChecks(), MappingInputDigests()
+
+    def read():
+        return read_mapping_batch_input(
+            receipt.input_digest,
+            AutomaticMappingBatchRequestV1,
+            artifacts=store,
+            original_checks=originals,
+            input_digests=identities,
+        )
+
+    read()
+    envelope = json.loads(store.read(receipt.input_publication.artifact.artifact_id))
+    reference = envelope["original_ref"]
+    record = store.get(reference["artifact_id"])
+    path = store._artifact_path(record.content_hash, record.media_type)
+    raw = path.read_bytes()
+    path.write_bytes(b"changed source report")
+    with pytest.raises(SnapshotError, match="failed verification"):
+        read()
+    path.write_bytes(raw)
+    assert read()[1] == request
+    store.invalidate(reference["artifact_id"])
+    with pytest.raises(DataReleaseError, match="valid retained evidence"):
+        read()
+
+
+def test_original_semantic_key_eviction_requires_fresh_validation(
+    tmp_path, monkeypatch
+):
+    from datetime import timedelta
+
+    from fundamental_service import original_issuer
+    from fundamental_service.serialization import canonical_bytes
+
+    request, _, _, _ = case(tmp_path)
+    first = request.original
+    second = original_issuer.evaluate_original_issuer(
+        first.report,
+        source=first.source,
+        decision_at=first.decision_at + timedelta(seconds=1),
+    )
+    digest_original = original_issuer._issuer_input_digest
+    calls = []
+
+    def observed(*args, **kwargs):
+        calls.append(True)
+        return digest_original(*args, **kwargs)
+
+    monkeypatch.setattr(original_issuer, "_issuer_input_digest", observed)
+    for limit in (0, 1):
+        checks = original_issuer.OriginalIssuerEvidenceChecks(
+            max_verified_entries=limit
+        )
+        for original in (first, second, first):
+            actual = original_issuer.OriginalIssuerEvidenceV1.model_validate_json(
+                canonical_bytes(original), context=checks
+            )
+            assert actual == original
+            assert len(checks._verified) <= limit
+    assert len(calls) == 6
+
+
 def test_substituted_report_and_unknown_envelope_version_are_rejected(tmp_path):
     import pytest
     from pydantic import ValidationError

@@ -388,6 +388,78 @@ def test_compile_consumes_checked_originals_and_next_compile_rechecks_storage(
         compiler._compile(request)
 
 
+def test_annual_operation_reuses_preparation_without_cross_operation_claims(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch, historical_annual=True)
+    prepared, _ = execute(value)
+    _, request = compiler_case(value, prepared)
+    read = type(value.service).read_with_validations
+    calls = []
+
+    def observed(owner, artifact_id):
+        calls.append(artifact_id)
+        return read(owner, artifact_id)
+
+    monkeypatch.setattr(type(value.service), "read_with_validations", observed)
+    for operation in range(2):
+        with value.service.evidence_operation() as originals:
+            compiler = OriginalSourcePlan(
+                originals=value.service,
+                artifacts=value.artifacts,
+                compilation_lock=value.locks,
+                original_reads=originals,
+            )
+            repeated, _ = value.service.execute(
+                value.request,
+                deadline_at=value.deadline,
+                reads=originals,
+            )
+            assert repeated == prepared
+            compiled, publication = compiler.execute(request)
+            assert compiled.plan is not None
+            assert publication.wrote is (operation == 0)
+            assert compiler.read(compiled.artifact_id) == compiled
+            assert calls == [prepared.artifact_id] * (operation + 1)
+        assert originals.closed and not originals.entries
+
+
+@pytest.mark.parametrize("fault", ("revocation", "corruption"))
+def test_compiler_checks_consumed_originals_before_publication(
+    tmp_path, monkeypatch, fault
+):
+    value = case(tmp_path, monkeypatch, historical_annual=True)
+    prepared, _ = execute(value)
+    _, request = compiler_case(value, prepared)
+    with pytest.raises(SnapshotError):
+        with value.service.evidence_operation() as originals:
+            compiler = OriginalSourcePlan(
+                originals=value.service,
+                artifacts=value.artifacts,
+                compilation_lock=value.locks,
+                original_reads=originals,
+            )
+            compile_original = compiler._compile
+
+            def changed_after_use(value_request):
+                evidence = compile_original(value_request)
+                if fault == "revocation":
+                    value.artifacts.invalidate(prepared.artifact_id)
+                else:
+                    record = value.artifacts.get(prepared.artifact_id)
+                    value.artifacts._artifact_path(
+                        record.content_hash, record.media_type
+                    ).write_bytes(b"corrupt consumed preparation")
+                return evidence
+
+            monkeypatch.setattr(compiler, "_compile", changed_after_use)
+            compiler.execute(request)
+    assert originals.closed
+    with pytest.raises(SnapshotError) as error:
+        value.artifacts.get(f"original-source-plan:{request.digest}")
+    assert error.value.code == "ARTIFACT_NOT_FOUND"
+
+
 @pytest.mark.parametrize(
     "change",
     ("reference", "cik", "cutoff", "security", "accession", "runtime", "source"),

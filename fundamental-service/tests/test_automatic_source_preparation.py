@@ -88,6 +88,32 @@ def run(runner, plan, **kwargs):
     )
 
 
+def test_mapping_input_scope_is_fresh_nested_and_cleared_after_failure(
+    tmp_path, monkeypatch
+):
+    plan, runner, _, _, _ = runner_case(tmp_path, monkeypatch)
+    observed = []
+
+    def operation(value_plan, **kwargs):
+        current = runner._mapping_inputs.get()
+        assert current is not None
+        observed.append(current)
+        if len(observed) == 1:
+            with pytest.raises(ValueError, match="interrupted"):
+                run(runner, value_plan)
+            assert runner._mapping_inputs.get() is current
+        elif len(observed) == 2:
+            raise ValueError("interrupted")
+
+    monkeypatch.setattr(runner, "_run", operation)
+    run(runner, plan)
+    assert runner._mapping_inputs.get() is None
+    run(runner, plan)
+    assert runner._mapping_inputs.get() is None
+    assert len({id(scope[0]) for scope in observed}) == 3
+    assert len({id(scope[1]) for scope in observed}) == 3
+
+
 def test_mapping_free_plan_retains_full_blocked_result_and_reuses_everything(
     tmp_path, monkeypatch
 ):

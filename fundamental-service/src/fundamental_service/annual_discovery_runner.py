@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from contextlib import AsyncExitStack
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -42,7 +43,7 @@ async def _run_command(args: argparse.Namespace) -> object:
             sys.path.insert(0, str(root))
     from .app import app
 
-    async with app.router.lifespan_context(app):
+    async with app.router.lifespan_context(app), AsyncExitStack() as scopes:
         application = app.state.application
         acquisition = app.state.sec_acquisition
         metadata = app.state.metadata_store
@@ -69,10 +70,12 @@ async def _run_command(args: argparse.Namespace) -> object:
             content=application.content_store,
             capture_lock=PostgresPublicCaptureLock(metadata),
         )
+        original_reads = scopes.enter_context(preparation.evidence_operation())
         compiler = OriginalSourcePlan(
             originals=preparation,
             artifacts=application.artifact_store,
             compilation_lock=PostgresPublicCaptureLock(metadata),
+            original_reads=original_reads,
         )
         if args.artifact_id:
             if args.artifact_id.startswith(
@@ -101,7 +104,7 @@ async def _run_command(args: argparse.Namespace) -> object:
             if args.artifact_id.startswith(
                 ("original-preparation:", "original-preparation-attempt:")
             ):
-                prepared = preparation.read(args.artifact_id)
+                prepared, _ = original_reads.read(args.artifact_id)
                 if args.source_plan_configuration is not None:
                     compiled_request = OriginalSourcePlanRequestV1(
                         original_preparation=preparation.reference(
@@ -176,6 +179,7 @@ async def _run_command(args: argparse.Namespace) -> object:
             prepared, original_publication = preparation.execute(
                 original_request,
                 deadline_at=deadline_at,
+                reads=original_reads,
             )
             if args.source_plan_configuration is not None:
                 compiled_request = OriginalSourcePlanRequestV1(
