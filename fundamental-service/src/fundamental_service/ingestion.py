@@ -56,6 +56,7 @@ from .inline_xbrl import (
     select_inline_document_set,
 )
 from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
+from .parser_actions import ParserActions
 from .replay import ArtifactRecordV1
 from .sec_integrity import assess_filing_response, extract_referenced_graphics
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
@@ -265,11 +266,13 @@ class SecIngestionService:
         snapshot_repository: SnapshotRepository,
         audit_store: IngestionAuditStore,
         fact_repository: CanonicalFactRepository | None = None,
+        parser_actions: ParserActions | None = None,
     ) -> None:
         self.source_adapter = source_adapter
         self.content_store = content_store
         self.audit_store = audit_store
         self.fact_repository = fact_repository
+        self.parser_actions = parser_actions
         self.builder = SnapshotBuilder(
             content_store, snapshot_repository, sec_source_register()
         )
@@ -299,6 +302,7 @@ class SecIngestionService:
         is_amendment: bool = False,
         amends_accession: str | None = None,
         amendment_scope: str | None = None,
+        parser_delivery_revision: str | None = None,
     ) -> ValidatedSecFiling:
         """Validate original bytes and regulatory evidence before identity/publication."""
         adapter = source_adapter or self.source_adapter
@@ -602,13 +606,45 @@ class SecIngestionService:
                 parser_input_hash = self.content_store.put(
                     raw_manifest, media_type="application/json"
                 )
-            report = parse_filing_offline(
-                normalized_path,
-                profile=profile,
-                taxonomy_version=taxonomy_version,
-                taxonomy_cache_dir=taxonomy_cache_dir,
-                source_content_hash=parser_input_hash,
-                deadline_at=deadline_at,
+
+            def parse_representation(
+                path: Path,
+                representation: Literal["normalized", "archive"],
+                content_hash: str,
+            ) -> ArelleParseReportV1:
+                def execute() -> ArelleParseReportV1:
+                    return parse_filing_offline(
+                        path,
+                        profile=profile,
+                        taxonomy_version=taxonomy_version,
+                        taxonomy_cache_dir=taxonomy_cache_dir,
+                        source_content_hash=content_hash,
+                        deadline_at=deadline_at,
+                    )
+
+                if (
+                    self.parser_actions is None
+                    or parser_delivery_revision is None
+                    or deadline_at is None
+                ):
+                    return execute()
+
+                return self.parser_actions.parse(
+                    path,
+                    representation=representation,
+                    delivery_revision=parser_delivery_revision,
+                    normalization_inputs=tuple(
+                        item.content_hash for item in captured_sources
+                    ),
+                    profile=profile,
+                    taxonomy_version=taxonomy_version,
+                    taxonomy_cache_dir=taxonomy_cache_dir,
+                    source_content_hash=content_hash,
+                    deadline_at=deadline_at,
+                )
+
+            report = parse_representation(
+                normalized_path, "normalized", parser_input_hash
             )
             require_sec_validation_evidence(report)
             if filing_date is not None and profile.dqc_applicability_digest is not None:
@@ -623,15 +659,10 @@ class SecIngestionService:
                 )
             archive_report = report
             if assessment.relation == "normalized":
-                archive_report = parse_filing_offline(
+                archive_report = parse_representation(
                     archive_path,
-                    profile=profile,
-                    taxonomy_version=taxonomy_version,
-                    taxonomy_cache_dir=taxonomy_cache_dir,
-                    source_content_hash=parser_input_hash
-                    if inline_integrity
-                    else archive_member_hash,
-                    deadline_at=deadline_at,
+                    "archive",
+                    parser_input_hash if inline_integrity else archive_member_hash,
                 )
                 require_sec_validation_evidence(archive_report)
                 if report.dqc_filing_context is not None:
@@ -647,6 +678,15 @@ class SecIngestionService:
                         "NORMALIZATION_SEMANTIC_MISMATCH",
                         "normalized and SEC archive XBRL semantics differ",
                     )
+                archive_markers = tuple(
+                    value
+                    for value in archive_report.validation_evidence
+                    if value.startswith("sec-parser-action-v1:archive:")
+                )
+                if archive_markers:
+                    payload = report.model_dump(mode="json")
+                    payload["validation_evidence"].extend(archive_markers)
+                    report = ArelleParseReportV1.model_validate(payload)
 
         fact_digest = fact_semantic_digest(report)
         archive_fact_digest = fact_semantic_digest(archive_report)
@@ -808,6 +848,7 @@ class SecIngestionService:
         amendment_scope: str | None = None,
         identity_basis: SecIdentityBasis = "current-sec-ticker-v1",
         identity_ticker: str | None = None,
+        parser_delivery_revision: str | None = None,
     ) -> SecIngestionResult:
         if mapping_resolver is not None and (
             mappings or identity_basis != "original-filing-dei-v1"
@@ -824,6 +865,7 @@ class SecIngestionService:
                 "original identity requires a pinned original 10-K, acceptance and ticker",
             )
         validated = self.validate_filing(
+            parser_delivery_revision=parser_delivery_revision,
             cik=cik,
             accession_number=accession_number,
             primary_document=primary_document,

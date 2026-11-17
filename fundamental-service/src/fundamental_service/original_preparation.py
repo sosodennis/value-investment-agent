@@ -34,6 +34,8 @@ from .issuer_identity import (
     resolve_original_filing_identity,
 )
 from .original_issuer import OriginalIssuerEvidenceV1
+from .parser_action_evidence import require_parser_action_evidence
+from .parser_action_contracts import parser_action_markers
 from .regulatory_validation import require_sec_validation_evidence
 from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .sec_capture import (
@@ -206,6 +208,13 @@ class OriginalValidationEvidenceV1(StrictModel):
         }
         if self.integrity is not None:
             values.update(self.integrity.parser_content_hashes)
+        if self.original is not None:
+            values.update(
+                digest
+                for _, _, digest in parser_action_markers(
+                    self.original.report.validation_evidence
+                )
+            )
         if self.failure_evidence is not None:
             values.add(self.failure_evidence.content_hash)
         return tuple(sorted(values))
@@ -367,6 +376,12 @@ class OriginalPreparation:
             if hashlib.sha256(payload).hexdigest() != content_hash:
                 raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "source differs")
         if evidence.integrity is not None:
+            if evidence.original is not None:
+                require_parser_action_evidence(
+                    evidence.original,
+                    artifacts=self._artifacts,
+                    delivery_revision=evidence.request.runtime.declared_source_revision,
+                )
             for digest in evidence.integrity.parser_content_hashes:
                 payload = self._content.get(
                     digest,

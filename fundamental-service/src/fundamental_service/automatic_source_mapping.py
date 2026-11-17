@@ -33,6 +33,7 @@ from .ingestion_mapping import (
 )
 from .policies import initial_model_specs
 from .public_acquisition import PublicSourceCutoffV1
+from .parser_action_evidence import require_parser_action_evidence
 from .serialization import sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
 from .taxonomy_evidence import (
@@ -223,6 +224,21 @@ class _AutomaticSourceMappingResolver:
                 "validated original differs from the pinned acquisition",
             )
         refs = []
+        for identity, record in require_parser_action_evidence(
+            original,
+            artifacts=authority.artifacts,
+            delivery_revision=request.source_revision,
+        ):
+            refs.append(
+                ArtifactRefV1(
+                    artifact_id=identity,
+                    content_hash=record.content_hash,
+                    media_type=record.media_type,
+                    role="sec-parser-action-report-v1"
+                    if identity.startswith("sec-parser-action-report-v1:")
+                    else "sec-parser-action-result-v1",
+                )
+            )
         for source in validated.captured_sources:
             refs.append(
                 authority._retain_bytes(

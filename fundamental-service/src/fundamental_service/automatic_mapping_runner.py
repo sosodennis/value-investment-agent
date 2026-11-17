@@ -39,6 +39,7 @@ from .data_releases import (
     verify_mapping_review_evidence,
 )
 from .mapping_input_storage import publish_mapping_input
+from .parser_action_evidence import require_current_parser_action_refs
 from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
@@ -98,6 +99,7 @@ def approve_mapping(
     _require_machine_identity(request, trust_roots=trust_roots, private_key=private_key)
     if evidence_checks is None:
         evidence_checks = AutomaticMappingEvidenceChecks()
+    evidence_checks.require_parser_actions(request, artifacts=artifacts)
     contents = {}
     for ref in request.evidence_refs:
         try:
@@ -144,6 +146,7 @@ def approve_mapping(
     )
     approval_publication = None
     if decision.mapping is not None:
+        require_current_parser_action_refs(request.evidence_refs, artifacts=artifacts)
         input_ref = ArtifactRefV1(
             artifact_id=input_publication.artifact.artifact_id,
             content_hash=input_publication.artifact.content_hash,
@@ -173,6 +176,7 @@ def approve_mapping(
                 approval.mapping_digest,
             ),
         )
+    require_current_parser_action_refs(request.evidence_refs, artifacts=artifacts)
     return AutomaticMappingReceiptV1(
         source_revision=request.source_revision,
         input_digest=input_digest,

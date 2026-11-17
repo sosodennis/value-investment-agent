@@ -12,6 +12,7 @@ import re
 import shutil
 import signal
 import sys
+import sysconfig
 import tempfile
 import threading
 import time
@@ -773,6 +774,24 @@ def _store_worker_result(result_file: Connection, payload: object) -> None:
         json.dump(payload, output)
 
 
+def parser_worker_import_paths() -> tuple[str, ...]:
+    """Use the same parser imports regardless of the API or CLI launcher."""
+    config = sysconfig.get_paths()
+    return tuple(
+        dict.fromkeys(
+            str(path.resolve())
+            for path in (
+                Path(__file__).resolve().parent.parent,
+                Path(config["stdlib"]),
+                Path(config["platstdlib"]),
+                Path(config["stdlib"]) / "lib-dynload",
+                Path(config["purelib"]),
+                Path(config["platlib"]),
+            )
+        )
+    )
+
+
 def _parse_worker(
     result_file: Connection,
     filing_path: str,
@@ -788,6 +807,7 @@ def _parse_worker(
 ) -> None:
     attempted_network = 0
     try:
+        sys.path[:] = parser_worker_import_paths()
         tempfile.tempdir = scratch_directory
         parent = multiprocessing.parent_process()
         if parent is None:

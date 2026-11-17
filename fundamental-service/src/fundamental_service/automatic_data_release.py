@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import Field
 
 from .automatic_release_evidence import require_automatic_release_sources
+from .parser_action_evidence import require_current_parser_action_refs
 from .automatic_market_authority import (
     AutomaticMarketAuthorityRuntime,
     AutomaticMarketPolicyAuthorizationV1,
@@ -495,6 +496,18 @@ class AutomaticDataReleaseService:
                 )
             )
             guard_execution_deadline(deadline_at)
+            require_current_parser_action_refs(
+                (
+                    *request.content.evidence_refs,
+                    *(
+                        ref
+                        for review in request.content.mapping_reviews
+                        for ref in review.evidence_refs
+                    ),
+                ),
+                artifacts=self._artifacts,
+            )
+            guard_execution_deadline(deadline_at)
             verification = sign_data_release_verification(
                 {
                     "manifest_digest": request.manifest.manifest_digest,
@@ -520,6 +533,16 @@ class AutomaticDataReleaseService:
                 ),
             )
             publications.append(canary_pub)
+            require_current_parser_action_refs(
+                verification.evidence_refs
+                + tuple(
+                    ref
+                    for review in verification.mapping_reviews
+                    for ref in review.evidence_refs
+                ),
+                artifacts=self._artifacts,
+            )
+            guard_execution_deadline(deadline_at)
             if staged_policies:
                 assert self._policy_registry is not None
                 for staged_policy in staged_policies:
@@ -541,7 +564,34 @@ class AutomaticDataReleaseService:
                 ),
             )
             publications.append(candidate_pub)
+            require_current_parser_action_refs(
+                verification.evidence_refs
+                + tuple(
+                    ref
+                    for review in verification.mapping_reviews
+                    for ref in review.evidence_refs
+                ),
+                artifacts=self._artifacts,
+            )
+            guard_execution_deadline(deadline_at)
         except (DataReleaseError, SnapshotError, ValueError) as error:
+            if candidate_pub is not None:
+                rejected = {
+                    "input_digest": input_digest,
+                    "candidate": candidate_pub.artifact,
+                    "issue_code": getattr(
+                        error, "code", "AUTOMATIC_RELEASE_EVIDENCE_INVALID"
+                    ),
+                }
+                publications.append(
+                    self._artifacts.put_with_receipt(
+                        "automatic-release-rejected-candidate-"
+                        + sha256_digest(rejected),
+                        rejected,
+                        (input_digest, candidate_pub.artifact.content_hash),
+                    )
+                )
+                candidate_pub = None
             decision = AutomaticDataReleaseDecisionV1(
                 input_digest=input_digest,
                 status="blocked",

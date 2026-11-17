@@ -27,6 +27,7 @@ from .data_releases import (
 )
 from .facts import CanonicalMappingV1, MappingObservationScopeV1, select_fact
 from .automatic_mapping_evidence import AutomaticMappingEvidenceChecks
+from .parser_action_evidence import require_current_parser_action_refs
 from .original_issuer import OriginalIssuerEvidenceV1
 from .registered_capital_expenditure import (
     CAPITAL_EXPENDITURE,
@@ -228,6 +229,10 @@ def automatic_mapping_policy_digest() -> str:
                     "lease_liability_mapping.py",
                     "accounting_roles.py",
                     "arelle_parser.py",
+                    "parser_action_contracts.py",
+                    "parser_action_identity.py",
+                    "parser_action_evidence.py",
+                    "parser_actions.py",
                     "inline_xbrl.py",
                     "facts.py",
                     "xbrl_precision.py",
@@ -1035,6 +1040,7 @@ def verify_automatic_mapping_replay(
         ref.content_hash: artifacts.read(ref.artifact_id)
         for ref in request.evidence_refs
     }
+    evidence_checks.require_parser_actions(request, artifacts=artifacts)
     decision = evaluate_automatic_mapping(
         request, contents=contents, evidence_checks=evidence_checks
     )
@@ -1053,4 +1059,5 @@ def verify_automatic_mapping_replay(
             "DATA_RELEASE_MAPPING_REPLAY_MISMATCH",
             "automatic approval differs from its retained policy evaluation",
         )
+    require_current_parser_action_refs(request.evidence_refs, artifacts=artifacts)
     return request

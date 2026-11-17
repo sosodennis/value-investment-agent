@@ -1730,7 +1730,7 @@ class SourcePreparationRunner:
             media_type=decision.media_type,
             role="automatic-release-decision-v1",
         )
-        if receipt.candidate_publication is None:
+        if receipt.decision.status != "passed" or receipt.candidate_publication is None:
             return None, ref, receipt.decision.issue_codes
         candidate_record = receipt.candidate_publication.artifact
         candidate = read_preparation_release_artifact(

@@ -44,6 +44,7 @@ from .data_releases import ArtifactRefV1, DataReleaseError
 from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .historical_dqc import historical_profile
 from .ingestion import SecIngestionService
+from .parser_actions import postgres_parser_actions
 from .inline_xbrl import (
     InlineDocumentSetError,
     inline_document_metadata,
@@ -666,6 +667,7 @@ class SecAcquisitionUseCase:
                     "SEC_CAPTURE_IDENTITY_MISMATCH", "missing capture timestamp"
                 )
             validated = self.ingestion.validate_filing(
+                parser_delivery_revision=runtime.declared_source_revision,
                 source_adapter=adapter,
                 cik=request.cik,
                 accession_number=filing.accession_number,
@@ -1255,6 +1257,9 @@ class SecAcquisitionUseCase:
             else datetime.now(UTC)
         )
         preparation = self.ingestion.prepare_filing(
+            parser_delivery_revision=request.source_revision
+            if isinstance(request, AutomaticSecIngestionRequestV1)
+            else None,
             source_adapter=adapter,
             identity=request.identity,
             identity_basis=request.identity_basis,
@@ -2281,6 +2286,10 @@ def build_runtime_sec_acquisition(
         snapshot_repository=snapshot_repository,
         audit_store=PostgresArtifactStore(metadata, content_store),
         fact_repository=fact_repository,
+        parser_actions=postgres_parser_actions(
+            metadata,
+            PostgresArtifactStore(metadata, content_store),
+        ),
     )
     return SecAcquisitionUseCase(
         adapter=adapter,

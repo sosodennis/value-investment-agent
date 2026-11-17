@@ -69,6 +69,7 @@ def _retained_original_inputs(
                 "AUTOMATIC_RELEASE_ORIGINAL_EVIDENCE_MISMATCH",
                 "retained originals must bind the release revision and evidence closure",
             )
+        evidence_checks.require_parser_actions(source, artifacts=artifacts)
         contents = {}
         for item in source.evidence_refs:
             content = artifacts.read(item.artifact_id)
