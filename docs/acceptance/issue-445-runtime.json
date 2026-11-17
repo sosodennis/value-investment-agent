@@ -1,0 +1,524 @@
+{
+  "schema_version": 2,
+  "acceptance_scope": "fundamental-service",
+  "acceptance_profile": "persistent-valuation-flow-v1",
+  "issue": 445,
+  "branch": "codex/issue-445-evidence-reuse",
+  "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+  "status": "VERIFIED",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-445-evidence-reuse/value-investment-agent",
+    "allowed_untracked_paths": [],
+    "fundamental": {
+      "compose_project": "value-investment-agent-445-evidence-reuse",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-445-evidence-reuse/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-445-evidence-reuse/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/worktrees/issue-445-evidence-reuse/value-investment-agent/.audit/issue-445-evidence-reuse/canonical-4f267c20.yml",
+        "/Users/denniswong/.codex/worktrees/issue-445-evidence-reuse/value-investment-agent/compose/verification/docker-compose.parser-actions.yml",
+        "/Users/denniswong/.codex/worktrees/issue-445-evidence-reuse/value-investment-agent/.audit/issue-445-evidence-reuse/capacity-two-workers.json"
+      ],
+      "env_files": [
+        {
+          "path": "/Users/denniswong/.codex/worktrees/issue-445-evidence-reuse/value-investment-agent/.audit/issue-445-evidence-reuse/canonical-4f267c20.env",
+          "sha256": "1ed4849c5e2fb3642944df07132089ad61b86c17738ede838e94ef0cbf1e4e33"
+        }
+      ],
+      "image_id": "sha256:3b2d39cd39b2c608588b95b44cdfe17bc772c394e0c9a0ae92d5abca69c4a72f",
+      "runtime_pins": {
+        "python": "3.12.16",
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2"
+      },
+      "published_host": "127.0.0.1",
+      "published_port": 21491,
+      "container_port": 8080,
+      "service": "fundamental-service",
+      "url": "http://127.0.0.1:21491",
+      "dependencies": [
+        {
+          "service": "fundamental-postgres",
+          "published_host": "127.0.0.1",
+          "published_port": 21492,
+          "container_port": 5432
+        }
+      ],
+      "networks": [
+        "value-investment-agent-445-evidence-reuse_default"
+      ],
+      "volumes": [
+        "value-investment-agent-445-evidence-reuse_fundamental-postgres-data",
+        "value-investment-agent-445-evidence-reuse_fundamental-service-data",
+        "value-investment-agent-445-evidence-reuse_fundamental-parser-scratch"
+      ],
+      "source": {
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 183,
+        "sha256": "d914d0fcc8d591c751b5989dfb671e7ecd419e232c0a1660d6294ca306fe62b6"
+      }
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "architecture",
+      "status": "pass",
+      "command": "python3 scripts/architecture_guard.py",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "4006e4cc4e1a6c97c388c80ed52852696e2df140993b4888451b882ce2aa1dc5",
+      "output_digest": "97b8b656a5af65a56390e6572b5a26a165ba216771b9c084b55de162f1a4a78b",
+      "evidence": [
+        {
+          "path": "4f267c20-final-architecture.log",
+          "sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+        },
+        {
+          "path": "4f267c20-final-engineering.json",
+          "sha256": "aa7c3ce422e2d5594e86f4ee617c519b7025ab6e2132f91cacac4f75b4fc76c6"
+        }
+      ]
+    },
+    {
+      "name": "artifact_retrieval",
+      "status": "pass",
+      "command": "python .audit/issue-445-evidence-reuse/restore_full_replay.py; Docker exec api_read.py and read_preparation_api.py",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "48bcc0b248b4d7e84290d0911609f80f45ee12572f42f48287400010640b2cc6",
+      "output_digest": "6ed330926b9186801125a9427f120822c207bd998b607cee3ff76d45ff384f54",
+      "evidence": [
+        {
+          "path": "final-restored-flow-receipt.json",
+          "sha256": "154141f0633973ed55f19da750ca9d325cdeb34be6117e4484f6f0d87634cca7"
+        },
+        {
+          "path": "final-restored-flow-api.json",
+          "sha256": "58b40299cb300362fa97d884278f8300ea479feb760e0521721f933da1c091fc"
+        },
+        {
+          "path": "final-restored-flow-preparation-api.json",
+          "sha256": "dc7b41f9eb754df4e32e41d78abc5c1c8f16f1354491382779b07f6ce2e82793"
+        }
+      ]
+    },
+    {
+      "name": "calculation",
+      "status": "pass",
+      "command": "Recorded CLI args in build-candidate-request.json via Docker exec; see delivery-4f267c20-first-receipt.json and stdout/stderr",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "730f3132eae6115864866cebc8cc6b275f62f9359f2d4cb9d6a6b6311beb73cb",
+      "output_digest": "6b89f24fdc03318e2f2509abfb3b90d126869add33d3f9e7095b77a2c8d1a9b1",
+      "evidence": [
+        {
+          "path": "delivery-4f267c20-first-receipt.json",
+          "sha256": "d4ba2968118a6817691ad0ffb84ef12867c54c9efa42998b7ea07c2a72388148"
+        },
+        {
+          "path": "delivery-4f267c20-first.stdout",
+          "sha256": "39fcf6b0d6ac8325d5b33a7c6777d3b100fb6cdc624440570545d896475f23d4"
+        },
+        {
+          "path": "delivery-4f267c20-first-api.json",
+          "sha256": "58b40299cb300362fa97d884278f8300ea479feb760e0521721f933da1c091fc"
+        }
+      ]
+    },
+    {
+      "name": "concurrent_deduplication",
+      "status": "pass",
+      "command": "run_recovery_checks.py parallel delivery-4f267c20-v2-5-candidate final-parallel-capacity",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "23c638cf09d59ffd5b9d068eb045f9e0ba0f47767913a85237e656044edc5932",
+      "output_digest": "ea9548a66c77fcb5564f1aaf576b78c272f209bb40387531e5327480de3c7366",
+      "evidence": [
+        {
+          "path": "final-parallel-capacity-receipt.json",
+          "sha256": "f63ecf87c69201264586a797986771dcad64ad2af860082e24dd9de6f827d6c5"
+        },
+        {
+          "path": "final-parallel-receipt.json",
+          "sha256": "6e20dc4e4e9272206ff56d7a51c662e646a38063c630ef0428064c9c6525e34d"
+        }
+      ]
+    },
+    {
+      "name": "deterministic_repeat",
+      "status": "pass",
+      "command": "python .audit/issue-445-evidence-reuse/benchmark_delivery_4f26.py (v2 five successful alternating pairs); final_numeric_projection.py",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "fbe599a2b15ccc1e2a4e64ad54ec12f1e405641ebef09411e35dbc888322901a",
+      "output_digest": "ba9f768c7b7b020186f9d8166c2a008c95c246e0ba16723e99ce7af6b4bcf3bd",
+      "evidence": [
+        {
+          "path": "delivery-4f267c20-v2-benchmark.json",
+          "sha256": "383d328f7e76d809949f7ec2a0da45ab32885c80ab4a4b392b1b8c760cdb9baf"
+        },
+        {
+          "path": "final-benchmark-verdict.json",
+          "sha256": "b352eba27289f07a465c000ed9dca2a5fbccad11f4a01f597834f515c2694252"
+        },
+        {
+          "path": "final-full-scenario-equality.json",
+          "sha256": "c4b4d98c8a03323f62e470713ec176900816b7d91ae0c717e229524a08008c3f"
+        },
+        {
+          "path": "final-work-counts.json",
+          "sha256": "4b3046929fe9ef30b1e6acbd997c3c5c41d6f0d9b82001fc0f64c636f9212423"
+        }
+      ]
+    },
+    {
+      "name": "diff",
+      "status": "pass",
+      "command": "git diff --check origin/main HEAD",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "1493c37be644283cf317632df466a6489c1c4dd5ae4ef3aeae608e1010e8e79e",
+      "output_digest": "1cc4e473318e9d9c4d936ca7a4fdd3d1ad73741785a6aa76beb298b8f50d3b37",
+      "evidence": [
+        {
+          "path": "4f267c20-final-diff.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "4f267c20-final-engineering.json",
+          "sha256": "aa7c3ce422e2d5594e86f4ee617c519b7025ab6e2132f91cacac4f75b4fc76c6"
+        }
+      ]
+    },
+    {
+      "name": "failure_retention",
+      "status": "pass",
+      "command": "verify_final_restored_refusals.py final-restored-flow ignored final-restored-refusals; verify_real_parser_faults.py via restored Docker exec; final_retained_rows.py",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "580fe3c14b2d5f7d151f61419c4477f351c0632276898b9fe41ba2675cb1d0e0",
+      "output_digest": "55d455a7f6e5a169bd259aef458d80b56e0e2f7b3d08d0082b8720947fdaeb32",
+      "evidence": [
+        {
+          "path": "final-restored-refusals-numerical-refusals-receipt.json",
+          "sha256": "e292b67f3718ebe88dbcf033c2c784384d1b560d511d3ff7b97e1bd5bddb31f0"
+        },
+        {
+          "path": "final-real-parser-faults.stdout",
+          "sha256": "359bfdf603b9f2e7ef36ef3b038fd7b007686a6dddb72703b6d259daa2a3a674"
+        },
+        {
+          "path": "final-retained-rows-integrity.json",
+          "sha256": "ddfe40ab1c26d12cf01f8c4faeafb5d651a2dbcd47229859b1befb4ce40a68aa"
+        },
+        {
+          "path": "4f267c20-ci-complete.json",
+          "sha256": "a0f5b5dc891252e3eae0653642c435905984434589567113c9ae8d36830f9cbc"
+        }
+      ]
+    },
+    {
+      "name": "forecast",
+      "status": "pass",
+      "command": "Recorded CLI args in build-candidate-request.json via Docker exec; see delivery-4f267c20-first-receipt.json and stdout/stderr",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "730f3132eae6115864866cebc8cc6b275f62f9359f2d4cb9d6a6b6311beb73cb",
+      "output_digest": "6b89f24fdc03318e2f2509abfb3b90d126869add33d3f9e7095b77a2c8d1a9b1",
+      "evidence": [
+        {
+          "path": "delivery-4f267c20-first-receipt.json",
+          "sha256": "d4ba2968118a6817691ad0ffb84ef12867c54c9efa42998b7ea07c2a72388148"
+        },
+        {
+          "path": "delivery-4f267c20-first.stdout",
+          "sha256": "39fcf6b0d6ac8325d5b33a7c6777d3b100fb6cdc624440570545d896475f23d4"
+        },
+        {
+          "path": "delivery-4f267c20-first-api.json",
+          "sha256": "58b40299cb300362fa97d884278f8300ea479feb760e0521721f933da1c091fc"
+        }
+      ]
+    },
+    {
+      "name": "full_flow_repeat",
+      "status": "pass",
+      "command": "python .audit/issue-445-evidence-reuse/benchmark_delivery_4f26.py (v2 five successful alternating pairs); final_numeric_projection.py",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "fbe599a2b15ccc1e2a4e64ad54ec12f1e405641ebef09411e35dbc888322901a",
+      "output_digest": "ba9f768c7b7b020186f9d8166c2a008c95c246e0ba16723e99ce7af6b4bcf3bd",
+      "evidence": [
+        {
+          "path": "delivery-4f267c20-v2-benchmark.json",
+          "sha256": "383d328f7e76d809949f7ec2a0da45ab32885c80ab4a4b392b1b8c760cdb9baf"
+        },
+        {
+          "path": "final-benchmark-verdict.json",
+          "sha256": "b352eba27289f07a465c000ed9dca2a5fbccad11f4a01f597834f515c2694252"
+        },
+        {
+          "path": "final-full-scenario-equality.json",
+          "sha256": "c4b4d98c8a03323f62e470713ec176900816b7d91ae0c717e229524a08008c3f"
+        },
+        {
+          "path": "final-work-counts.json",
+          "sha256": "4b3046929fe9ef30b1e6acbd997c3c5c41d6f0d9b82001fc0f64c636f9212423"
+        }
+      ]
+    },
+    {
+      "name": "mapping",
+      "status": "pass",
+      "command": "Recorded CLI args in build-candidate-request.json via Docker exec; see delivery-4f267c20-first-receipt.json and stdout/stderr",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "730f3132eae6115864866cebc8cc6b275f62f9359f2d4cb9d6a6b6311beb73cb",
+      "output_digest": "6b89f24fdc03318e2f2509abfb3b90d126869add33d3f9e7095b77a2c8d1a9b1",
+      "evidence": [
+        {
+          "path": "delivery-4f267c20-first-receipt.json",
+          "sha256": "d4ba2968118a6817691ad0ffb84ef12867c54c9efa42998b7ea07c2a72388148"
+        },
+        {
+          "path": "delivery-4f267c20-first.stdout",
+          "sha256": "39fcf6b0d6ac8325d5b33a7c6777d3b100fb6cdc624440570545d896475f23d4"
+        },
+        {
+          "path": "delivery-4f267c20-first-api.json",
+          "sha256": "58b40299cb300362fa97d884278f8300ea479feb760e0521721f933da1c091fc"
+        }
+      ]
+    },
+    {
+      "name": "preparation",
+      "status": "pass",
+      "command": "Recorded CLI args in build-candidate-request.json via Docker exec; see delivery-4f267c20-first-receipt.json and stdout/stderr",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "730f3132eae6115864866cebc8cc6b275f62f9359f2d4cb9d6a6b6311beb73cb",
+      "output_digest": "6b89f24fdc03318e2f2509abfb3b90d126869add33d3f9e7095b77a2c8d1a9b1",
+      "evidence": [
+        {
+          "path": "delivery-4f267c20-first-receipt.json",
+          "sha256": "d4ba2968118a6817691ad0ffb84ef12867c54c9efa42998b7ea07c2a72388148"
+        },
+        {
+          "path": "delivery-4f267c20-first.stdout",
+          "sha256": "39fcf6b0d6ac8325d5b33a7c6777d3b100fb6cdc624440570545d896475f23d4"
+        },
+        {
+          "path": "delivery-4f267c20-first-api.json",
+          "sha256": "58b40299cb300362fa97d884278f8300ea479feb760e0521721f933da1c091fc"
+        }
+      ]
+    },
+    {
+      "name": "restart_restore",
+      "status": "pass",
+      "command": "run_recovery_remaining.py; run_container_restore.py; restore_full_replay.py",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "4cea132042241f223ee0d64678d18e51b9eb3fc0df40161ba61d36430b4423fe",
+      "output_digest": "d7a535db25ac65edcead7154ef25068c5dccda875685252af8a1caed9cdd3743",
+      "evidence": [
+        {
+          "path": "final-interrupt-receipt.json",
+          "sha256": "59802d62b001fc7399378728d269720145b444df44aa08fb543c7855911cb10e"
+        },
+        {
+          "path": "final-restart-receipt.json",
+          "sha256": "da1990b835b2a908c5b4075f868aa97d6c20060e7f971ec19778e7b326ee3c02"
+        },
+        {
+          "path": "final-host-backup-receipt.json",
+          "sha256": "d666811cc08be1dcf90cd65344b6972698b923dcd39ef41cb1700fead6a6d2ba"
+        },
+        {
+          "path": "final-empty-store-restore-receipt.json",
+          "sha256": "11e80052c1e7c8cfe760f18d422d07ac6cf15286e96f4afbe25a8768aa6b1cca"
+        },
+        {
+          "path": "final-restore-table-equality.json",
+          "sha256": "5e773e211a96c7ef3dcedc4c11bcf7480a03422d08fc5b5f15427fba564205b4"
+        },
+        {
+          "path": "final-restored-flow-receipt.json",
+          "sha256": "154141f0633973ed55f19da750ca9d325cdeb34be6117e4484f6f0d87634cca7"
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "status": "pass",
+      "command": "Independent read-only source and acceptance-evidence review, /root/evidence_reuse_review",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "73a4d85f4ea6a06e8aacf1518c3f33bfd5e57c1708ed2d319139354e59c753fe",
+      "output_digest": "c5d3a478b42c8f178e8d83ef6f263cf3693a22a61f76ea6de7f063cde9416f67",
+      "evidence": [
+        {
+          "path": "4f267c20-final-independent-review.json",
+          "sha256": "038071df4cf97f33ab5b6809f00769bcf7ef8ea281f3781f248b9613d36cb89f"
+        },
+        {
+          "path": "97d1d8a2-independent-review.json",
+          "sha256": "5f7ca0def39c39da5e612c81ccab0d5e779469599b74655d67b024e78a5bc7be"
+        }
+      ]
+    },
+    {
+      "name": "ruff",
+      "status": "pass",
+      "command": "uvx --from ruff==0.14.10 ruff check fundamental-service",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "6d974b6f3ab12f4b5bed099fcb6ba8c20bc374d5b2f09b6391d1f2819039c16f",
+      "output_digest": "77492f5138e541cb9a6e8c9698da1877354226fac875d835e219aec0bddefef1",
+      "evidence": [
+        {
+          "path": "4f267c20-final-ruff.log",
+          "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        {
+          "path": "4f267c20-final-engineering.json",
+          "sha256": "aa7c3ce422e2d5594e86f4ee617c519b7025ab6e2132f91cacac4f75b4fc76c6"
+        }
+      ]
+    },
+    {
+      "name": "service_acceptance",
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=.audit/issue-445-evidence-reuse/service-manifest-4f267c20.json scripts/acceptance_preflight.sh; uv run --frozen --extra dev --project fundamental-service python -m fundamental_service.verification_gate --cohort fundamental-service/tests/fixtures/verification/golden_cohort.json",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "e93b97d63d5b8b511d738606658833e087e44e4e21346a16115c428a1aa1af9c",
+      "output_digest": "f79cce151f53d4797a34cf54ba2ede3358f05b65a5629dc4e176b6957e59d9e8",
+      "evidence": [
+        {
+          "path": "final-preflight.log",
+          "sha256": "3b9df3bfe242d82c32c21e253096eb83538793f5b33a57b76b5318c4c7671a3f"
+        },
+        {
+          "path": "4f267c20-final-release-gate.json",
+          "sha256": "7ca188275de985f22316a6ccf726714c244c84c2db64abe9eab116662c6a0068"
+        },
+        {
+          "path": "4f267c20-ci-complete.json",
+          "sha256": "a0f5b5dc891252e3eae0653642c435905984434589567113c9ae8d36830f9cbc"
+        },
+        {
+          "path": "4f267c20-final-engineering.json",
+          "sha256": "aa7c3ce422e2d5594e86f4ee617c519b7025ab6e2132f91cacac4f75b4fc76c6"
+        }
+      ]
+    },
+    {
+      "name": "snapshot_persistence",
+      "status": "pass",
+      "command": "Recorded CLI args in build-candidate-request.json via Docker exec; see delivery-4f267c20-first-receipt.json and stdout/stderr",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "730f3132eae6115864866cebc8cc6b275f62f9359f2d4cb9d6a6b6311beb73cb",
+      "output_digest": "6b89f24fdc03318e2f2509abfb3b90d126869add33d3f9e7095b77a2c8d1a9b1",
+      "evidence": [
+        {
+          "path": "delivery-4f267c20-first-receipt.json",
+          "sha256": "d4ba2968118a6817691ad0ffb84ef12867c54c9efa42998b7ea07c2a72388148"
+        },
+        {
+          "path": "delivery-4f267c20-first.stdout",
+          "sha256": "39fcf6b0d6ac8325d5b33a7c6777d3b100fb6cdc624440570545d896475f23d4"
+        },
+        {
+          "path": "delivery-4f267c20-first-api.json",
+          "sha256": "58b40299cb300362fa97d884278f8300ea479feb760e0521721f933da1c091fc"
+        }
+      ]
+    },
+    {
+      "name": "source_acquisition",
+      "status": "pass",
+      "command": "Recorded CLI args in build-candidate-request.json via Docker exec; see delivery-4f267c20-first-receipt.json and stdout/stderr",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "730f3132eae6115864866cebc8cc6b275f62f9359f2d4cb9d6a6b6311beb73cb",
+      "output_digest": "6b89f24fdc03318e2f2509abfb3b90d126869add33d3f9e7095b77a2c8d1a9b1",
+      "evidence": [
+        {
+          "path": "delivery-4f267c20-first-receipt.json",
+          "sha256": "d4ba2968118a6817691ad0ffb84ef12867c54c9efa42998b7ea07c2a72388148"
+        },
+        {
+          "path": "delivery-4f267c20-first.stdout",
+          "sha256": "39fcf6b0d6ac8325d5b33a7c6777d3b100fb6cdc624440570545d896475f23d4"
+        },
+        {
+          "path": "delivery-4f267c20-first-api.json",
+          "sha256": "58b40299cb300362fa97d884278f8300ea479feb760e0521721f933da1c091fc"
+        }
+      ]
+    },
+    {
+      "name": "source_reuse",
+      "status": "pass",
+      "command": "Recorded CLI args in build-candidate-request.json via Docker exec; see delivery-4f267c20-first-receipt.json and stdout/stderr",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "730f3132eae6115864866cebc8cc6b275f62f9359f2d4cb9d6a6b6311beb73cb",
+      "output_digest": "d3854c3947e01c7a96434f0939a50e6436ce6d4440b819172ec5b2192ba46808",
+      "evidence": [
+        {
+          "path": "4f267c20-cross-delivery-proof.json",
+          "sha256": "c752ed44b6c3376ae98f56db9bb7a1fa5edfa8079146b370486eed9ce9b41bf7"
+        },
+        {
+          "path": "build-97d1d8a2-first-receipt.json",
+          "sha256": "481cc0f6eb2720251a3c7910869a6f16edc43d7832297297a847176bafda8592"
+        },
+        {
+          "path": "delivery-4f267c20-first-receipt.json",
+          "sha256": "d4ba2968118a6817691ad0ffb84ef12867c54c9efa42998b7ea07c2a72388148"
+        }
+      ]
+    },
+    {
+      "name": "types",
+      "status": "pass",
+      "command": "uv run --frozen --project fundamental-service --with mypy==1.19.1 mypy --no-incremental --follow-imports=silent --ignore-missing-imports fundamental-service/src/fundamental_service/annual_discovery_service.py fundamental-service/src/fundamental_service/arelle_parser.py fundamental-service/src/fundamental_service/automatic_data_release.py fundamental-service/src/fundamental_service/automatic_mapping.py fundamental-service/src/fundamental_service/automatic_mapping_evidence.py fundamental-service/src/fundamental_service/automatic_mapping_runner.py fundamental-service/src/fundamental_service/automatic_release_evidence.py fundamental-service/src/fundamental_service/automatic_source_mapping.py fundamental-service/src/fundamental_service/data_releases.py fundamental-service/src/fundamental_service/ingestion.py fundamental-service/src/fundamental_service/issuer_release_evidence.py fundamental-service/src/fundamental_service/mapping_computation.py fundamental-service/src/fundamental_service/mapping_input_identity.py fundamental-service/src/fundamental_service/metadata.py fundamental-service/src/fundamental_service/original_issuer.py fundamental-service/src/fundamental_service/original_preparation.py fundamental-service/src/fundamental_service/parser_action_contracts.py fundamental-service/src/fundamental_service/parser_action_evidence.py fundamental-service/src/fundamental_service/parser_action_identity.py fundamental-service/src/fundamental_service/parser_actions.py fundamental-service/src/fundamental_service/parser_computation.py fundamental-service/src/fundamental_service/parser_native_closure.py fundamental-service/src/fundamental_service/persistence_recovery.py fundamental-service/src/fundamental_service/preparation_runner.py fundamental-service/src/fundamental_service/release_runner.py fundamental-service/src/fundamental_service/sec_rebuild.py fundamental-service/src/fundamental_service/source_acquisition.py",
+      "exit_code": 0,
+      "commit": "4f267c20f2c40f74e0ebe85061e0cd7347910636",
+      "input_digest": "f5e82af7464766c283410c38f7532b6cfff24e7632a7b8342c37dd71663914f5",
+      "output_digest": "28bff93947172fc9c72e78c515f45b8779218ad0e8ba704707d1db84263d6dab",
+      "evidence": [
+        {
+          "path": "4f267c20-final-types.log",
+          "sha256": "843649a0230c7553c8b57e66c604afb1635f102a7f73c9dd914713d9f01fff0f"
+        },
+        {
+          "path": "4f267c20-final-engineering.json",
+          "sha256": "aa7c3ce422e2d5594e86f4ee617c519b7025ab6e2132f91cacac4f75b4fc76c6"
+        }
+      ]
+    }
+  ],
+  "next_step": "Ordinary merge PR #446 after required CI and final review, validate the actual merge SHA, then close #445 and retire only owned resources.",
+  "implementation_commit": "97d1d8a2206c1888a1fad320961f0c3d87682fd5",
+  "limitations": [
+    "Final warm replay improvement is inconclusive: 75.866107 to 74.452887 seconds, overlapping ranges, five alternating successful pairs; 40-55 second target not met.",
+    "Numerical case remains provisional uncalibrated what-if; capital, awards and reinvestment assumptions do not become observations; supported_history_threshold is null.",
+    "First-preparation samples reuse captured SEC sources; no new-download cold success is claimed.",
+    "Parallel/recovery acceptance uses 2 CPU and 2 workers; single-worker concurrent automatic caller timed out. Benchmark uses 1 CPU and 1 worker. Both use 3GiB, API5s/CLI900s.",
+    "Legacy release job skipped is not counted passing; applicable independent Fundamental Service release gate ran and passed.",
+    "Merge-SHA verification and issue-owned resource retirement occur after ordinary merge; they do not yet appear in this premerge receipt."
+  ],
+  "evidence_root": "/Users/denniswong/.codex/diagnostics/issue-445-evidence-reuse-delivery/audit",
+  "blockers": []
+}
