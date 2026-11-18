@@ -504,10 +504,12 @@ class OriginalPreparation:
                 raise SnapshotError(
                     "ORIGINAL_PREPARATION_INVALID", "validator request differs"
                 )
+            artifact_id = evidence.artifact_id
             self._artifacts.put_with_receipt(
-                evidence.artifact_id, evidence, evidence.dependencies
+                artifact_id, evidence, evidence.dependencies
             )
-            return self.read_validation(evidence.artifact_id, build_checks=build_checks)
+            del evidence
+            return self.read_validation(artifact_id, build_checks=build_checks)
 
     @staticmethod
     def _selection_issues(

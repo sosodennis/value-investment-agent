@@ -521,6 +521,47 @@ def test_producer_releases_reports_before_next_validation_and_read_reconstructs(
     assert value.service.read(result.artifact_id) == result
 
 
+def test_published_producer_models_are_released_before_independent_reconstruction(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch, multiple_originals=True)
+    validate = value.acquisition.validate_original_filing
+    read = value.service.read_validation
+    produced = {}
+    reconstructed = set()
+
+    def produce(*args, **kwargs):
+        result = validate(*args, **kwargs)
+        produced[result.artifact_id] = (
+            weakref.ref(result),
+            weakref.ref(result.original.report)
+            if result.original is not None
+            else None,
+            canonical_bytes(result),
+        )
+        return result
+
+    def reconstruct(artifact_id, **kwargs):
+        expected = produced.get(artifact_id)
+        if expected is not None:
+            evidence, report, _ = expected
+            assert evidence() is None
+            assert report is None or report() is None
+        result = read(artifact_id, **kwargs)
+        if expected is not None:
+            assert canonical_bytes(result) == expected[2]
+            reconstructed.add(artifact_id)
+        return result
+
+    monkeypatch.setattr(value.acquisition, "validate_original_filing", produce)
+    monkeypatch.setattr(value.service, "read_validation", reconstruct)
+    result, publication = execute(value)
+    assert publication.wrote and len(result.filings) == 2
+    assert len(produced) == 2 and reconstructed == produced.keys()
+    assert any(report is not None for _, report, _ in produced.values())
+    assert value.service.read(result.artifact_id) == result
+
+
 def test_complete_selection_guard_precedes_identity_resolution(tmp_path, monkeypatch):
     value = case(tmp_path, monkeypatch, multiple_originals=True)
     validate = value.service._validation
