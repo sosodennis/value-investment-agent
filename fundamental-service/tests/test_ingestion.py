@@ -27,8 +27,12 @@ from fundamental_service.dqc_applicability import dqc_applicability_policy_diges
 from fundamental_service.facts import (
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
+    MappingObservationScopeV1,
 )
+from fundamental_service import ingestion
 from fundamental_service.ingestion import SecIngestionService, read_sec_xbrl_archive
+from fundamental_service.mapping_input_identity import MappingInputDigests
+from fundamental_service.serialization import sha256_digest
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
 from fundamental_service.snapshots import (
@@ -538,6 +542,59 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     )
     assert missing_field_result.missing_fields == ("cash_and_equivalents",)
     assert missing_field_issue.severity is Severity.ERROR
+
+    scope = MappingObservationScopeV1(
+        issuer_id=ingestion_args["identity"].issuer_id,
+        accession_number=ingestion_args["accession_number"],
+        raw_content_hash=missing_field_result.integrity_evidence.raw_content_hash,
+        parser_input_hash=missing_field_result.parser_report.source_content_hash,
+        parser_replay_digest=missing_field_result.parser_report.replay_digest(),
+        observation_digests=tuple(
+            sha256_digest(fact) for fact in missing_field_result.parser_report.facts
+        ),
+    )
+    scoped_args = {
+        **prepare_args,
+        "mappings": tuple(
+            mapping.model_copy(update={"observation_scope": scope})
+            for mapping in prepare_args["mappings"]
+        ),
+    }
+    contexts = []
+    replay_calls = []
+    rebuild = ingestion.parsed_facts_to_candidates
+    replay_digest = ArelleParseReportV1.replay_digest
+
+    def compare_candidates(report, **kwargs):
+        context = kwargs.pop("input_digests")
+        contexts.append(context)
+        expected = rebuild(report, **kwargs)
+        with monkeypatch.context() as checks:
+
+            def counted_replay(report):
+                replay_calls.append(report)
+                return replay_digest(report)
+
+            checks.setattr(ArelleParseReportV1, "replay_digest", counted_replay)
+            actual = rebuild(report, input_digests=context, **kwargs)
+        assert actual == expected
+        return actual
+
+    with monkeypatch.context() as checks:
+        checks.setattr(ingestion, "parsed_facts_to_candidates", compare_candidates)
+        shared = service.prepare_filing(**scoped_args)
+        assert len(contexts) == 2 and contexts[0] is contexts[1]
+        assert len(replay_calls) == 1
+        contexts.clear()
+        replay_calls.clear()
+        checks.setattr(
+            ingestion, "MappingInputDigests", lambda: MappingInputDigests(max_reports=0)
+        )
+        evicted = service.prepare_filing(**scoped_args)
+        assert len(replay_calls) == 2
+    assert replace(shared, parser_report=evicted.parser_report) == evicted
+    assert shared.parser_report.replay_digest() == evicted.parser_report.replay_digest()
+    assert shared.missing_fields == ("cash_and_equivalents",)
 
     historical_args = {
         **prepare_args,

@@ -56,6 +56,7 @@ from .inline_xbrl import (
     select_inline_document_set,
 )
 from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
+from .mapping_input_identity import MappingInputDigests
 from .parser_actions import ParserActions
 from .parser_action_identity import ParserBuildChecks
 from .replay import ArtifactRecordV1
@@ -1044,6 +1045,7 @@ class SecIngestionService:
         missing_fields: list[str] = list(mapping_missing)
         issues: list[IssueV1] = list(mapping_issues)
         first_selection = FactSelection(None, (), ())
+        input_digests = MappingInputDigests()
         for index, mapping in enumerate(mappings):
             if mapping.accounting_rules is not None:
                 for rule in mapping.accounting_rules.periods:
@@ -1063,6 +1065,7 @@ class SecIngestionService:
                 security_id=identity.security_id,
                 normalized_field=mapping.normalized_field,
                 mapping=mapping,
+                input_digests=input_digests,
             )
             selection = select_canonical_fact(candidates, valuation_timestamp)
             if index == 0:
