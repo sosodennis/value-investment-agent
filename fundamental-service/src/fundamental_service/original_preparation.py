@@ -17,7 +17,7 @@ from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 from .annual_discovery import AnnualFilingV1
 from .annual_discovery_service import AnnualDiscovery, AnnualDiscoveryEvidenceV1
-from .arelle_parser import fact_semantic_digest
+from .arelle_parser import ParsedXbrlFactV1, fact_semantic_digest
 from .command_artifacts import EvidenceArtifactStore
 from .contracts import (
     IdentityV1,
@@ -31,6 +31,7 @@ from .issuer_identity import (
     OriginalHistoryIdentityPolicy,
     OriginalSecuritySelectionPolicy,
     original_history_identity_key,
+    original_identity_evidence_facts,
     resolve_original_filing_identity,
 )
 from .original_issuer import OriginalIssuerEvidenceChecks, OriginalIssuerEvidenceV1
@@ -310,6 +311,36 @@ class OriginalPreparationEvidenceV1(StrictModel):
         )
 
 
+@dataclass(frozen=True)
+class _FilingAssessment:
+    request: OriginalValidationRequestV1
+    artifact_id: str
+    facts: tuple[ParsedXbrlFactV1, ...] | None
+    issue_codes: tuple[str, ...]
+    retryable: bool
+
+    @classmethod
+    def from_validation(
+        cls, validation: OriginalValidationEvidenceV1, *, project: bool
+    ) -> _FilingAssessment:
+        facts = (
+            validation.original.report.facts
+            if validation.original is not None
+            else None
+        )
+        return cls(
+            request=validation.request,
+            artifact_id=validation.artifact_id,
+            facts=(
+                original_identity_evidence_facts(facts)
+                if project and facts is not None
+                else facts
+            ),
+            issue_codes=validation.issue_codes,
+            retryable=validation.retryable,
+        )
+
+
 class OriginalPreparation:
     def __init__(
         self,
@@ -498,6 +529,21 @@ class OriginalPreparation:
         annual: AnnualDiscoveryEvidenceV1,
         validations: tuple[OriginalValidationEvidenceV1, ...],
     ) -> OriginalPreparationEvidenceV1:
+        return self._assess_filings(
+            request,
+            annual,
+            tuple(
+                _FilingAssessment.from_validation(validation, project=False)
+                for validation in validations
+            ),
+        )
+
+    def _assess_filings(
+        self,
+        request: OriginalPreparationRequestV1,
+        annual: AnnualDiscoveryEvidenceV1,
+        validations: tuple[_FilingAssessment, ...],
+    ) -> OriginalPreparationEvidenceV1:
         codes = set(self._selection_issues(request, annual))
         expected = () if codes else annual.selection.selected
         if tuple(v.request.filing for v in validations) != expected or any(
@@ -513,12 +559,12 @@ class OriginalPreparation:
         for validation in validations:
             identity = None
             reasons = set(validation.issue_codes)
-            if not reasons and validation.original is not None:
+            if not reasons and validation.facts is not None:
                 try:
                     identity = resolve_original_filing_identity(
                         cik=validation.request.cik,
                         accepted_at=validation.request.filing.accepted_at,
-                        facts=validation.original.report.facts,
+                        facts=validation.facts,
                         ticker=request.ticker,
                         share_class=request.share_class,
                         security_selection_policy=request.security_selection_policy,
@@ -642,15 +688,18 @@ class OriginalPreparation:
                 f"original-preparation-request:{request.digest}", request
             )
             validations = tuple(
-                self._validation(
-                    OriginalValidationRequestV1(
-                        cik=annual.request.cik,
-                        valuation_timestamp=annual.request.valuation_timestamp,
-                        filing=filing,
-                        runtime=request.runtime,
+                _FilingAssessment.from_validation(
+                    self._validation(
+                        OriginalValidationRequestV1(
+                            cik=annual.request.cik,
+                            valuation_timestamp=annual.request.valuation_timestamp,
+                            filing=filing,
+                            runtime=request.runtime,
+                        ),
+                        deadline_at,
+                        build_checks,
                     ),
-                    deadline_at,
-                    build_checks,
+                    project=True,
                 )
                 for filing in (
                     ()
@@ -658,7 +707,7 @@ class OriginalPreparation:
                     else annual.selection.selected
                 )
             )
-            evidence = self._assess(request, annual, validations)
+            evidence = self._assess_filings(request, annual, validations)
             build_checks.verify()
             publication = self._artifacts.put_with_receipt(
                 evidence.artifact_id, evidence, evidence.dependencies
