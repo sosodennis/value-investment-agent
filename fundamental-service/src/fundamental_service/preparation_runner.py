@@ -79,6 +79,7 @@ from .mapping_input_storage import read_mapping_batch_input
 from .mapping_input_identity import MappingInputDigests
 from .original_issuer import OriginalIssuerEvidenceChecks
 from .serialization import canonical_bytes, sha256_digest
+from .process_output import write_stdout
 from .source_acquisition import SecAcquisitionUseCase
 from .snapshots import SnapshotError
 from .public_acquisition import (
@@ -2986,6 +2987,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         receipt = asyncio.run(_run_command(args))
+        write_stdout(canonical_bytes(receipt) + b"\n")
     except SnapshotError as error:
         print(
             canonical_bytes(
@@ -3011,7 +3013,6 @@ def main(argv: list[str] | None = None) -> int:
     ) as error:
         print(f"source preparation failed: {error}", file=sys.stderr)
         return 2
-    print(canonical_bytes(receipt).decode("utf-8"))
     return 0
 
 
