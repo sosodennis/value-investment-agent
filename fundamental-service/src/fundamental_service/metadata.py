@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import sys
 from concurrent.futures import Future
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -1591,14 +1592,14 @@ class PostgresMetadataStore:
 
     def retained_artifact_records(
         self, artifact_ids: tuple[str, ...]
-    ) -> dict[str, tuple[ArtifactRecordV1, int | None]]:
+    ) -> dict[str, _RetainedArtifactMetadata]:
         self._require_ready()
         if not artifact_ids:
             return {}
         rows = self._runner.run(self._retained_artifact_records(artifact_ids))
         return {
-            row["artifact_id"]: (
-                ArtifactRecordV1.model_validate(
+            row["artifact_id"]: _RetainedArtifactMetadata(
+                canonical_bytes(
                     {key: value for key, value in row.items() if key != "byte_length"}
                 ),
                 row["byte_length"],
@@ -1888,10 +1889,18 @@ class PostgresArtifactStore:
 
     @contextmanager
     def retained_read_operation(
-        self, artifact_ids: tuple[str, ...]
+        self,
+        artifact_ids: tuple[str, ...],
+        *,
+        max_entries: int = 512,
+        max_bytes: int = 2 * 1024 * 1024,
     ) -> Iterator[_RetainedPostgresArtifactReads]:
+        if min(max_entries, max_bytes) < 0:
+            raise ValueError("artifact metadata retention limits must be nonnegative")
         try:
-            reader = _RetainedPostgresArtifactReads(self, artifact_ids)
+            reader = _RetainedPostgresArtifactReads(
+                self, artifact_ids, max_entries=max_entries, max_bytes=max_bytes
+            )
         except Exception as error:
             raise DataReleaseError(
                 "DATA_RELEASE_ARTIFACT_UNAVAILABLE",
@@ -1920,40 +1929,156 @@ class PostgresArtifactStore:
         return None
 
 
+@dataclass(frozen=True, slots=True)
+class _RetainedArtifactMetadata:
+    payload: bytes
+    byte_length: int | None
+
+    def record(self) -> ArtifactRecordV1:
+        return ArtifactRecordV1.model_validate_json(self.payload)
+
+    def references_content(self, content_hash: str, media_type: str) -> bool:
+        payload = json.loads(self.payload)
+        return (
+            payload["content_hash"] == content_hash
+            and payload["media_type"] == media_type
+        )
+
+
 class _RetainedPostgresArtifactReads:
     """Metadata snapshot for one verification; bytes stay streamed and rehashed."""
 
     def __init__(
-        self, artifacts: PostgresArtifactStore, artifact_ids: tuple[str, ...]
+        self,
+        artifacts: PostgresArtifactStore,
+        artifact_ids: tuple[str, ...],
+        *,
+        max_entries: int,
+        max_bytes: int,
     ) -> None:
         self._artifacts = artifacts
-        self._ids = set(artifact_ids)
+        self._max_entries = max_entries
+        self._max_bytes = max_bytes
+        self._ids: set[str] = set()
+        self._records: dict[str, _RetainedArtifactMetadata] = {}
+        self._closed = False
+        self._fallback = False
+        for artifact_id in artifact_ids:
+            self._ids.add(artifact_id)
+            if self._over_budget():
+                self._discard_batch()
+                return
         self._records = artifacts._metadata.retained_artifact_records(
             tuple(sorted(self._ids))
         )
-        self._closed = False
+        if self._over_budget():
+            self._discard_batch()
+
+    def _over_budget(self) -> bool:
+        retained_bytes = (
+            sys.getsizeof(self._ids)
+            + sys.getsizeof(self._records)
+            + sum(sys.getsizeof(identity) for identity in self._ids)
+            + sum(
+                sys.getsizeof(identity)
+                + sys.getsizeof(entry)
+                + sys.getsizeof(entry.payload)
+                + sys.getsizeof(entry.byte_length)
+                for identity, entry in self._records.items()
+            )
+        )
+        return len(self._ids) > self._max_entries or retained_bytes > self._max_bytes
+
+    def _discard_batch(self) -> None:
+        self._fallback = True
+        self._ids.clear()
+        self._records.clear()
+
+    def _require_current(self) -> None:
+        if not self._fallback:
+            current = self._artifacts._metadata.retained_artifact_records(
+                tuple(sorted(self._ids))
+            )
+            if current != self._records:
+                raise DataReleaseError(
+                    "ARTIFACT_EVIDENCE_CHANGED",
+                    "release artifact metadata changed during its read operation",
+                )
 
     def get(self, artifact_id: str) -> ArtifactRecordV1:
         if self._closed:
             raise RuntimeError("retained artifact read operation has ended")
+        if self._fallback:
+            return self._artifacts.get(artifact_id)
         if artifact_id not in self._ids:
+            if len(self._ids) >= self._max_entries:
+                self._require_current()
+                self._discard_batch()
+                return self._artifacts.get(artifact_id)
             self._ids.add(artifact_id)
             self._records.update(
                 self._artifacts._metadata.retained_artifact_records((artifact_id,))
             )
+            if self._over_budget():
+                self._require_current()
+                self._discard_batch()
+                return self._artifacts.get(artifact_id)
         entry = self._records.get(artifact_id)
         if entry is None:
             raise SnapshotError(
                 "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
             )
-        return entry[0]
+        return entry.record()
 
     def read(self, artifact_id: str) -> bytes:
         record = self.get(artifact_id)
+        if self._fallback:
+            return self._artifacts.read(artifact_id)
         raw = self._artifacts._content._filesystem.get(
             record.content_hash, media_type=record.media_type
         )
-        if self._records[artifact_id][1] != len(raw):
+        entry = self._records[artifact_id]
+        if entry.byte_length is None:
+            self._artifacts._metadata.register_content(
+                record.content_hash, media_type=record.media_type, byte_length=len(raw)
+            )
+            current = self._artifacts._metadata.retained_artifact_records(
+                tuple(sorted(self._ids))
+            )
+            repaired = current.get(artifact_id)
+            if repaired is None or repaired.payload != entry.payload:
+                raise DataReleaseError(
+                    "ARTIFACT_EVIDENCE_CHANGED",
+                    "artifact metadata changed during content registration repair",
+                )
+            if repaired.byte_length != len(raw):
+                raise SnapshotError(
+                    "CONTENT_METADATA_MISMATCH",
+                    "repaired content registration differs from its checked bytes",
+                )
+            expected = {
+                identity: _RetainedArtifactMetadata(
+                    previous.payload,
+                    len(raw)
+                    if previous.byte_length is None
+                    and previous.references_content(
+                        record.content_hash, record.media_type
+                    )
+                    else previous.byte_length,
+                )
+                for identity, previous in self._records.items()
+            }
+            if current != expected:
+                raise DataReleaseError(
+                    "ARTIFACT_EVIDENCE_CHANGED",
+                    "artifact metadata changed during content registration repair",
+                )
+            self._records = expected
+            entry = repaired
+            if self._over_budget():
+                self._require_current()
+                self._discard_batch()
+        if entry.byte_length != len(raw):
             raise SnapshotError(
                 "CONTENT_METADATA_MISMATCH",
                 "retained content registration differs from its checked bytes",
@@ -1961,18 +2086,15 @@ class _RetainedPostgresArtifactReads:
         return raw
 
     def finish(self) -> None:
-        self.close()
-        current = self._artifacts._metadata.retained_artifact_records(
-            tuple(sorted(self._ids))
-        )
-        if current != self._records:
-            raise DataReleaseError(
-                "ARTIFACT_EVIDENCE_CHANGED",
-                "release artifact metadata changed during its read operation",
-            )
+        try:
+            self._require_current()
+        finally:
+            self.close()
 
     def close(self) -> None:
         self._closed = True
+        self._ids.clear()
+        self._records.clear()
 
 
 __all__ = [
