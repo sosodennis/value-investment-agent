@@ -48,7 +48,7 @@ def original_identity_evidence_facts(
     facts: tuple[ParsedXbrlFactV1, ...],
 ) -> tuple[ParsedXbrlFactV1, ...]:
     """Keep ordered identity inputs; bound extra references without losing facts."""
-    selected = []
+    selected: list[ParsedXbrlFactV1] = []
     for fact in facts:
         if (
             fact.concept in _ORIGINAL_IDENTITY_EVIDENCE_CONCEPTS
