@@ -5,6 +5,7 @@ import pytest
 from fundamental_service import automatic_mapping_evidence as evidence
 from fundamental_service import original_issuer
 from fundamental_service.arelle_parser import ArelleParseReportV1
+from fundamental_service.artifact_evidence import retained_artifact_operation
 from fundamental_service.automatic_mapping import evaluate_automatic_mapping
 from fundamental_service.automatic_mapping_evidence import (
     AutomaticMappingEvidenceChecks,
@@ -55,6 +56,44 @@ def test_shared_original_checks_preserve_each_distinct_proposal(tmp_path, monkey
     assert len(calls) == 1
     assert evaluate_automatic_mapping(request, contents=contents) == expected[0]
     assert len(calls) == 2
+
+
+def test_mapping_metadata_views_share_bytes_and_end_before_the_next_read(
+    tmp_path, monkeypatch
+):
+    request, store, _, _ = case(tmp_path)
+    ref = request.evidence_refs[0]
+    expected = store.read(ref.artifact_id)
+    read = store.read
+    reads = []
+
+    def observed(artifact_id):
+        reads.append(artifact_id)
+        return read(artifact_id)
+
+    monkeypatch.setattr(store, "read", observed)
+    checks = AutomaticMappingEvidenceChecks()
+    owner = checks.reader(store)
+    for _ in range(3):
+        with retained_artifact_operation(owner, (ref.artifact_id,)) as reader:
+            assert reader.read(ref.artifact_id) == expected
+        with pytest.raises(RuntimeError, match="ended"):
+            reader.read(ref.artifact_id)
+    assert reads == [ref.artifact_id]
+    assert checks.reader(store) is owner
+    get = store.get
+    monkeypatch.setattr(
+        store,
+        "get",
+        lambda identity: get(identity).model_copy(
+            update={"dependency_hashes": ("f" * 64,)}
+        ),
+    )
+    with retained_artifact_operation(owner, (ref.artifact_id,)) as reader:
+        assert reader.read(ref.artifact_id) == expected
+    assert reads == [ref.artifact_id, ref.artifact_id]
+    with pytest.raises(ValueError, match="one artifact store"):
+        checks.reader(object())
 
 
 def test_report_replay_work_is_shared_without_changing_mapping_results(

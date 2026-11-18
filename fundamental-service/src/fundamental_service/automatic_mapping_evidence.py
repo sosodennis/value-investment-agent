@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 from collections import OrderedDict
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from .arelle_parser import ArelleParseReportV1
+from .artifact_evidence import retained_artifact_operation
 from .data_releases import DataReleaseError
 from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
@@ -39,15 +42,18 @@ class _MappingArtifactReadScope:
         return self.reader.get(artifact_id)
 
     def read(self, artifact_id: str) -> bytes:
-        record = self.reader.get(artifact_id)
+        return self._read(artifact_id, self.reader)
+
+    def _read(self, artifact_id: str, reader: MappingInputReader) -> bytes:
+        record = reader.get(artifact_id)
         previous = self._retained.pop(artifact_id, None)
         if previous is not None:
             if previous[0] == record:
                 self._retained[artifact_id] = previous
                 return previous[1]
             self._size -= len(previous[1])
-        raw = self.reader.read(artifact_id)
-        if record.artifact_id != artifact_id or self.reader.get(artifact_id) != record:
+        raw = reader.read(artifact_id)
+        if record.artifact_id != artifact_id or reader.get(artifact_id) != record:
             raise DataReleaseError(
                 "MAPPING_SOURCE_ARTIFACT_CHANGED",
                 "source bytes and metadata must identify one fixed artifact",
@@ -65,6 +71,39 @@ class _MappingArtifactReadScope:
             self._retained[artifact_id] = record, raw
             self._size += len(raw)
         return raw
+
+    @contextmanager
+    def retained_read_operation(
+        self, artifact_ids: tuple[str, ...]
+    ) -> Iterator[MappingInputReader]:
+        with retained_artifact_operation(self.reader, artifact_ids) as reader:
+            view = _MappingArtifactReadView(self, reader)
+            try:
+                yield view
+            finally:
+                view.close()
+
+
+class _MappingArtifactReadView:
+    def __init__(
+        self, scope: _MappingArtifactReadScope, reader: MappingInputReader
+    ) -> None:
+        self._scope = scope
+        self._reader: MappingInputReader | None = reader
+
+    def _current(self) -> MappingInputReader:
+        if self._reader is None:
+            raise RuntimeError("mapping artifact read operation has ended")
+        return self._reader
+
+    def get(self, artifact_id: str) -> ArtifactRecordV1:
+        return self._current().get(artifact_id)
+
+    def read(self, artifact_id: str) -> bytes:
+        return self._scope._read(artifact_id, self._current())
+
+    def close(self) -> None:
+        self._reader = None
 
 
 class AutomaticMappingEvidenceChecks:

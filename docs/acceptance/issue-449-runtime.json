@@ -1,0 +1,248 @@
+{
+  "schema_version": 2,
+  "acceptance_scope": "fundamental-service",
+  "acceptance_profile": "persistent-valuation-flow-v1",
+  "issue": 449,
+  "branch": "codex/issue-449-preparation-performance",
+  "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+  "status": "VERIFIED",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-449-preparation-performance/value-investment-agent",
+    "allowed_untracked_paths": [],
+    "fundamental": {
+      "compose_project": "value-investment-agent-449-preparation-performance",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-449-preparation-performance/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-449-preparation-performance/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-449-preparation-performance/compose-runtime.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-449-preparation-performance/candidate-261856d6-compose.json",
+        "/Users/denniswong/.codex/diagnostics/issue-449-preparation-performance/formal-261856d6-b-p5-candidate-compose.yml"
+      ],
+      "env_files": [
+        {
+          "path": "/Users/denniswong/.codex/diagnostics/issue-449-preparation-performance/runtime.env",
+          "sha256": "e7ea92cf77f4947da90a18293d89cb4a2e0482b0c03c6618708714ab50ca491a"
+        }
+      ],
+      "image_id": "sha256:628db23a72bd4623702b3a710ce6ba0c181c565467fdf3aa589e55a7b758640d",
+      "runtime_pins": {
+        "python": "3.12.16",
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2"
+      },
+      "published_host": "127.0.0.1",
+      "published_port": 21561,
+      "container_port": 8080,
+      "service": "fundamental-service",
+      "url": "http://127.0.0.1:21561",
+      "dependencies": [
+        {
+          "service": "fundamental-postgres",
+          "published_host": "127.0.0.1",
+          "published_port": 21562,
+          "container_port": 5432
+        }
+      ],
+      "networks": [
+        "value-investment-agent-449-preparation-performance_default"
+      ],
+      "volumes": [
+        "value-investment-agent-449-preparation-performance_fundamental-postgres-data",
+        "value-investment-agent-449-preparation-performance_data-formal-261856d6-b-p5-candidate",
+        "value-investment-agent-449-preparation-performance_scratch-formal-261856d6-b-p5-candidate"
+      ],
+      "source": {
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 183,
+        "sha256": "ea50816be3316168d49bac52b4f33c0f5e9a20f0dca310ddee3e5d374327ca1a"
+      }
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "architecture",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "python3 scripts/architecture_guard.py; fundamental_service.architecture_guard",
+      "exit_code": 0,
+      "input_digest": "b0d922407123079150188eac3e93844f62b981d9e54ed8ed0ced186eab32b822",
+      "output_digest": "938bc2f6b2062db70672d9ca3a5565ebf413f2f8dcb1ab2b2c20347a0135d9bd"
+    },
+    {
+      "name": "artifact_retrieval",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Authenticated numerical/provenance API with content hashes and input/result digest binding",
+      "exit_code": 0,
+      "input_digest": "d21f9c38b3358a18ac7735b951bdfb2fa99bf79a9ec7cd4e03ee8b82f2e99e3b",
+      "output_digest": "c71ed9985ee8c4a9adbac8a620e7e3c8f2cc6e757bc0fb5c6034541bdf295ac5"
+    },
+    {
+      "name": "calculation",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Deployment-authorized exact-input automatic caller and existing calculator after independent restore",
+      "exit_code": 0,
+      "input_digest": "7ca603d204325aa3e8beeed0996bb99aa123c37d70f47c3f75120a36dd11106b",
+      "output_digest": "c71ed9985ee8c4a9adbac8a620e7e3c8f2cc6e757bc0fb5c6034541bdf295ac5"
+    },
+    {
+      "name": "concurrent_deduplication",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Reviewed concurrency/capacity evidence with retained one-worker limits and full row comparison",
+      "exit_code": 0,
+      "input_digest": "c0669bc972b7fcfa80aabb0d3f0cf6dfeb69e9c127987422928faea7698acdde",
+      "output_digest": "3191b3edb18aac1077f2179db0218b0582e7064d13eec456f3c6f74baab77957"
+    },
+    {
+      "name": "deterministic_repeat",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Five matched C pairs; stable signatures, wrote=false, exact full table contents",
+      "exit_code": 0,
+      "input_digest": "d6bd7036b43c3831258a31d74b87ad283ab1b44846d010ee3d3d57db5a5d375e",
+      "output_digest": "9fca094a6dba5cc929be1d36b111dfece579493c0dac921b64e57d866db02e58"
+    },
+    {
+      "name": "diff",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "git diff --check a82cbdb1 261856d6",
+      "exit_code": 0,
+      "input_digest": "e96958e6cb8df1d1b829ca8221784ac7699c57bbebf20b27dcf3fa205af712b7",
+      "output_digest": "938bc2f6b2062db70672d9ca3a5565ebf413f2f8dcb1ab2b2c20347a0135d9bd"
+    },
+    {
+      "name": "failure_retention",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Queue, revocation, API and parser refusals; original rows retained, new refusal artifacts verified",
+      "exit_code": 0,
+      "input_digest": "bb27a4ce1612730febadf0e8741a5cfaa2b48776a6ce5b716d3f9d26be29013c",
+      "output_digest": "994d27c57388c6a2c4e23f7f3acf47cb3e9b645d3f3de8e88b161f67ae0ea838"
+    },
+    {
+      "name": "forecast",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Formal composer and unchanged calculator complete three provisional scenarios in every sample",
+      "exit_code": 0,
+      "input_digest": "2d7dc2ed632cb7d5b8b6de7d485fa26f2aad78bf5f6b8e26d4629991156f8800",
+      "output_digest": "9fca094a6dba5cc929be1d36b111dfece579493c0dac921b64e57d866db02e58"
+    },
+    {
+      "name": "full_flow_repeat",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "All five alternating A/B/C pairs; full API boundary and applicable digests",
+      "exit_code": 0,
+      "input_digest": "d962f1a7cfeb6ecf2328ea8490a7989fd358bde95683b8eeb57a46e0d533bbf7",
+      "output_digest": "9fca094a6dba5cc929be1d36b111dfece579493c0dac921b64e57d866db02e58"
+    },
+    {
+      "name": "mapping",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "export_work_attribution_261856d6.py; 220 independent mapping replays retained, exact numerical output in formal samples",
+      "exit_code": 0,
+      "input_digest": "663042de01c6b9a1ab2d7f022abc467ec4974403a2139af4819b36db97990470",
+      "output_digest": "2b6fd7677acef6b86606f94e90f45b2f065f2b2b07ea005b4a06a4278975e777"
+    },
+    {
+      "name": "preparation",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Thirty complete real company/date timed flows with frozen store and runtime boundary",
+      "exit_code": 0,
+      "input_digest": "93b9c77dd2d30685d2a41de8c8dc53228d879493a9b50a640728518887648f04",
+      "output_digest": "9fca094a6dba5cc929be1d36b111dfece579493c0dac921b64e57d866db02e58"
+    },
+    {
+      "name": "restart_restore",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "run_recovery_replays.py restart/interrupt; run_empty_restore.py",
+      "exit_code": 0,
+      "input_digest": "65d4b8c2748d97c3982ac1cc7710739007a5ffd0ac308e9563ab0c616ca1414f",
+      "output_digest": "3191b3edb18aac1077f2179db0218b0582e7064d13eec456f3c6f74baab77957"
+    },
+    {
+      "name": "review",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Independent read-only source and completed evidence review; primary performed implementation/tests/runtime/GitHub",
+      "exit_code": 0,
+      "input_digest": "1a476cac321a7bf57aa93a59956d1011c2a1bc07bf8b02150c3aff8e876e13ce",
+      "output_digest": "21043630dc2674265b866f5b050a5159882e4bd1b16bc61401dd76cdc387a4a6"
+    },
+    {
+      "name": "ruff",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Ruff 0.14.10 check and changed-file format --check",
+      "exit_code": 0,
+      "input_digest": "40808f8a9cc6db85ecdcb0e201219ef6c2eee4a2708d9fea8adbf9d7a1462f6e",
+      "output_digest": "938bc2f6b2062db70672d9ca3a5565ebf413f2f8dcb1ab2b2c20347a0135d9bd"
+    },
+    {
+      "name": "service_acceptance",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Exact SEC-enabled image preflight, actual Service release gate and full real numerical/recovery acceptance",
+      "exit_code": 0,
+      "input_digest": "812ee291866892cd47d7b711c0e6ce62793c9f170504847bc9c96b1231493832",
+      "output_digest": "3191b3edb18aac1077f2179db0218b0582e7064d13eec456f3c6f74baab77957"
+    },
+    {
+      "name": "snapshot_persistence",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "run_empty_restore.py; first restore writes, repeat wrote=false and all tables match",
+      "exit_code": 0,
+      "input_digest": "9e37f921842e2498077fec448db029e2d896a1a69dda8b5e6e1ed306a2b12270",
+      "output_digest": "c71ed9985ee8c4a9adbac8a620e7e3c8f2cc6e757bc0fb5c6034541bdf295ac5"
+    },
+    {
+      "name": "source_acquisition",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "run_formal_pairs.py --prefix formal-261856d6 --start 1 --end 5; A captured-source automatic preparation with six actual parser validations",
+      "exit_code": 0,
+      "input_digest": "0b2797870b81ecc95dba0b7859e447fbef23eebdb6f1e8d3ff1b8ac4dc6705cd",
+      "output_digest": "9fca094a6dba5cc929be1d36b111dfece579493c0dac921b64e57d866db02e58"
+    },
+    {
+      "name": "source_reuse",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "Same formal B/C samples; matching parser evidence and fixed-input reuse",
+      "exit_code": 0,
+      "input_digest": "40d52f75ef0b6da72900837925f38678fdf56d187eb7b2a17d94e78015bc1049",
+      "output_digest": "9fca094a6dba5cc929be1d36b111dfece579493c0dac921b64e57d866db02e58"
+    },
+    {
+      "name": "types",
+      "status": "pass",
+      "commit": "261856d60a552ad2d8df2870b6d493a48f004b7f",
+      "command": "mypy 1.19.1 with exact changed production paths and CI flags",
+      "exit_code": 0,
+      "input_digest": "e89dbca16f96cdf5805f7b111ea22cd96e54e2866ecc18182d9258cd1b7177b3",
+      "output_digest": "938bc2f6b2062db70672d9ca3a5565ebf413f2f8dcb1ab2b2c20347a0135d9bd"
+    }
+  ],
+  "next_step": "Ordinary guarded PR450 merge; verify rebuilt merge-SHA real preparation, numerical/API/replay and performance applicability, then close issue and clean owned resources.",
+  "blockers": [],
+  "evidence_root": "/Users/denniswong/.codex/diagnostics/issue-449-preparation-performance",
+  "quality_limitation": "MSFT remains provisional, uncalibrated what-if; capital, awards and reinvestment assumptions remain unobserved. supported_history_threshold=null.",
+  "performance_summary_sha256": "9fca094a6dba5cc929be1d36b111dfece579493c0dac921b64e57d866db02e58",
+  "capacity_limitation": "Two simultaneous complete CLI flows on 1 CPU / 1 worker produced one HTTP 408; on 1 CPU / 2 workers both produced HTTP 408. Both failures retain identical complete tables, no OOM and responsive health checks. Separately labelled 2 CPU / 2 worker capacity acceptance succeeds for both complete numerical/API flows with identical signatures, wrote=false and full table contents. This establishes only that explicit capacity configuration, not simultaneous success at the frozen single-worker performance capacity. The canonical 1 CPU / 1 worker runtime is restored. All 30 formal performance samples retain 1 CPU / 3 GiB / 1 worker, CLI 900 s and API 5 s."
+}

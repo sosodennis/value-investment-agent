@@ -1296,6 +1296,445 @@ def test_retained_artifact_operation_preserves_failure_reasons(
         assert len(calls) == 1
 
 
+def _change_artifact_metadata(metadata, query, parameters):
+    async def change():
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(text(query), parameters)
+
+    metadata._runner.run(change())
+
+
+def test_retained_metadata_preserves_first_byte_failure_before_later_bad_row(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    first = artifacts.put(uuid4().hex, {"first": uuid4().hex})
+    later = artifacts.put(uuid4().hex, {"later": uuid4().hex})
+    _change_artifact_metadata(
+        metadata,
+        "UPDATE fundamental.artifact_references "
+        "SET dependency_hashes=CAST(:dependencies AS jsonb) WHERE artifact_id=:id",
+        {"id": later.artifact_id, "dependencies": json.dumps({"malformed": True})},
+    )
+    content._filesystem._path(first.content_hash, first.media_type).write_bytes(
+        b"corrupt"
+    )
+    with pytest.raises(SnapshotError) as error:
+        with artifacts.retained_read_operation(
+            (first.artifact_id, later.artifact_id)
+        ) as reader:
+            reader.read(first.artifact_id)
+            reader.get(later.artifact_id)
+    assert error.value.code == "SOURCE_HASH_MISMATCH"
+    with pytest.raises(ValueError):
+        with artifacts.retained_read_operation((later.artifact_id,)) as reader:
+            reader.get(later.artifact_id)
+
+
+@pytest.mark.parametrize("fault", (None, "corrupt", "revoked"))
+def test_retained_reads_repair_only_verified_content_registration(
+    metadata: PostgresMetadataStore, tmp_path: Path, monkeypatch, fault: str | None
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    record = artifacts.put(uuid4().hex, {"repair": uuid4().hex})
+    raw = artifacts.read(record.artifact_id)
+    _change_artifact_metadata(
+        metadata,
+        "DELETE FROM fundamental.content_objects "
+        "WHERE content_hash=:hash AND media_type=:media",
+        {"hash": record.content_hash, "media": record.media_type},
+    )
+    if fault == "corrupt":
+        content._filesystem._path(record.content_hash, record.media_type).write_bytes(
+            b"corrupt"
+        )
+    if fault == "revoked":
+        register = metadata.register_content
+
+        def revoke(*args, **kwargs):
+            register(*args, **kwargs)
+            _change_artifact_metadata(
+                metadata,
+                "UPDATE fundamental.artifact_references "
+                "SET status='invalidated' WHERE artifact_id=:id",
+                {"id": record.artifact_id},
+            )
+
+        monkeypatch.setattr(metadata, "register_content", revoke)
+
+    def read():
+        with artifacts.retained_read_operation((record.artifact_id,)) as reader:
+            assert reader.read(record.artifact_id) == raw
+            assert reader.get(record.artifact_id) == record
+
+    if fault is None:
+        read()
+    else:
+        with pytest.raises(
+            SnapshotError if fault == "corrupt" else DataReleaseError
+        ) as error:
+            read()
+        assert error.value.code == (
+            "SOURCE_HASH_MISMATCH"
+            if fault == "corrupt"
+            else "ARTIFACT_EVIDENCE_CHANGED"
+        )
+    assert metadata.has_content_hash(record.content_hash) is (fault != "corrupt")
+
+
+@pytest.mark.parametrize("change_sibling", (False, True))
+def test_registration_repair_covers_shared_content_without_accepting_other_changes(
+    metadata: PostgresMetadataStore, tmp_path: Path, monkeypatch, change_sibling: bool
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    payload = {"shared": uuid4().hex}
+    first = artifacts.put(uuid4().hex, payload)
+    sibling = artifacts.put(uuid4().hex, payload)
+    raw = artifacts.read(first.artifact_id)
+    _change_artifact_metadata(
+        metadata,
+        "DELETE FROM fundamental.content_objects "
+        "WHERE content_hash=:hash AND media_type=:media",
+        {"hash": first.content_hash, "media": first.media_type},
+    )
+    register = metadata.register_content
+
+    def repair(*args, **kwargs):
+        register(*args, **kwargs)
+        if change_sibling:
+            _change_artifact_metadata(
+                metadata,
+                "UPDATE fundamental.artifact_references "
+                "SET status='invalidated' WHERE artifact_id=:id",
+                {"id": sibling.artifact_id},
+            )
+
+    monkeypatch.setattr(metadata, "register_content", repair)
+
+    def read():
+        with artifacts.retained_read_operation(
+            (first.artifact_id, sibling.artifact_id)
+        ) as reader:
+            assert reader.read(first.artifact_id) == raw
+
+    if change_sibling:
+        with pytest.raises(DataReleaseError) as error:
+            read()
+        assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    else:
+        read()
+
+
+@pytest.mark.parametrize("limits", ({"max_entries": 0}, {"max_bytes": 1}))
+def test_retained_metadata_initial_overflow_uses_current_base_reads(
+    metadata: PostgresMetadataStore, tmp_path: Path, limits
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(uuid4().hex, {"overflow": uuid4().hex})
+    expected = artifacts.read(record.artifact_id)
+    with pytest.raises(DataReleaseError) as error:
+        with artifacts.retained_read_operation(
+            (record.artifact_id,), **limits
+        ) as reader:
+            assert reader.read(record.artifact_id) == expected
+            assert not reader._ids and not reader._records
+            _change_artifact_metadata(
+                metadata,
+                "UPDATE fundamental.artifact_references "
+                "SET status='invalidated' WHERE artifact_id=:id",
+                {"id": record.artifact_id},
+            )
+            assert reader.get(record.artifact_id).status == "invalidated"
+    assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    with pytest.raises(RuntimeError, match="ended"):
+        reader.read(record.artifact_id)
+
+
+@pytest.mark.parametrize("limit", ("entries", "bytes"))
+@pytest.mark.parametrize("changed", (False, True))
+def test_retained_metadata_indirect_overflow_checks_prior_records(
+    metadata: PostgresMetadataStore, tmp_path: Path, limit: str, changed: bool
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    first = artifacts.put(uuid4().hex, {"first": uuid4().hex})
+    indirect = artifacts.put(
+        uuid4().hex,
+        {"indirect": uuid4().hex},
+        dependency_hashes=tuple(f"{index:064x}" for index in range(40)),
+    )
+    limits = {"max_entries": 1} if limit == "entries" else {"max_bytes": 2048}
+
+    def read():
+        with artifacts.retained_read_operation(
+            (first.artifact_id,), **limits
+        ) as reader:
+            assert reader.get(first.artifact_id) == first
+            assert not reader._fallback
+            if changed:
+                _change_artifact_metadata(
+                    metadata,
+                    "UPDATE fundamental.artifact_references "
+                    "SET status='invalidated' WHERE artifact_id=:id",
+                    {"id": first.artifact_id},
+                )
+            assert reader.read(indirect.artifact_id) == artifacts.read(
+                indirect.artifact_id
+            )
+            assert not reader._ids and not reader._records
+            assert reader.get(first.artifact_id) == first
+
+    if changed:
+        with pytest.raises(DataReleaseError) as error:
+            read()
+        assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    else:
+        read()
+
+
+@pytest.mark.parametrize("initial", (False, True))
+@pytest.mark.parametrize(
+    "fault", ("status", "dependency", "retention", "length", "missing")
+)
+def test_retained_metadata_overflow_keeps_the_final_guard(
+    metadata: PostgresMetadataStore, tmp_path: Path, initial: bool, fault: str
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    first = artifacts.put(uuid4().hex, {"first": uuid4().hex})
+    second = artifacts.put(uuid4().hex, {"second": uuid4().hex})
+    ids = (first.artifact_id, second.artifact_id) if initial else (first.artifact_id,)
+    with pytest.raises(DataReleaseError) as error:
+        with artifacts.retained_read_operation(ids, max_entries=1) as reader:
+            reader.read(first.artifact_id)
+            reader.read(second.artifact_id)
+            assert reader._fallback and not reader._ids and not reader._records
+            journal = getattr(reader, "_journal", None)
+            if fault == "missing":
+                query = (
+                    "DELETE FROM fundamental.artifact_references WHERE artifact_id=:id"
+                )
+            elif fault == "length":
+                query = (
+                    "UPDATE fundamental.content_objects SET byte_length=byte_length+1 "
+                    "WHERE content_hash=:hash"
+                )
+            else:
+                assignment = {
+                    "status": "status='invalidated'",
+                    "dependency": "dependency_hashes=CAST(:deps AS jsonb)",
+                    "retention": "retention='operational_cache'",
+                }[fault]
+                query = f"UPDATE fundamental.artifact_references SET {assignment} WHERE artifact_id=:id"
+            _change_artifact_metadata(
+                metadata,
+                query,
+                {
+                    "id": first.artifact_id,
+                    "hash": first.content_hash,
+                    "deps": json.dumps(["f" * 64]),
+                },
+            )
+    assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    assert journal.closed and reader._journal is None
+    with pytest.raises(RuntimeError, match="ended"):
+        reader.get(first.artifact_id)
+
+
+@pytest.mark.parametrize("revoke", (False, True))
+def test_retained_metadata_spilled_alias_registration_repair(
+    metadata: PostgresMetadataStore, tmp_path: Path, monkeypatch, revoke: bool
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    first = artifacts.put(uuid4().hex, {"shared": uuid4().hex})
+    second = artifacts.put(uuid4().hex, json.loads(artifacts.read(first.artifact_id)))
+    _change_artifact_metadata(
+        metadata,
+        "DELETE FROM fundamental.content_objects WHERE content_hash=:hash",
+        {"hash": first.content_hash},
+    )
+    register = metadata.register_content
+
+    def repair(*args, **kwargs):
+        register(*args, **kwargs)
+        if revoke:
+            _change_artifact_metadata(
+                metadata,
+                "UPDATE fundamental.artifact_references SET status='invalidated' WHERE artifact_id=:id",
+                {"id": second.artifact_id},
+            )
+
+    monkeypatch.setattr(metadata, "register_content", repair)
+
+    def read():
+        with artifacts.retained_read_operation(
+            (first.artifact_id, second.artifact_id, first.artifact_id), max_entries=1
+        ) as reader:
+            assert reader.read(first.artifact_id)
+            assert reader.get(second.artifact_id) == second
+            assert not reader._ids and not reader._records
+
+    if revoke:
+        with pytest.raises(DataReleaseError) as error:
+            read()
+        assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    else:
+        read()
+
+
+def test_retained_metadata_spilled_body_failure_closes_journal(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    record = artifacts.put(uuid4().hex, {"corrupt": uuid4().hex})
+    content._filesystem._path(record.content_hash, record.media_type).write_bytes(
+        b"bad"
+    )
+    with pytest.raises(SnapshotError):
+        with artifacts.retained_read_operation(
+            (record.artifact_id,), max_entries=0
+        ) as reader:
+            journal = reader._journal
+            reader.read(record.artifact_id)
+    assert journal.closed and reader._journal is None
+
+
+def test_retained_metadata_spill_enrolls_the_complete_initial_set(
+    metadata: PostgresMetadataStore, tmp_path: Path, monkeypatch
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    records = tuple(
+        artifacts.put(uuid4().hex, {"entry": uuid4().hex}) for _ in range(12)
+    )
+    calls = []
+    query = metadata._retained_artifact_records
+
+    async def checked(ids, connection=None):
+        if connection is not None:
+            isolation = await connection.execute(text("SHOW transaction_isolation"))
+            readonly = await connection.execute(text("SHOW transaction_read_only"))
+            if readonly.scalar_one() == "on":
+                calls.append((id(connection), isolation.scalar_one(), "on"))
+        return await query(ids, connection)
+
+    monkeypatch.setattr(metadata, "_retained_artifact_records", checked)
+    ids = tuple(record.artifact_id for record in records)
+    with artifacts.retained_read_operation(ids + ids, max_entries=2) as reader:
+        reader.read(ids[0])
+        assert not reader._ids and not reader._records
+    assert len(calls) == 25
+    assert len({call[0] for call in calls}) == 1
+    assert all(call[1:] == ("repeatable read", "on") for call in calls)
+    with pytest.raises(DataReleaseError) as error:
+        with artifacts.retained_read_operation(ids, max_entries=2):
+            _change_artifact_metadata(
+                metadata,
+                "UPDATE fundamental.artifact_references SET status='invalidated' WHERE artifact_id=:id",
+                {"id": ids[-1]},
+            )
+    assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+
+
+def test_retained_metadata_spill_io_failure_cannot_return_success(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(uuid4().hex, {"io": uuid4().hex})
+    with pytest.raises(DataReleaseError) as error:
+        with artifacts.retained_read_operation(
+            (record.artifact_id,), max_entries=0
+        ) as reader:
+            reader.read(record.artifact_id)
+            reader._journal.close()
+    assert error.value.code == "DATA_RELEASE_ARTIFACT_UNAVAILABLE"
+    assert reader._closed and reader._journal is None
+
+
+def test_mapping_replay_batches_each_read_but_rechecks_before_return(
+    metadata: PostgresMetadataStore, tmp_path: Path, monkeypatch
+):
+    from fundamental_service import automatic_mapping
+    from fundamental_service.automatic_mapping import AutomaticMappingDecisionV1
+    from fundamental_service.automatic_mapping_evidence import (
+        AutomaticMappingEvidenceChecks,
+    )
+    from fundamental_service.data_releases import AutomaticMappingApprovalV1
+    from test_automatic_mapping import approve, case
+
+    request, source, roots, _ = case(
+        tmp_path / "source", observation_changes={"context_id": uuid4().hex}
+    )
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    prefix = uuid4().hex
+    refs = []
+    for ref in request.evidence_refs:
+        identity = prefix + ref.artifact_id
+        artifacts.put_bytes_with_receipt(
+            identity, source.read(ref.artifact_id), media_type=ref.media_type
+        )
+        refs.append(ref.model_copy(update={"artifact_id": identity}))
+    request = request.model_copy(update={"evidence_refs": tuple(refs)})
+    receipt = approve(request, artifacts, roots)
+    decision = AutomaticMappingDecisionV1.model_validate_json(
+        artifacts.read(receipt.decision_publication.artifact.artifact_id)
+    )
+    approval = AutomaticMappingApprovalV1.model_validate_json(
+        artifacts.read(receipt.approval_publication.artifact.artifact_id)
+    )
+    batches = []
+    fetch = metadata.retained_artifact_records
+
+    def observed(ids):
+        batches.append(ids)
+        return fetch(ids)
+
+    monkeypatch.setattr(metadata, "retained_artifact_records", observed)
+    checks = AutomaticMappingEvidenceChecks()
+    for _ in range(3):
+        assert (
+            automatic_mapping.verify_automatic_mapping_replay(
+                approval, decision.mapping, artifacts=artifacts, evidence_checks=checks
+            )
+            == request
+        )
+    assert 6 <= len(batches) <= 12
+    assert len({ids for ids in batches}) <= 3
+    evaluate = automatic_mapping.evaluate_automatic_mapping
+
+    def withdraw(*args, **kwargs):
+        result = evaluate(*args, **kwargs)
+        _change_artifact_metadata(
+            metadata,
+            "UPDATE fundamental.artifact_references "
+            "SET status='invalidated' WHERE artifact_id=:id",
+            {"id": refs[0].artifact_id},
+        )
+        return result
+
+    monkeypatch.setattr(automatic_mapping, "evaluate_automatic_mapping", withdraw)
+    with pytest.raises(DataReleaseError) as error:
+        automatic_mapping.verify_automatic_mapping_replay(
+            approval, decision.mapping, artifacts=artifacts, evidence_checks=checks
+        )
+    assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+
+
 def test_distinct_sec_acquisition_keys_hold_independent_postgres_locks(
     metadata: PostgresMetadataStore,
 ):
