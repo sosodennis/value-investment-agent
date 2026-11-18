@@ -816,6 +816,14 @@ class SourcePreparationRunner:
                 return False
         return True
 
+    def _release_mapping_inputs(self) -> None:
+        inputs = self._mapping_inputs.get()
+        self._mapping_inputs.set(None)
+        if inputs is not None:
+            originals, identities = inputs
+            originals.clear()
+            identities.clear()
+
     def _verify_original_boundary(self, plan: SourcePreparationPlan) -> None:
         if (
             isinstance(plan, AutomaticSourcePreparationPlanV1)
@@ -860,6 +868,7 @@ class SourcePreparationRunner:
             if error.code != "DATA_RELEASE_NOT_ACTIVE":
                 raise
             active = None
+        self._release_mapping_inputs()
         self._canary.validate(manifest, candidate.verification)
         guard_execution_deadline(deadline_at)
         if not self._candidate_snapshot_available(
@@ -1732,6 +1741,7 @@ class SourcePreparationRunner:
         )
         if self._acquisition is not None:
             self._acquisition.verify_original_boundary()
+        self._release_mapping_inputs()
         receipt = self._automatic_release.verify_and_sign(
             request, deadline_at=deadline_at
         )

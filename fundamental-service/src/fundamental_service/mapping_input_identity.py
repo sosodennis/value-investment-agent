@@ -63,6 +63,10 @@ class MappingInputDigests:
         self._size = 0
         self._reports: OrderedDict[int, _ReportIdentity] = OrderedDict()
 
+    def clear(self) -> None:
+        self._reports.clear()
+        self._size = 0
+
     def _report(self, report: ArelleParseReportV1) -> _ReportIdentity:
         retained = self._reports.pop(id(report), None)
         if retained is not None:
