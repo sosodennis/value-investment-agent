@@ -624,6 +624,19 @@ def _validation_plugin_root(profile: "ArelleValidationProfileV1") -> Path:
         return plugin_root
 
 
+def _close_parser_models(controller: object, manager: object) -> None:
+    """Release single-use worker models after extracting every report value."""
+    try:
+        imported = getattr(controller, "xule_vars", {}).get("importModelManager")
+        if imported is not None:
+            for model in tuple(imported.loadedModelXbrls):
+                imported.close(model)
+    finally:
+        close = getattr(manager, "close", None)
+        if callable(close):
+            close()
+
+
 def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     level = str(record.get("level", "")).lower()
     level = {"warning-semantic": "warning", "error-semantic": "error"}.get(level, level)
@@ -1381,6 +1394,8 @@ def _parse_in_process(
                     security_scope="segmented" if dimensions else "unspecified",
                 )
             )
+        model_manager, manager = manager, None
+        _close_parser_models(controller, model_manager)
         return ArelleParseReportV1(
             filing_path=str(filing_path),
             parser_version=profile.arelle_version,
