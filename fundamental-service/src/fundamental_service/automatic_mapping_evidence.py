@@ -72,6 +72,13 @@ class _MappingArtifactReadScope:
             self._size += len(raw)
         return raw
 
+    def retained_content_digest(self, raw: bytes) -> str | None:
+        if type(raw) is bytes:
+            for record, retained in self._retained.values():
+                if retained is raw:
+                    return record.content_hash
+        return None
+
     @contextmanager
     def retained_read_operation(
         self, artifact_ids: tuple[str, ...]
@@ -135,8 +142,6 @@ class AutomaticMappingEvidenceChecks:
         self._max_retained_bytes = max_retained_bytes
         self._max_retained_artifacts = max_retained_artifacts
         self._reader: _MappingArtifactReadScope | None = None
-        self._fingerprints: OrderedDict[int, tuple[bytes, str]] = OrderedDict()
-        self._fingerprint_bytes = 0
         self._parser_checked: OrderedDict[
             str, tuple[tuple[str, ArtifactRecordV1], ...]
         ] = OrderedDict()
@@ -180,26 +185,11 @@ class AutomaticMappingEvidenceChecks:
             self._parser_checked[key] = previous
 
     def _content_digest(self, raw: bytes) -> str:
-        retained = self._fingerprints.pop(id(raw), None)
-        if retained is not None:
-            assert retained[0] is raw
-            self._fingerprints[id(raw)] = retained
-            return retained[1]
-        digest = hashlib.sha256(raw).hexdigest()
-        if (
-            type(raw) is bytes
-            and self._max_retained_artifacts
-            and len(raw) <= self._max_retained_bytes
-        ):
-            while self._fingerprints and (
-                self._fingerprint_bytes + len(raw) > self._max_retained_bytes
-                or len(self._fingerprints) >= self._max_retained_artifacts
-            ):
-                _, (removed, _) = self._fingerprints.popitem(last=False)
-                self._fingerprint_bytes -= len(removed)
-            self._fingerprints[id(raw)] = raw, digest
-            self._fingerprint_bytes += len(raw)
-        return digest
+        if self._reader is not None:
+            retained = self._reader.retained_content_digest(raw)
+            if retained is not None:
+                return retained
+        return hashlib.sha256(raw).hexdigest()
 
     def reader(self, artifacts: MappingInputReader) -> MappingInputReader:
         if self._reader is None:

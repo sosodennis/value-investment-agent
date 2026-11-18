@@ -8,34 +8,18 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any
 
 from pydantic import BaseModel
 
 from .arelle_parser import ArelleParseReportV1, ParsedXbrlFactV1, fact_semantic_digest
 from .original_issuer import OriginalIssuerEvidenceV1
-from .serialization import canonical_bytes, sha256_digest
-
-
-def _object_parts(
-    fields: dict[str, Any], name: str, embedded: tuple[bytes, ...]
-) -> tuple[bytes, ...]:
-    """Insert owner-produced canonical JSON without expanding it again."""
-    parts = [b"{"]
-    for index, key in enumerate(sorted((*fields, name))):
-        if index:
-            parts.append(b",")
-        parts.extend((canonical_bytes(key), b":"))
-        parts.extend(embedded if key == name else (canonical_bytes(fields[key]),))
-    parts.append(b"}")
-    return tuple(parts)
-
-
-def _digest_parts(parts: tuple[bytes, ...]) -> str:
-    digest = hashlib.sha256()
-    for part in parts:
-        digest.update(part)
-    return digest.hexdigest()
+from .serialization import (
+    canonical_array_parts,
+    canonical_bytes,
+    canonical_object_parts,
+    sha256_digest,
+    sha256_parts,
+)
 
 
 @dataclass
@@ -119,9 +103,25 @@ class MappingInputDigests:
     def report_computation_digest(self, report: ArelleParseReportV1) -> str:
         retained = self._report(report)
         if retained.computation_digest is None:
-            fields = report.model_dump(mode="json", exclude={"execution_evidence"})
+            fields = report.model_dump(
+                mode="json", exclude={"facts", "findings", "execution_evidence"}
+            )
             fields["parsed_at"] = report.parsed_at
-            retained.computation_digest = sha256_digest(fields)
+            retained.computation_digest = sha256_parts(
+                canonical_object_parts(
+                    fields,
+                    {
+                        "facts": canonical_array_parts(
+                            canonical_bytes(fact.model_dump(mode="json"))
+                            for fact in report.facts
+                        ),
+                        "findings": canonical_array_parts(
+                            canonical_bytes(finding.model_dump(mode="json"))
+                            for finding in report.findings
+                        ),
+                    },
+                )
+            )
         return retained.computation_digest
 
     def report_facts(
@@ -150,10 +150,10 @@ class MappingInputDigests:
     ) -> tuple[tuple[bytes, ...], str]:
         fields = original.model_dump(mode="python", exclude={"report"})
         key = ("original", sha256_digest(fields))
-        parts = _object_parts(fields, "report", (report.canonical,))
+        parts = tuple(canonical_object_parts(fields, {"report": (report.canonical,)}))
         digest = report.identities.get(key)
         if digest is None:
-            digest = report.remember(key, _digest_parts(parts))
+            digest = report.remember(key, sha256_parts(parts))
         return parts, digest
 
     def original_digest(self, original: OriginalIssuerEvidenceV1) -> str:
@@ -170,6 +170,6 @@ class MappingInputDigests:
         digest = report.identities.get(key)
         if digest is None:
             digest = report.remember(
-                key, _digest_parts(_object_parts(fields, "original", parts))
+                key, sha256_parts(canonical_object_parts(fields, {"original": parts}))
             )
         return digest

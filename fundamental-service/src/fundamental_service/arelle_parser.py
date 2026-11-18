@@ -16,6 +16,7 @@ import sysconfig
 import tempfile
 import threading
 import time
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -31,7 +32,13 @@ from .historical_dqc import (
     execution_for,
     historical_profile,
 )
-from .serialization import sha256_digest
+from .serialization import (
+    canonical_array_parts,
+    canonical_bytes,
+    canonical_object_parts,
+    sha256_digest,
+    sha256_parts,
+)
 from .inline_xbrl import (
     InlineDocumentSetError,
     inline_document_metadata,
@@ -532,38 +539,46 @@ class ArelleParseReportV1(BaseModel):
         )
 
     def replay_digest(self) -> str:
-        facts = sorted(
-            (fact.model_dump(mode="json") for fact in self.facts),
-            key=lambda fact: sha256_digest(fact),
+        return sha256_parts(
+            canonical_object_parts(
+                {
+                    "parser_version": self.parser_version,
+                    "taxonomy_version": self.taxonomy_version,
+                    "validation_profile_digest": self.validation_profile_digest,
+                    "source_content_hash": self.source_content_hash,
+                    "taxonomy_cache_hash": self.taxonomy_cache_hash,
+                    "validation_engines": self.validation_engines,
+                    "validation_evidence": self.validation_evidence,
+                    "offline": self.offline,
+                    "network_attempt_count": self.network_attempt_count,
+                },
+                {
+                    "facts": canonical_array_parts(_sorted_report_items(self.facts)),
+                    "findings": canonical_array_parts(
+                        _sorted_report_items(self.findings)
+                    ),
+                },
+            )
         )
-        findings = sorted(
-            (finding.model_dump(mode="json") for finding in self.findings),
-            key=lambda finding: sha256_digest(finding),
-        )
-        return sha256_digest(
-            {
-                "parser_version": self.parser_version,
-                "taxonomy_version": self.taxonomy_version,
-                "validation_profile_digest": self.validation_profile_digest,
-                "source_content_hash": self.source_content_hash,
-                "taxonomy_cache_hash": self.taxonomy_cache_hash,
-                "facts": facts,
-                "findings": findings,
-                "validation_engines": self.validation_engines,
-                "validation_evidence": self.validation_evidence,
-                "offline": self.offline,
-                "network_attempt_count": self.network_attempt_count,
-            }
-        )
+
+
+def _sorted_report_items(
+    items: Iterable[ParsedXbrlFactV1 | ArelleFindingV1],
+) -> list[bytes]:
+    return sorted(
+        (canonical_bytes(item.model_dump(mode="json")) for item in items),
+        key=lambda raw: hashlib.sha256(raw).hexdigest(),
+    )
 
 
 def fact_semantic_digest(report: ArelleParseReportV1) -> str:
     """Digest XBRL fact meaning without parser paths or run-time timestamps."""
-    facts = sorted(
-        (fact.model_dump(mode="json") for fact in report.facts),
-        key=lambda fact: sha256_digest(fact),
+    return sha256_parts(
+        canonical_object_parts(
+            {"fact_count": len(report.facts)},
+            {"facts": canonical_array_parts(_sorted_report_items(report.facts))},
+        )
     )
-    return sha256_digest({"fact_count": len(facts), "facts": facts})
 
 
 def _directory_hash(root: Path) -> str:

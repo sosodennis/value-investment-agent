@@ -5,7 +5,13 @@ from enum import Enum, IntEnum
 import pytest
 from pydantic import BaseModel
 
-from fundamental_service.serialization import canonical_bytes
+from fundamental_service.serialization import (
+    canonical_array_parts,
+    canonical_bytes,
+    canonical_object_parts,
+    sha256_digest,
+    sha256_parts,
+)
 
 
 class Phase(str, Enum):
@@ -71,3 +77,19 @@ def test_v1_mixed_keys_sort_after_stringification():
 def test_v1_rejects_nonfinite_json_numbers_at_any_depth(value):
     with pytest.raises(ValueError, match="Out of range float"):
         canonical_bytes({"values": [value]})
+
+
+def test_embedded_canonical_fragments_preserve_nested_values_and_duplicate_items():
+    items = ("é", {"漢": Decimal("1.00")}, "é")
+    fields = {"timestamp": datetime(2026, 1, 1, 8, tzinfo=timezone(timedelta(hours=8)))}
+    parts = tuple(
+        canonical_object_parts(
+            fields,
+            {"items": canonical_array_parts(canonical_bytes(item) for item in items)},
+        )
+    )
+    assert b"".join(parts) == canonical_bytes({**fields, "items": items})
+    assert sha256_parts(parts) == sha256_digest({**fields, "items": items})
+    assert b"".join(canonical_array_parts(())) == b"[]"
+    with pytest.raises(ValueError, match="distinct"):
+        tuple(canonical_object_parts({"items": 1}, {"items": (b"[]",)}))
