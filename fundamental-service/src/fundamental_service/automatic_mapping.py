@@ -13,6 +13,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from .arelle_parser import ParsedXbrlFactV1
+from .artifact_evidence import retained_artifact_operation
 from .automatic_mapping_disclosures import (
     select_option_compensation_disclosure,
     select_stock_compensation_disclosure,
@@ -1039,49 +1040,54 @@ def verify_automatic_mapping_replay(
             "DATA_RELEASE_MAPPING_INPUT_UNAVAILABLE",
             "retain one automatic mapping input",
         )
-    raw = artifacts.read(refs[0].artifact_id)
-    if hashlib.sha256(raw).hexdigest() != refs[0].content_hash:
-        raise DataReleaseError(
-            "DATA_RELEASE_MAPPING_INPUT_HASH_MISMATCH",
-            "automatic mapping input changed",
+    with retained_artifact_operation(
+        artifacts, tuple(ref.artifact_id for ref in approval.evidence_refs)
+    ) as artifacts:
+        raw = artifacts.read(refs[0].artifact_id)
+        if hashlib.sha256(raw).hexdigest() != refs[0].content_hash:
+            raise DataReleaseError(
+                "DATA_RELEASE_MAPPING_INPUT_HASH_MISMATCH",
+                "automatic mapping input changed",
+            )
+        request = resolve_mapping_input(
+            raw,
+            AutomaticMappingRequestV1,
+            artifacts=artifacts,
+            original_checks=evidence_checks.originals,
+            input_digests=evidence_checks.identities,
         )
-    request = resolve_mapping_input(
-        raw,
-        AutomaticMappingRequestV1,
-        artifacts=artifacts,
-        original_checks=evidence_checks.originals,
-        input_digests=evidence_checks.identities,
-    )
-    if approval.evidence_refs != (refs[0], *request.evidence_refs):
-        raise DataReleaseError(
-            "DATA_RELEASE_MAPPING_EVIDENCE_MISMATCH",
-            "automatic source references differ",
+        if approval.evidence_refs != (refs[0], *request.evidence_refs):
+            raise DataReleaseError(
+                "DATA_RELEASE_MAPPING_EVIDENCE_MISMATCH",
+                "automatic source references differ",
+            )
+        contents = {
+            ref.content_hash: artifacts.read(ref.artifact_id)
+            for ref in request.evidence_refs
+        }
+        evidence_checks.require_parser_actions(request, artifacts=artifacts)
+        decision = evaluate_automatic_mapping(
+            request, contents=contents, evidence_checks=evidence_checks
         )
-    contents = {
-        ref.content_hash: artifacts.read(ref.artifact_id)
-        for ref in request.evidence_refs
-    }
-    evidence_checks.require_parser_actions(request, artifacts=artifacts)
-    decision = evaluate_automatic_mapping(
-        request, contents=contents, evidence_checks=evidence_checks
-    )
-    if (
-        request.evaluator_id != approval.evaluator_id
-        or request.source_revision != approval.source_revision
-        or decision.input_digest != approval.input_digest
-        or decision.computation != approval.computation
-        or sha256_digest(decision) != approval.output_digest
-        or decision.policy_digest != approval.policy_digest
-        or decision.mapping != mapping
-        or mapping.decision_id != approval.mapping_id
-        or sha256_digest(mapping) != approval.mapping_digest
-        or decision.status != "approved"
-    ):
-        raise DataReleaseError(
-            "DATA_RELEASE_MAPPING_REPLAY_MISMATCH",
-            "automatic approval differs from its retained policy evaluation",
+        if (
+            request.evaluator_id != approval.evaluator_id
+            or request.source_revision != approval.source_revision
+            or decision.input_digest != approval.input_digest
+            or decision.computation != approval.computation
+            or sha256_digest(decision) != approval.output_digest
+            or decision.policy_digest != approval.policy_digest
+            or decision.mapping != mapping
+            or mapping.decision_id != approval.mapping_id
+            or sha256_digest(mapping) != approval.mapping_digest
+            or decision.status != "approved"
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_MAPPING_REPLAY_MISMATCH",
+                "automatic approval differs from its retained policy evaluation",
+            )
+        require_current_parser_action_refs(
+            request.evidence_refs,
+            artifacts=artifacts,
+            build_checks=evidence_checks.builds,
         )
-    require_current_parser_action_refs(
-        request.evidence_refs, artifacts=artifacts, build_checks=evidence_checks.builds
-    )
-    return request
+        return request

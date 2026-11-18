@@ -1495,6 +1495,75 @@ def test_retained_metadata_indirect_overflow_checks_prior_records(
         read()
 
 
+def test_mapping_replay_batches_each_read_but_rechecks_before_return(
+    metadata: PostgresMetadataStore, tmp_path: Path, monkeypatch
+):
+    from fundamental_service import automatic_mapping
+    from fundamental_service.automatic_mapping import AutomaticMappingDecisionV1
+    from fundamental_service.automatic_mapping_evidence import (
+        AutomaticMappingEvidenceChecks,
+    )
+    from fundamental_service.data_releases import AutomaticMappingApprovalV1
+    from test_automatic_mapping import approve, case
+
+    request, source, roots, _ = case(tmp_path / "source")
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    prefix = uuid4().hex
+    refs = []
+    for ref in request.evidence_refs:
+        identity = prefix + ref.artifact_id
+        artifacts.put_bytes_with_receipt(
+            identity, source.read(ref.artifact_id), media_type=ref.media_type
+        )
+        refs.append(ref.model_copy(update={"artifact_id": identity}))
+    request = request.model_copy(update={"evidence_refs": tuple(refs)})
+    receipt = approve(request, artifacts, roots)
+    decision = AutomaticMappingDecisionV1.model_validate_json(
+        artifacts.read(receipt.decision_publication.artifact.artifact_id)
+    )
+    approval = AutomaticMappingApprovalV1.model_validate_json(
+        artifacts.read(receipt.approval_publication.artifact.artifact_id)
+    )
+    batches = []
+    fetch = metadata.retained_artifact_records
+
+    def observed(ids):
+        batches.append(ids)
+        return fetch(ids)
+
+    monkeypatch.setattr(metadata, "retained_artifact_records", observed)
+    checks = AutomaticMappingEvidenceChecks()
+    for _ in range(3):
+        assert (
+            automatic_mapping.verify_automatic_mapping_replay(
+                approval, decision.mapping, artifacts=artifacts, evidence_checks=checks
+            )
+            == request
+        )
+    assert 6 <= len(batches) <= 12
+    assert len({ids for ids in batches}) <= 3
+    evaluate = automatic_mapping.evaluate_automatic_mapping
+
+    def withdraw(*args, **kwargs):
+        result = evaluate(*args, **kwargs)
+        _change_artifact_metadata(
+            metadata,
+            "UPDATE fundamental.artifact_references "
+            "SET status='invalidated' WHERE artifact_id=:id",
+            {"id": refs[0].artifact_id},
+        )
+        return result
+
+    monkeypatch.setattr(automatic_mapping, "evaluate_automatic_mapping", withdraw)
+    with pytest.raises(DataReleaseError) as error:
+        automatic_mapping.verify_automatic_mapping_replay(
+            approval, decision.mapping, artifacts=artifacts, evidence_checks=checks
+        )
+    assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+
+
 def test_distinct_sec_acquisition_keys_hold_independent_postgres_locks(
     metadata: PostgresMetadataStore,
 ):
