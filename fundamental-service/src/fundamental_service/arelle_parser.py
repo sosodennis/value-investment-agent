@@ -582,17 +582,20 @@ def fact_semantic_digest(report: ArelleParseReportV1) -> str:
 
 
 def _directory_hash(root: Path) -> str:
+    from .resource_hashing import ResourceHashReader
+
     digest = hashlib.sha256()
-    for path in sorted(
-        path
-        for path in root.rglob("*")
-        if path.is_file()
-        and "__pycache__" not in path.relative_to(root).parts
-        and path.suffix not in {".pyc", ".pyo"}
-    ):
-        digest.update(str(path.relative_to(root)).encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(path.read_bytes())
+    with ResourceHashReader() as reader:
+        for path in sorted(
+            path
+            for path in root.rglob("*")
+            if path.is_file()
+            and "__pycache__" not in path.relative_to(root).parts
+            and path.suffix not in {".pyc", ".pyo"}
+        ):
+            digest.update(str(path.relative_to(root)).encode("utf-8"))
+            digest.update(b"\0")
+            reader.update(path, digest.update)
     return digest.hexdigest()
 
 

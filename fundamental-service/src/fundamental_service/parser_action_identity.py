@@ -25,6 +25,7 @@ from .parser_action_contracts import (
 )
 from .serialization import sha256_digest
 from .parser_native_closure import NativeClosureError, native_closure
+from .resource_hashing import ResourceHashReader
 from .snapshots import SnapshotError
 
 
@@ -73,28 +74,31 @@ def _resource_digests(root: Path) -> tuple[str, str]:
     """Compute the existing directory and complete closure identities in one read."""
     directory = hashlib.sha256()
     files = []
-    for path in sorted(_regular_files(root)):
-        if path.is_symlink():
-            raise IncompleteParserClosure(
-                "symlinked parser dependencies are unsupported"
-            )
-        if not path.is_file():
-            raise IncompleteParserClosure("parser dependency is not a regular file")
-        relative = path.relative_to(root)
-        included = "__pycache__" not in relative.parts and path.suffix not in {
-            ".pyc",
-            ".pyo",
-        }
-        if included:
-            directory.update(str(relative).encode("utf-8"))
-            directory.update(b"\0")
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            while chunk := handle.read(1024 * 1024):
+    with ResourceHashReader() as reader:
+        for path in sorted(_regular_files(root)):
+            if path.is_symlink():
+                raise IncompleteParserClosure(
+                    "symlinked parser dependencies are unsupported"
+                )
+            if not path.is_file():
+                raise IncompleteParserClosure("parser dependency is not a regular file")
+            relative = path.relative_to(root)
+            included = "__pycache__" not in relative.parts and path.suffix not in {
+                ".pyc",
+                ".pyo",
+            }
+            if included:
+                directory.update(str(relative).encode("utf-8"))
+                directory.update(b"\0")
+            digest = hashlib.sha256()
+
+            def consume(chunk: memoryview) -> None:
                 digest.update(chunk)
                 if included:
                     directory.update(chunk)
-        files.append((relative.as_posix(), digest.hexdigest()))
+
+            reader.update(path, consume)
+            files.append((relative.as_posix(), digest.hexdigest()))
     return directory.hexdigest(), sha256_digest(tuple(sorted(files)))
 
 
