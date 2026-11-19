@@ -271,6 +271,16 @@ def test_fork_discards_inherited_lock_shared_value_and_consumer_memo(
 
 @pytest.fixture
 def immutable_kernel(monkeypatch):
+    for name in tuple(os.environ):
+        if name.startswith("LD_") or name in {
+            "XML_CATALOG_FILES",
+            "SGML_CATALOG_FILES",
+            "GCONV_PATH",
+            "LOCPATH",
+            "TZDIR",
+            "GLIBC_TUNABLES",
+        }:
+            monkeypatch.delenv(name)
     original = Path.read_text
     mount = ["1 0 0:1 / / ro - overlay overlay ro\n"]
 
@@ -290,6 +300,27 @@ def immutable_kernel(monkeypatch):
     )
     monkeypatch.setattr(identity.sys, "path", ["", *identity.sys.path])
     return mount
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "LD_LIBRARY_PATH",
+        "LD_PRELOAD",
+        "XML_CATALOG_FILES",
+        "SGML_CATALOG_FILES",
+        "GCONV_PATH",
+        "LOCPATH",
+        "TZDIR",
+        "GLIBC_TUNABLES",
+    ],
+)
+def test_kernel_configuration_refuses_external_configuration(
+    monkeypatch, immutable_kernel, name
+):
+    monkeypatch.setenv(name, "/outside-image")
+    with pytest.raises(identity.IncompleteParserClosure, match="external"):
+        identity._immutable_build_configuration()
 
 
 @pytest.mark.parametrize(
