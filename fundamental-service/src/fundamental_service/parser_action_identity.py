@@ -7,7 +7,9 @@ import os
 import platform
 import sys
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Literal
 
 from .arelle_parser import (
@@ -318,7 +320,12 @@ def _immutable_build_configuration() -> tuple[str, tuple[Path, ...]]:
             mounts,
             tuple(sorted(os.environ.items())),
             tuple(sys.path),
+            tuple(str(Path(path or ".").resolve()) for path in sys.path),
             sys.executable,
+            str(Path(sys.executable).resolve()),
+            sys.version,
+            repr(sys.flags),
+            sys._xoptions,
             os.geteuid(),
             os.getegid(),
             tuple(sorted(os.getgroups())),
@@ -338,33 +345,72 @@ def replace_mount_escapes(value: str) -> str:
     return value
 
 
-class ParserBuildChecks:
-    """One independent operation's owner-computed immutable image identity."""
+@dataclass(frozen=True)
+class _ImmutableBuild:
+    configuration: str
+    value: ParserBuildIdentityV1
 
-    def __init__(self) -> None:
+
+_BUILD_LOCK = Lock()
+_SHARED_BUILD: _ImmutableBuild | None = None
+
+
+def _reset_build_after_fork() -> None:
+    global _BUILD_LOCK, _SHARED_BUILD
+    _BUILD_LOCK = Lock()
+    _SHARED_BUILD = None
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_build_after_fork)
+
+
+def _calculate_build(
+    configuration: str, mounts: tuple[Path, ...]
+) -> ParserBuildIdentityV1:
+    implementation = sha256_digest(_files(Path(__file__).parent))
+    runtime = _runtime_identity(image_mounts=mounts)
+    build = ParserBuildIdentityV1(
+        implementation_digest=implementation,
+        runtime_digest=runtime,
+        output_schema_digest=sha256_digest(ArelleParseReportV1.model_json_schema()),
+    )
+    if _immutable_build_configuration()[0] != configuration:
+        raise IncompleteParserClosure("parser image changed during verification")
+    return build
+
+
+class ParserBuildChecks:
+    """Independent boundary checks over an owner-computed immutable build value."""
+
+    def __init__(self, *, share_image: bool = True) -> None:
+        self._pid = os.getpid()
+        self._share_image = share_image
         self._configuration: str | None = None
         self._build: ParserBuildIdentityV1 | None = None
 
     def current(self) -> ParserBuildIdentityV1:
-        configuration, mounts = _immutable_build_configuration()
-        if self._configuration is not None and self._configuration != configuration:
-            raise IncompleteParserClosure("parser image configuration changed")
-        if self._build is None:
-            implementation = sha256_digest(_files(Path(__file__).parent))
-            runtime = _runtime_identity(image_mounts=mounts)
-            if _immutable_build_configuration()[0] != configuration:
-                raise IncompleteParserClosure(
-                    "parser image changed during verification"
-                )
-            self._build = ParserBuildIdentityV1(
-                implementation_digest=implementation,
-                runtime_digest=runtime,
-                output_schema_digest=sha256_digest(
-                    ArelleParseReportV1.model_json_schema()
-                ),
-            )
-            self._configuration = configuration
-        return self._build
+        global _SHARED_BUILD
+        with _BUILD_LOCK:
+            if self._pid != os.getpid():
+                self._pid = os.getpid()
+                self._configuration = None
+                self._build = None
+            # Prove this consumer's boundary after waiting for initialization.
+            configuration, mounts = _immutable_build_configuration()
+            if self._configuration is not None and self._configuration != configuration:
+                raise IncompleteParserClosure("parser image configuration changed")
+            if self._build is None:
+                shared = _SHARED_BUILD if self._share_image else None
+                if shared is not None and shared.configuration == configuration:
+                    build = shared.value
+                else:
+                    build = _calculate_build(configuration, mounts)
+                    if self._share_image:
+                        _SHARED_BUILD = _ImmutableBuild(configuration, build)
+                self._configuration = configuration
+                self._build = build
+            return self._build
 
     def verify(self) -> None:
         if self._build is not None:

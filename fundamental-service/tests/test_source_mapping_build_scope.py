@@ -19,9 +19,13 @@ def build_probe(monkeypatch):
 
     configuration = ["fixed image"]
     proofs = []
-    monkeypatch.setattr(
-        identity, "_immutable_build_configuration", lambda: (configuration[0], ())
-    )
+    boundaries = []
+
+    def boundary():
+        boundaries.append(True)
+        return configuration[0], ()
+
+    monkeypatch.setattr(identity, "_immutable_build_configuration", boundary)
     monkeypatch.setattr(
         identity, "_runtime_identity", lambda **kwargs: proofs.append(True) or "2" * 64
     )
@@ -41,21 +45,23 @@ def build_probe(monkeypatch):
     monkeypatch.setattr(
         AutomaticMappingEvidenceChecks, "require_parser_actions", check_actions
     )
-    return configuration, proofs
+    return configuration, proofs, boundaries
 
 
-def test_source_batch_uses_one_build_proof_and_next_operation_starts_fresh(
+def test_source_batch_and_next_operation_independently_check_shared_image_value(
     tmp_path, monkeypatch
 ):
     request, authority, validated, artifacts, _ = source_case(tmp_path)
-    _, proofs = build_probe(monkeypatch)
+    _, proofs, boundaries = build_probe(monkeypatch)
     builds = ParserBuildChecks()
     builds.current()
     expected = authority.resolver_for(request, build_checks=builds).resolve(validated)
     assert expected.mappings and len(proofs) == 1
     before = inventory(artifacts.root)
+    previous_checks = len(boundaries)
     assert authority.resolver_for(request).resolve(validated) == expected
-    assert len(proofs) == 2
+    assert len(proofs) == 1
+    assert len(boundaries) > previous_checks
     assert inventory(artifacts.root) == before
 
 
@@ -63,7 +69,7 @@ def test_changed_image_after_batch_read_refuses_domain_mapping_publication(
     tmp_path, monkeypatch
 ):
     request, authority, validated, artifacts, mappings = source_case(tmp_path)
-    configuration, _ = build_probe(monkeypatch)
+    configuration, _, _ = build_probe(monkeypatch)
     read = artifacts.read
 
     def replace_image(identity):
