@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -9,8 +10,8 @@ import tempfile
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from functools import partial
 from pathlib import Path
+from threading import get_ident
 from time import monotonic
 from typing import Any, Literal, ParamSpec, TypeVar
 
@@ -131,6 +132,92 @@ from .forward_evidence import (
 LOGGER = logging.getLogger("fundamental_service")
 P = ParamSpec("P")
 T = TypeVar("T")
+
+
+def _valuation_input_identity(raw: object) -> dict[str, object]:
+    """Expose only bounded exact-input identifiers in opt-in diagnostics."""
+    if not isinstance(raw, dict):
+        return {}
+    identity: dict[str, object] = {
+        key: value
+        for key in (
+            "input_digest",
+            "expected_input_digest",
+            "approval_policy_digest",
+            "policy_digest",
+            "source_use_policy_digest",
+        )
+        if isinstance(value := raw.get(key), str) and len(value) <= 256
+    }
+    preparation = raw.get("preparation")
+    if (
+        isinstance(preparation, dict)
+        and isinstance(value := preparation.get("input_digest"), str)
+        and len(value) <= 256
+    ):
+        identity["preparation_input_digest"] = value
+    identity["input_keys"] = tuple(sorted(str(key) for key in raw))
+    return identity
+
+
+def _valuation_response_body(
+    response: Response | None,
+    *,
+    limit: int,
+    captured_body: bytes | None = None,
+) -> dict[str, object]:
+    """Return bounded body evidence without changing the response stream."""
+    body = (
+        captured_body if captured_body is not None else getattr(response, "body", None)
+    )
+    if not isinstance(body, bytes):
+        return {
+            "response_body_available": False,
+            "response_body": None,
+            "response_body_length": None,
+            "response_body_sha256": None,
+            "response_body_truncated": False,
+        }
+    return {
+        "response_body_available": True,
+        "response_body": body[:limit].decode("utf-8", errors="replace"),
+        "response_body_length": len(body),
+        "response_body_sha256": hashlib.sha256(body).hexdigest(),
+        "response_body_truncated": len(body) > limit,
+    }
+
+
+def _log_valuation_diagnostic(
+    *,
+    correlation: str,
+    path: str,
+    operation: str | None,
+    event: str,
+    trace_started: float,
+    deadline_at: datetime | None,
+    **fields: object,
+) -> None:
+    """Emit one machine-readable, opt-in execution phase record."""
+    payload: dict[str, object] = {
+        "event": event,
+        "correlation_id": correlation,
+        "path": path,
+        "operation": operation,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "elapsed_ms": round((monotonic() - trace_started) * 1000, 3),
+        "deadline_at": deadline_at.isoformat() if deadline_at is not None else None,
+        "deadline_remaining_ms": (
+            round((deadline_at - datetime.now(UTC)).total_seconds() * 1000, 3)
+            if deadline_at is not None
+            else None
+        ),
+        **fields,
+    }
+    LOGGER.info(
+        "fundamental_valuation_diagnostic %s",
+        json.dumps(payload, sort_keys=True, separators=(",", ":")),
+        extra={"correlation_id": correlation, "valuation_diagnostic_event": event},
+    )
 
 
 def _validation_error(
@@ -292,14 +379,112 @@ def create_app(
     ) -> T:
         deadline_at = request.state.deadline
         guard_execution_deadline(deadline_at)
+        trace_enabled = runtime_config.valuation_diagnostics
+        trace_started = getattr(request.state, "valuation_trace_started", monotonic())
+        correlation = request.state.correlation_id
+        path = request.url.path
+        operation_name = getattr(
+            operation,
+            "__qualname__",
+            getattr(operation, "__name__", type(operation).__name__),
+        )
+        queue_started = monotonic()
+        worker_started: float | None = None
+        if trace_enabled:
+            _log_valuation_diagnostic(
+                correlation=correlation,
+                path=path,
+                operation=operation_name,
+                event="queue_wait_started",
+                trace_started=trace_started,
+                deadline_at=deadline_at,
+                queue_wait_started_at=datetime.now(UTC).isoformat(),
+                input_identity=_valuation_input_identity(
+                    getattr(request.state, "operation_input", None)
+                ),
+            )
+
+        def execute_on_worker() -> T:
+            nonlocal worker_started
+            worker_started = monotonic()
+            if trace_enabled:
+                _log_valuation_diagnostic(
+                    correlation=correlation,
+                    path=path,
+                    operation=operation_name,
+                    event="worker_acquired",
+                    trace_started=trace_started,
+                    deadline_at=deadline_at,
+                    queue_wait_ms=round((worker_started - queue_started) * 1000, 3),
+                    worker_thread_id=get_ident(),
+                )
+                _log_valuation_diagnostic(
+                    correlation=correlation,
+                    path=path,
+                    operation=operation_name,
+                    event="execution_started",
+                    trace_started=trace_started,
+                    deadline_at=deadline_at,
+                    worker_thread_id=get_ident(),
+                )
+            try:
+                result = operation(*args, **kwargs)
+            except BaseException as error:
+                if trace_enabled:
+                    _log_valuation_diagnostic(
+                        correlation=correlation,
+                        path=path,
+                        operation=operation_name,
+                        event="execution_failed",
+                        trace_started=trace_started,
+                        deadline_at=deadline_at,
+                        execution_ms=round((monotonic() - worker_started) * 1000, 3),
+                        error_type=type(error).__name__,
+                        error_code=getattr(error, "code", None),
+                        worker_thread_id=get_ident(),
+                    )
+                raise
+            if trace_enabled:
+                _log_valuation_diagnostic(
+                    correlation=correlation,
+                    path=path,
+                    operation=operation_name,
+                    event="execution_finished",
+                    trace_started=trace_started,
+                    deadline_at=deadline_at,
+                    execution_ms=round((monotonic() - worker_started) * 1000, 3),
+                    worker_thread_id=get_ident(),
+                )
+            return result
+
         try:
             with fail_after((deadline_at - datetime.now(UTC)).total_seconds()) as scope:
                 result = await to_thread.run_sync(
-                    partial(operation, *args, **kwargs), limiter=valuation_limiter
+                    execute_on_worker, limiter=valuation_limiter
                 )
         except TimeoutError as error:
             if not scope.cancel_called:
                 raise
+            if trace_enabled:
+                _log_valuation_diagnostic(
+                    correlation=correlation,
+                    path=path,
+                    operation=operation_name,
+                    event="deadline_expired",
+                    trace_started=trace_started,
+                    deadline_at=deadline_at,
+                    timeout_phase="queue_wait"
+                    if worker_started is None
+                    else "execution",
+                    queue_wait_ms=round(
+                        ((worker_started or monotonic()) - queue_started) * 1000, 3
+                    ),
+                    execution_ms=(
+                        round((monotonic() - worker_started) * 1000, 3)
+                        if worker_started is not None
+                        else None
+                    ),
+                )
             raise ServiceError(
                 "REQUEST_DEADLINE_EXCEEDED",
                 "request deadline expired while waiting for valuation execution",
@@ -335,11 +520,31 @@ def create_app(
     async def operations_boundary(request: Request, call_next):
         started = monotonic()
         request.state.correlation_id = correlation_id(request)
+        request.state.valuation_trace_started = started
+        trace_enabled = (
+            runtime_config.valuation_diagnostics
+            and request.url.path.startswith("/v1/valuation/")
+        )
         status_code = 500
+        response: Response | None = None
         try:
             guard_body_size(request, runtime_config)
             if request.url.path.startswith("/v1/"):
                 context, _ = await authorize_operation(request, runtime_config)
+                if trace_enabled:
+                    _log_valuation_diagnostic(
+                        correlation=request.state.correlation_id,
+                        path=request.url.path,
+                        operation=None,
+                        event="request_admitted",
+                        trace_started=started,
+                        deadline_at=getattr(request.state, "deadline", None),
+                        caller_id=context.principal.subject_id,
+                        organization_id=context.principal.organization_id,
+                        input_identity=_valuation_input_identity(
+                            getattr(request.state, "operation_input", None)
+                        ),
+                    )
                 if not limiter.allow(context.principal.subject_id):
                     metrics.increment("rate_limited_total")
                     raise ServiceError(
@@ -410,10 +615,11 @@ def create_app(
                 metrics.increment("calculation_budget_failures_total")
             if error.code.startswith("request_deadline"):
                 metrics.increment("deadline_failures_total")
-            return error_response(request, error)
+            response = error_response(request, error)
+            return response
         except Exception:  # pragma: no cover - final redacted safety net
             status_code = 500
-            return error_response(
+            response = error_response(
                 request,
                 ServiceError(
                     "internal_failure",
@@ -422,7 +628,25 @@ def create_app(
                     retryable=False,
                 ),
             )
+            return response
         finally:
+            if trace_enabled:
+                _log_valuation_diagnostic(
+                    correlation=request.state.correlation_id,
+                    path=request.url.path,
+                    operation=None,
+                    event="response_emitted",
+                    trace_started=started,
+                    deadline_at=getattr(request.state, "deadline", None),
+                    status_code=status_code,
+                    **_valuation_response_body(
+                        response,
+                        limit=runtime_config.valuation_diagnostics_body_bytes,
+                        captured_body=getattr(
+                            request.state, "valuation_response_body", None
+                        ),
+                    ),
+                )
             LOGGER.info(
                 "fundamental_request",
                 extra={

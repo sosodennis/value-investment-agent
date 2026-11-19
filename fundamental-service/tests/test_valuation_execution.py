@@ -1,6 +1,7 @@
 """Execution budgets protect the event loop and prevent late calculation writes."""
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from threading import Event
 
@@ -9,7 +10,7 @@ import pytest
 
 from fundamental_service.app import create_app
 from fundamental_service.application.service import FundamentalApplication
-from fundamental_service.operations import ServiceError
+from fundamental_service.operations import OperationsConfig, ServiceError
 from fundamental_service.testsupport import (
     auth_headers,
     make_internal_envelope,
@@ -100,6 +101,124 @@ def test_valuation_worker_preserves_health_and_expires_queued_work(
             assert len(executed) == 2
 
     asyncio.run(exercise())
+
+
+def test_opt_in_valuation_diagnostic_records_queue_worker_deadline_and_body(
+    monkeypatch, caplog
+):
+    started, release = Event(), Event()
+
+    def execute(self, value, *, deadline_at, **kwargs):
+        started.set()
+        assert release.wait(5), "test did not release the valuation worker"
+        return {"completed": True}
+
+    monkeypatch.setattr(FundamentalApplication, "uncertainty_valuation", execute)
+    payload = _with_uncertainty_digest(
+        _bind_initial_policy(make_valuation()).model_dump(mode="json")
+    ).model_dump(mode="json")
+    app = create_app(
+        config=OperationsConfig.testing(
+            valuation_diagnostics=True, valuation_diagnostics_body_bytes=4096
+        )
+    )
+
+    async def exercise():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://service"
+        ) as client:
+            first = asyncio.create_task(
+                client.post(
+                    "/v1/valuation/uncertainty",
+                    headers=auth_headers(),
+                    json=make_internal_envelope(payload, correlation_id="trace-first"),
+                )
+            )
+            try:
+                assert await asyncio.to_thread(started.wait, 2), "worker did not start"
+                queued = await asyncio.wait_for(
+                    client.post(
+                        "/v1/valuation/uncertainty",
+                        headers=auth_headers(),
+                        json=make_internal_envelope(
+                            payload,
+                            correlation_id="trace-second",
+                            deadline_at=datetime.now(UTC) + timedelta(milliseconds=100),
+                        ),
+                    ),
+                    1,
+                )
+            finally:
+                release.set()
+                completed = await first
+            assert queued.status_code == 408, queued.text
+            assert completed.status_code == 200, completed.text
+
+    with caplog.at_level("INFO", logger="fundamental_service"):
+        asyncio.run(exercise())
+
+    events = []
+    for record in caplog.records:
+        if record.getMessage().startswith("fundamental_valuation_diagnostic "):
+            events.append(json.loads(record.getMessage().split(" ", 1)[1]))
+    by_correlation = {
+        correlation: [item for item in events if item["correlation_id"] == correlation]
+        for correlation in ("trace-first", "trace-second")
+    }
+    first_events = {item["event"] for item in by_correlation["trace-first"]}
+    second_events = {item["event"] for item in by_correlation["trace-second"]}
+    assert {
+        "request_admitted",
+        "queue_wait_started",
+        "worker_acquired",
+        "execution_started",
+        "execution_finished",
+        "response_emitted",
+    } <= first_events
+    assert {
+        "request_admitted",
+        "queue_wait_started",
+        "deadline_expired",
+        "response_emitted",
+    } <= (second_events)
+    first_admitted = next(
+        item
+        for item in by_correlation["trace-first"]
+        if item["event"] == "request_admitted"
+    )
+    second_admitted = next(
+        item
+        for item in by_correlation["trace-second"]
+        if item["event"] == "request_admitted"
+    )
+    assert first_admitted["input_identity"] == second_admitted["input_identity"]
+    completed_response = next(
+        item
+        for item in by_correlation["trace-first"]
+        if item["event"] == "response_emitted"
+    )
+    assert completed_response["status_code"] == 200
+    assert completed_response["response_body_available"] is True
+    assert '"completed":true' in completed_response["response_body"]
+    failed_response = next(
+        item
+        for item in by_correlation["trace-second"]
+        if item["event"] == "response_emitted"
+    )
+    assert failed_response["status_code"] == 408
+    assert failed_response["response_body_available"] is True
+    assert "REQUEST_DEADLINE_EXCEEDED" in failed_response["response_body"]
+    assert failed_response["response_body_length"] == len(
+        failed_response["response_body"].encode("utf-8")
+    )
+    assert failed_response["response_body_truncated"] is False
+    timeout = next(
+        item
+        for item in by_correlation["trace-second"]
+        if item["event"] == "deadline_expired"
+    )
+    assert timeout["timeout_phase"] == "queue_wait"
+    assert all(item["deadline_at"] is not None for item in events)
 
 
 @pytest.mark.parametrize("expired_stage", ["sources", "composition", "calculator"])

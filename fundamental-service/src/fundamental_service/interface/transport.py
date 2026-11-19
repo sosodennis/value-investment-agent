@@ -200,11 +200,13 @@ def error_response(request: Request, error: ServiceError) -> JSONResponse:
             retry_after_ms=error.retry_after_ms,
         ),
     )
-    return JSONResponse(
+    response = JSONResponse(
         status_code=error.status_code,
         content=body.model_dump(mode="json"),
         headers={CORRELATION_HEADER: correlation},
     )
+    request.state.valuation_response_body = response.body
+    return response
 
 
 def success_response(
@@ -226,10 +228,12 @@ def success_response(
             "result": payload,
         }
     )
-    return JSONResponse(
+    response = JSONResponse(
         content=body.model_dump(mode="json"),
         headers={CORRELATION_HEADER: context.correlation_id},
     )
+    request.state.valuation_response_body = response.body
+    return response
 
 
 def readiness_response(

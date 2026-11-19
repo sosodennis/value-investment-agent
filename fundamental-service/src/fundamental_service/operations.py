@@ -83,15 +83,27 @@ class OperationsConfig:
     ingestion_authorized_organizations: frozenset[str] = frozenset()
     release_publish_authorized_organizations: frozenset[str] = frozenset()
     release_activation_authorized_organizations: frozenset[str] = frozenset()
+    valuation_diagnostics: bool = False
+    valuation_diagnostics_body_bytes: int = 64 * 1024
 
     @classmethod
-    def testing(cls) -> OperationsConfig:
+    def testing(
+        cls,
+        *,
+        valuation_diagnostics: bool = False,
+        valuation_diagnostics_body_bytes: int = 64 * 1024,
+    ) -> OperationsConfig:
         """A deterministic token for direct unit-test seams.
 
         Tests still exercise the production authentication path and must create a
         signed ``InternalRequestContext``; there is no unauthenticated bypass.
         """
-        return cls(service_token="test-service-token", rate_limit_per_minute=10_000)
+        return cls(
+            service_token="test-service-token",
+            rate_limit_per_minute=10_000,
+            valuation_diagnostics=valuation_diagnostics,
+            valuation_diagnostics_body_bytes=valuation_diagnostics_body_bytes,
+        )
 
     @classmethod
     def from_env(cls) -> OperationsConfig:
@@ -106,6 +118,17 @@ class OperationsConfig:
             if value < minimum:
                 raise ValueError(f"{name} must be at least {minimum}")
             return value
+
+        def flag(name: str, default: bool = False) -> bool:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            normalized = raw.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+            raise ValueError(f"{name} must be a boolean")
 
         return cls(
             service_token=os.getenv("FUNDAMENTAL_SERVICE_TOKEN"),
@@ -144,6 +167,11 @@ class OperationsConfig:
                     "FUNDAMENTAL_SERVICE_RELEASE_ACTIVATION_ORGANIZATIONS", ""
                 ).split(",")
                 if item.strip()
+            ),
+            valuation_diagnostics=flag("FUNDAMENTAL_SERVICE_VALUATION_DIAGNOSTICS"),
+            valuation_diagnostics_body_bytes=integer(
+                "FUNDAMENTAL_SERVICE_VALUATION_DIAGNOSTICS_BODY_BYTES",
+                64 * 1024,
             ),
         )
 
