@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
+import re
 import tempfile
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -32,7 +32,11 @@ from .automatic_valuation import (
     AutomaticValuationResponseV1,
     load_runtime_automatic_approval_policy,
 )
-from .valuation_diagnostics import ValuationDiagnosticSink, valuation_diagnostic_scope
+from .valuation_diagnostics import (
+    ValuationDiagnosticSink,
+    diagnostic_error_code,
+    valuation_diagnostic_scope,
+)
 from .calculation_flights import AutomaticValuationFlightRegistry
 from .contracts import (
     CalculationArtifactV1,
@@ -135,6 +139,7 @@ from .serialization import sha256_digest
 LOGGER = logging.getLogger("fundamental_service")
 P = ParamSpec("P")
 T = TypeVar("T")
+_DIAGNOSTIC_DIGEST = re.compile(r"[0-9a-f]{64}")
 
 
 def _valuation_input_identity(raw: object) -> dict[str, object]:
@@ -150,16 +155,16 @@ def _valuation_input_identity(raw: object) -> dict[str, object]:
             "policy_digest",
             "source_use_policy_digest",
         )
-        if isinstance(value := raw.get(key), str) and len(value) <= 256
+        if isinstance(value := raw.get(key), str)
+        and _DIAGNOSTIC_DIGEST.fullmatch(value)
     }
     preparation = raw.get("preparation")
     if (
         isinstance(preparation, dict)
         and isinstance(value := preparation.get("input_digest"), str)
-        and len(value) <= 256
+        and _DIAGNOSTIC_DIGEST.fullmatch(value)
     ):
         identity["preparation_input_digest"] = value
-    identity["input_keys"] = tuple(sorted(str(key) for key in raw))
     return identity
 
 
@@ -184,33 +189,6 @@ def _automatic_valuation_flight_key(
             "source_use_policy_digest": source_use_policy_digest,
         }
     )
-
-
-def _valuation_response_body(
-    response: Response | None,
-    *,
-    limit: int,
-    captured_body: bytes | None = None,
-) -> dict[str, object]:
-    """Return bounded body evidence without changing the response stream."""
-    body = (
-        captured_body if captured_body is not None else getattr(response, "body", None)
-    )
-    if not isinstance(body, bytes):
-        return {
-            "response_body_available": False,
-            "response_body": None,
-            "response_body_length": None,
-            "response_body_sha256": None,
-            "response_body_truncated": False,
-        }
-    return {
-        "response_body_available": True,
-        "response_body": body[:limit].decode("utf-8", errors="replace"),
-        "response_body_length": len(body),
-        "response_body_sha256": hashlib.sha256(body).hexdigest(),
-        "response_body_truncated": len(body) > limit,
-    }
 
 
 def _log_valuation_diagnostic(
@@ -481,7 +459,7 @@ def create_app(
                         deadline_at=deadline_at,
                         execution_ms=round((monotonic() - worker_started) * 1000, 3),
                         error_type=type(error).__name__,
-                        error_code=getattr(error, "code", None),
+                        error_code=diagnostic_error_code(getattr(error, "code", None)),
                         worker_thread_id=get_ident(),
                     )
                 raise
@@ -568,6 +546,7 @@ def create_app(
             runtime_config.valuation_diagnostics
             and request.url.path.startswith("/v1/valuation/")
         )
+        request.state.trace_valuation_response = trace_enabled
         status_code = 500
         response: Response | None = None
         try:
@@ -684,13 +663,7 @@ def create_app(
                     trace_started=started,
                     deadline_at=getattr(request.state, "deadline", None),
                     status_code=status_code,
-                    **_valuation_response_body(
-                        response,
-                        limit=runtime_config.valuation_diagnostics_body_bytes,
-                        captured_body=getattr(
-                            request.state, "valuation_response_body", None
-                        ),
-                    ),
+                    **getattr(request.state, "valuation_response_metadata", {}),
                 )
             LOGGER.info(
                 "fundamental_request",
@@ -1248,7 +1221,7 @@ def create_app(
                             deadline_at=request.state.deadline,
                             timeout_phase="preparation_flight_wait",
                             wait_ms=round((monotonic() - wait_started) * 1000, 3),
-                            error_code=error.code,
+                            error_code=diagnostic_error_code(error.code),
                         )
                     raise
                 if runtime_config.valuation_diagnostics:

@@ -84,14 +84,12 @@ class OperationsConfig:
     release_publish_authorized_organizations: frozenset[str] = frozenset()
     release_activation_authorized_organizations: frozenset[str] = frozenset()
     valuation_diagnostics: bool = False
-    valuation_diagnostics_body_bytes: int = 64 * 1024
 
     @classmethod
     def testing(
         cls,
         *,
         valuation_diagnostics: bool = False,
-        valuation_diagnostics_body_bytes: int = 64 * 1024,
     ) -> OperationsConfig:
         """A deterministic token for direct unit-test seams.
 
@@ -102,7 +100,6 @@ class OperationsConfig:
             service_token="test-service-token",
             rate_limit_per_minute=10_000,
             valuation_diagnostics=valuation_diagnostics,
-            valuation_diagnostics_body_bytes=valuation_diagnostics_body_bytes,
         )
 
     @classmethod
@@ -169,10 +166,6 @@ class OperationsConfig:
                 if item.strip()
             ),
             valuation_diagnostics=flag("FUNDAMENTAL_SERVICE_VALUATION_DIAGNOSTICS"),
-            valuation_diagnostics_body_bytes=integer(
-                "FUNDAMENTAL_SERVICE_VALUATION_DIAGNOSTICS_BODY_BYTES",
-                64 * 1024,
-            ),
         )
 
     @property

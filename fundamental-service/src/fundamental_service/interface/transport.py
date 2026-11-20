@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
+from hashlib import sha256
 from typing import Generic, Literal, TypeVar
 
 from fastapi import Request
@@ -31,6 +32,7 @@ from ..operations import (
     correlation_id,
     enforce_deadline,
 )
+from ..valuation_diagnostics import diagnostic_error_code
 
 
 class FundamentalRequestEnvelopeV1(BaseModel):
@@ -179,6 +181,18 @@ async def authorize_operation(
     return context, request.state.operation_input
 
 
+def _capture_valuation_response(
+    request: Request, response: JSONResponse, *, error_code: str | None = None
+) -> JSONResponse:
+    if getattr(request.state, "trace_valuation_response", False):
+        request.state.valuation_response_metadata = {
+            "response_body_length": len(response.body),
+            "response_body_sha256": sha256(response.body).hexdigest(),
+            "error_code": diagnostic_error_code(error_code),
+        }
+    return response
+
+
 def error_response(request: Request, error: ServiceError) -> JSONResponse:
     correlation = getattr(request.state, "correlation_id", "unknown")
     LOGGER.warning(
@@ -205,8 +219,7 @@ def error_response(request: Request, error: ServiceError) -> JSONResponse:
         content=body.model_dump(mode="json"),
         headers={CORRELATION_HEADER: correlation},
     )
-    request.state.valuation_response_body = response.body
-    return response
+    return _capture_valuation_response(request, response, error_code=error.code)
 
 
 def success_response(
@@ -232,8 +245,7 @@ def success_response(
         content=body.model_dump(mode="json"),
         headers={CORRELATION_HEADER: context.correlation_id},
     )
-    request.state.valuation_response_body = response.body
-    return response
+    return _capture_valuation_response(request, response)
 
 
 def readiness_response(

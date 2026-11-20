@@ -18,6 +18,19 @@ LOGGER = logging.getLogger("fundamental_service")
 P = ParamSpec("P")
 T = TypeVar("T")
 
+_DIAGNOSTIC_ERROR_CODES = frozenset(
+    {
+        "AUTOMATIC_VALUATION_CAPACITY_EXCEEDED",
+        "CALCULATION_BUDGET_EXCEEDED",
+        "REQUEST_DEADLINE_EXCEEDED",
+        "request_deadline_exceeded",
+    }
+)
+
+
+def diagnostic_error_code(code: object) -> str | None:
+    return code if isinstance(code, str) and code in _DIAGNOSTIC_ERROR_CODES else None
+
 
 class ValuationDiagnosticSink:
     """Bound optional logging; a slow or failed handler never owns a worker."""
@@ -36,7 +49,7 @@ class ValuationDiagnosticSink:
     def submit(
         self, event: str, payload: str, *, extra: dict[str, object] | None = None
     ) -> None:
-        # Both queue length and record bytes are bounded, including body diagnostics.
+        # Bound both queue length and record bytes.
         with self._lock:
             if self._stopped.is_set() or len(payload.encode("utf-8")) > 131072:
                 self._dropped += 1

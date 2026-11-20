@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from threading import Event
 
 import httpx
@@ -10,6 +11,7 @@ import pytest
 
 from fundamental_service.app import create_app
 from fundamental_service.application.service import FundamentalApplication
+from fundamental_service.interface import transport
 from fundamental_service.operations import OperationsConfig, ServiceError
 from fundamental_service.testsupport import (
     auth_headers,
@@ -22,6 +24,7 @@ from test_api import (
     _bind_initial_policy,
     _with_uncertainty_digest,
 )
+from test_valuation_diagnostics import wait_for_diagnostics
 
 
 @pytest.mark.parametrize(
@@ -103,8 +106,9 @@ def test_valuation_worker_preserves_health_and_expires_queued_work(
     asyncio.run(exercise())
 
 
-def test_opt_in_valuation_diagnostic_records_queue_worker_deadline_and_body(
-    monkeypatch, caplog
+@pytest.mark.parametrize("diagnostics_enabled", [False, True])
+def test_valuation_diagnostic_records_queue_worker_deadline_without_body(
+    monkeypatch, caplog, diagnostics_enabled
 ):
     started, release = Event(), Event()
 
@@ -118,10 +122,15 @@ def test_opt_in_valuation_diagnostic_records_queue_worker_deadline_and_body(
         _bind_initial_policy(make_valuation()).model_dump(mode="json")
     ).model_dump(mode="json")
     app = create_app(
-        config=OperationsConfig.testing(
-            valuation_diagnostics=True, valuation_diagnostics_body_bytes=4096
-        )
+        config=OperationsConfig.testing(valuation_diagnostics=diagnostics_enabled)
     )
+    digested_lengths = []
+
+    def track_response_digest(body):
+        digested_lengths.append(len(body))
+        return sha256(body)
+
+    monkeypatch.setattr(transport, "sha256", track_response_digest)
 
     async def exercise():
         async with httpx.AsyncClient(
@@ -153,14 +162,25 @@ def test_opt_in_valuation_diagnostic_records_queue_worker_deadline_and_body(
                 completed = await first
             assert queued.status_code == 408, queued.text
             assert completed.status_code == 200, completed.text
+            return completed, queued
 
     with caplog.at_level("INFO", logger="fundamental_service"):
-        asyncio.run(exercise())
+        try:
+            completed, queued = asyncio.run(exercise())
+            wait_for_diagnostics(app.state.valuation_diagnostic_sink)
+        finally:
+            app.state.valuation_diagnostic_sink.close()
 
     events = []
     for record in caplog.records:
         if record.getMessage().startswith("fundamental_valuation_diagnostic "):
             events.append(json.loads(record.getMessage().split(" ", 1)[1]))
+    if not diagnostics_enabled:
+        assert events == []
+        assert digested_lengths == []
+        return
+
+    assert digested_lengths == [len(queued.content), len(completed.content)]
     by_correlation = {
         correlation: [item for item in events if item["correlation_id"] == correlation]
         for correlation in ("trace-first", "trace-second")
@@ -198,20 +218,26 @@ def test_opt_in_valuation_diagnostic_records_queue_worker_deadline_and_body(
         if item["event"] == "response_emitted"
     )
     assert completed_response["status_code"] == 200
-    assert completed_response["response_body_available"] is True
-    assert '"completed":true' in completed_response["response_body"]
+    assert completed_response["response_body_length"] == len(completed.content)
+    assert (
+        completed_response["response_body_sha256"]
+        == sha256(completed.content).hexdigest()
+    )
+    assert "response_body" not in completed_response
+    assert "completed" not in json.dumps(completed_response)
+    assert "error_message" not in completed_response
     failed_response = next(
         item
         for item in by_correlation["trace-second"]
         if item["event"] == "response_emitted"
     )
     assert failed_response["status_code"] == 408
-    assert failed_response["response_body_available"] is True
-    assert "REQUEST_DEADLINE_EXCEEDED" in failed_response["response_body"]
-    assert failed_response["response_body_length"] == len(
-        failed_response["response_body"].encode("utf-8")
-    )
-    assert failed_response["response_body_truncated"] is False
+    assert failed_response["response_body_length"] == len(queued.content)
+    assert failed_response["response_body_sha256"] == sha256(queued.content).hexdigest()
+    assert failed_response["error_code"] == "REQUEST_DEADLINE_EXCEEDED"
+    assert "response_body" not in failed_response
+    assert "error_message" not in failed_response
+    assert queued.json()["error"]["message"] not in json.dumps(failed_response)
     timeout = next(
         item
         for item in by_correlation["trace-second"]

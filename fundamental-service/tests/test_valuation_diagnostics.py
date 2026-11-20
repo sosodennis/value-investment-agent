@@ -11,10 +11,19 @@ import pytest
 
 from fundamental_service.valuation_diagnostics import (
     ValuationDiagnosticSink,
+    diagnostic_error_code,
     timed_valuation_stage,
     valuation_diagnostic_scope,
     valuation_stage,
 )
+
+
+def test_diagnostic_error_code_only_exposes_allowlisted_codes():
+    assert diagnostic_error_code("REQUEST_DEADLINE_EXCEEDED") == (
+        "REQUEST_DEADLINE_EXCEEDED"
+    )
+    assert diagnostic_error_code("private-input-derived-code") is None
+    assert diagnostic_error_code(None) is None
 
 
 @pytest.fixture
