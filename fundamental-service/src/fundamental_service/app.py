@@ -33,7 +33,7 @@ from .automatic_valuation import (
     load_runtime_automatic_approval_policy,
 )
 from .valuation_diagnostics import ValuationDiagnosticSink, valuation_diagnostic_scope
-from .calculation_flights import CalculationFlightRegistry
+from .calculation_flights import AutomaticValuationFlightRegistry
 from .contracts import (
     CalculationArtifactV1,
     FactsReadRequestV1,
@@ -163,7 +163,7 @@ def _valuation_input_identity(raw: object) -> dict[str, object]:
     return identity
 
 
-def _automatic_calculation_flight_key(
+def _automatic_valuation_flight_key(
     request: AutomaticValuationRequestV1,
     *,
     caller_id: str,
@@ -175,7 +175,7 @@ def _automatic_calculation_flight_key(
     """Key a possible match; each request still validates its own input."""
     return sha256_digest(
         {
-            "protocol": "automatic-valuation-calculation-flight-v1",
+            "protocol": "automatic-valuation-preparation-flight-v1",
             "runtime_identity": runtime_identity,
             "request": request,
             "caller_id": caller_id,
@@ -329,7 +329,7 @@ def create_app(
             )
     metrics = OperationalMetrics()
     limiter = RateLimiter(runtime_config.rate_limit_per_minute)
-    calculation_flights = CalculationFlightRegistry()
+    valuation_flights = AutomaticValuationFlightRegistry()
     diagnostic_sink = ValuationDiagnosticSink()
     application = FundamentalApplication(
         snapshot_repository=snapshot_repository,
@@ -384,7 +384,7 @@ def create_app(
             yield
         finally:
             app.state.accepting_requests = False
-            calculation_flights.close()
+            valuation_flights.close()
             diagnostic_sink.close()
             if metadata_store is not None:
                 metadata_store.close()
@@ -401,7 +401,7 @@ def create_app(
     app.state.model_inventory = model_inventory
     app.state.sec_acquisition = sec_acquisition
     app.state.identity_resolution = identity_resolution
-    app.state.calculation_flights = calculation_flights
+    app.state.automatic_valuation_flights = valuation_flights
     app.state.valuation_diagnostic_sink = diagnostic_sink
     sec_acquisition_limiter = RateLimiter(
         runtime_config.ingestion_rate_limit_per_minute
@@ -1173,7 +1173,7 @@ def create_app(
         executor = AutomaticValuationExecutor(
             application, automatic_approval_policy
         ).execute
-        flight_key = _automatic_calculation_flight_key(
+        flight_key = _automatic_valuation_flight_key(
             value,
             caller_id=principal.subject_id,
             organization_id=principal.organization_id,
@@ -1187,9 +1187,9 @@ def create_app(
                 if application.source_use_policy is not None
                 else "source-use-policy-unavailable"
             ),
-            runtime_identity=calculation_flights.runtime_identity,
+            runtime_identity=valuation_flights.runtime_identity,
         )
-        lease = calculation_flights.join(flight_key)
+        lease = valuation_flights.join(flight_key)
         if lease is None:
             if runtime_config.valuation_diagnostics:
                 _log_valuation_diagnostic(
@@ -1197,7 +1197,7 @@ def create_app(
                     correlation=request.state.correlation_id,
                     path=request.url.path,
                     operation="AutomaticValuationExecutor.execute",
-                    event="calculation_flight_admission_rejected",
+                    event="preparation_flight_admission_rejected",
                     trace_started=getattr(
                         request.state, "valuation_trace_started", monotonic()
                     ),
@@ -1212,7 +1212,7 @@ def create_app(
                 retry_after_ms=250,
             )
 
-        shared_calculation = None
+        shared_preparation = None
 
         try:
             if lease is not None and not lease.is_owner:
@@ -1223,15 +1223,15 @@ def create_app(
                         correlation=request.state.correlation_id,
                         path=request.url.path,
                         operation="AutomaticValuationExecutor.execute",
-                        event="calculation_flight_wait_started",
+                        event="preparation_flight_wait_started",
                         trace_started=getattr(
                             request.state, "valuation_trace_started", wait_started
                         ),
                         deadline_at=request.state.deadline,
-                        runtime_identity=calculation_flights.runtime_identity,
+                        runtime_identity=valuation_flights.runtime_identity,
                     )
                 try:
-                    shared_calculation = await lease.wait(request.state.deadline)
+                    shared_preparation = await lease.wait(request.state.deadline)
                 except ServiceError as error:
                     if runtime_config.valuation_diagnostics:
                         _log_valuation_diagnostic(
@@ -1246,7 +1246,7 @@ def create_app(
                                 wait_started,
                             ),
                             deadline_at=request.state.deadline,
-                            timeout_phase="calculation_flight_wait",
+                            timeout_phase="preparation_flight_wait",
                             wait_ms=round((monotonic() - wait_started) * 1000, 3),
                             error_code=error.code,
                         )
@@ -1257,13 +1257,13 @@ def create_app(
                         correlation=request.state.correlation_id,
                         path=request.url.path,
                         operation="AutomaticValuationExecutor.execute",
-                        event="calculation_flight_wait_finished",
+                        event="preparation_flight_wait_finished",
                         trace_started=getattr(
                             request.state, "valuation_trace_started", wait_started
                         ),
                         deadline_at=request.state.deadline,
                         wait_ms=round((monotonic() - wait_started) * 1000, 3),
-                        reusable_calculation=shared_calculation is not None,
+                        reusable_preparation=shared_preparation is not None,
                     )
             result = await run_valuation_operation(
                 request,
@@ -1272,8 +1272,8 @@ def create_app(
                 caller_id=principal.subject_id,
                 organization_id=principal.organization_id,
                 deadline_at=request.state.deadline,
-                shared_calculation=shared_calculation,
-                publish_calculation_result=(
+                shared_preparation=shared_preparation,
+                publish_preparation_result=(
                     lease.publish if lease is not None and lease.is_owner else None
                 ),
             )

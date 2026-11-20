@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import datetime
 from hashlib import sha256
-from typing import Any, Callable, overload
+from typing import Any, overload
 
 from pydantic import model_validator
 
@@ -18,7 +18,7 @@ from ..calculator import (
     with_calculation_result_hash,
 )
 from ..valuation_diagnostics import timed_valuation_stage, valuation_stage
-from ..calculation_flights import ImmutableCalculationResult
+from ..calculation_flights import ImmutableAutomaticValuationPreparation
 from ..contracts import (
     ArtifactReferenceV1,
     CanonicalFactV1,
@@ -165,11 +165,6 @@ class PreparedValuationOperation:
         approval: CallerApprovalEnvelopeV1,
         *,
         correlation_id: str,
-        shared_calculation: ImmutableCalculationResult | None = None,
-        publish_calculation_result: Callable[
-            [CalculationArtifactV1, ValuationInputV1, bool, datetime | None], None
-        ]
-        | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(self._deadline_at)
         if sha256_digest(self.preparation) != self._preparation_digest:
@@ -192,8 +187,6 @@ class PreparedValuationOperation:
             correlation_id=correlation_id,
             deadline_at=self._deadline_at,
             preparation=self.preparation,
-            shared_calculation=shared_calculation,
-            publish_calculation_result=publish_calculation_result,
         )
 
 
@@ -1676,6 +1669,145 @@ class FundamentalApplication:
             _deadline_at=deadline_at,
         )
 
+    @timed_valuation_stage("preparation.flight_revalidation")
+    def reuse_automatic_valuation_operation(
+        self,
+        request: ValuationEvidenceReadRequestV1,
+        shared: ImmutableAutomaticValuationPreparation,
+        *,
+        expected_input_digest: str,
+        deadline_at: datetime,
+    ) -> PreparedValuationOperation:
+        """Revalidate a shared immutable preparation for this request."""
+        guard_execution_deadline(deadline_at)
+        preparation = shared.materialize(expected_input_digest=expected_input_digest)
+        if preparation is None:
+            raise ServiceError(
+                "PREPARED_VALUATION_MISMATCH",
+                "shared preparation does not match the exact requested input",
+                status_code=409,
+                retryable=False,
+            )
+        value = preparation.input
+        assert value is not None
+
+        snapshot = self.snapshot(request.snapshot_id)
+        manifest = self._data_release_manifest(request.data_release_manifest_digest)
+        if (
+            manifest is None
+            or manifest.manifest_digest != request.data_release_manifest_digest
+            or preparation.model_id != request.model_id
+            or value.model_id != request.model_id
+            or value.identity != snapshot.identity
+            or value.valuation_context.data_snapshot_id != snapshot.snapshot_id
+            or value.valuation_context.valuation_timestamp
+            != snapshot.valuation_timestamp
+            or value.valuation_context.data_release_manifest_digest
+            != manifest.manifest_digest
+        ):
+            raise ServiceError(
+                "PREPARED_VALUATION_RELEASE_MISMATCH",
+                "shared preparation differs from the current pinned release",
+                status_code=409,
+                retryable=False,
+            )
+
+        try:
+            self._verify_current_release_artifacts(manifest, deadline_at=deadline_at)
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
+
+        evidence = self.read_valuation_evidence(request)
+        guard_execution_deadline(deadline_at)
+        current_fact_ids = {fact.fact_id for fact in evidence.facts}
+        if (
+            evidence.snapshot_manifest_digest != snapshot.manifest_digest
+            or evidence.identity != value.identity
+            or evidence.valuation_timestamp
+            != value.valuation_context.valuation_timestamp
+            or evidence.profile_id != preparation.profile_id
+            or evidence.profile_digest != preparation.profile_digest
+            or value.provenance.mapping_version
+            != (evidence.mapping_version or "sec-canonical-mapping-v1")
+            or not set(value.historical_facts) <= current_fact_ids
+            or not set(value.provenance.fact_ids) <= current_fact_ids
+        ):
+            raise ServiceError(
+                "PREPARED_VALUATION_EVIDENCE_MISMATCH",
+                "shared preparation differs from current release evidence",
+                status_code=409,
+                retryable=False,
+            )
+
+        model_version = f"{request.model_id}-v2"
+        if self.policy_registry is None:
+            policy_id = f"{request.model_id}-us-gaap-public-v3"
+            policy_version = "unresolved"
+        else:
+            try:
+                policy = self.policy_registry.select_policy(
+                    model_id=request.model_id,
+                    model_version=model_version,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    policy_id=None,
+                    issuer_id=snapshot.identity.issuer_id,
+                    data_release_manifest_digest=manifest.manifest_digest,
+                )
+            except PolicyError as error:
+                raise ServiceError(
+                    error.code,
+                    "an effective service-owned valuation policy is unavailable",
+                    status_code=422,
+                    retryable=False,
+                ) from error
+            policy_id = policy.policy_id
+            policy_version = policy.policy_version
+            model_version = policy.model_version
+        if (
+            preparation.model_version != model_version
+            or preparation.policy_id != policy_id
+            or preparation.policy_version != policy_version
+        ):
+            raise ServiceError(
+                "PREPARED_VALUATION_POLICY_MISMATCH",
+                "shared preparation differs from the current valuation policy",
+                status_code=409,
+                retryable=False,
+            )
+
+        if self.source_use_policy is None:
+            raise ServiceError(
+                "AUTOMATIC_APPROVAL_SOURCE_POLICY_MISSING",
+                "automatic approval requires a deployed source-use policy",
+                status_code=403,
+                retryable=False,
+            )
+        try:
+            load_release_source_admissions(
+                manifest,
+                artifacts=self.artifact_store,
+                policy=self.source_use_policy,
+                macro_providers=self.macro_providers,
+                reference_providers=self.reference_providers,
+            )
+        except (DataReleaseError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "SOURCE_ADMISSION_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        guard_execution_deadline(deadline_at)
+
+        return PreparedValuationOperation(
+            preparation=preparation,
+            _application=self,
+            _preparation_digest=sha256_digest(preparation),
+            _deadline_at=deadline_at,
+        )
+
     def apply_manual_override(
         self, request: ManualValuationOverrideRequestV1
     ) -> AutomaticValuationPreparationV1:
@@ -2045,11 +2177,6 @@ class FundamentalApplication:
         correlation_id: str,
         deadline_at: datetime | None = None,
         preparation: AutomaticValuationPreparationV1 | None = None,
-        shared_calculation: ImmutableCalculationResult | None = None,
-        publish_calculation_result: Callable[
-            [CalculationArtifactV1, ValuationInputV1, bool, datetime | None], None
-        ]
-        | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
@@ -2067,8 +2194,6 @@ class FundamentalApplication:
             correlation_id=correlation_id,
             deadline_at=deadline_at,
             preparation=preparation,
-            shared_calculation=shared_calculation,
-            publish_calculation_result=publish_calculation_result,
         )
 
     def calculate_with_policy(
@@ -2158,11 +2283,6 @@ class FundamentalApplication:
         correlation_id: str,
         deadline_at: datetime | None = None,
         preparation: AutomaticValuationPreparationV1 | None = None,
-        shared_calculation: ImmutableCalculationResult | None = None,
-        publish_calculation_result: Callable[
-            [CalculationArtifactV1, ValuationInputV1, bool, datetime | None], None
-        ]
-        | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         if resolution.input_digest != resolved.input_digest:
@@ -2242,20 +2362,11 @@ class FundamentalApplication:
             )
             guard_execution_deadline(deadline_at)
             with valuation_stage("calculation.raw_result"):
-                result = (
-                    shared_calculation.materialize(
-                        calculation_input,
-                        allow_provisional=service_owned_uncertainty,
-                    )
-                    if shared_calculation is not None
-                    else None
+                result = calculate(
+                    calculation_input,
+                    correlation_id=correlation_id,
+                    allow_provisional=service_owned_uncertainty,
                 )
-                if result is None:
-                    result = calculate(
-                        calculation_input,
-                        correlation_id=correlation_id,
-                        allow_provisional=service_owned_uncertainty,
-                    )
         except CalculationRefusal as error:
             raise ServiceError(
                 error.code,
@@ -2264,13 +2375,6 @@ class FundamentalApplication:
                 retryable=False,
             ) from error
         guard_execution_deadline(deadline_at)
-        if publish_calculation_result is not None and shared_calculation is None:
-            publish_calculation_result(
-                result,
-                calculation_input,
-                service_owned_uncertainty,
-                deadline_at,
-            )
         trace = self._trace(calculation_input, result, snapshot, calculation_resolution)
         result = with_calculation_result_hash(
             result.model_copy(

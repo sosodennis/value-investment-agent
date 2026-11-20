@@ -14,14 +14,13 @@ from .automatic_approval import (
     automatic_approval_issues,
 )
 from .valuation_diagnostics import timed_valuation_stage, valuation_stage
-from .calculation_flights import ImmutableCalculationResult
+from .calculation_flights import ImmutableAutomaticValuationPreparation
 from .contracts import (
     ArtifactReferenceV1,
     CalculationArtifactV1,
     CallerApprovalEnvelopeV1,
     StrictModel,
     ValuationEvidenceReadRequestV1,
-    ValuationInputV1,
 )
 from .data_releases import ArtifactRefV1
 from .operations import ServiceError, guard_execution_deadline
@@ -29,6 +28,7 @@ from .replay import ArtifactPublicationV1
 from .serialization import sha256_digest
 from .snapshots import SnapshotError
 from .uncertainty import UncertaintyReportV1
+from .valuation_preparation import AutomaticValuationPreparationV1
 
 
 class AutomaticValuationRequestV1(StrictModel):
@@ -182,9 +182,9 @@ class AutomaticValuationExecutor:
         caller_id: str,
         organization_id: str,
         deadline_at: datetime,
-        shared_calculation: ImmutableCalculationResult | None = None,
-        publish_calculation_result: Callable[
-            [CalculationArtifactV1, ValuationInputV1, bool, datetime | None], None
+        shared_preparation: ImmutableAutomaticValuationPreparation | None = None,
+        publish_preparation_result: Callable[
+            [AutomaticValuationPreparationV1, str, datetime | None], None
         ]
         | None = None,
     ) -> AutomaticValuationResponseV1:
@@ -213,9 +213,23 @@ class AutomaticValuationExecutor:
                 status_code=403,
                 retryable=False,
             )
-        operation = application.prepare_valuation_operation(
-            request.preparation, deadline_at=deadline_at
-        )
+        if shared_preparation is None:
+            operation = application.prepare_valuation_operation(
+                request.preparation, deadline_at=deadline_at
+            )
+            if publish_preparation_result is not None:
+                publish_preparation_result(
+                    operation.preparation,
+                    request.expected_input_digest,
+                    deadline_at,
+                )
+        else:
+            operation = application.reuse_automatic_valuation_operation(
+                request.preparation,
+                shared_preparation,
+                expected_input_digest=request.expected_input_digest,
+                deadline_at=deadline_at,
+            )
         preparation = operation.preparation
         guard_execution_deadline(deadline_at)
         with valuation_stage("automatic.policy_checks"):
@@ -290,8 +304,6 @@ class AutomaticValuationExecutor:
         calculation = operation.calculate(
             approval,
             correlation_id=f"automatic-valuation:{value.input_digest}",
-            shared_calculation=shared_calculation,
-            publish_calculation_result=publish_calculation_result,
         )
         guard_execution_deadline(deadline_at)
         with valuation_stage("automatic.execution_evidence"):

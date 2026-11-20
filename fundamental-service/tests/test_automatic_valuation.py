@@ -13,17 +13,16 @@ from pydantic import ValidationError
 
 from fundamental_service import app as app_module
 from fundamental_service.app import create_app
-from fundamental_service.app import _automatic_calculation_flight_key
+from fundamental_service.app import _automatic_valuation_flight_key
 from fundamental_service.application import service as service_module
 from fundamental_service.application.service import FundamentalApplication
 from fundamental_service import automatic_valuation as automatic_valuation_module
 from fundamental_service.automatic_valuation import (
     automatic_approval_issues as _automatic_approval_issues,
 )
-from fundamental_service.calculator import calculate as calculate_raw
 from fundamental_service.calculation_flights import (
-    CalculationFlightRegistry,
-    ImmutableCalculationResult,
+    AutomaticValuationFlightRegistry,
+    ImmutableAutomaticValuationPreparation,
 )
 from fundamental_service.automatic_approval import (
     AutomaticApprovalModelV1,
@@ -35,7 +34,8 @@ from fundamental_service.automatic_valuation import (
     AutomaticValuationRequestV1,
     load_runtime_automatic_approval_policy,
 )
-from fundamental_service.contracts import UncertaintyV1, ValuationEvidenceReadRequestV1
+from fundamental_service.contracts import ValuationEvidenceReadRequestV1
+from fundamental_service.data_releases import DataReleaseError
 from fundamental_service.operations import ServiceError
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.testsupport import auth_headers, make_internal_envelope
@@ -289,7 +289,7 @@ def test_deployment_requires_complete_exact_pin_and_valid_policy(tmp_path, monke
         )
 
 
-def test_calculation_flight_key_binds_full_request_and_authority(tmp_path):
+def test_valuation_flight_key_binds_full_request_and_authority(tmp_path):
     _, _, policy, raw_request = _case(tmp_path)
     request = AutomaticValuationRequestV1.model_validate(raw_request)
     common = {
@@ -299,40 +299,40 @@ def test_calculation_flight_key_binds_full_request_and_authority(tmp_path):
         "source_use_policy_digest": "b" * 64,
         "runtime_identity": "runtime-one",
     }
-    baseline = _automatic_calculation_flight_key(request, **common)
-    assert _automatic_calculation_flight_key(request, **common) == baseline
+    baseline = _automatic_valuation_flight_key(request, **common)
+    assert _automatic_valuation_flight_key(request, **common) == baseline
     assert (
-        _automatic_calculation_flight_key(
+        _automatic_valuation_flight_key(
             request, **(common | {"caller_id": "other-caller"})
         )
         != baseline
     )
     assert (
-        _automatic_calculation_flight_key(
+        _automatic_valuation_flight_key(
             request, **(common | {"organization_id": "other-organization"})
         )
         != baseline
     )
     assert (
-        _automatic_calculation_flight_key(
+        _automatic_valuation_flight_key(
             request, **(common | {"automatic_policy_digest": "c" * 64})
         )
         != baseline
     )
     assert (
-        _automatic_calculation_flight_key(
+        _automatic_valuation_flight_key(
             request, **(common | {"source_use_policy_digest": "d" * 64})
         )
         != baseline
     )
     assert (
-        _automatic_calculation_flight_key(
+        _automatic_valuation_flight_key(
             request, **(common | {"runtime_identity": "runtime-two"})
         )
         != baseline
     )
     assert (
-        _automatic_calculation_flight_key(
+        _automatic_valuation_flight_key(
             request.model_copy(update={"expected_input_digest": "e" * 64}),
             **common,
         )
@@ -342,7 +342,7 @@ def test_calculation_flight_key_binds_full_request_and_authority(tmp_path):
         update={"model_id": "transition_fcff_dcf"}
     )
     assert (
-        _automatic_calculation_flight_key(
+        _automatic_valuation_flight_key(
             request.model_copy(update={"preparation": changed_preparation}),
             **common,
         )
@@ -350,18 +350,25 @@ def test_calculation_flight_key_binds_full_request_and_authority(tmp_path):
     )
 
 
-def test_concurrent_identical_automatic_requests_share_only_calculator_output(
+def test_concurrent_identical_automatic_requests_share_only_preparation_bytes(
     tmp_path, monkeypatch
 ):
     _, sync_client, _, request = _case(tmp_path)
     app = sync_client.app
-    release_calculator = Event()
-    calculator_started = Event()
+    release_preparation = Event()
+    preparation_started = Event()
     follower_joined = Event()
     count_lock = Lock()
-    counts = {"prepare": 0, "policy": 0, "resolved": 0, "calculate": 0}
+    counts = {
+        "prepare": 0,
+        "reuse": 0,
+        "policy": 0,
+        "resolved": 0,
+        "calculate": 0,
+    }
 
     original_prepare = FundamentalApplication.prepare_valuation_operation
+    original_reuse = FundamentalApplication.reuse_automatic_valuation_operation
     original_resolved = FundamentalApplication._calculate_resolved
     original_calculate = service_module.calculate
 
@@ -371,7 +378,14 @@ def test_concurrent_identical_automatic_requests_share_only_calculator_output(
 
     def prepare(self, *args, **kwargs):
         increment("prepare")
-        return original_prepare(self, *args, **kwargs)
+        operation = original_prepare(self, *args, **kwargs)
+        preparation_started.set()
+        assert release_preparation.wait(5), "test did not release preparation"
+        return operation
+
+    def reuse(self, *args, **kwargs):
+        increment("reuse")
+        return original_reuse(self, *args, **kwargs)
 
     def resolved(self, *args, **kwargs):
         increment("resolved")
@@ -379,8 +393,6 @@ def test_concurrent_identical_automatic_requests_share_only_calculator_output(
 
     def calculate(*args, **kwargs):
         increment("calculate")
-        calculator_started.set()
-        assert release_calculator.wait(5), "test did not release calculator"
         return original_calculate(*args, **kwargs)
 
     def issues(*args, **kwargs):
@@ -388,10 +400,13 @@ def test_concurrent_identical_automatic_requests_share_only_calculator_output(
         return _automatic_approval_issues(*args, **kwargs)
 
     monkeypatch.setattr(FundamentalApplication, "prepare_valuation_operation", prepare)
+    monkeypatch.setattr(
+        FundamentalApplication, "reuse_automatic_valuation_operation", reuse
+    )
     monkeypatch.setattr(FundamentalApplication, "_calculate_resolved", resolved)
     monkeypatch.setattr(service_module, "calculate", calculate)
     monkeypatch.setattr(automatic_valuation_module, "automatic_approval_issues", issues)
-    registry = app.state.calculation_flights
+    registry = app.state.automatic_valuation_flights
     original_join = registry.join
 
     def join(key):
@@ -415,7 +430,7 @@ def test_concurrent_identical_automatic_requests_share_only_calculator_output(
                     ),
                 )
             )
-            assert await asyncio.to_thread(calculator_started.wait, 3)
+            assert await asyncio.to_thread(preparation_started.wait, 3)
             second = asyncio.create_task(
                 client.post(
                     "/v1/valuation/calculate-automatically",
@@ -425,10 +440,8 @@ def test_concurrent_identical_automatic_requests_share_only_calculator_output(
                     ),
                 )
             )
-            try:
-                assert await asyncio.to_thread(follower_joined.wait, 3)
-            finally:
-                release_calculator.set()
+            assert await asyncio.to_thread(follower_joined.wait, 3)
+            release_preparation.set()
             return await asyncio.gather(first, second)
 
     responses = asyncio.run(exercise())
@@ -438,7 +451,13 @@ def test_concurrent_identical_automatic_requests_share_only_calculator_output(
     results = [response.json()["result"] for response in responses]
     assert results[0]["calculation"] == results[1]["calculation"]
     assert results[0]["decision"]["caller_id"] == results[1]["decision"]["caller_id"]
-    assert counts == {"prepare": 2, "policy": 2, "resolved": 2, "calculate": 1}
+    assert counts == {
+        "prepare": 1,
+        "reuse": 1,
+        "policy": 2,
+        "resolved": 2,
+        "calculate": 2,
+    }
     for name in (
         "policy_publication",
         "preparation_publication",
@@ -450,29 +469,25 @@ def test_concurrent_identical_automatic_requests_share_only_calculator_output(
         assert results[1][name]["wrote"] is False
 
 
-def test_follower_rechecks_policy_after_waiting_for_shared_calculation(
+def test_follower_rechecks_policy_after_waiting_for_shared_preparation(
     tmp_path, monkeypatch
 ):
     initial_time = datetime.now(UTC)
     expires_at = initial_time + timedelta(seconds=10)
     _, sync_client, _, request = _case(tmp_path, expires_at=expires_at)
     app = sync_client.app
+    release_preparation = Event()
+    preparation_started = Event()
     release_calculator = Event()
     calculator_started = Event()
     follower_joined = Event()
     policy_checks = 0
     calculator_calls = 0
 
-    class Clock:
-        current = initial_time
-
-        @classmethod
-        def now(cls, tz=None):
-            return cls.current
-
     original_calculate = service_module.calculate
+    original_prepare = FundamentalApplication.prepare_valuation_operation
     original_issues = automatic_valuation_module.automatic_approval_issues
-    original_join = app.state.calculation_flights.join
+    original_join = app.state.automatic_valuation_flights.join
 
     def calculate(*args, **kwargs):
         nonlocal calculator_calls
@@ -481,9 +496,17 @@ def test_follower_rechecks_policy_after_waiting_for_shared_calculation(
         assert release_calculator.wait(5), "test did not release calculator"
         return original_calculate(*args, **kwargs)
 
+    def prepare(self, *args, **kwargs):
+        operation = original_prepare(self, *args, **kwargs)
+        preparation_started.set()
+        assert release_preparation.wait(5), "test did not release preparation"
+        return operation
+
     def issues(*args, **kwargs):
         nonlocal policy_checks
         policy_checks += 1
+        if policy_checks == 2:
+            kwargs["received_at"] = expires_at + timedelta(seconds=1)
         return original_issues(*args, **kwargs)
 
     def join(key):
@@ -493,9 +516,9 @@ def test_follower_rechecks_policy_after_waiting_for_shared_calculation(
         return lease
 
     monkeypatch.setattr(service_module, "calculate", calculate)
+    monkeypatch.setattr(FundamentalApplication, "prepare_valuation_operation", prepare)
     monkeypatch.setattr(automatic_valuation_module, "automatic_approval_issues", issues)
-    monkeypatch.setattr(automatic_valuation_module, "datetime", Clock)
-    monkeypatch.setattr(app.state.calculation_flights, "join", join)
+    monkeypatch.setattr(app.state.automatic_valuation_flights, "join", join)
 
     async def exercise():
         async with httpx.AsyncClient(
@@ -510,7 +533,7 @@ def test_follower_rechecks_policy_after_waiting_for_shared_calculation(
                     ),
                 )
             )
-            assert await asyncio.to_thread(calculator_started.wait, 3)
+            assert await asyncio.to_thread(preparation_started.wait, 3)
             second = asyncio.create_task(
                 client.post(
                     "/v1/valuation/calculate-automatically",
@@ -522,8 +545,9 @@ def test_follower_rechecks_policy_after_waiting_for_shared_calculation(
             )
             try:
                 assert await asyncio.to_thread(follower_joined.wait, 3)
+                release_preparation.set()
+                assert await asyncio.to_thread(calculator_started.wait, 3)
             finally:
-                Clock.current = expires_at + timedelta(seconds=1)
                 release_calculator.set()
             return await asyncio.gather(first, second)
 
@@ -545,24 +569,220 @@ def test_follower_rechecks_policy_after_waiting_for_shared_calculation(
     assert calculator_calls == 1
 
 
+def test_follower_revalidates_source_permission_before_reusing_preparation(
+    tmp_path, monkeypatch
+):
+    _, sync_client, _, request = _case(tmp_path)
+    app = sync_client.app
+    release_preparation = Event()
+    preparation_started = Event()
+    follower_joined = Event()
+    source_admission_calls = 0
+    original_prepare = FundamentalApplication.prepare_valuation_operation
+    original_join = app.state.automatic_valuation_flights.join
+    original_load_admissions = service_module.load_release_source_admissions
+
+    def prepare(self, *args, **kwargs):
+        operation = original_prepare(self, *args, **kwargs)
+        preparation_started.set()
+        assert release_preparation.wait(5), "test did not release preparation"
+        return operation
+
+    def join(key):
+        lease = original_join(key)
+        if lease is not None and not lease.is_owner:
+            follower_joined.set()
+        return lease
+
+    def load_admissions(*args, **kwargs):
+        nonlocal source_admission_calls
+        source_admission_calls += 1
+        if source_admission_calls == 2:
+            raise DataReleaseError(
+                "SOURCE_ADMISSION_REVOKED", "source admission was revoked"
+            )
+        return original_load_admissions(*args, **kwargs)
+
+    monkeypatch.setattr(FundamentalApplication, "prepare_valuation_operation", prepare)
+    monkeypatch.setattr(app.state.automatic_valuation_flights, "join", join)
+    monkeypatch.setattr(
+        service_module, "load_release_source_admissions", load_admissions
+    )
+
+    async def exercise():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://service"
+        ) as client:
+            owner = asyncio.create_task(
+                client.post(
+                    "/v1/valuation/calculate-automatically",
+                    headers=auth_headers(),
+                    json=make_internal_envelope(
+                        request, correlation_id="source-flight-owner"
+                    ),
+                )
+            )
+            assert await asyncio.to_thread(preparation_started.wait, 3)
+            follower = asyncio.create_task(
+                client.post(
+                    "/v1/valuation/calculate-automatically",
+                    headers=auth_headers(),
+                    json=make_internal_envelope(
+                        request, correlation_id="source-flight-follower"
+                    ),
+                )
+            )
+            assert await asyncio.to_thread(follower_joined.wait, 3)
+            release_preparation.set()
+            return await asyncio.gather(owner, follower)
+
+    owner_response, follower_response = asyncio.run(exercise())
+    assert owner_response.status_code == 200, owner_response.text
+    assert follower_response.status_code == 422, follower_response.text
+    assert follower_response.json()["error"]["code"] == "SOURCE_ADMISSION_REVOKED"
+    assert source_admission_calls == 2
+
+
+def test_follower_revalidates_release_artifacts_before_publishing_approval(
+    tmp_path, monkeypatch
+):
+    fixture, sync_client, _, request = _case(tmp_path)
+    app = sync_client.app
+    release_preparation = Event()
+    preparation_started = Event()
+    follower_joined = Event()
+    revalidation_started = Event()
+    calculator_started = Event()
+    release_calculator = Event()
+    policy_checks = 0
+    publication_calls = 0
+    artifact_checks = 0
+    original_prepare = FundamentalApplication.prepare_valuation_operation
+    original_reuse = FundamentalApplication.reuse_automatic_valuation_operation
+    original_verify_artifacts = FundamentalApplication._verify_current_release_artifacts
+    original_calculate = service_module.calculate
+    original_issues = automatic_valuation_module.automatic_approval_issues
+    original_publish = AutomaticValuationExecutor._publish
+    original_join = app.state.automatic_valuation_flights.join
+
+    def prepare(self, *args, **kwargs):
+        operation = original_prepare(self, *args, **kwargs)
+        preparation_started.set()
+        assert release_preparation.wait(5), "test did not release preparation"
+        return operation
+
+    def reuse(self, *args, **kwargs):
+        revalidation_started.set()
+        return original_reuse(self, *args, **kwargs)
+
+    def join(key):
+        lease = original_join(key)
+        if lease is not None and not lease.is_owner:
+            follower_joined.set()
+        return lease
+
+    def calculate(*args, **kwargs):
+        calculator_started.set()
+        assert release_calculator.wait(5), "test did not release calculator"
+        return original_calculate(*args, **kwargs)
+
+    def issues(*args, **kwargs):
+        nonlocal policy_checks
+        policy_checks += 1
+        return original_issues(*args, **kwargs)
+
+    def publish(self, *args, **kwargs):
+        nonlocal publication_calls
+        publication_calls += 1
+        return original_publish(self, *args, **kwargs)
+
+    def verify_artifacts(self, *args, **kwargs):
+        nonlocal artifact_checks
+        artifact_checks += 1
+        return original_verify_artifacts(self, *args, **kwargs)
+
+    monkeypatch.setattr(FundamentalApplication, "prepare_valuation_operation", prepare)
+    monkeypatch.setattr(
+        FundamentalApplication, "reuse_automatic_valuation_operation", reuse
+    )
+    monkeypatch.setattr(app.state.automatic_valuation_flights, "join", join)
+    monkeypatch.setattr(service_module, "calculate", calculate)
+    monkeypatch.setattr(automatic_valuation_module, "automatic_approval_issues", issues)
+    monkeypatch.setattr(AutomaticValuationExecutor, "_publish", publish)
+    monkeypatch.setattr(
+        FundamentalApplication,
+        "_verify_current_release_artifacts",
+        verify_artifacts,
+    )
+
+    async def exercise():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://service"
+        ) as client:
+            owner = asyncio.create_task(
+                client.post(
+                    "/v1/valuation/calculate-automatically",
+                    headers=auth_headers(),
+                    json=make_internal_envelope(
+                        request, correlation_id="release-flight-owner"
+                    ),
+                )
+            )
+            assert await asyncio.to_thread(preparation_started.wait, 3)
+            follower = asyncio.create_task(
+                client.post(
+                    "/v1/valuation/calculate-automatically",
+                    headers=auth_headers(),
+                    json=make_internal_envelope(
+                        request, correlation_id="release-flight-follower"
+                    ),
+                )
+            )
+            assert await asyncio.to_thread(follower_joined.wait, 3)
+            release_preparation.set()
+            assert await asyncio.to_thread(calculator_started.wait, 3)
+
+            manifest = fixture.metadata.get_data_release_manifest(
+                request["preparation"]["data_release_manifest_digest"]
+            )
+            fixture.artifacts.invalidate(manifest.taxonomy_refs[0].artifact_id)
+            release_calculator.set()
+            assert await asyncio.to_thread(revalidation_started.wait, 3)
+            return await asyncio.gather(owner, follower)
+
+    owner_response, follower_response = asyncio.run(exercise())
+    assert owner_response.status_code == 200, owner_response.text
+    assert follower_response.status_code == 422, follower_response.text
+    assert follower_response.json()["error"]["code"] == "ARTIFACT_EVIDENCE_INVALID"
+    assert "result" not in follower_response.json()
+    assert policy_checks == 1
+    assert publication_calls == 4
+    assert artifact_checks == 3
+
+
 def test_http_follower_deadline_detaches_without_cancelling_owner(
     tmp_path, monkeypatch
 ):
     _, sync_client, _, request = _case(tmp_path)
     app = sync_client.app
-    release_calculator = Event()
-    calculator_started = Event()
+    release_preparation = Event()
+    preparation_started = Event()
     follower_joined = Event()
     calculator_calls = 0
     original_calculate = service_module.calculate
-    original_join = app.state.calculation_flights.join
+    original_prepare = FundamentalApplication.prepare_valuation_operation
+    original_join = app.state.automatic_valuation_flights.join
 
     def calculate(*args, **kwargs):
         nonlocal calculator_calls
         calculator_calls += 1
-        calculator_started.set()
-        assert release_calculator.wait(5), "test did not release calculator"
         return original_calculate(*args, **kwargs)
+
+    def prepare(self, *args, **kwargs):
+        operation = original_prepare(self, *args, **kwargs)
+        preparation_started.set()
+        assert release_preparation.wait(5), "test did not release preparation"
+        return operation
 
     def join(key):
         lease = original_join(key)
@@ -571,7 +791,8 @@ def test_http_follower_deadline_detaches_without_cancelling_owner(
         return lease
 
     monkeypatch.setattr(service_module, "calculate", calculate)
-    monkeypatch.setattr(app.state.calculation_flights, "join", join)
+    monkeypatch.setattr(FundamentalApplication, "prepare_valuation_operation", prepare)
+    monkeypatch.setattr(app.state.automatic_valuation_flights, "join", join)
 
     async def exercise():
         async with httpx.AsyncClient(
@@ -586,7 +807,7 @@ def test_http_follower_deadline_detaches_without_cancelling_owner(
                     ),
                 )
             )
-            assert await asyncio.to_thread(calculator_started.wait, 3)
+            assert await asyncio.to_thread(preparation_started.wait, 3)
             follower = asyncio.create_task(
                 client.post(
                     "/v1/valuation/calculate-automatically",
@@ -607,7 +828,7 @@ def test_http_follower_deadline_detaches_without_cancelling_owner(
                 )
                 assert not owner.done()
             finally:
-                release_calculator.set()
+                release_preparation.set()
             completed = await owner
             return timed_out, completed
 
@@ -617,8 +838,84 @@ def test_http_follower_deadline_detaches_without_cancelling_owner(
     assert calculator_calls == 1
 
 
+def test_http_follower_cancellation_detaches_without_cancelling_owner(
+    tmp_path, monkeypatch
+):
+    _, sync_client, _, request = _case(tmp_path)
+    app = sync_client.app
+    release_preparation = Event()
+    preparation_started = Event()
+    follower_joined = Event()
+    follower_leases = []
+    original_prepare = FundamentalApplication.prepare_valuation_operation
+    original_join = app.state.automatic_valuation_flights.join
+
+    def prepare(self, *args, **kwargs):
+        operation = original_prepare(self, *args, **kwargs)
+        preparation_started.set()
+        assert release_preparation.wait(5), "test did not release preparation"
+        return operation
+
+    def join(key):
+        lease = original_join(key)
+        if lease is not None and not lease.is_owner:
+            follower_leases.append(lease)
+            follower_joined.set()
+        return lease
+
+    monkeypatch.setattr(FundamentalApplication, "prepare_valuation_operation", prepare)
+    monkeypatch.setattr(app.state.automatic_valuation_flights, "join", join)
+
+    async def exercise():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://service"
+        ) as client:
+            owner = asyncio.create_task(
+                client.post(
+                    "/v1/valuation/calculate-automatically",
+                    headers=auth_headers(),
+                    json=make_internal_envelope(
+                        request, correlation_id="cancel-flight-owner"
+                    ),
+                )
+            )
+            assert await asyncio.to_thread(preparation_started.wait, 3)
+            follower = asyncio.create_task(
+                client.post(
+                    "/v1/valuation/calculate-automatically",
+                    headers=auth_headers(),
+                    json=make_internal_envelope(
+                        request, correlation_id="cancel-flight-follower"
+                    ),
+                )
+            )
+            try:
+                assert await asyncio.to_thread(follower_joined.wait, 3)
+                flight = follower_leases[0]._flight
+
+                async def wait_until_follower_is_attached():
+                    while not flight.ready._waiters:
+                        await asyncio.sleep(0)
+
+                await asyncio.wait_for(wait_until_follower_is_attached(), timeout=1)
+                follower.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await follower
+                assert not flight.ready._waiters
+                assert not owner.done()
+                assert app.state.automatic_valuation_flights._active_participants == 1
+            finally:
+                release_preparation.set()
+            completed = await owner
+            return completed
+
+    completed = asyncio.run(exercise())
+    assert completed.status_code == 200, completed.text
+    assert app.state.automatic_valuation_flights._active_participants == 0
+
+
 def test_flight_registry_bounds_waiters_and_drops_completed_results():
-    registry = CalculationFlightRegistry(
+    registry = AutomaticValuationFlightRegistry(
         max_active_flights=1, max_participants_per_flight=2
     )
     owner = registry.join("exact-input")
@@ -642,7 +939,7 @@ def test_flight_registry_bounds_waiters_and_drops_completed_results():
 
 
 def test_timed_out_and_cancelled_flight_waiters_detach_from_notification():
-    registry = CalculationFlightRegistry(
+    registry = AutomaticValuationFlightRegistry(
         max_active_flights=1,
         max_participants_per_flight=2,
         max_active_participants=2,
@@ -686,55 +983,37 @@ def test_timed_out_and_cancelled_flight_waiters_detach_from_notification():
     owner.close()
 
 
-def test_immutable_calculation_result_checks_identity_and_rehydrates_fresh_model(
+def test_immutable_preparation_checks_identity_and_rehydrates_fresh_model(
     tmp_path,
 ):
     _, _, _, preparation = _prepared(tmp_path)
     value = preparation.input
     assert value is not None
-    calculation_input = value.model_copy(
-        update={
-            "uncertainty": UncertaintyV1(mode="none"),
-            "input_digest": None,
-            "caller_approval": None,
-        }
-    ).with_digest()
-    result = calculate_raw(calculation_input, allow_provisional=True)
-    shared = ImmutableCalculationResult.capture(
-        calculation_input, allow_provisional=True, artifact=result
+    assert value.input_digest is not None
+    shared = ImmutableAutomaticValuationPreparation.capture(
+        preparation, expected_input_digest=value.input_digest
     )
 
-    reused = shared.materialize(calculation_input, allow_provisional=True)
-    assert reused == result
-    assert reused is not result
-    assert shared.materialize(calculation_input, allow_provisional=False) is None
+    reused = shared.materialize(expected_input_digest=value.input_digest)
+    assert reused == preparation
+    assert reused is not preparation
+    assert reused is not None and reused.input is not value
+    assert shared.materialize(expected_input_digest="0" * 64) is None
 
-    changed = calculation_input.model_copy(
-        update={"historical_facts": (*value.historical_facts, "changed-fact")}
-    ).with_digest()
-    assert shared.materialize(changed, allow_provisional=True) is None
-
-    corrupted = ImmutableCalculationResult(
+    corrupted = ImmutableAutomaticValuationPreparation(
+        preparation_digest=shared.preparation_digest,
         input_digest=shared.input_digest,
-        semantics_digest=shared.semantics_digest,
-        artifact_bytes=b"invalid calculation bytes",
+        preparation_bytes=b"invalid preparation bytes",
     )
-    assert corrupted.materialize(calculation_input, allow_provisional=True) is None
+    assert corrupted.materialize(expected_input_digest=value.input_digest) is None
 
 
 def test_follower_timeout_detaches_without_cancelling_owner(tmp_path):
     _, _, _, preparation = _prepared(tmp_path)
     value = preparation.input
     assert value is not None
-    calculation_input = value.model_copy(
-        update={
-            "uncertainty": UncertaintyV1(mode="none"),
-            "input_digest": None,
-            "caller_approval": None,
-        }
-    ).with_digest()
-    result = calculate_raw(calculation_input, allow_provisional=True)
-    registry = CalculationFlightRegistry()
+    assert value.input_digest is not None
+    registry = AutomaticValuationFlightRegistry()
     owner = registry.join("exact-input")
     follower = registry.join("exact-input")
     assert owner is not None and owner.is_owner
@@ -750,7 +1029,7 @@ def test_follower_timeout_detaches_without_cancelling_owner(tmp_path):
 
     # The owner can still finish; with no attached waiters the result is discarded.
     owner.publish(
-        result, calculation_input, True, datetime.now(UTC) + timedelta(seconds=1)
+        preparation, value.input_digest, datetime.now(UTC) + timedelta(seconds=1)
     )
     owner.close()
     next_owner = registry.join("exact-input")
@@ -762,15 +1041,8 @@ def test_waiter_retention_remains_bounded_after_owner_publishes(tmp_path):
     _, _, _, preparation = _prepared(tmp_path)
     value = preparation.input
     assert value is not None
-    calculation_input = value.model_copy(
-        update={
-            "uncertainty": UncertaintyV1(mode="none"),
-            "input_digest": None,
-            "caller_approval": None,
-        }
-    ).with_digest()
-    result = calculate_raw(calculation_input, allow_provisional=True)
-    registry = CalculationFlightRegistry(
+    assert value.input_digest is not None
+    registry = AutomaticValuationFlightRegistry(
         max_active_flights=1,
         max_participants_per_flight=2,
         max_active_participants=2,
@@ -781,7 +1053,7 @@ def test_waiter_retention_remains_bounded_after_owner_publishes(tmp_path):
     assert follower is not None and not follower.is_owner
 
     owner.publish(
-        result, calculation_input, True, datetime.now(UTC) + timedelta(seconds=1)
+        preparation, value.input_digest, datetime.now(UTC) + timedelta(seconds=1)
     )
     # Publication removes the completed key, but attached waiters still hold the
     # immutable bytes. The total participant bound includes those references.
@@ -790,6 +1062,9 @@ def test_waiter_retention_remains_bounded_after_owner_publishes(tmp_path):
     async def receive_result():
         shared = await follower.wait(datetime.now(UTC) + timedelta(seconds=1))
         assert shared is not None
+        assert (
+            shared.materialize(expected_input_digest=value.input_digest) == preparation
+        )
         follower.close()
 
     asyncio.run(receive_result())
@@ -804,8 +1079,8 @@ def test_saturated_automatic_admission_rejects_before_worker_queue(
 ):
     monkeypatch.setattr(
         app_module,
-        "CalculationFlightRegistry",
-        lambda: CalculationFlightRegistry(
+        "AutomaticValuationFlightRegistry",
+        lambda: AutomaticValuationFlightRegistry(
             max_active_flights=1,
             max_participants_per_flight=1,
             max_active_participants=1,
@@ -813,11 +1088,11 @@ def test_saturated_automatic_admission_rejects_before_worker_queue(
     )
     _, sync_client, policy, raw_request = _case(tmp_path)
     app = sync_client.app
-    registry = app.state.calculation_flights
+    registry = app.state.automatic_valuation_flights
     source_policy = app.state.application.source_use_policy
     assert source_policy is not None
     request = AutomaticValuationRequestV1.model_validate(raw_request)
-    key = _automatic_calculation_flight_key(
+    key = _automatic_valuation_flight_key(
         request,
         caller_id="subject-test",
         organization_id="organization-test",

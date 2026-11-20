@@ -1,4 +1,4 @@
-"""Bounded, process-local coordination for identical calculator work."""
+"""Bounded, process-local coordination for identical valuation preparation."""
 
 from __future__ import annotations
 
@@ -11,96 +11,88 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from .calculator import CALCULATOR_RESULT_VERSION
-from .contracts import CalculationArtifactV1, ValuationInputV1
 from .operations import ServiceError, guard_execution_deadline
 from .serialization import canonical_bytes, sha256_digest
+from .valuation_preparation import AutomaticValuationPreparationV1
 
 
 @dataclass(frozen=True, slots=True)
-class ImmutableCalculationResult:
-    """Canonical calculator output detached from request-owned mutable state."""
+class ImmutableAutomaticValuationPreparation:
+    """Canonical preparation bytes detached from request-owned mutable state."""
 
+    preparation_digest: str
     input_digest: str
-    semantics_digest: str
-    artifact_bytes: bytes
+    preparation_bytes: bytes
 
     @classmethod
     def capture(
         cls,
-        calculation_input: ValuationInputV1,
+        preparation: AutomaticValuationPreparationV1,
         *,
-        allow_provisional: bool,
-        artifact: CalculationArtifactV1,
-    ) -> ImmutableCalculationResult:
+        expected_input_digest: str,
+    ) -> ImmutableAutomaticValuationPreparation:
+        value = preparation.input
+        if preparation.status != "prepared" or value is None:
+            raise ValueError("only a complete preparation can join a flight")
         input_digest = sha256_digest(
-            calculation_input.model_dump(exclude={"input_digest", "caller_approval"})
+            value.model_dump(exclude={"input_digest", "caller_approval"})
         )
         if (
-            calculation_input.input_digest not in (None, input_digest)
-            or artifact.input_digest != input_digest
-            or artifact.calculation_version != CALCULATOR_RESULT_VERSION
+            value.input_digest != input_digest
+            or input_digest != expected_input_digest
+            or value.caller_approval is not None
         ):
-            raise ValueError("calculator output does not match its exact input")
+            raise ValueError("preparation does not match its exact input")
         return cls(
+            preparation_digest=sha256_digest(preparation),
             input_digest=input_digest,
-            semantics_digest=_semantics_digest(input_digest, allow_provisional),
-            artifact_bytes=canonical_bytes(artifact),
+            preparation_bytes=canonical_bytes(preparation),
         )
 
     def materialize(
-        self,
-        calculation_input: ValuationInputV1,
-        *,
-        allow_provisional: bool,
-    ) -> CalculationArtifactV1 | None:
-        input_digest = sha256_digest(
-            calculation_input.model_dump(exclude={"input_digest", "caller_approval"})
-        )
-        if (
-            calculation_input.input_digest not in (None, input_digest)
-            or self.input_digest != input_digest
-            or self.semantics_digest
-            != _semantics_digest(input_digest, allow_provisional)
-        ):
-            return None
+        self, *, expected_input_digest: str
+    ) -> AutomaticValuationPreparationV1 | None:
         try:
-            artifact = CalculationArtifactV1.model_validate_json(self.artifact_bytes)
+            preparation = AutomaticValuationPreparationV1.model_validate_json(
+                self.preparation_bytes
+            )
         except (ValidationError, ValueError):
             return None
+        value = preparation.input
         if (
-            artifact.input_digest != input_digest
-            or artifact.calculation_version != CALCULATOR_RESULT_VERSION
+            preparation.status != "prepared"
+            or value is None
+            or sha256_digest(preparation) != self.preparation_digest
         ):
             return None
-        return artifact
-
-
-def _semantics_digest(input_digest: str, allow_provisional: bool) -> str:
-    return sha256_digest(
-        {
-            "calculator_result_version": CALCULATOR_RESULT_VERSION,
-            "input_digest": input_digest,
-            "allow_provisional": allow_provisional,
-        }
-    )
+        input_digest = sha256_digest(
+            value.model_dump(exclude={"input_digest", "caller_approval"})
+        )
+        if (
+            value.input_digest != input_digest
+            or self.input_digest != input_digest
+            or expected_input_digest != input_digest
+            or value.caller_approval is not None
+        ):
+            return None
+        return preparation
 
 
 @dataclass(slots=True)
 class _Flight:
     key: str
-    result: Future[ImmutableCalculationResult | None]
+    result: Future[ImmutableAutomaticValuationPreparation | None]
     ready: asyncio.Event
     loop: asyncio.AbstractEventLoop | None = None
     participants: int = 1
 
 
-class CalculationFlightLease:
-    """One request's independent claim on an active calculation flight."""
+class AutomaticValuationFlightLease:
+    """One request's independent claim on an active preparation flight."""
 
     def __init__(
         self,
-        registry: CalculationFlightRegistry,
+        registry: AutomaticValuationFlightRegistry,
         flight: _Flight,
         *,
         owner: bool,
@@ -110,7 +102,9 @@ class CalculationFlightLease:
         self.is_owner = owner
         self._closed = False
 
-    async def wait(self, deadline_at: datetime) -> ImmutableCalculationResult | None:
+    async def wait(
+        self, deadline_at: datetime
+    ) -> ImmutableAutomaticValuationPreparation | None:
         guard_execution_deadline(deadline_at)
         remaining_seconds = (deadline_at - datetime.now(UTC)).total_seconds()
         with self._registry._lock:
@@ -122,7 +116,7 @@ class CalculationFlightLease:
         except asyncio.TimeoutError as error:
             raise ServiceError(
                 "REQUEST_DEADLINE_EXCEEDED",
-                "request deadline expired while waiting for identical calculation",
+                "request deadline expired while waiting for identical preparation",
                 status_code=408,
                 retryable=True,
             ) from error
@@ -130,17 +124,15 @@ class CalculationFlightLease:
 
     def publish(
         self,
-        artifact: CalculationArtifactV1,
-        calculation_input: ValuationInputV1,
-        allow_provisional: bool,
+        preparation: AutomaticValuationPreparationV1,
+        expected_input_digest: str,
         deadline_at: datetime | None,
     ) -> None:
         if self.is_owner:
             self._registry._publish(
                 self._flight,
-                artifact,
-                calculation_input,
-                allow_provisional=allow_provisional,
+                preparation,
+                expected_input_digest=expected_input_digest,
                 deadline_at=deadline_at,
             )
 
@@ -153,7 +145,7 @@ class CalculationFlightLease:
         self._registry._release(self._flight)
 
 
-class CalculationFlightRegistry:
+class AutomaticValuationFlightRegistry:
     """App-scoped active-only registry; it never retains completed results."""
 
     def __init__(
@@ -168,7 +160,7 @@ class CalculationFlightRegistry:
             or max_participants_per_flight < 1
             or max_active_participants < 1
         ):
-            raise ValueError("calculation flight bounds must be positive")
+            raise ValueError("valuation flight bounds must be positive")
         self.runtime_identity = uuid4().hex
         self._max_active_flights = max_active_flights
         self._max_participants_per_flight = max_participants_per_flight
@@ -178,7 +170,7 @@ class CalculationFlightRegistry:
         self._flights: dict[str, _Flight] = {}
         self._closed = False
 
-    def join(self, key: str) -> CalculationFlightLease | None:
+    def join(self, key: str) -> AutomaticValuationFlightLease | None:
         with self._lock:
             if self._closed:
                 return None
@@ -192,7 +184,7 @@ class CalculationFlightRegistry:
                 ):
                     existing.participants += 1
                     self._active_participants += 1
-                    return CalculationFlightLease(self, existing, owner=False)
+                    return AutomaticValuationFlightLease(self, existing, owner=False)
                 else:
                     return None
             if (
@@ -203,48 +195,40 @@ class CalculationFlightRegistry:
             flight = _Flight(key=key, result=Future(), ready=asyncio.Event())
             self._flights[key] = flight
             self._active_participants += 1
-            return CalculationFlightLease(self, flight, owner=True)
+            return AutomaticValuationFlightLease(self, flight, owner=True)
 
     def _publish(
         self,
         flight: _Flight,
-        artifact: CalculationArtifactV1,
-        calculation_input: ValuationInputV1,
+        preparation: AutomaticValuationPreparationV1,
         *,
-        allow_provisional: bool,
+        expected_input_digest: str,
         deadline_at: datetime | None,
     ) -> None:
-        no_followers = False
         with self._lock:
             if flight.result.done():
                 self._remove_if_current(flight)
                 return
             if flight.participants <= 1:
                 self._remove_if_current(flight)
-                no_followers = True
-
-        if no_followers:
-            _resolve(flight.result, None)
-            self._notify(flight)
-            return
-
-        try:
-            candidate = ImmutableCalculationResult.capture(
-                calculation_input,
-                allow_provisional=allow_provisional,
-                artifact=artifact,
-            )
-        except (TypeError, ValueError, ValidationError):
-            candidate = None
-        if candidate is not None:
-            try:
-                guard_execution_deadline(deadline_at)
-            except ServiceError:
                 candidate = None
+            else:
+                candidate = preparation
+
+        if candidate is None:
+            immutable = None
+        else:
+            try:
+                immutable = ImmutableAutomaticValuationPreparation.capture(
+                    candidate, expected_input_digest=expected_input_digest
+                )
+                guard_execution_deadline(deadline_at)
+            except (ServiceError, TypeError, ValueError, ValidationError):
+                immutable = None
 
         with self._lock:
             self._remove_if_current(flight)
-        _resolve(flight.result, candidate)
+        _resolve(flight.result, immutable)
         self._notify(flight)
 
     def _finish(self, flight: _Flight) -> None:
@@ -270,7 +254,6 @@ class CalculationFlightRegistry:
         try:
             loop.call_soon_threadsafe(flight.ready.set)
         except RuntimeError:
-            # The request loop may already be closing during app shutdown.
             pass
 
     def close(self) -> None:
@@ -284,12 +267,11 @@ class CalculationFlightRegistry:
 
 
 def _resolve(
-    future: Future[ImmutableCalculationResult | None],
-    result: ImmutableCalculationResult | None,
+    future: Future[ImmutableAutomaticValuationPreparation | None],
+    result: ImmutableAutomaticValuationPreparation | None,
 ) -> None:
     try:
         if not future.done():
             future.set_result(result)
     except InvalidStateError:
-        # A concurrent shutdown or owner cleanup has already resolved the flight.
         pass
