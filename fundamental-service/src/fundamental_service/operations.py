@@ -14,13 +14,21 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final
+from uuid import uuid4
 
 from fastapi import Request
+from starlette.routing import Match
 
 from .contracts import CallerApprovalEnvelopeV1
 
 AUTH_HEADER: Final[str] = "Authorization"
 CORRELATION_HEADER: Final[str] = "X-Correlation-ID"
+
+
+@dataclass(frozen=True, slots=True)
+class RequestLogContext:
+    request_log_id: str
+    route_template: str
 
 
 class ServiceError(RuntimeError):
@@ -251,11 +259,32 @@ def correlation_id(request: Request) -> str:
     value = request.headers.get(CORRELATION_HEADER)
     if value and len(value) <= 128 and all(char.isprintable() for char in value):
         return value
-    # Imported lazily so the hot path does not allocate UUID state for callers
-    # that already supplied a correlation identifier.
-    from uuid import uuid4
-
     return str(uuid4())
+
+
+def request_route_template(request: Request) -> str:
+    """Return the matched route template without caller-supplied path values."""
+    route = request.scope.get("route")
+    template = getattr(route, "path", None)
+    if isinstance(template, str):
+        return template
+    router = getattr(request.scope.get("app"), "router", None)
+    for candidate in getattr(router, "routes", ()):
+        match, _ = candidate.matches(request.scope)
+        if match is Match.FULL:
+            template = getattr(candidate, "path", None)
+            if isinstance(template, str):
+                return template
+    return "unmatched"
+
+
+def create_request_log_context(request: Request) -> RequestLogContext:
+    """Separate the server-owned log identity from caller correlation data."""
+    try:
+        route_template = request_route_template(request)
+    except Exception:
+        route_template = "unmatched"
+    return RequestLogContext(str(uuid4()), route_template)
 
 
 def guard_execution_deadline(deadline_at: datetime | None) -> None:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import tempfile
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -94,8 +93,10 @@ from .operations import (
     OperationalMetrics,
     OperationsConfig,
     RateLimiter,
+    RequestLogContext,
     ServiceError,
     correlation_id,
+    create_request_log_context,
     guard_body_size,
     guard_caller_approval,
     guard_execution_deadline,
@@ -139,33 +140,6 @@ from .serialization import sha256_digest
 LOGGER = logging.getLogger("fundamental_service")
 P = ParamSpec("P")
 T = TypeVar("T")
-_DIAGNOSTIC_DIGEST = re.compile(r"[0-9a-f]{64}")
-
-
-def _valuation_input_identity(raw: object) -> dict[str, object]:
-    """Expose only bounded exact-input identifiers in opt-in diagnostics."""
-    if not isinstance(raw, dict):
-        return {}
-    identity: dict[str, object] = {
-        key: value
-        for key in (
-            "input_digest",
-            "expected_input_digest",
-            "approval_policy_digest",
-            "policy_digest",
-            "source_use_policy_digest",
-        )
-        if isinstance(value := raw.get(key), str)
-        and _DIAGNOSTIC_DIGEST.fullmatch(value)
-    }
-    preparation = raw.get("preparation")
-    if (
-        isinstance(preparation, dict)
-        and isinstance(value := preparation.get("input_digest"), str)
-        and _DIAGNOSTIC_DIGEST.fullmatch(value)
-    ):
-        identity["preparation_input_digest"] = value
-    return identity
 
 
 def _automatic_valuation_flight_key(
@@ -193,9 +167,8 @@ def _automatic_valuation_flight_key(
 
 def _log_valuation_diagnostic(
     *,
+    request: Request,
     sink: ValuationDiagnosticSink,
-    correlation: str,
-    path: str,
     operation: str | None,
     event: str,
     trace_started: float,
@@ -203,10 +176,13 @@ def _log_valuation_diagnostic(
     **fields: object,
 ) -> None:
     """Emit one machine-readable, opt-in execution phase record."""
+    log_context = getattr(request.state, "log_context", None)
+    if not isinstance(log_context, RequestLogContext):
+        return
     payload: dict[str, object] = {
         "event": event,
-        "correlation_id": correlation,
-        "path": path,
+        "request_log_id": log_context.request_log_id,
+        "route_template": log_context.route_template,
         "operation": operation,
         "timestamp": datetime.now(UTC).isoformat(),
         "elapsed_ms": round((monotonic() - trace_started) * 1000, 3),
@@ -222,38 +198,24 @@ def _log_valuation_diagnostic(
     sink.submit(
         "fundamental_valuation_diagnostic",
         json.dumps(payload, sort_keys=True, separators=(",", ":")),
-        extra={"correlation_id": correlation, "valuation_diagnostic_event": event},
+        extra={
+            "request_log_id": log_context.request_log_id,
+            "valuation_diagnostic_event": event,
+        },
     )
 
 
 def _validation_error(
     request: Request, error: ValidationError | RequestValidationError | None = None
 ) -> JSONResponse:
-    if error is not None:
-        diagnostics = tuple(
-            {
-                "field_path": ".".join(str(part) for part in item.get("loc", ())),
-                "error_type": str(item.get("type", "validation_error")),
-                "message": str(item.get("msg", "request validation failed"))[:256],
-            }
-            for item in error.errors()
-        )
-        diagnostic_payload = json.dumps(
-            {
-                "correlation_id": getattr(request.state, "correlation_id", "unknown"),
-                "path": request.url.path,
-                "diagnostics": diagnostics,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+    log_context = getattr(request.state, "log_context", None)
+    if error is not None and isinstance(log_context, RequestLogContext):
         LOGGER.warning(
-            "fundamental_validation_error %s",
-            diagnostic_payload,
+            "fundamental_validation_error",
             extra={
-                "correlation_id": getattr(request.state, "correlation_id", "unknown"),
-                "path": request.url.path,
-                "diagnostics": diagnostics,
+                "request_log_id": log_context.request_log_id,
+                "route_template": log_context.route_template,
+                "validation_error_count": len(error.errors()),
             },
         )
     return error_response(
@@ -356,7 +318,7 @@ def create_app(
                             policy_version=policy.policy_version,
                         )
             except Exception:
-                LOGGER.exception("fundamental metadata startup failed")
+                LOGGER.error("fundamental_metadata_startup_failed")
         app.state.accepting_requests = True
         try:
             yield
@@ -393,8 +355,7 @@ def create_app(
         guard_execution_deadline(deadline_at)
         trace_enabled = runtime_config.valuation_diagnostics
         trace_started = getattr(request.state, "valuation_trace_started", monotonic())
-        correlation = request.state.correlation_id
-        path = request.url.path
+        log_context = getattr(request.state, "log_context", None)
         operation_name = getattr(
             operation,
             "__qualname__",
@@ -404,17 +365,13 @@ def create_app(
         worker_started: float | None = None
         if trace_enabled:
             _log_valuation_diagnostic(
+                request=request,
                 sink=diagnostic_sink,
-                correlation=correlation,
-                path=path,
                 operation=operation_name,
                 event="queue_wait_started",
                 trace_started=trace_started,
                 deadline_at=deadline_at,
                 queue_wait_started_at=datetime.now(UTC).isoformat(),
-                input_identity=_valuation_input_identity(
-                    getattr(request.state, "operation_input", None)
-                ),
             )
 
         def execute_on_worker() -> T:
@@ -422,9 +379,8 @@ def create_app(
             worker_started = monotonic()
             if trace_enabled:
                 _log_valuation_diagnostic(
+                    request=request,
                     sink=diagnostic_sink,
-                    correlation=correlation,
-                    path=path,
                     operation=operation_name,
                     event="worker_acquired",
                     trace_started=trace_started,
@@ -433,9 +389,8 @@ def create_app(
                     worker_thread_id=get_ident(),
                 )
                 _log_valuation_diagnostic(
+                    request=request,
                     sink=diagnostic_sink,
-                    correlation=correlation,
-                    path=path,
                     operation=operation_name,
                     event="execution_started",
                     trace_started=trace_started,
@@ -444,15 +399,14 @@ def create_app(
                 )
             try:
                 with valuation_diagnostic_scope(
-                    correlation if trace_enabled else None, diagnostic_sink
+                    log_context if trace_enabled else None, diagnostic_sink
                 ):
                     result = operation(*args, **kwargs)
             except BaseException as error:
                 if trace_enabled:
                     _log_valuation_diagnostic(
+                        request=request,
                         sink=diagnostic_sink,
-                        correlation=correlation,
-                        path=path,
                         operation=operation_name,
                         event="execution_failed",
                         trace_started=trace_started,
@@ -465,9 +419,8 @@ def create_app(
                 raise
             if trace_enabled:
                 _log_valuation_diagnostic(
+                    request=request,
                     sink=diagnostic_sink,
-                    correlation=correlation,
-                    path=path,
                     operation=operation_name,
                     event="execution_finished",
                     trace_started=trace_started,
@@ -487,9 +440,8 @@ def create_app(
                 raise
             if trace_enabled:
                 _log_valuation_diagnostic(
+                    request=request,
                     sink=diagnostic_sink,
-                    correlation=correlation,
-                    path=path,
                     operation=operation_name,
                     event="deadline_expired",
                     trace_started=trace_started,
@@ -540,6 +492,10 @@ def create_app(
     @app.middleware("http")
     async def operations_boundary(request: Request, call_next):
         started = monotonic()
+        try:
+            request.state.log_context = create_request_log_context(request)
+        except Exception:
+            request.state.log_context = None
         request.state.correlation_id = correlation_id(request)
         request.state.valuation_trace_started = started
         trace_enabled = (
@@ -555,18 +511,12 @@ def create_app(
                 context, _ = await authorize_operation(request, runtime_config)
                 if trace_enabled:
                     _log_valuation_diagnostic(
+                        request=request,
                         sink=diagnostic_sink,
-                        correlation=request.state.correlation_id,
-                        path=request.url.path,
                         operation=None,
                         event="request_admitted",
                         trace_started=started,
                         deadline_at=getattr(request.state, "deadline", None),
-                        caller_id=context.principal.subject_id,
-                        organization_id=context.principal.organization_id,
-                        input_identity=_valuation_input_identity(
-                            getattr(request.state, "operation_input", None)
-                        ),
                     )
                 if not limiter.allow(context.principal.subject_id):
                     metrics.increment("rate_limited_total")
@@ -617,18 +567,6 @@ def create_app(
             return response
         except ServiceError as error:
             status_code = error.status_code
-            failed_context = getattr(request.state, "context", None)
-            LOGGER.warning(
-                "fundamental_request_failed path=%s status_code=%s error_code=%s "
-                "error_message=%s organization_id=%s",
-                request.url.path,
-                error.status_code,
-                error.code,
-                error.message,
-                getattr(
-                    getattr(failed_context, "principal", None), "organization_id", None
-                ),
-            )
             if (
                 error.code.startswith("internal_auth")
                 or error.code == "invalid_context"
@@ -655,9 +593,8 @@ def create_app(
         finally:
             if trace_enabled:
                 _log_valuation_diagnostic(
+                    request=request,
                     sink=diagnostic_sink,
-                    correlation=request.state.correlation_id,
-                    path=request.url.path,
                     operation=None,
                     event="response_emitted",
                     trace_started=started,
@@ -665,15 +602,17 @@ def create_app(
                     status_code=status_code,
                     **getattr(request.state, "valuation_response_metadata", {}),
                 )
-            LOGGER.info(
-                "fundamental_request",
-                extra={
-                    "correlation_id": request.state.correlation_id,
-                    "path": request.url.path,
-                    "status_code": status_code,
-                    "elapsed_ms": round((monotonic() - started) * 1000, 3),
-                },
-            )
+            log_context = getattr(request.state, "log_context", None)
+            if isinstance(log_context, RequestLogContext):
+                LOGGER.info(
+                    "fundamental_request",
+                    extra={
+                        "request_log_id": log_context.request_log_id,
+                        "route_template": log_context.route_template,
+                        "status_code": status_code,
+                        "elapsed_ms": round((monotonic() - started) * 1000, 3),
+                    },
+                )
             metrics.observe_request(
                 status_code=status_code,
                 elapsed_ms=(monotonic() - started) * 1000,
@@ -1166,9 +1105,8 @@ def create_app(
         if lease is None:
             if runtime_config.valuation_diagnostics:
                 _log_valuation_diagnostic(
+                    request=request,
                     sink=diagnostic_sink,
-                    correlation=request.state.correlation_id,
-                    path=request.url.path,
                     operation="AutomaticValuationExecutor.execute",
                     event="preparation_flight_admission_rejected",
                     trace_started=getattr(
@@ -1192,9 +1130,8 @@ def create_app(
                 wait_started = monotonic()
                 if runtime_config.valuation_diagnostics:
                     _log_valuation_diagnostic(
+                        request=request,
                         sink=diagnostic_sink,
-                        correlation=request.state.correlation_id,
-                        path=request.url.path,
                         operation="AutomaticValuationExecutor.execute",
                         event="preparation_flight_wait_started",
                         trace_started=getattr(
@@ -1208,9 +1145,8 @@ def create_app(
                 except ServiceError as error:
                     if runtime_config.valuation_diagnostics:
                         _log_valuation_diagnostic(
+                            request=request,
                             sink=diagnostic_sink,
-                            correlation=request.state.correlation_id,
-                            path=request.url.path,
                             operation="AutomaticValuationExecutor.execute",
                             event="deadline_expired",
                             trace_started=getattr(
@@ -1226,9 +1162,8 @@ def create_app(
                     raise
                 if runtime_config.valuation_diagnostics:
                     _log_valuation_diagnostic(
+                        request=request,
                         sink=diagnostic_sink,
-                        correlation=request.state.correlation_id,
-                        path=request.url.path,
                         operation="AutomaticValuationExecutor.execute",
                         event="preparation_flight_wait_finished",
                         trace_started=getattr(

@@ -1137,7 +1137,7 @@ def test_automatic_stage_diagnostics_cover_request_owned_work_without_input(
 ):
     from test_valuation_diagnostics import wait_for_diagnostics
 
-    _, client, _, request = _case(tmp_path, valuation_diagnostics=True)
+    _, client, policy, request = _case(tmp_path, valuation_diagnostics=True)
     with caplog.at_level("INFO", logger="fundamental_service"):
         response = _execute(client, request)
         wait_for_diagnostics(client.app.state.valuation_diagnostic_sink)
@@ -1175,7 +1175,8 @@ def test_automatic_stage_diagnostics_cover_request_owned_work_without_input(
         "automatic.response_validation",
     } <= stages
     expected_fields = {
-        "correlation_id",
+        "request_log_id",
+        "route_template",
         "stage",
         "span_id",
         "parent_span_id",
@@ -1187,8 +1188,17 @@ def test_automatic_stage_diagnostics_cover_request_owned_work_without_input(
     }
     assert all(set(event) == expected_fields for event in events)
     assert all(
-        event["correlation_id"] == response.json()["correlation_id"] for event in events
+        event["request_log_id"] == events[0]["request_log_id"] for event in events
     )
+    assert all(
+        event["route_template"] == "/v1/valuation/calculate-automatically"
+        for event in events
+    )
+    assert "caller_id" not in caplog.text
+    assert "organization_id" not in caplog.text
+    assert "input_identity" not in caplog.text
+    assert request["expected_input_digest"] not in caplog.text
+    assert policy.digest not in caplog.text
     assert all(event["outcome"] == "completed" for event in events)
     assert all(
         event["duration_ms"] >= 0 and event["thread_cpu_ms"] >= 0 for event in events

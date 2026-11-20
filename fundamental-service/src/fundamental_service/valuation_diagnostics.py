@@ -14,6 +14,8 @@ from functools import wraps
 from time import monotonic, thread_time
 from typing import ParamSpec, TypeVar
 
+from .operations import RequestLogContext
+
 LOGGER = logging.getLogger("fundamental_service")
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -22,6 +24,7 @@ _DIAGNOSTIC_ERROR_CODES = frozenset(
     {
         "AUTOMATIC_VALUATION_CAPACITY_EXCEEDED",
         "CALCULATION_BUDGET_EXCEEDED",
+        "FACT_MAPPING_UNRESOLVED",
         "REQUEST_DEADLINE_EXCEEDED",
         "request_deadline_exceeded",
     }
@@ -111,7 +114,7 @@ class ValuationDiagnosticSink:
 
 @dataclass
 class _TimingContext:
-    correlation_id: str
+    request_log_context: RequestLogContext
     sink: ValuationDiagnosticSink
     started: float = field(default_factory=monotonic)
     next_span: int = 0
@@ -125,10 +128,13 @@ _TIMING: ContextVar[_TimingContext | None] = ContextVar(
 
 @contextmanager
 def valuation_diagnostic_scope(
-    correlation_id: str | None, sink: ValuationDiagnosticSink | None = None
+    request_log_context: RequestLogContext | None,
+    sink: ValuationDiagnosticSink | None = None,
 ) -> Iterator[None]:
     token = _TIMING.set(
-        _TimingContext(correlation_id, sink) if correlation_id and sink else None
+        _TimingContext(request_log_context, sink)
+        if request_log_context is not None and sink
+        else None
     )
     try:
         yield
@@ -160,7 +166,8 @@ def valuation_stage(stage: str) -> Iterator[None]:
             "fundamental_valuation_stage",
             json.dumps(
                 {
-                    "correlation_id": context.correlation_id,
+                    "request_log_id": context.request_log_context.request_log_id,
+                    "route_template": context.request_log_context.route_template,
                     "stage": stage,
                     "span_id": span_id,
                     "parent_span_id": parent_span_id,

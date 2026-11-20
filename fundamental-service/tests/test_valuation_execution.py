@@ -12,7 +12,10 @@ import pytest
 from fundamental_service.app import create_app
 from fundamental_service.application.service import FundamentalApplication
 from fundamental_service.interface import transport
-from fundamental_service.operations import OperationsConfig, ServiceError
+from fundamental_service.operations import (
+    OperationsConfig,
+    ServiceError,
+)
 from fundamental_service.testsupport import (
     auth_headers,
     make_internal_envelope,
@@ -181,12 +184,21 @@ def test_valuation_diagnostic_records_queue_worker_deadline_without_body(
         return
 
     assert digested_lengths == [len(queued.content), len(completed.content)]
-    by_correlation = {
-        correlation: [item for item in events if item["correlation_id"] == correlation]
-        for correlation in ("trace-first", "trace-second")
+    response_log_ids = {
+        record.status_code: record.request_log_id
+        for record in caplog.records
+        if record.getMessage() == "fundamental_request"
+        and record.route_template == "/v1/valuation/uncertainty"
     }
-    first_events = {item["event"] for item in by_correlation["trace-first"]}
-    second_events = {item["event"] for item in by_correlation["trace-second"]}
+    assert {200, 408} <= response_log_ids.keys()
+    by_request_id = {
+        status_code: [
+            item for item in events if item["request_log_id"] == request_log_id
+        ]
+        for status_code, request_log_id in response_log_ids.items()
+    }
+    first_events = {item["event"] for item in by_request_id[200]}
+    second_events = {item["event"] for item in by_request_id[408]}
     assert {
         "request_admitted",
         "queue_wait_started",
@@ -202,22 +214,39 @@ def test_valuation_diagnostic_records_queue_worker_deadline_without_body(
         "response_emitted",
     } <= (second_events)
     first_admitted = next(
-        item
-        for item in by_correlation["trace-first"]
-        if item["event"] == "request_admitted"
+        item for item in by_request_id[200] if item["event"] == "request_admitted"
     )
     second_admitted = next(
-        item
-        for item in by_correlation["trace-second"]
-        if item["event"] == "request_admitted"
+        item for item in by_request_id[408] if item["event"] == "request_admitted"
     )
-    assert first_admitted["input_identity"] == second_admitted["input_identity"]
+    assert first_admitted["request_log_id"] == response_log_ids[200]
+    assert second_admitted["request_log_id"] == response_log_ids[408]
+    assert first_admitted["request_log_id"] != second_admitted["request_log_id"]
+    assert first_admitted["route_template"] == "/v1/valuation/uncertainty"
+    assert second_admitted["route_template"] == "/v1/valuation/uncertainty"
+    assert (
+        not {
+            "caller_id",
+            "organization_id",
+            "input_identity",
+        }
+        & first_admitted.keys()
+    )
+    assert (
+        not {
+            "caller_id",
+            "organization_id",
+            "input_identity",
+        }
+        & second_admitted.keys()
+    )
+    assert "trace-first" not in caplog.text
+    assert "trace-second" not in caplog.text
     completed_response = next(
-        item
-        for item in by_correlation["trace-first"]
-        if item["event"] == "response_emitted"
+        item for item in by_request_id[200] if item["event"] == "response_emitted"
     )
     assert completed_response["status_code"] == 200
+    assert completed_response["route_template"] == "/v1/valuation/uncertainty"
     assert completed_response["response_body_length"] == len(completed.content)
     assert (
         completed_response["response_body_sha256"]
@@ -227,21 +256,20 @@ def test_valuation_diagnostic_records_queue_worker_deadline_without_body(
     assert "completed" not in json.dumps(completed_response)
     assert "error_message" not in completed_response
     failed_response = next(
-        item
-        for item in by_correlation["trace-second"]
-        if item["event"] == "response_emitted"
+        item for item in by_request_id[408] if item["event"] == "response_emitted"
     )
     assert failed_response["status_code"] == 408
+    assert failed_response["route_template"] == "/v1/valuation/uncertainty"
     assert failed_response["response_body_length"] == len(queued.content)
     assert failed_response["response_body_sha256"] == sha256(queued.content).hexdigest()
     assert failed_response["error_code"] == "REQUEST_DEADLINE_EXCEEDED"
     assert "response_body" not in failed_response
     assert "error_message" not in failed_response
     assert queued.json()["error"]["message"] not in json.dumps(failed_response)
+    assert "trace-first" not in caplog.text
+    assert "trace-second" not in caplog.text
     timeout = next(
-        item
-        for item in by_correlation["trace-second"]
-        if item["event"] == "deadline_expired"
+        item for item in by_request_id[408] if item["event"] == "deadline_expired"
     )
     assert timeout["timeout_phase"] == "queue_wait"
     assert all(item["deadline_at"] is not None for item in events)

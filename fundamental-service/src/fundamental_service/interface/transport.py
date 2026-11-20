@@ -195,15 +195,17 @@ def _capture_valuation_response(
 
 def error_response(request: Request, error: ServiceError) -> JSONResponse:
     correlation = getattr(request.state, "correlation_id", "unknown")
-    LOGGER.warning(
-        "fundamental_error_response path=%s status_code=%s error_code=%s "
-        "error_message=%s correlation_id=%s",
-        request.url.path,
-        error.status_code,
-        error.code,
-        error.message,
-        correlation,
-    )
+    log_context = getattr(request.state, "log_context", None)
+    if log_context is not None:
+        LOGGER.warning(
+            "fundamental_error_response",
+            extra={
+                "request_log_id": log_context.request_log_id,
+                "route_template": log_context.route_template,
+                "status_code": error.status_code,
+                "error_code": diagnostic_error_code(error.code) or "SERVICE_ERROR",
+            },
+        )
     body = InternalErrorResponse(
         correlation_id=correlation,
         contract_version=INTERNAL_CONTRACT_VERSION,

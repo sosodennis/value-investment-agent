@@ -6,6 +6,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from time import monotonic, sleep
+from uuid import uuid4
 
 import pytest
 
@@ -16,11 +17,15 @@ from fundamental_service.valuation_diagnostics import (
     valuation_diagnostic_scope,
     valuation_stage,
 )
+from fundamental_service.operations import RequestLogContext
 
 
 def test_diagnostic_error_code_only_exposes_allowlisted_codes():
     assert diagnostic_error_code("REQUEST_DEADLINE_EXCEEDED") == (
         "REQUEST_DEADLINE_EXCEEDED"
+    )
+    assert diagnostic_error_code("FACT_MAPPING_UNRESOLVED") == (
+        "FACT_MAPPING_UNRESOLVED"
     )
     assert diagnostic_error_code("private-input-derived-code") is None
     assert diagnostic_error_code(None) is None
@@ -65,7 +70,10 @@ def test_stage_timings_are_opt_in_and_keep_nested_failure_without_error_text(
         assert disabled.value is error
         assert not _events(caplog)
         with pytest.raises(ValueError) as enabled:
-            with valuation_diagnostic_scope("request-one", diagnostic_sink):
+            with valuation_diagnostic_scope(
+                RequestLogContext(str(uuid4()), "/v1/valuation/uncertainty"),
+                diagnostic_sink,
+            ):
                 operation()
         assert enabled.value is error
         with valuation_stage("outside.request"):
@@ -82,38 +90,59 @@ def test_stage_timings_are_opt_in_and_keep_nested_failure_without_error_text(
     assert all(event["timing_scope"] == "inclusive" for event in (inner, outer))
 
 
-def test_concurrent_worker_scopes_keep_correlation_and_span_sequences_separate(
+def test_concurrent_worker_scopes_keep_request_ids_and_span_sequences_separate(
     caplog, diagnostic_sink
 ):
-    def operation(correlation):
-        with valuation_diagnostic_scope(correlation, diagnostic_sink):
+    request_contexts = {
+        name: RequestLogContext(str(uuid4()), "/v1/valuation/uncertainty")
+        for name in ("first", "second", "worker", "async")
+    }
+
+    def operation(request_context, result):
+        with valuation_diagnostic_scope(request_context, diagnostic_sink):
             with valuation_stage("test.worker"):
                 with valuation_stage("test.inner"):
-                    return correlation
+                    return result
 
     async def exercise():
         # to_thread copies request context just as the service's AnyIO worker does.
-        with valuation_diagnostic_scope("async-request", diagnostic_sink):
-            result = await asyncio.to_thread(operation, "worker-request")
+        with valuation_diagnostic_scope(request_contexts["async"], diagnostic_sink):
+            result = await asyncio.to_thread(
+                operation, request_contexts["worker"], "worker-request"
+            )
             with valuation_stage("test.async"):
                 return result
 
     with caplog.at_level("INFO", logger="fundamental_service"):
         with ThreadPoolExecutor(max_workers=2) as workers:
-            assert list(workers.map(operation, ("first", "second"))) == [
+            assert list(
+                workers.map(
+                    lambda item: operation(*item),
+                    (
+                        (request_contexts["first"], "first"),
+                        (request_contexts["second"], "second"),
+                    ),
+                )
+            ) == [
                 "first",
                 "second",
             ]
         assert asyncio.run(exercise()) == "worker-request"
         wait_for_diagnostics(diagnostic_sink)
     events = _events(caplog)
-    for correlation in ("first", "second", "worker-request"):
-        spans = [e for e in events if e["correlation_id"] == correlation]
+    for name in ("first", "second", "worker"):
+        request_id = request_contexts[name].request_log_id
+        spans = [e for e in events if e["request_log_id"] == request_id]
         assert len(spans) == 2
         assert {e["span_id"] for e in spans} == {1, 2}
-    async_span = next(e for e in events if e["correlation_id"] == "async-request")
+    async_span = next(
+        e
+        for e in events
+        if e["request_log_id"] == request_contexts["async"].request_log_id
+    )
     assert async_span["span_id"] == 1
     assert async_span["parent_span_id"] is None
+    assert "worker-request" not in caplog.text
 
 
 def test_failing_handler_cannot_replace_success_or_original_error(diagnostic_sink):
@@ -128,7 +157,10 @@ def test_failing_handler_cannot_replace_success_or_original_error(diagnostic_sin
     logger.addHandler(handler)
     error = ValueError("valuation failure")
     try:
-        with valuation_diagnostic_scope("failure-test", diagnostic_sink):
+        with valuation_diagnostic_scope(
+            RequestLogContext(str(uuid4()), "/v1/valuation/uncertainty"),
+            diagnostic_sink,
+        ):
             with valuation_stage("success"):
                 result = 42
             with pytest.raises(ValueError) as raised:
@@ -159,7 +191,9 @@ def test_blocked_handler_bounds_queue_and_does_not_hold_operation_or_shutdown():
     sink = ValuationDiagnosticSink(capacity=1)
 
     def operation():
-        with valuation_diagnostic_scope("blocked-test", sink):
+        with valuation_diagnostic_scope(
+            RequestLogContext(str(uuid4()), "/v1/valuation/uncertainty"), sink
+        ):
             with valuation_stage("in-flight"):
                 pass
             assert entered.wait(2)
