@@ -1158,7 +1158,7 @@ def test_validation_error_logs_only_a_sanitized_count(caplog):
     error_record = next(
         record
         for record in caplog.records
-        if record.getMessage() == "fundamental_error_response"
+        if record.getMessage().startswith("fundamental_error_response ")
     )
     assert error_record.request_log_id == records[0].request_log_id
     assert "model_id" not in caplog.text
@@ -1184,7 +1184,7 @@ def test_request_logs_redact_caller_correlation_and_dynamic_path(caplog):
     record = next(
         item
         for item in caplog.records
-        if item.getMessage() == "fundamental_error_response"
+        if item.getMessage().startswith("fundamental_error_response ")
     )
     assert str(UUID(record.request_log_id)) == record.request_log_id
     assert record.request_log_id != correlation

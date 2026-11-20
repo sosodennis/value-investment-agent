@@ -210,13 +210,15 @@ def _validation_error(
 ) -> JSONResponse:
     log_context = getattr(request.state, "log_context", None)
     if error is not None and isinstance(log_context, RequestLogContext):
+        payload = {
+            "request_log_id": log_context.request_log_id,
+            "route_template": log_context.route_template,
+            "validation_error_count": len(error.errors()),
+        }
         LOGGER.warning(
-            "fundamental_validation_error",
-            extra={
-                "request_log_id": log_context.request_log_id,
-                "route_template": log_context.route_template,
-                "validation_error_count": len(error.errors()),
-            },
+            "fundamental_validation_error %s",
+            json.dumps(payload, sort_keys=True, separators=(",", ":")),
+            extra=payload,
         )
     return error_response(
         request,
@@ -604,14 +606,16 @@ def create_app(
                 )
             log_context = getattr(request.state, "log_context", None)
             if isinstance(log_context, RequestLogContext):
+                payload = {
+                    "request_log_id": log_context.request_log_id,
+                    "route_template": log_context.route_template,
+                    "status_code": status_code,
+                    "elapsed_ms": round((monotonic() - started) * 1000, 3),
+                }
                 LOGGER.info(
-                    "fundamental_request",
-                    extra={
-                        "request_log_id": log_context.request_log_id,
-                        "route_template": log_context.route_template,
-                        "status_code": status_code,
-                        "elapsed_ms": round((monotonic() - started) * 1000, 3),
-                    },
+                    "fundamental_request %s",
+                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    extra=payload,
                 )
             metrics.observe_request(
                 status_code=status_code,

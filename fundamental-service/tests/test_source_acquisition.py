@@ -615,7 +615,7 @@ def test_mapping_error_logs_safe_http_boundary_context(monkeypatch, caplog):
     record = next(
         item
         for item in caplog.records
-        if item.getMessage() == "fundamental_error_response"
+        if item.getMessage().startswith("fundamental_error_response ")
     )
     assert record.error_code == "FACT_MAPPING_UNRESOLVED"
     assert record.route_template == "/v1/data/ingestions"

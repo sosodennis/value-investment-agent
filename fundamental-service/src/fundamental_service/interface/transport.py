@@ -197,14 +197,16 @@ def error_response(request: Request, error: ServiceError) -> JSONResponse:
     correlation = getattr(request.state, "correlation_id", "unknown")
     log_context = getattr(request.state, "log_context", None)
     if log_context is not None:
+        payload = {
+            "request_log_id": log_context.request_log_id,
+            "route_template": log_context.route_template,
+            "status_code": error.status_code,
+            "error_code": diagnostic_error_code(error.code) or "SERVICE_ERROR",
+        }
         LOGGER.warning(
-            "fundamental_error_response",
-            extra={
-                "request_log_id": log_context.request_log_id,
-                "route_template": log_context.route_template,
-                "status_code": error.status_code,
-                "error_code": diagnostic_error_code(error.code) or "SERVICE_ERROR",
-            },
+            "fundamental_error_response %s",
+            json.dumps(payload, sort_keys=True, separators=(",", ":")),
+            extra=payload,
         )
     body = InternalErrorResponse(
         correlation_id=correlation,

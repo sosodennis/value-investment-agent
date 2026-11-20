@@ -187,7 +187,7 @@ def test_valuation_diagnostic_records_queue_worker_deadline_without_body(
     response_log_ids = {
         record.status_code: record.request_log_id
         for record in caplog.records
-        if record.getMessage() == "fundamental_request"
+        if record.getMessage().startswith("fundamental_request ")
         and record.route_template == "/v1/valuation/uncertainty"
     }
     assert {200, 408} <= response_log_ids.keys()
