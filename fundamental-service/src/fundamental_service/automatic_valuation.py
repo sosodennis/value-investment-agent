@@ -1,6 +1,7 @@
 """Authenticated automatic caller execution using pinned deployment policy."""
 
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -12,12 +13,14 @@ from .automatic_approval import (
     AutomaticValuationApprovalPolicyV1,
     automatic_approval_issues,
 )
+from .calculation_flights import ImmutableCalculationResult
 from .contracts import (
     ArtifactReferenceV1,
     CalculationArtifactV1,
     CallerApprovalEnvelopeV1,
     StrictModel,
     ValuationEvidenceReadRequestV1,
+    ValuationInputV1,
 )
 from .data_releases import ArtifactRefV1
 from .operations import ServiceError, guard_execution_deadline
@@ -177,6 +180,11 @@ class AutomaticValuationExecutor:
         caller_id: str,
         organization_id: str,
         deadline_at: datetime,
+        shared_calculation: ImmutableCalculationResult | None = None,
+        publish_calculation_result: Callable[
+            [CalculationArtifactV1, ValuationInputV1, bool, datetime | None], None
+        ]
+        | None = None,
     ) -> AutomaticValuationResponseV1:
         policy = self._policy
         if policy is None:
@@ -275,6 +283,8 @@ class AutomaticValuationExecutor:
         calculation = operation.calculate(
             approval,
             correlation_id=f"automatic-valuation:{value.input_digest}",
+            shared_calculation=shared_calculation,
+            publish_calculation_result=publish_calculation_result,
         )
         guard_execution_deadline(deadline_at)
         execution = AutomaticValuationExecutionEvidenceV1(

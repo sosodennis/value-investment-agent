@@ -32,6 +32,7 @@ from .automatic_valuation import (
     AutomaticValuationResponseV1,
     load_runtime_automatic_approval_policy,
 )
+from .calculation_flights import CalculationFlightRegistry
 from .contracts import (
     CalculationArtifactV1,
     FactsReadRequestV1,
@@ -128,6 +129,7 @@ from .forward_evidence import (
     ForwardEvidenceReviewResponseV1,
     review_forward_evidence,
 )
+from .serialization import sha256_digest
 
 LOGGER = logging.getLogger("fundamental_service")
 P = ParamSpec("P")
@@ -158,6 +160,29 @@ def _valuation_input_identity(raw: object) -> dict[str, object]:
         identity["preparation_input_digest"] = value
     identity["input_keys"] = tuple(sorted(str(key) for key in raw))
     return identity
+
+
+def _automatic_calculation_flight_key(
+    request: AutomaticValuationRequestV1,
+    *,
+    caller_id: str,
+    organization_id: str,
+    automatic_policy_digest: str,
+    source_use_policy_digest: str,
+    runtime_identity: str,
+) -> str:
+    """Key a possible match; each request still validates its own input."""
+    return sha256_digest(
+        {
+            "protocol": "automatic-valuation-calculation-flight-v1",
+            "runtime_identity": runtime_identity,
+            "request": request,
+            "caller_id": caller_id,
+            "organization_id": organization_id,
+            "automatic_policy_digest": automatic_policy_digest,
+            "source_use_policy_digest": source_use_policy_digest,
+        }
+    )
 
 
 def _valuation_response_body(
@@ -301,6 +326,7 @@ def create_app(
             )
     metrics = OperationalMetrics()
     limiter = RateLimiter(runtime_config.rate_limit_per_minute)
+    calculation_flights = CalculationFlightRegistry()
     application = FundamentalApplication(
         snapshot_repository=snapshot_repository,
         artifact_store=artifact_store,
@@ -354,6 +380,7 @@ def create_app(
             yield
         finally:
             app.state.accepting_requests = False
+            calculation_flights.close()
             if metadata_store is not None:
                 metadata_store.close()
 
@@ -369,6 +396,7 @@ def create_app(
     app.state.model_inventory = model_inventory
     app.state.sec_acquisition = sec_acquisition
     app.state.identity_resolution = identity_resolution
+    app.state.calculation_flights = calculation_flights
     sec_acquisition_limiter = RateLimiter(
         runtime_config.ingestion_rate_limit_per_minute
     )
@@ -1125,15 +1153,113 @@ def create_app(
     async def calculate_automatically(request: Request) -> JSONResponse:
         value = decode_input(request, AutomaticValuationRequestV1)
         principal = request.state.context.principal
-        result = await run_valuation_operation(
-            request,
-            AutomaticValuationExecutor(application, automatic_approval_policy).execute,
+        executor = AutomaticValuationExecutor(
+            application, automatic_approval_policy
+        ).execute
+        flight_key = _automatic_calculation_flight_key(
             value,
             caller_id=principal.subject_id,
             organization_id=principal.organization_id,
-            deadline_at=request.state.deadline,
+            automatic_policy_digest=(
+                automatic_approval_policy.digest
+                if automatic_approval_policy is not None
+                else "automatic-approval-unconfigured"
+            ),
+            source_use_policy_digest=(
+                application.source_use_policy.digest
+                if application.source_use_policy is not None
+                else "source-use-policy-unavailable"
+            ),
+            runtime_identity=calculation_flights.runtime_identity,
         )
-        return success_response(request, result)
+        lease = calculation_flights.join(flight_key)
+        if lease is None:
+            if runtime_config.valuation_diagnostics:
+                _log_valuation_diagnostic(
+                    correlation=request.state.correlation_id,
+                    path=request.url.path,
+                    operation="AutomaticValuationExecutor.execute",
+                    event="calculation_flight_admission_rejected",
+                    trace_started=getattr(
+                        request.state, "valuation_trace_started", monotonic()
+                    ),
+                    deadline_at=request.state.deadline,
+                    reason="bounded_registry_capacity",
+                )
+            raise ServiceError(
+                "AUTOMATIC_VALUATION_CAPACITY_EXCEEDED",
+                "automatic valuation capacity is full; retry after current work completes",
+                status_code=503,
+                retryable=True,
+                retry_after_ms=250,
+            )
+
+        shared_calculation = None
+
+        try:
+            if lease is not None and not lease.is_owner:
+                wait_started = monotonic()
+                if runtime_config.valuation_diagnostics:
+                    _log_valuation_diagnostic(
+                        correlation=request.state.correlation_id,
+                        path=request.url.path,
+                        operation="AutomaticValuationExecutor.execute",
+                        event="calculation_flight_wait_started",
+                        trace_started=getattr(
+                            request.state, "valuation_trace_started", wait_started
+                        ),
+                        deadline_at=request.state.deadline,
+                        runtime_identity=calculation_flights.runtime_identity,
+                    )
+                try:
+                    shared_calculation = await lease.wait(request.state.deadline)
+                except ServiceError as error:
+                    if runtime_config.valuation_diagnostics:
+                        _log_valuation_diagnostic(
+                            correlation=request.state.correlation_id,
+                            path=request.url.path,
+                            operation="AutomaticValuationExecutor.execute",
+                            event="deadline_expired",
+                            trace_started=getattr(
+                                request.state,
+                                "valuation_trace_started",
+                                wait_started,
+                            ),
+                            deadline_at=request.state.deadline,
+                            timeout_phase="calculation_flight_wait",
+                            wait_ms=round((monotonic() - wait_started) * 1000, 3),
+                            error_code=error.code,
+                        )
+                    raise
+                if runtime_config.valuation_diagnostics:
+                    _log_valuation_diagnostic(
+                        correlation=request.state.correlation_id,
+                        path=request.url.path,
+                        operation="AutomaticValuationExecutor.execute",
+                        event="calculation_flight_wait_finished",
+                        trace_started=getattr(
+                            request.state, "valuation_trace_started", wait_started
+                        ),
+                        deadline_at=request.state.deadline,
+                        wait_ms=round((monotonic() - wait_started) * 1000, 3),
+                        reusable_calculation=shared_calculation is not None,
+                    )
+            result = await run_valuation_operation(
+                request,
+                executor,
+                value,
+                caller_id=principal.subject_id,
+                organization_id=principal.organization_id,
+                deadline_at=request.state.deadline,
+                shared_calculation=shared_calculation,
+                publish_calculation_result=(
+                    lease.publish if lease is not None and lease.is_owner else None
+                ),
+            )
+            return success_response(request, result)
+        finally:
+            if lease is not None:
+                lease.close()
 
     @app.post(
         "/v1/valuation/calculate",

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import datetime
 from hashlib import sha256
-from typing import Any, overload
+from typing import Any, Callable, overload
 
 from pydantic import model_validator
 
@@ -17,6 +17,7 @@ from ..calculator import (
     validate,
     with_calculation_result_hash,
 )
+from ..calculation_flights import ImmutableCalculationResult
 from ..contracts import (
     ArtifactReferenceV1,
     CanonicalFactV1,
@@ -163,6 +164,11 @@ class PreparedValuationOperation:
         approval: CallerApprovalEnvelopeV1,
         *,
         correlation_id: str,
+        shared_calculation: ImmutableCalculationResult | None = None,
+        publish_calculation_result: Callable[
+            [CalculationArtifactV1, ValuationInputV1, bool, datetime | None], None
+        ]
+        | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(self._deadline_at)
         if sha256_digest(self.preparation) != self._preparation_digest:
@@ -185,6 +191,8 @@ class PreparedValuationOperation:
             correlation_id=correlation_id,
             deadline_at=self._deadline_at,
             preparation=self.preparation,
+            shared_calculation=shared_calculation,
+            publish_calculation_result=publish_calculation_result,
         )
 
 
@@ -2026,6 +2034,11 @@ class FundamentalApplication:
         correlation_id: str,
         deadline_at: datetime | None = None,
         preparation: AutomaticValuationPreparationV1 | None = None,
+        shared_calculation: ImmutableCalculationResult | None = None,
+        publish_calculation_result: Callable[
+            [CalculationArtifactV1, ValuationInputV1, bool, datetime | None], None
+        ]
+        | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
@@ -2043,6 +2056,8 @@ class FundamentalApplication:
             correlation_id=correlation_id,
             deadline_at=deadline_at,
             preparation=preparation,
+            shared_calculation=shared_calculation,
+            publish_calculation_result=publish_calculation_result,
         )
 
     def calculate_with_policy(
@@ -2130,6 +2145,11 @@ class FundamentalApplication:
         correlation_id: str,
         deadline_at: datetime | None = None,
         preparation: AutomaticValuationPreparationV1 | None = None,
+        shared_calculation: ImmutableCalculationResult | None = None,
+        publish_calculation_result: Callable[
+            [CalculationArtifactV1, ValuationInputV1, bool, datetime | None], None
+        ]
+        | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         if resolution.input_digest != resolved.input_digest:
@@ -2208,11 +2228,20 @@ class FundamentalApplication:
                 released_conditional or is_service_owned_monte_carlo(resolved)
             )
             guard_execution_deadline(deadline_at)
-            result = calculate(
-                calculation_input,
-                correlation_id=correlation_id,
-                allow_provisional=service_owned_uncertainty,
+            result = (
+                shared_calculation.materialize(
+                    calculation_input,
+                    allow_provisional=service_owned_uncertainty,
+                )
+                if shared_calculation is not None
+                else None
             )
+            if result is None:
+                result = calculate(
+                    calculation_input,
+                    correlation_id=correlation_id,
+                    allow_provisional=service_owned_uncertainty,
+                )
         except CalculationRefusal as error:
             raise ServiceError(
                 error.code,
@@ -2220,6 +2249,14 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
+        guard_execution_deadline(deadline_at)
+        if publish_calculation_result is not None and shared_calculation is None:
+            publish_calculation_result(
+                result,
+                calculation_input,
+                service_owned_uncertainty,
+                deadline_at,
+            )
         trace = self._trace(calculation_input, result, snapshot, calculation_resolution)
         result = with_calculation_result_hash(
             result.model_copy(
