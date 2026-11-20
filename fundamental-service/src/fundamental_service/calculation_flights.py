@@ -90,6 +90,8 @@ def _semantics_digest(input_digest: str, allow_provisional: bool) -> str:
 class _Flight:
     key: str
     result: Future[ImmutableCalculationResult | None]
+    ready: asyncio.Event
+    loop: asyncio.AbstractEventLoop | None = None
     participants: int = 1
 
 
@@ -111,11 +113,12 @@ class CalculationFlightLease:
     async def wait(self, deadline_at: datetime) -> ImmutableCalculationResult | None:
         guard_execution_deadline(deadline_at)
         remaining_seconds = (deadline_at - datetime.now(UTC)).total_seconds()
-        wrapped = asyncio.wrap_future(self._flight.result)
+        with self._registry._lock:
+            self._flight.loop = asyncio.get_running_loop()
+            if self._flight.result.done():
+                return self._flight.result.result()
         try:
-            return await asyncio.wait_for(
-                asyncio.shield(wrapped), timeout=remaining_seconds
-            )
+            await asyncio.wait_for(self._flight.ready.wait(), timeout=remaining_seconds)
         except asyncio.TimeoutError as error:
             raise ServiceError(
                 "REQUEST_DEADLINE_EXCEEDED",
@@ -123,6 +126,7 @@ class CalculationFlightLease:
                 status_code=408,
                 retryable=True,
             ) from error
+        return self._flight.result.result()
 
     def publish(
         self,
@@ -196,7 +200,7 @@ class CalculationFlightRegistry:
                 or self._active_participants >= self._max_active_participants
             ):
                 return None
-            flight = _Flight(key=key, result=Future())
+            flight = _Flight(key=key, result=Future(), ready=asyncio.Event())
             self._flights[key] = flight
             self._active_participants += 1
             return CalculationFlightLease(self, flight, owner=True)
@@ -210,14 +214,19 @@ class CalculationFlightRegistry:
         allow_provisional: bool,
         deadline_at: datetime | None,
     ) -> None:
+        no_followers = False
         with self._lock:
             if flight.result.done():
                 self._remove_if_current(flight)
                 return
             if flight.participants <= 1:
                 self._remove_if_current(flight)
-                _resolve(flight.result, None)
-                return
+                no_followers = True
+
+        if no_followers:
+            _resolve(flight.result, None)
+            self._notify(flight)
+            return
 
         try:
             candidate = ImmutableCalculationResult.capture(
@@ -235,12 +244,14 @@ class CalculationFlightRegistry:
 
         with self._lock:
             self._remove_if_current(flight)
-            _resolve(flight.result, candidate)
+        _resolve(flight.result, candidate)
+        self._notify(flight)
 
     def _finish(self, flight: _Flight) -> None:
         with self._lock:
             self._remove_if_current(flight)
         _resolve(flight.result, None)
+        self._notify(flight)
 
     def _release(self, flight: _Flight) -> None:
         with self._lock:
@@ -251,6 +262,17 @@ class CalculationFlightRegistry:
         if self._flights.get(flight.key) is flight:
             self._flights.pop(flight.key, None)
 
+    def _notify(self, flight: _Flight) -> None:
+        with self._lock:
+            loop = flight.loop
+        if loop is None:
+            return
+        try:
+            loop.call_soon_threadsafe(flight.ready.set)
+        except RuntimeError:
+            # The request loop may already be closing during app shutdown.
+            pass
+
     def close(self) -> None:
         with self._lock:
             self._closed = True
@@ -258,6 +280,7 @@ class CalculationFlightRegistry:
             self._flights.clear()
         for flight in flights:
             _resolve(flight.result, None)
+            self._notify(flight)
 
 
 def _resolve(

@@ -638,6 +638,51 @@ def test_flight_registry_bounds_waiters_and_drops_completed_results():
     next_owner.close()
 
 
+def test_timed_out_and_cancelled_flight_waiters_detach_from_notification():
+    registry = CalculationFlightRegistry(
+        max_active_flights=1,
+        max_participants_per_flight=2,
+        max_active_participants=2,
+    )
+    owner = registry.join("exact-input")
+    assert owner is not None and owner.is_owner
+    flight = owner._flight
+
+    async def exercise():
+        for index in range(12):
+            timed_out_waiter = registry.join("exact-input")
+            assert timed_out_waiter is not None and not timed_out_waiter.is_owner
+            with pytest.raises(ServiceError, match="deadline expired"):
+                await timed_out_waiter.wait(
+                    datetime.now(UTC) + timedelta(milliseconds=1)
+                )
+            timed_out_waiter.close()
+            assert not flight.ready._waiters
+
+            cancelled_waiter = registry.join("exact-input")
+            assert cancelled_waiter is not None and not cancelled_waiter.is_owner
+            waiting = asyncio.create_task(
+                cancelled_waiter.wait(datetime.now(UTC) + timedelta(seconds=5))
+            )
+            for _ in range(20):
+                if flight.ready._waiters:
+                    break
+                await asyncio.sleep(0)
+            assert flight.ready._waiters
+            waiting.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiting
+            cancelled_waiter.close()
+            assert not flight.ready._waiters
+
+            replacement = registry.join("exact-input")
+            assert replacement is not None and not replacement.is_owner
+            replacement.close()
+
+    asyncio.run(exercise())
+    owner.close()
+
+
 def test_immutable_calculation_result_checks_identity_and_rehydrates_fresh_model(
     tmp_path,
 ):
