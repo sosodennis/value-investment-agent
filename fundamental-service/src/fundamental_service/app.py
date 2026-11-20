@@ -93,6 +93,7 @@ from .operations import (
     OperationalMetrics,
     OperationsConfig,
     RateLimiter,
+    REQUEST_LOG_ID_HEADER,
     RequestLogContext,
     ServiceError,
     correlation_id,
@@ -566,6 +567,9 @@ def create_app(
                     )
                     status_code = response.status_code
             response.headers[CORRELATION_HEADER] = request.state.correlation_id
+            log_context = getattr(request.state, "log_context", None)
+            if isinstance(log_context, RequestLogContext):
+                response.headers[REQUEST_LOG_ID_HEADER] = log_context.request_log_id
             return response
         except ServiceError as error:
             status_code = error.status_code

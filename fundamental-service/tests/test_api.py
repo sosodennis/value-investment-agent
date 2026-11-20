@@ -1170,10 +1170,15 @@ def test_validation_error_logs_only_a_sanitized_count(caplog):
 def test_request_logs_redact_caller_correlation_and_dynamic_path(caplog):
     correlation = "customer@example.test"
     path_value = "private-customer-identifier"
-    caplog.set_level("WARNING", logger="fundamental_service")
-    response = TestClient(create_app()).get(
+    caller_request_id = "caller-chosen-request-id"
+    caplog.set_level("INFO", logger="fundamental_service")
+    client = TestClient(create_app())
+    response = client.get(
         f"/v1/data/snapshots/{path_value}",
-        headers={"X-Correlation-ID": correlation},
+        headers={
+            "X-Correlation-ID": correlation,
+            "X-Server-Request-ID": caller_request_id,
+        },
     )
 
     assert response.status_code == 400
@@ -1188,11 +1193,35 @@ def test_request_logs_redact_caller_correlation_and_dynamic_path(caplog):
     )
     assert str(UUID(record.request_log_id)) == record.request_log_id
     assert record.request_log_id != correlation
+    assert response.headers["X-Server-Request-ID"] == record.request_log_id
+    assert response.headers["X-Server-Request-ID"] != caller_request_id
     assert record.route_template == "/v1/data/snapshots/{snapshot_id}"
     assert record.error_code == "SERVICE_ERROR"
     assert "invalid_request" not in caplog.text
     assert "request body is invalid" not in caplog.text
     assert "correlation_id_sha256" not in caplog.text
+
+    success = client.get(
+        "/livez",
+        headers={
+            "X-Correlation-ID": "successful-caller-correlation",
+            "X-Server-Request-ID": caller_request_id,
+        },
+    )
+    assert success.status_code == 200
+    assert (
+        str(UUID(success.headers["X-Server-Request-ID"]))
+        == success.headers["X-Server-Request-ID"]
+    )
+    assert success.headers["X-Server-Request-ID"] != caller_request_id
+    assert success.headers["X-Correlation-ID"] == "successful-caller-correlation"
+    success_log = next(
+        item
+        for item in caplog.records
+        if item.getMessage().startswith("fundamental_request ")
+        and item.status_code == 200
+    )
+    assert success.headers["X-Server-Request-ID"] == success_log.request_log_id
 
 
 def test_request_log_context_failure_preserves_the_response(monkeypatch, caplog):

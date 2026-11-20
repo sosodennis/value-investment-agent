@@ -28,6 +28,8 @@ from ..operations import (
     AUTH_HEADER,
     CORRELATION_HEADER,
     OperationsConfig,
+    REQUEST_LOG_ID_HEADER,
+    RequestLogContext,
     ServiceError,
     correlation_id,
     enforce_deadline,
@@ -218,10 +220,13 @@ def error_response(request: Request, error: ServiceError) -> JSONResponse:
             retry_after_ms=error.retry_after_ms,
         ),
     )
+    response_headers = {CORRELATION_HEADER: correlation}
+    if isinstance(log_context, RequestLogContext):
+        response_headers[REQUEST_LOG_ID_HEADER] = log_context.request_log_id
     response = JSONResponse(
         status_code=error.status_code,
         content=body.model_dump(mode="json"),
-        headers={CORRELATION_HEADER: correlation},
+        headers=response_headers,
     )
     return _capture_valuation_response(request, response, error_code=error.code)
 

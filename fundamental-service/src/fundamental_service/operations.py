@@ -23,6 +23,7 @@ from .contracts import CallerApprovalEnvelopeV1
 
 AUTH_HEADER: Final[str] = "Authorization"
 CORRELATION_HEADER: Final[str] = "X-Correlation-ID"
+REQUEST_LOG_ID_HEADER: Final[str] = "X-Server-Request-ID"
 
 
 @dataclass(frozen=True, slots=True)
