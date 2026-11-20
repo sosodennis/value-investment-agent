@@ -17,6 +17,7 @@ from ..calculator import (
     validate,
     with_calculation_result_hash,
 )
+from ..valuation_diagnostics import timed_valuation_stage, valuation_stage
 from ..calculation_flights import ImmutableCalculationResult
 from ..contracts import (
     ArtifactReferenceV1,
@@ -484,6 +485,7 @@ class FundamentalApplication:
             )
         )
 
+    @timed_valuation_stage("release.fact_references")
     def _verify_fact_references(self, value: ValuationInputV1) -> None:
         if self.snapshot_repository is None or self.fact_repository is None:
             raise ServiceError(
@@ -600,6 +602,7 @@ class FundamentalApplication:
             )
         return manifest
 
+    @timed_valuation_stage("release.current_artifacts")
     def _verify_current_release_artifacts(
         self, manifest: DataReleaseManifestV1, *, deadline_at: datetime | None = None
     ) -> None:
@@ -842,6 +845,7 @@ class FundamentalApplication:
             )
         return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
 
+    @timed_valuation_stage("release.snapshot_facts")
     def _release_snapshot_facts(
         self, manifest: DataReleaseManifestV1, snapshot: SourceSnapshotV1
     ) -> tuple[CanonicalFactV1, ...]:
@@ -943,6 +947,7 @@ class FundamentalApplication:
                 retryable=False,
             )
 
+    @timed_valuation_stage("policy.resolve")
     def _resolve_policy(self, value: ValuationInputV1) -> tuple[ValuationInputV1, Any]:
         if self.policy_registry is None:
             raise ServiceError(
@@ -1080,6 +1085,7 @@ class FundamentalApplication:
             )
 
     @staticmethod
+    @timed_valuation_stage("calculation.trace")
     def _trace(
         request: ValuationInputV1,
         result: CalculationArtifactV1,
@@ -1134,6 +1140,7 @@ class FundamentalApplication:
             calculation_version=result.calculation_version,
         )
 
+    @timed_valuation_stage("calculation.persist_evidence")
     def _persist_evidence(
         self,
         request: ValuationInputV1,
@@ -1196,6 +1203,7 @@ class FundamentalApplication:
             result.model_copy(update={"artifact_references": (reference,)})
         )
 
+    @timed_valuation_stage("uncertainty.persist_evidence")
     def _persist_uncertainty_evidence(
         self,
         result: UncertaintyReportV1,
@@ -1339,6 +1347,7 @@ class FundamentalApplication:
             facts=facts,
         )
 
+    @timed_valuation_stage("release.current_mappings")
     def _current_release_mappings(
         self, manifest: DataReleaseManifestV1
     ) -> tuple[CanonicalMappingV1, ...] | None:
@@ -1474,6 +1483,7 @@ class FundamentalApplication:
             facts=selection.facts,
         )
 
+    @timed_valuation_stage("preparation.compose")
     def prepare_valuation(
         self,
         request: ValuationEvidenceReadRequestV1,
@@ -1651,6 +1661,7 @@ class FundamentalApplication:
         guard_execution_deadline(deadline_at)
         return preparation
 
+    @timed_valuation_stage("preparation.operation")
     def prepare_valuation_operation(
         self,
         request: ValuationEvidenceReadRequestV1,
@@ -2073,6 +2084,7 @@ class FundamentalApplication:
             resolved, resolution, correlation_id=correlation_id, deadline_at=deadline_at
         )
 
+    @timed_valuation_stage("release.conditional_input")
     def _is_released_conditional_input(
         self,
         value: ValuationInputV1,
@@ -2137,6 +2149,7 @@ class FundamentalApplication:
             )
         return True
 
+    @timed_valuation_stage("calculation.resolved")
     def _calculate_resolved(
         self,
         resolved: ValuationInputV1,
@@ -2228,20 +2241,21 @@ class FundamentalApplication:
                 released_conditional or is_service_owned_monte_carlo(resolved)
             )
             guard_execution_deadline(deadline_at)
-            result = (
-                shared_calculation.materialize(
-                    calculation_input,
-                    allow_provisional=service_owned_uncertainty,
+            with valuation_stage("calculation.raw_result"):
+                result = (
+                    shared_calculation.materialize(
+                        calculation_input,
+                        allow_provisional=service_owned_uncertainty,
+                    )
+                    if shared_calculation is not None
+                    else None
                 )
-                if shared_calculation is not None
-                else None
-            )
-            if result is None:
-                result = calculate(
-                    calculation_input,
-                    correlation_id=correlation_id,
-                    allow_provisional=service_owned_uncertainty,
-                )
+                if result is None:
+                    result = calculate(
+                        calculation_input,
+                        correlation_id=correlation_id,
+                        allow_provisional=service_owned_uncertainty,
+                    )
         except CalculationRefusal as error:
             raise ServiceError(
                 error.code,
@@ -2271,11 +2285,12 @@ class FundamentalApplication:
             return result
         try:
             guard_execution_deadline(deadline_at)
-            uncertainty = run_uncertainty(
-                resolved,
-                base_result=result,
-                allow_provisional=service_owned_uncertainty,
-            )
+            with valuation_stage("uncertainty.run"):
+                uncertainty = run_uncertainty(
+                    resolved,
+                    base_result=result,
+                    allow_provisional=service_owned_uncertainty,
+                )
         except (CalculationRefusal, ValueError) as error:
             raise ServiceError(
                 getattr(error, "code", "uncertainty_invalid"),

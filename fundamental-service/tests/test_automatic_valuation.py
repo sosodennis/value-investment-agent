@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from threading import Event, Lock
 
@@ -41,7 +42,7 @@ from fundamental_service.testsupport import auth_headers, make_internal_envelope
 from test_conditional_reinvestment_composer import _prepared
 
 
-def _case(tmp_path, **policy_updates):
+def _case(tmp_path, *, valuation_diagnostics=False, **policy_updates):
     fixture, _, candidate, prepared = _prepared(tmp_path)
     now = datetime.now(UTC)
     policy = AutomaticValuationApprovalPolicyV1(
@@ -76,7 +77,9 @@ def _case(tmp_path, **policy_updates):
         fact_repository=fixture.facts,
         artifact_store=fixture.artifacts,
         metadata_store=fixture.metadata,
-        config=fixture.application.config,
+        config=replace(
+            fixture.application.config, valuation_diagnostics=valuation_diagnostics
+        ),
         policy_registry=fixture.application.policy_registry,
         source_use_policy=fixture.application.source_use_policy,
         automatic_approval_policy=policy,
@@ -852,3 +855,77 @@ def test_saturated_automatic_admission_rejects_before_worker_queue(
     assert response.status_code == 503, response.text
     assert response.json()["error"]["code"] == ("AUTOMATIC_VALUATION_CAPACITY_EXCEEDED")
     assert worker_entered is False
+
+
+def test_automatic_stage_diagnostics_cover_request_owned_work_without_input(
+    caplog, tmp_path
+):
+    _, client, _, request = _case(tmp_path, valuation_diagnostics=True)
+    with caplog.at_level("INFO", logger="fundamental_service"):
+        response = _execute(client, request)
+    assert response.status_code == 200, response.text
+    events = [
+        json.loads(record.getMessage().split(" ", 1)[1])
+        for record in caplog.records
+        if record.getMessage().startswith("fundamental_valuation_stage ")
+    ]
+    stages = {event["stage"] for event in events}
+    assert {
+        "automatic.execute",
+        "preparation.operation",
+        "preparation.compose",
+        "automatic.policy_checks",
+        "automatic.publish_policy",
+        "automatic.publish_preparation",
+        "automatic.decision",
+        "automatic.publish_decision",
+        "calculation.resolved",
+        "release.current_artifacts",
+        "release.fact_references",
+        "release.snapshot_facts",
+        "release.current_mappings",
+        "release.conditional_input",
+        "policy.resolve",
+        "calculation.raw_result",
+        "calculation.trace",
+        "calculation.persist_evidence",
+        "uncertainty.run",
+        "uncertainty.persist_evidence",
+        "automatic.execution_evidence",
+        "automatic.publish_execution",
+        "automatic.response_validation",
+    } <= stages
+    expected_fields = {
+        "correlation_id",
+        "stage",
+        "span_id",
+        "parent_span_id",
+        "started_ms",
+        "duration_ms",
+        "thread_cpu_ms",
+        "outcome",
+        "timing_scope",
+    }
+    assert all(set(event) == expected_fields for event in events)
+    assert all(
+        event["correlation_id"] == response.json()["correlation_id"] for event in events
+    )
+    assert all(event["outcome"] == "completed" for event in events)
+    assert all(
+        event["duration_ms"] >= 0 and event["thread_cpu_ms"] >= 0 for event in events
+    )
+    assert all(event["timing_scope"] == "inclusive" for event in events)
+    # Repeating the same operation with diagnostics disabled preserves the values.
+    with caplog.at_level("INFO", logger="fundamental_service"):
+        caplog.clear()
+        _, disabled_client, _, disabled_request = _case(tmp_path / "disabled")
+        repeated = _execute(disabled_client, disabled_request)
+    assert repeated.status_code == 200, repeated.text
+    assert (
+        repeated.json()["result"]["calculation"]
+        == response.json()["result"]["calculation"]
+    )
+    assert not any(
+        record.getMessage().startswith("fundamental_valuation_stage ")
+        for record in caplog.records
+    )

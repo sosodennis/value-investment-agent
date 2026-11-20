@@ -32,6 +32,7 @@ from .automatic_valuation import (
     AutomaticValuationResponseV1,
     load_runtime_automatic_approval_policy,
 )
+from .valuation_diagnostics import valuation_diagnostic_scope
 from .calculation_flights import CalculationFlightRegistry
 from .contracts import (
     CalculationArtifactV1,
@@ -456,7 +457,8 @@ def create_app(
                     worker_thread_id=get_ident(),
                 )
             try:
-                result = operation(*args, **kwargs)
+                with valuation_diagnostic_scope(correlation if trace_enabled else None):
+                    result = operation(*args, **kwargs)
             except BaseException as error:
                 if trace_enabled:
                     _log_valuation_diagnostic(
