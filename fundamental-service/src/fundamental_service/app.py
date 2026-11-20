@@ -32,7 +32,7 @@ from .automatic_valuation import (
     AutomaticValuationResponseV1,
     load_runtime_automatic_approval_policy,
 )
-from .valuation_diagnostics import valuation_diagnostic_scope
+from .valuation_diagnostics import ValuationDiagnosticSink, valuation_diagnostic_scope
 from .calculation_flights import CalculationFlightRegistry
 from .contracts import (
     CalculationArtifactV1,
@@ -215,6 +215,7 @@ def _valuation_response_body(
 
 def _log_valuation_diagnostic(
     *,
+    sink: ValuationDiagnosticSink,
     correlation: str,
     path: str,
     operation: str | None,
@@ -237,10 +238,11 @@ def _log_valuation_diagnostic(
             if deadline_at is not None
             else None
         ),
+        "diagnostic_sink": sink.status(),
         **fields,
     }
-    LOGGER.info(
-        "fundamental_valuation_diagnostic %s",
+    sink.submit(
+        "fundamental_valuation_diagnostic",
         json.dumps(payload, sort_keys=True, separators=(",", ":")),
         extra={"correlation_id": correlation, "valuation_diagnostic_event": event},
     )
@@ -328,6 +330,7 @@ def create_app(
     metrics = OperationalMetrics()
     limiter = RateLimiter(runtime_config.rate_limit_per_minute)
     calculation_flights = CalculationFlightRegistry()
+    diagnostic_sink = ValuationDiagnosticSink()
     application = FundamentalApplication(
         snapshot_repository=snapshot_repository,
         artifact_store=artifact_store,
@@ -382,6 +385,7 @@ def create_app(
         finally:
             app.state.accepting_requests = False
             calculation_flights.close()
+            diagnostic_sink.close()
             if metadata_store is not None:
                 metadata_store.close()
 
@@ -398,6 +402,7 @@ def create_app(
     app.state.sec_acquisition = sec_acquisition
     app.state.identity_resolution = identity_resolution
     app.state.calculation_flights = calculation_flights
+    app.state.valuation_diagnostic_sink = diagnostic_sink
     sec_acquisition_limiter = RateLimiter(
         runtime_config.ingestion_rate_limit_per_minute
     )
@@ -421,6 +426,7 @@ def create_app(
         worker_started: float | None = None
         if trace_enabled:
             _log_valuation_diagnostic(
+                sink=diagnostic_sink,
                 correlation=correlation,
                 path=path,
                 operation=operation_name,
@@ -438,6 +444,7 @@ def create_app(
             worker_started = monotonic()
             if trace_enabled:
                 _log_valuation_diagnostic(
+                    sink=diagnostic_sink,
                     correlation=correlation,
                     path=path,
                     operation=operation_name,
@@ -448,6 +455,7 @@ def create_app(
                     worker_thread_id=get_ident(),
                 )
                 _log_valuation_diagnostic(
+                    sink=diagnostic_sink,
                     correlation=correlation,
                     path=path,
                     operation=operation_name,
@@ -457,11 +465,14 @@ def create_app(
                     worker_thread_id=get_ident(),
                 )
             try:
-                with valuation_diagnostic_scope(correlation if trace_enabled else None):
+                with valuation_diagnostic_scope(
+                    correlation if trace_enabled else None, diagnostic_sink
+                ):
                     result = operation(*args, **kwargs)
             except BaseException as error:
                 if trace_enabled:
                     _log_valuation_diagnostic(
+                        sink=diagnostic_sink,
                         correlation=correlation,
                         path=path,
                         operation=operation_name,
@@ -476,6 +487,7 @@ def create_app(
                 raise
             if trace_enabled:
                 _log_valuation_diagnostic(
+                    sink=diagnostic_sink,
                     correlation=correlation,
                     path=path,
                     operation=operation_name,
@@ -497,6 +509,7 @@ def create_app(
                 raise
             if trace_enabled:
                 _log_valuation_diagnostic(
+                    sink=diagnostic_sink,
                     correlation=correlation,
                     path=path,
                     operation=operation_name,
@@ -563,6 +576,7 @@ def create_app(
                 context, _ = await authorize_operation(request, runtime_config)
                 if trace_enabled:
                     _log_valuation_diagnostic(
+                        sink=diagnostic_sink,
                         correlation=request.state.correlation_id,
                         path=request.url.path,
                         operation=None,
@@ -662,6 +676,7 @@ def create_app(
         finally:
             if trace_enabled:
                 _log_valuation_diagnostic(
+                    sink=diagnostic_sink,
                     correlation=request.state.correlation_id,
                     path=request.url.path,
                     operation=None,
@@ -1178,6 +1193,7 @@ def create_app(
         if lease is None:
             if runtime_config.valuation_diagnostics:
                 _log_valuation_diagnostic(
+                    sink=diagnostic_sink,
                     correlation=request.state.correlation_id,
                     path=request.url.path,
                     operation="AutomaticValuationExecutor.execute",
@@ -1203,6 +1219,7 @@ def create_app(
                 wait_started = monotonic()
                 if runtime_config.valuation_diagnostics:
                     _log_valuation_diagnostic(
+                        sink=diagnostic_sink,
                         correlation=request.state.correlation_id,
                         path=request.url.path,
                         operation="AutomaticValuationExecutor.execute",
@@ -1218,6 +1235,7 @@ def create_app(
                 except ServiceError as error:
                     if runtime_config.valuation_diagnostics:
                         _log_valuation_diagnostic(
+                            sink=diagnostic_sink,
                             correlation=request.state.correlation_id,
                             path=request.url.path,
                             operation="AutomaticValuationExecutor.execute",
@@ -1235,6 +1253,7 @@ def create_app(
                     raise
                 if runtime_config.valuation_diagnostics:
                     _log_valuation_diagnostic(
+                        sink=diagnostic_sink,
                         correlation=request.state.correlation_id,
                         path=request.url.path,
                         operation="AutomaticValuationExecutor.execute",

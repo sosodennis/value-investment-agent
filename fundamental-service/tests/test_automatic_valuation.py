@@ -860,9 +860,13 @@ def test_saturated_automatic_admission_rejects_before_worker_queue(
 def test_automatic_stage_diagnostics_cover_request_owned_work_without_input(
     caplog, tmp_path
 ):
+    from test_valuation_diagnostics import wait_for_diagnostics
+
     _, client, _, request = _case(tmp_path, valuation_diagnostics=True)
     with caplog.at_level("INFO", logger="fundamental_service"):
         response = _execute(client, request)
+        wait_for_diagnostics(client.app.state.valuation_diagnostic_sink)
+    client.app.state.valuation_diagnostic_sink.close()
     assert response.status_code == 200, response.text
     events = [
         json.loads(record.getMessage().split(" ", 1)[1])

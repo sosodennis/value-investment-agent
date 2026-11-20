@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+from queue import Empty, Full, Queue
+from threading import Event, Lock, Thread
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -17,9 +19,87 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
+class ValuationDiagnosticSink:
+    """Bound optional logging; a slow or failed handler never owns a worker."""
+
+    def __init__(self, *, capacity: int = 128) -> None:
+        if not 1 <= capacity <= 1024:
+            raise ValueError("diagnostic capacity must be between 1 and 1024")
+        self._queue: Queue[tuple[str, str, dict[str, object] | None]] = Queue(capacity)
+        self._lock = Lock()
+        self._stopped = Event()
+        self._worker: Thread | None = None
+        self._dropped = 0
+        self._failed = 0
+        self._delivered = 0
+
+    def submit(
+        self, event: str, payload: str, *, extra: dict[str, object] | None = None
+    ) -> None:
+        # Both queue length and record bytes are bounded, including body diagnostics.
+        with self._lock:
+            if self._stopped.is_set() or len(payload.encode("utf-8")) > 131072:
+                self._dropped += 1
+                return
+            if self._worker is None:
+                self._worker = Thread(
+                    target=self._run, name="valuation-diagnostics", daemon=True
+                )
+                try:
+                    self._worker.start()
+                except Exception:
+                    self._failed += 1
+                    self._dropped += 1
+                    self._stopped.set()
+                    return
+            try:
+                self._queue.put_nowait((event, payload, extra))
+            except Full:
+                self._dropped += 1
+
+    def _run(self) -> None:
+        while not self._stopped.is_set():
+            try:
+                event, payload, extra = self._queue.get(timeout=0.05)
+            except Empty:
+                continue
+            try:
+                LOGGER.info("%s %s", event, payload, extra=extra)
+            except Exception:
+                with self._lock:
+                    self._failed += 1
+            else:
+                with self._lock:
+                    self._delivered += 1
+            finally:
+                self._queue.task_done()
+
+    def status(self) -> dict[str, int]:
+        with self._lock:
+            return {
+                "dropped": self._dropped,
+                "failed": self._failed,
+                "delivered": self._delivered,
+                "pending": self._queue.unfinished_tasks,
+            }
+
+    def close(self) -> None:
+        self._stopped.set()
+        # Never join a handler: a deployment sink can block indefinitely.
+        with self._lock:
+            while True:
+                try:
+                    self._queue.get_nowait()
+                except Empty:
+                    break
+                self._queue.task_done()
+                self._dropped += 1
+
+
 @dataclass
 class _TimingContext:
     correlation_id: str
+    sink: ValuationDiagnosticSink
     started: float = field(default_factory=monotonic)
     next_span: int = 0
     stack: list[int] = field(default_factory=list)
@@ -31,8 +111,12 @@ _TIMING: ContextVar[_TimingContext | None] = ContextVar(
 
 
 @contextmanager
-def valuation_diagnostic_scope(correlation_id: str | None) -> Iterator[None]:
-    token = _TIMING.set(_TimingContext(correlation_id) if correlation_id else None)
+def valuation_diagnostic_scope(
+    correlation_id: str | None, sink: ValuationDiagnosticSink | None = None
+) -> Iterator[None]:
+    token = _TIMING.set(
+        _TimingContext(correlation_id, sink) if correlation_id and sink else None
+    )
     try:
         yield
     finally:
@@ -59,8 +143,8 @@ def valuation_stage(stage: str) -> Iterator[None]:
     finally:
         duration, cpu = monotonic() - started, thread_time() - cpu_started
         context.stack.pop()
-        LOGGER.info(
-            "fundamental_valuation_stage %s",
+        context.sink.submit(
+            "fundamental_valuation_stage",
             json.dumps(
                 {
                     "correlation_id": context.correlation_id,
