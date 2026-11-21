@@ -79,6 +79,7 @@ from .mapping_input_storage import read_mapping_batch_input
 from .mapping_input_identity import MappingInputDigests
 from .original_issuer import OriginalIssuerEvidenceChecks
 from .serialization import canonical_bytes, sha256_digest
+from .process_output import write_stdout
 from .source_acquisition import SecAcquisitionUseCase
 from .snapshots import SnapshotError
 from .public_acquisition import (
@@ -816,6 +817,14 @@ class SourcePreparationRunner:
                 return False
         return True
 
+    def _release_mapping_inputs(self) -> None:
+        inputs = self._mapping_inputs.get()
+        self._mapping_inputs.set(None)
+        if inputs is not None:
+            originals, identities = inputs
+            originals.clear()
+            identities.clear()
+
     def _verify_original_boundary(self, plan: SourcePreparationPlan) -> None:
         if (
             isinstance(plan, AutomaticSourcePreparationPlanV1)
@@ -860,6 +869,7 @@ class SourcePreparationRunner:
             if error.code != "DATA_RELEASE_NOT_ACTIVE":
                 raise
             active = None
+        self._release_mapping_inputs()
         self._canary.validate(manifest, candidate.verification)
         guard_execution_deadline(deadline_at)
         if not self._candidate_snapshot_available(
@@ -1732,6 +1742,7 @@ class SourcePreparationRunner:
         )
         if self._acquisition is not None:
             self._acquisition.verify_original_boundary()
+        self._release_mapping_inputs()
         receipt = self._automatic_release.verify_and_sign(
             request, deadline_at=deadline_at
         )
@@ -2976,6 +2987,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         receipt = asyncio.run(_run_command(args))
+        write_stdout(canonical_bytes(receipt) + b"\n")
     except SnapshotError as error:
         print(
             canonical_bytes(
@@ -3001,7 +3013,6 @@ def main(argv: list[str] | None = None) -> int:
     ) as error:
         print(f"source preparation failed: {error}", file=sys.stderr)
         return 2
-    print(canonical_bytes(receipt).decode("utf-8"))
     return 0
 
 

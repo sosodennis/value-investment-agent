@@ -27,6 +27,9 @@ class CalculationRefusal(ValueError):
         self.code = code
 
 
+CALCULATOR_RESULT_VERSION = "calculator-v2"
+
+
 def _artifact_digests(
     request: ValuationInputV1,
     *,
@@ -187,7 +190,7 @@ def calculate(
     input_digest = expected_input_digest
     result = CalculationArtifactV1(
         contract_version="fundamental.v1",
-        calculation_version="calculator-v2",
+        calculation_version=CALCULATOR_RESULT_VERSION,
         calculation_status=CalculationStatus.COMPLETED,
         quality_status=quality_status,
         input_digest=input_digest,

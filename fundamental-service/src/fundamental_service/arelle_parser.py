@@ -16,6 +16,7 @@ import sysconfig
 import tempfile
 import threading
 import time
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -31,7 +32,13 @@ from .historical_dqc import (
     execution_for,
     historical_profile,
 )
-from .serialization import sha256_digest
+from .serialization import (
+    canonical_array_parts,
+    canonical_bytes,
+    canonical_object_parts,
+    sha256_digest,
+    sha256_parts,
+)
 from .inline_xbrl import (
     InlineDocumentSetError,
     inline_document_metadata,
@@ -532,52 +539,63 @@ class ArelleParseReportV1(BaseModel):
         )
 
     def replay_digest(self) -> str:
-        facts = sorted(
-            (fact.model_dump(mode="json") for fact in self.facts),
-            key=lambda fact: sha256_digest(fact),
+        return sha256_parts(
+            canonical_object_parts(
+                {
+                    "parser_version": self.parser_version,
+                    "taxonomy_version": self.taxonomy_version,
+                    "validation_profile_digest": self.validation_profile_digest,
+                    "source_content_hash": self.source_content_hash,
+                    "taxonomy_cache_hash": self.taxonomy_cache_hash,
+                    "validation_engines": self.validation_engines,
+                    "validation_evidence": self.validation_evidence,
+                    "offline": self.offline,
+                    "network_attempt_count": self.network_attempt_count,
+                },
+                {
+                    "facts": canonical_array_parts(_sorted_report_items(self.facts)),
+                    "findings": canonical_array_parts(
+                        _sorted_report_items(self.findings)
+                    ),
+                },
+            )
         )
-        findings = sorted(
-            (finding.model_dump(mode="json") for finding in self.findings),
-            key=lambda finding: sha256_digest(finding),
-        )
-        return sha256_digest(
-            {
-                "parser_version": self.parser_version,
-                "taxonomy_version": self.taxonomy_version,
-                "validation_profile_digest": self.validation_profile_digest,
-                "source_content_hash": self.source_content_hash,
-                "taxonomy_cache_hash": self.taxonomy_cache_hash,
-                "facts": facts,
-                "findings": findings,
-                "validation_engines": self.validation_engines,
-                "validation_evidence": self.validation_evidence,
-                "offline": self.offline,
-                "network_attempt_count": self.network_attempt_count,
-            }
-        )
+
+
+def _sorted_report_items(
+    items: Iterable[ParsedXbrlFactV1 | ArelleFindingV1],
+) -> list[bytes]:
+    return sorted(
+        (canonical_bytes(item.model_dump(mode="json")) for item in items),
+        key=lambda raw: hashlib.sha256(raw).hexdigest(),
+    )
 
 
 def fact_semantic_digest(report: ArelleParseReportV1) -> str:
     """Digest XBRL fact meaning without parser paths or run-time timestamps."""
-    facts = sorted(
-        (fact.model_dump(mode="json") for fact in report.facts),
-        key=lambda fact: sha256_digest(fact),
+    return sha256_parts(
+        canonical_object_parts(
+            {"fact_count": len(report.facts)},
+            {"facts": canonical_array_parts(_sorted_report_items(report.facts))},
+        )
     )
-    return sha256_digest({"fact_count": len(facts), "facts": facts})
 
 
 def _directory_hash(root: Path) -> str:
+    from .resource_hashing import ResourceHashReader
+
     digest = hashlib.sha256()
-    for path in sorted(
-        path
-        for path in root.rglob("*")
-        if path.is_file()
-        and "__pycache__" not in path.relative_to(root).parts
-        and path.suffix not in {".pyc", ".pyo"}
-    ):
-        digest.update(str(path.relative_to(root)).encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(path.read_bytes())
+    with ResourceHashReader() as reader:
+        for path in sorted(
+            path
+            for path in root.rglob("*")
+            if path.is_file()
+            and "__pycache__" not in path.relative_to(root).parts
+            and path.suffix not in {".pyc", ".pyo"}
+        ):
+            digest.update(str(path.relative_to(root)).encode("utf-8"))
+            digest.update(b"\0")
+            reader.update(path, digest.update)
     return digest.hexdigest()
 
 
@@ -607,6 +625,19 @@ def _validation_plugin_root(profile: "ArelleValidationProfileV1") -> Path:
         )
         _PLUGIN_ROOTS[cache_key] = (config_root, plugin_root)
         return plugin_root
+
+
+def _close_parser_models(controller: object, manager: object) -> None:
+    """Release single-use worker models after extracting every report value."""
+    try:
+        imported = getattr(controller, "xule_vars", {}).get("importModelManager")
+        if imported is not None:
+            for model in tuple(imported.loadedModelXbrls):
+                imported.close(model)
+    finally:
+        close = getattr(manager, "close", None)
+        if callable(close):
+            close()
 
 
 def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
@@ -1366,6 +1397,8 @@ def _parse_in_process(
                     security_scope="segmented" if dimensions else "unspecified",
                 )
             )
+        model_manager, manager = manager, None
+        _close_parser_models(controller, model_manager)
         return ArelleParseReportV1(
             filing_path=str(filing_path),
             parser_version=profile.arelle_version,

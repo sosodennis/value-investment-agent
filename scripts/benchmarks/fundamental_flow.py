@@ -111,26 +111,21 @@ def require_reuse(flow: dict[str, Any]) -> None:
         raise ValueError("replay wrote new lineage or calculation artifacts")
 
 
-def statistics(container: str) -> dict[str, int]:
-    lines = subprocess.check_output(
+def statistics(container: str) -> dict[str, Any]:
+    reader = Path(__file__).with_name("fundamental_resources.py").read_text()
+    raw = subprocess.check_output(
         [
             "docker",
             "exec",
             container,
-            "sh",
+            "python",
             "-c",
-            "cat /sys/fs/cgroup/cpu.stat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.peak",
+            reader,
         ],
         text=True,
         timeout=10,
-    ).splitlines()
-    return {
-        "cpu_us": int(
-            next(line.split()[1] for line in lines if line.startswith("usage_usec "))
-        ),
-        "memory_current": int(lines[-2]),
-        "memory_peak": int(lines[-1]),
-    }
+    )
+    return json.loads(raw)
 
 
 def run(manifest_path: Path, label: str) -> bool:
@@ -268,7 +263,7 @@ def run(manifest_path: Path, label: str) -> bool:
         receipt.setdefault("wall_seconds", time.monotonic() - start)
         stop.set()
         thread.join(timeout=12)
-        after: dict[str, int] | None
+        after: dict[str, Any] | None
         try:
             after = statistics(container)
             samples.append(after)
@@ -286,6 +281,7 @@ def run(manifest_path: Path, label: str) -> bool:
             ),
             cgroup_peak_bytes=after["memory_peak"] if after is not None else None,
             memory_scope="sampled cgroup usage and container lifetime peak; neither is process RSS",
+            resource_samples=samples,
             sampling_errors=sampling_errors,
             host_load_after=os.getloadavg(),
         )

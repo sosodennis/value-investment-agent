@@ -17,6 +17,8 @@ from ..calculator import (
     validate,
     with_calculation_result_hash,
 )
+from ..valuation_diagnostics import timed_valuation_stage, valuation_stage
+from ..calculation_flights import ImmutableAutomaticValuationPreparation
 from ..contracts import (
     ArtifactReferenceV1,
     CanonicalFactV1,
@@ -476,6 +478,7 @@ class FundamentalApplication:
             )
         )
 
+    @timed_valuation_stage("release.fact_references")
     def _verify_fact_references(self, value: ValuationInputV1) -> None:
         if self.snapshot_repository is None or self.fact_repository is None:
             raise ServiceError(
@@ -592,6 +595,7 @@ class FundamentalApplication:
             )
         return manifest
 
+    @timed_valuation_stage("release.current_artifacts")
     def _verify_current_release_artifacts(
         self, manifest: DataReleaseManifestV1, *, deadline_at: datetime | None = None
     ) -> None:
@@ -834,6 +838,7 @@ class FundamentalApplication:
             )
         return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
 
+    @timed_valuation_stage("release.snapshot_facts")
     def _release_snapshot_facts(
         self, manifest: DataReleaseManifestV1, snapshot: SourceSnapshotV1
     ) -> tuple[CanonicalFactV1, ...]:
@@ -935,6 +940,7 @@ class FundamentalApplication:
                 retryable=False,
             )
 
+    @timed_valuation_stage("policy.resolve")
     def _resolve_policy(self, value: ValuationInputV1) -> tuple[ValuationInputV1, Any]:
         if self.policy_registry is None:
             raise ServiceError(
@@ -1072,6 +1078,7 @@ class FundamentalApplication:
             )
 
     @staticmethod
+    @timed_valuation_stage("calculation.trace")
     def _trace(
         request: ValuationInputV1,
         result: CalculationArtifactV1,
@@ -1126,6 +1133,7 @@ class FundamentalApplication:
             calculation_version=result.calculation_version,
         )
 
+    @timed_valuation_stage("calculation.persist_evidence")
     def _persist_evidence(
         self,
         request: ValuationInputV1,
@@ -1188,6 +1196,7 @@ class FundamentalApplication:
             result.model_copy(update={"artifact_references": (reference,)})
         )
 
+    @timed_valuation_stage("uncertainty.persist_evidence")
     def _persist_uncertainty_evidence(
         self,
         result: UncertaintyReportV1,
@@ -1331,6 +1340,7 @@ class FundamentalApplication:
             facts=facts,
         )
 
+    @timed_valuation_stage("release.current_mappings")
     def _current_release_mappings(
         self, manifest: DataReleaseManifestV1
     ) -> tuple[CanonicalMappingV1, ...] | None:
@@ -1466,6 +1476,7 @@ class FundamentalApplication:
             facts=selection.facts,
         )
 
+    @timed_valuation_stage("preparation.compose")
     def prepare_valuation(
         self,
         request: ValuationEvidenceReadRequestV1,
@@ -1643,6 +1654,7 @@ class FundamentalApplication:
         guard_execution_deadline(deadline_at)
         return preparation
 
+    @timed_valuation_stage("preparation.operation")
     def prepare_valuation_operation(
         self,
         request: ValuationEvidenceReadRequestV1,
@@ -1650,6 +1662,179 @@ class FundamentalApplication:
         deadline_at: datetime,
     ) -> PreparedValuationOperation:
         preparation = self.prepare_valuation(request, deadline_at=deadline_at)
+        return PreparedValuationOperation(
+            preparation=preparation,
+            _application=self,
+            _preparation_digest=sha256_digest(preparation),
+            _deadline_at=deadline_at,
+        )
+
+    @timed_valuation_stage("preparation.flight_revalidation")
+    def reuse_automatic_valuation_operation(
+        self,
+        request: ValuationEvidenceReadRequestV1,
+        shared: ImmutableAutomaticValuationPreparation,
+        *,
+        expected_input_digest: str,
+        deadline_at: datetime,
+    ) -> PreparedValuationOperation:
+        """Revalidate a shared immutable preparation for this request."""
+        guard_execution_deadline(deadline_at)
+        preparation = shared.materialize(expected_input_digest=expected_input_digest)
+        if preparation is None:
+            raise ServiceError(
+                "PREPARED_VALUATION_MISMATCH",
+                "shared preparation does not match the exact requested input",
+                status_code=409,
+                retryable=False,
+            )
+        value = preparation.input
+        assert value is not None
+
+        snapshot = self.snapshot(request.snapshot_id)
+        manifest = self._data_release_manifest(request.data_release_manifest_digest)
+        if (
+            manifest is None
+            or manifest.manifest_digest != request.data_release_manifest_digest
+            or preparation.model_id != request.model_id
+            or value.model_id != request.model_id
+            or value.identity != snapshot.identity
+            or value.valuation_context.data_snapshot_id != snapshot.snapshot_id
+            or value.valuation_context.valuation_timestamp
+            != snapshot.valuation_timestamp
+            or value.valuation_context.data_release_manifest_digest
+            != manifest.manifest_digest
+        ):
+            raise ServiceError(
+                "PREPARED_VALUATION_RELEASE_MISMATCH",
+                "shared preparation differs from the current pinned release",
+                status_code=409,
+                retryable=False,
+            )
+
+        try:
+            self._verify_current_release_artifacts(manifest, deadline_at=deadline_at)
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
+
+        evidence = self.read_valuation_evidence(request)
+        guard_execution_deadline(deadline_at)
+        current_fact_ids = {fact.fact_id for fact in evidence.facts}
+        if (
+            evidence.snapshot_manifest_digest != snapshot.manifest_digest
+            or evidence.identity != value.identity
+            or evidence.valuation_timestamp
+            != value.valuation_context.valuation_timestamp
+            or evidence.profile_id != preparation.profile_id
+            or evidence.profile_digest != preparation.profile_digest
+            or value.provenance.mapping_version
+            != (evidence.mapping_version or "sec-canonical-mapping-v1")
+            or not set(value.historical_facts) <= current_fact_ids
+            or not set(value.provenance.fact_ids) <= current_fact_ids
+        ):
+            raise ServiceError(
+                "PREPARED_VALUATION_EVIDENCE_MISMATCH",
+                "shared preparation differs from current release evidence",
+                status_code=409,
+                retryable=False,
+            )
+
+        model_version = f"{request.model_id}-v2"
+        if self.policy_registry is None:
+            policy_id = f"{request.model_id}-us-gaap-public-v3"
+            policy_version = "unresolved"
+        else:
+            try:
+                policy = self.policy_registry.select_policy(
+                    model_id=request.model_id,
+                    model_version=model_version,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    policy_id=None,
+                    issuer_id=snapshot.identity.issuer_id,
+                    data_release_manifest_digest=manifest.manifest_digest,
+                )
+            except PolicyError as error:
+                raise ServiceError(
+                    error.code,
+                    "an effective service-owned valuation policy is unavailable",
+                    status_code=422,
+                    retryable=False,
+                ) from error
+            policy_id = policy.policy_id
+            policy_version = policy.policy_version
+            model_version = policy.model_version
+        if (
+            preparation.model_version != model_version
+            or preparation.policy_id != policy_id
+            or preparation.policy_version != policy_version
+        ):
+            raise ServiceError(
+                "PREPARED_VALUATION_POLICY_MISMATCH",
+                "shared preparation differs from the current valuation policy",
+                status_code=409,
+                retryable=False,
+            )
+
+        if self.source_use_policy is None:
+            raise ServiceError(
+                "AUTOMATIC_APPROVAL_SOURCE_POLICY_MISSING",
+                "automatic approval requires a deployed source-use policy",
+                status_code=403,
+                retryable=False,
+            )
+        try:
+            load_release_source_admissions(
+                manifest,
+                artifacts=self.artifact_store,
+                policy=self.source_use_policy,
+                macro_providers=self.macro_providers,
+                reference_providers=self.reference_providers,
+            )
+        except (DataReleaseError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "SOURCE_ADMISSION_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        guard_execution_deadline(deadline_at)
+
+        try:
+            conditional = valuation_release_conditional_capital(
+                manifest,
+                snapshot,
+                evidence.facts,
+                mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
+            )
+            if conditional is not None:
+                load_release_conditional_quote(
+                    manifest,
+                    policy=conditional.policy,
+                    snapshot=snapshot,
+                    artifacts=self.artifact_store,
+                    quote_providers=self.quote_providers,
+                    source_use_policy=self.source_use_policy,
+                )
+            else:
+                load_release_dilution_evidence(
+                    manifest,
+                    snapshot=snapshot,
+                    artifacts=self.artifact_store,
+                    released_facts=evidence.facts,
+                    quote_providers=self.quote_providers,
+                    source_use_policy=self.source_use_policy,
+                )
+        except (DataReleaseError, DilutionError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "DILUTION_EVIDENCE_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        guard_execution_deadline(deadline_at)
+
         return PreparedValuationOperation(
             preparation=preparation,
             _application=self,
@@ -2058,6 +2243,7 @@ class FundamentalApplication:
             resolved, resolution, correlation_id=correlation_id, deadline_at=deadline_at
         )
 
+    @timed_valuation_stage("release.conditional_input")
     def _is_released_conditional_input(
         self,
         value: ValuationInputV1,
@@ -2122,6 +2308,7 @@ class FundamentalApplication:
             )
         return True
 
+    @timed_valuation_stage("calculation.resolved")
     def _calculate_resolved(
         self,
         resolved: ValuationInputV1,
@@ -2208,11 +2395,12 @@ class FundamentalApplication:
                 released_conditional or is_service_owned_monte_carlo(resolved)
             )
             guard_execution_deadline(deadline_at)
-            result = calculate(
-                calculation_input,
-                correlation_id=correlation_id,
-                allow_provisional=service_owned_uncertainty,
-            )
+            with valuation_stage("calculation.raw_result"):
+                result = calculate(
+                    calculation_input,
+                    correlation_id=correlation_id,
+                    allow_provisional=service_owned_uncertainty,
+                )
         except CalculationRefusal as error:
             raise ServiceError(
                 error.code,
@@ -2220,6 +2408,7 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
+        guard_execution_deadline(deadline_at)
         trace = self._trace(calculation_input, result, snapshot, calculation_resolution)
         result = with_calculation_result_hash(
             result.model_copy(
@@ -2234,11 +2423,12 @@ class FundamentalApplication:
             return result
         try:
             guard_execution_deadline(deadline_at)
-            uncertainty = run_uncertainty(
-                resolved,
-                base_result=result,
-                allow_provisional=service_owned_uncertainty,
-            )
+            with valuation_stage("uncertainty.run"):
+                uncertainty = run_uncertainty(
+                    resolved,
+                    base_result=result,
+                    allow_provisional=service_owned_uncertainty,
+                )
         except (CalculationRefusal, ValueError) as error:
             raise ServiceError(
                 getattr(error, "code", "uncertainty_invalid"),

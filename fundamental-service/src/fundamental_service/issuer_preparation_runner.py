@@ -24,6 +24,7 @@ from .original_source_plan import (
 from .source_plan_contracts import SOURCE_PREPARATION_PLAN
 from .replay import ArtifactRecordV1
 from .serialization import canonical_bytes
+from .process_output import write_stdout
 from .valuation_requirements import valuation_requirements_profile
 
 
@@ -457,10 +458,10 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("market-policy authorization requires its exact digest")
         result = _execute(args)
+        write_stdout(canonical_bytes(result) + b"\n")
     except (OSError, RuntimeError, TypeError, ValueError) as error:
         print(str(error), file=sys.stderr)
         return 2
-    print(canonical_bytes(result).decode("utf-8"))
     return 0
 
 

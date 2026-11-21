@@ -4,13 +4,14 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from fundamental_service.application.service import FundamentalApplication
-from fundamental_service.contracts import CallerApprovalEnvelopeV1
+from fundamental_service.contracts import (
+    CallerApprovalEnvelopeV1,
+    ValuationEvidenceReadRequestV1,
+)
 from fundamental_service.operations import ServiceError
 from fundamental_service.quote_admission import QUOTE_ADMISSION_ROLE
 from test_automatic_valuation import _case, _execute
-from fundamental_service.contracts import ValuationEvidenceReadRequestV1
 
 
 def prepared_operation(tmp_path):

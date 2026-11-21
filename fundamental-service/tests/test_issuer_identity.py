@@ -13,6 +13,7 @@ from fundamental_service.issuer_identity import (
     DEFAULT_ORIGINAL_SECURITY_POLICY,
     IdentityResolutionError,
     original_history_identity_key,
+    original_identity_evidence_facts,
     resolve_issuer_identity,
     resolve_original_filing_identity,
     validate_original_filing_identity,
@@ -103,6 +104,76 @@ def _original_identity_facts():
             }
         ),
     )
+
+
+@pytest.mark.parametrize(
+    "policy", (None, *(f"original-dei-paired-common-stock-v{i}" for i in range(2, 6)))
+)
+@pytest.mark.parametrize(
+    "change",
+    (
+        "none",
+        "mixed_currency",
+        "other_period",
+        "other_entity",
+        "duplicate",
+        "no_symbol",
+    ),
+)
+def test_projected_facts_preserve_identity_and_exact_refusals(policy, change):
+    facts = _original_identity_facts()
+    monetary = facts[-1]
+    changes = {
+        "none": (),
+        "mixed_currency": (monetary.model_copy(update={"unit": "iso4217:CAD"}),),
+        "other_period": (
+            monetary.model_copy(
+                update={"unit": "iso4217:CAD", "period_end": date(2020, 1, 1)}
+            ),
+        ),
+        "other_entity": (
+            monetary.model_copy(
+                update={"unit": "iso4217:CAD", "entity_identifier": "999"}
+            ),
+        ),
+        "duplicate": (facts[0], facts[-1]),
+        "no_symbol": (
+            facts[0].model_copy(
+                update={"concept": "dei:NoTradingSymbolFlag", "value": "true"}
+            ),
+        ),
+    }
+    facts = (*facts, *changes[change])
+    unrelated = monetary.model_copy(
+        update={
+            "concept": "issuer:Unrelated",
+            "namespace_uri": "https://example.com",
+            "is_numeric": False,
+        }
+    )
+    facts = (unrelated, *facts, unrelated)
+    projected = original_identity_evidence_facts(facts)
+    assert projected == facts[1:-1]
+    assert all(a is b for a, b in zip(projected, facts[1:-1]))
+
+    def outcome(values):
+        try:
+            return resolve_original_filing_identity(
+                cik="0000320193",
+                accepted_at=datetime(2024, 11, 1, tzinfo=UTC),
+                facts=values,
+                security_selection_policy=policy,
+            )
+        except IdentityResolutionError as error:
+            return error.code, str(error)
+
+    assert outcome(projected) == outcome(facts)
+
+
+def test_projection_overflow_returns_complete_original_tuple():
+    fact = _original_identity_facts()[0]
+    facts = (fact,) * 4097
+    assert original_identity_evidence_facts(facts) is facts
 
 
 def _check_original(facts=None, **identity_changes):

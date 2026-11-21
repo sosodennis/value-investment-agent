@@ -8,19 +8,24 @@ from fundamental_service.snapshots import SnapshotError
 from test_original_preparation import case, execute
 
 
-def test_original_producer_shares_build_proof_only_within_one_operation(
+def test_original_producer_keeps_independent_scopes_over_shared_image_value(
     tmp_path, monkeypatch
 ):
     import fundamental_service.parser_action_identity as identity
 
     proofs = []
-    monkeypatch.setattr(
-        identity, "_immutable_build_configuration", lambda: ("image", ())
-    )
+    boundaries = []
+
+    def boundary():
+        boundaries.append(True)
+        return "image", ()
+
+    monkeypatch.setattr(identity, "_immutable_build_configuration", boundary)
     monkeypatch.setattr(
         identity, "_runtime_identity", lambda **kwargs: proofs.append(True) or "2" * 64
     )
     for number in range(2):
+        previous = len(boundaries)
         value = case(tmp_path / str(number), monkeypatch, multiple_originals=True)
         validate = value.acquisition.validate_original_filing
         ingest = value.acquisition.ingestion.validate_filing
@@ -50,7 +55,8 @@ def test_original_producer_shares_build_proof_only_within_one_operation(
             assert receipt.wrote and len(result.filings) == 2
             assert consumed == [reads.builds, reads.builds]
             assert ingestion_builds and all(b is reads.builds for b in ingestion_builds)
-            assert len(proofs) == number + 1
+            assert len(proofs) == 1
+            assert len(boundaries) > previous
         assert reads.closed
         with pytest.raises(RuntimeError, match="scope has ended"):
             value.service.execute(

@@ -7,10 +7,12 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
+import fundamental_service.app as app_module
 from fundamental_service.app import create_app, create_runtime_app
 from fundamental_service.application.service import (
     FundamentalApplication,
@@ -1123,28 +1125,162 @@ def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     assert response.json()["error"]["code"] == "internal_context_signature_invalid"
 
 
-def test_validation_error_logs_a_sanitized_field_path(caplog):
+def test_validation_error_logs_only_a_sanitized_count(caplog):
     caplog.set_level("WARNING", logger="fundamental_service")
     client = TestClient(create_app())
     malformed = make_valuation().model_dump(mode="json")
     malformed.pop("model_id")
+    header_correlation = "caller-header-correlation"
+    body_correlation = "caller-body-correlation"
+    headers = auth_headers()
+    headers["X-Correlation-ID"] = header_correlation
 
     response = client.post(
         "/v1/valuation/validate",
-        headers=auth_headers(),
-        json=make_internal_envelope(malformed),
+        headers=headers,
+        json=make_internal_envelope(malformed, correlation_id=body_correlation),
     )
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_request"
+    assert response.headers["X-Correlation-ID"] == body_correlation
+    assert response.json()["correlation_id"] == body_correlation
     records = [
         record
         for record in caplog.records
         if record.getMessage().startswith("fundamental_validation_error")
     ]
     assert len(records) == 1
-    assert records[0].diagnostics[0]["field_path"] == "model_id"
-    assert "input" not in records[0].diagnostics[0]
+    assert records[0].validation_error_count == 1
+    assert records[0].route_template == "/v1/valuation/validate"
+    assert not hasattr(records[0], "diagnostics")
+    assert str(UUID(records[0].request_log_id)) == records[0].request_log_id
+    error_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage().startswith("fundamental_error_response ")
+    )
+    assert error_record.request_log_id == records[0].request_log_id
+    assert "model_id" not in caplog.text
+    assert header_correlation not in caplog.text
+    assert body_correlation not in caplog.text
+    assert "request does not match the versioned service contract" not in caplog.text
+
+
+def test_request_logs_redact_caller_correlation_and_dynamic_path(caplog):
+    correlation = "customer@example.test"
+    path_value = "private-customer-identifier"
+    caller_request_id = "caller-chosen-request-id"
+    caplog.set_level("INFO", logger="fundamental_service")
+    client = TestClient(create_app())
+    response = client.get(
+        f"/v1/data/snapshots/{path_value}",
+        headers={
+            "X-Correlation-ID": correlation,
+            "X-Server-Request-ID": caller_request_id,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.headers["X-Correlation-ID"] == correlation
+    assert response.json()["correlation_id"] == correlation
+    assert correlation not in caplog.text
+    assert path_value not in caplog.text
+    record = next(
+        item
+        for item in caplog.records
+        if item.getMessage().startswith("fundamental_error_response ")
+    )
+    assert str(UUID(record.request_log_id)) == record.request_log_id
+    assert record.request_log_id != correlation
+    assert response.headers["X-Server-Request-ID"] == record.request_log_id
+    assert response.headers["X-Server-Request-ID"] != caller_request_id
+    assert record.route_template == "/v1/data/snapshots/{snapshot_id}"
+    assert record.error_code == "SERVICE_ERROR"
+    assert "invalid_request" not in caplog.text
+    assert "request body is invalid" not in caplog.text
+    assert "correlation_id_sha256" not in caplog.text
+
+    success = client.get(
+        "/livez",
+        headers={
+            "X-Correlation-ID": "successful-caller-correlation",
+            "X-Server-Request-ID": caller_request_id,
+        },
+    )
+    assert success.status_code == 200
+    assert (
+        str(UUID(success.headers["X-Server-Request-ID"]))
+        == success.headers["X-Server-Request-ID"]
+    )
+    assert success.headers["X-Server-Request-ID"] != caller_request_id
+    assert success.headers["X-Correlation-ID"] == "successful-caller-correlation"
+    success_log = next(
+        item
+        for item in caplog.records
+        if item.getMessage().startswith("fundamental_request ")
+        and item.status_code == 200
+    )
+    assert success.headers["X-Server-Request-ID"] == success_log.request_log_id
+
+
+def test_request_log_context_failure_preserves_the_response(monkeypatch, caplog):
+    def fail_context(_request):
+        raise OSError("private random source detail")
+
+    monkeypatch.setattr(app_module, "create_request_log_context", fail_context)
+    correlation = "caller-correlation"
+    headers = auth_headers()
+    headers["X-Correlation-ID"] = correlation
+
+    with caplog.at_level("INFO", logger="fundamental_service"):
+        client = TestClient(
+            create_app(config=OperationsConfig.testing(valuation_diagnostics=True))
+        )
+        response = client.get("/livez", headers={"X-Correlation-ID": correlation})
+        malformed = make_valuation().model_dump(mode="json")
+        malformed.pop("model_id")
+        error_response = client.post(
+            "/v1/valuation/validate",
+            headers=headers,
+            json=make_internal_envelope(malformed, correlation_id=correlation),
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Correlation-ID"] == correlation
+    assert error_response.status_code == 400
+    assert error_response.json()["error"]["code"] == "invalid_request"
+    assert error_response.headers["X-Correlation-ID"] == correlation
+    assert error_response.json()["correlation_id"] == correlation
+    assert "fundamental_request" not in caplog.text
+    assert "fundamental_validation_error" not in caplog.text
+    assert "fundamental_error_response" not in caplog.text
+    assert correlation not in caplog.text
+    assert "private random source detail" not in caplog.text
+
+
+def test_metadata_startup_failure_log_omits_exception_text(caplog):
+    class FailingMetadataStore:
+        @staticmethod
+        def start():
+            raise RuntimeError("private database connection detail")
+
+        @staticmethod
+        def close():
+            return None
+
+    with caplog.at_level("ERROR", logger="fundamental_service"):
+        with TestClient(create_app(metadata_store=FailingMetadataStore())) as client:
+            assert client.get("/livez").status_code == 200
+
+    records = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "fundamental_metadata_startup_failed"
+    ]
+    assert len(records) == 1
+    assert records[0].exc_info is None
+    assert "private database connection detail" not in caplog.text
 
 
 def test_sec_ingestion_route_requires_a_valid_signed_context():

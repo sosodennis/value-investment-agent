@@ -348,9 +348,12 @@ def test_batch_shares_source_checks_but_new_batch_revalidates(tmp_path, monkeypa
     assert not second.wrote and second.output_digest == first.output_digest
 
 
-def test_source_reuse_does_not_rehash_exact_immutable_bytes(tmp_path, monkeypatch):
+def test_source_reuse_uses_the_reader_owned_exact_immutable_bytes(
+    tmp_path, monkeypatch
+):
     request, store, _, _ = case(tmp_path)
-    contents = contents_for(request, store)
+    checks = AutomaticMappingEvidenceChecks()
+    contents = contents_for(request, checks.reader(store))
     expected = AutomaticMappingEvidenceChecks().assess(request, contents=contents)
     hashed = []
     real_sha256 = evidence.hashlib.sha256
@@ -361,7 +364,6 @@ def test_source_reuse_does_not_rehash_exact_immutable_bytes(tmp_path, monkeypatc
         return real_sha256(raw, *args, **kwargs)
 
     monkeypatch.setattr(evidence.hashlib, "sha256", observed)
-    checks = AutomaticMappingEvidenceChecks()
     assert checks.assess(request, contents=contents) == expected
     first_work = len(hashed)
     assert first_work > 0
@@ -379,6 +381,32 @@ def test_source_reuse_does_not_rehash_exact_immutable_bytes(tmp_path, monkeypatc
         AutomaticMappingEvidenceChecks().assess(request, contents=contents) == expected
     )
     assert len(hashed) > first_work
+
+
+@pytest.mark.parametrize(
+    "limits", ({}, {"max_retained_bytes": 1}, {"max_retained_artifacts": 0})
+)
+def test_reader_supplied_mutable_content_is_rehashed_after_mutation(
+    tmp_path, monkeypatch, limits
+):
+    request, store, _, _ = case(tmp_path)
+    reference = request.evidence_refs[0]
+    mutable = bytearray(store.read(reference.artifact_id))
+    read = store.read
+    monkeypatch.setattr(
+        store,
+        "read",
+        lambda identity: mutable
+        if identity == reference.artifact_id
+        else read(identity),
+    )
+    checks = AutomaticMappingEvidenceChecks(**limits)
+    contents = contents_for(request, checks.reader(store))
+    assert checks.assess(request, contents=contents) == ()
+    mutable[0] ^= 1
+    assert "MAPPING_SOURCE_ARTIFACT_UNAVAILABLE" in checks.assess(
+        request, contents=contents
+    )
 
 
 @pytest.mark.parametrize(

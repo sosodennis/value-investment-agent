@@ -8,6 +8,13 @@ import asyncpg
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def isolated_image_build_value(monkeypatch):
+    import fundamental_service.parser_action_identity as identity
+
+    monkeypatch.setattr(identity, "_SHARED_BUILD", None)
+
+
 @pytest.fixture
 def recovery_databases():
     database_url = os.getenv("FUNDAMENTAL_TEST_DATABASE_URL")

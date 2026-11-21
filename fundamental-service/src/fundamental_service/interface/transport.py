@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
+from hashlib import sha256
 from typing import Generic, Literal, TypeVar
 
 from fastapi import Request
@@ -27,10 +28,13 @@ from ..operations import (
     AUTH_HEADER,
     CORRELATION_HEADER,
     OperationsConfig,
+    REQUEST_LOG_ID_HEADER,
+    RequestLogContext,
     ServiceError,
     correlation_id,
     enforce_deadline,
 )
+from ..valuation_diagnostics import diagnostic_error_code
 
 
 class FundamentalRequestEnvelopeV1(BaseModel):
@@ -179,17 +183,33 @@ async def authorize_operation(
     return context, request.state.operation_input
 
 
+def _capture_valuation_response(
+    request: Request, response: JSONResponse, *, error_code: str | None = None
+) -> JSONResponse:
+    if getattr(request.state, "trace_valuation_response", False):
+        request.state.valuation_response_metadata = {
+            "response_body_length": len(response.body),
+            "response_body_sha256": sha256(response.body).hexdigest(),
+            "error_code": diagnostic_error_code(error_code),
+        }
+    return response
+
+
 def error_response(request: Request, error: ServiceError) -> JSONResponse:
     correlation = getattr(request.state, "correlation_id", "unknown")
-    LOGGER.warning(
-        "fundamental_error_response path=%s status_code=%s error_code=%s "
-        "error_message=%s correlation_id=%s",
-        request.url.path,
-        error.status_code,
-        error.code,
-        error.message,
-        correlation,
-    )
+    log_context = getattr(request.state, "log_context", None)
+    if log_context is not None:
+        payload = {
+            "request_log_id": log_context.request_log_id,
+            "route_template": log_context.route_template,
+            "status_code": error.status_code,
+            "error_code": diagnostic_error_code(error.code) or "SERVICE_ERROR",
+        }
+        LOGGER.warning(
+            "fundamental_error_response %s",
+            json.dumps(payload, sort_keys=True, separators=(",", ":")),
+            extra=payload,
+        )
     body = InternalErrorResponse(
         correlation_id=correlation,
         contract_version=INTERNAL_CONTRACT_VERSION,
@@ -200,11 +220,15 @@ def error_response(request: Request, error: ServiceError) -> JSONResponse:
             retry_after_ms=error.retry_after_ms,
         ),
     )
-    return JSONResponse(
+    response_headers = {CORRELATION_HEADER: correlation}
+    if isinstance(log_context, RequestLogContext):
+        response_headers[REQUEST_LOG_ID_HEADER] = log_context.request_log_id
+    response = JSONResponse(
         status_code=error.status_code,
         content=body.model_dump(mode="json"),
-        headers={CORRELATION_HEADER: correlation},
+        headers=response_headers,
     )
+    return _capture_valuation_response(request, response, error_code=error.code)
 
 
 def success_response(
@@ -226,10 +250,11 @@ def success_response(
             "result": payload,
         }
     )
-    return JSONResponse(
+    response = JSONResponse(
         content=body.model_dump(mode="json"),
         headers={CORRELATION_HEADER: context.correlation_id},
     )
+    return _capture_valuation_response(request, response)
 
 
 def readiness_response(

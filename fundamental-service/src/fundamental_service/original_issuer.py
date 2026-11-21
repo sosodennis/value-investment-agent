@@ -66,6 +66,12 @@ class OriginalIssuerEvidenceChecks:
         self._report_bytes = 0
         self._report_facts = 0
 
+    def clear(self) -> None:
+        self._verified.clear()
+        self._reports.clear()
+        self._report_bytes = 0
+        self._report_facts = 0
+
     def validate(self, original: OriginalIssuerEvidenceV1) -> None:
         # Referenced reports have already been decoded from owner-checked bytes.
         # Match exact frozen objects, while binding every mutable claim header.

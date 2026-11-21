@@ -1,6 +1,7 @@
 """Authenticated automatic caller execution using pinned deployment policy."""
 
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,8 @@ from .automatic_approval import (
     AutomaticValuationApprovalPolicyV1,
     automatic_approval_issues,
 )
+from .valuation_diagnostics import timed_valuation_stage, valuation_stage
+from .calculation_flights import ImmutableAutomaticValuationPreparation
 from .contracts import (
     ArtifactReferenceV1,
     CalculationArtifactV1,
@@ -25,6 +28,7 @@ from .replay import ArtifactPublicationV1
 from .serialization import sha256_digest
 from .snapshots import SnapshotError
 from .uncertainty import UncertaintyReportV1
+from .valuation_preparation import AutomaticValuationPreparationV1
 
 
 class AutomaticValuationRequestV1(StrictModel):
@@ -170,6 +174,7 @@ class AutomaticValuationExecutor:
                 error.code, str(error), status_code=422, retryable=False
             ) from error
 
+    @timed_valuation_stage("automatic.execute")
     def execute(
         self,
         request: AutomaticValuationRequestV1,
@@ -177,6 +182,11 @@ class AutomaticValuationExecutor:
         caller_id: str,
         organization_id: str,
         deadline_at: datetime,
+        shared_preparation: ImmutableAutomaticValuationPreparation | None = None,
+        publish_preparation_result: Callable[
+            [AutomaticValuationPreparationV1, str, datetime | None], None
+        ]
+        | None = None,
     ) -> AutomaticValuationResponseV1:
         policy = self._policy
         if policy is None:
@@ -203,58 +213,77 @@ class AutomaticValuationExecutor:
                 status_code=403,
                 retryable=False,
             )
-        operation = application.prepare_valuation_operation(
-            request.preparation, deadline_at=deadline_at
-        )
+        if shared_preparation is None:
+            operation = application.prepare_valuation_operation(
+                request.preparation, deadline_at=deadline_at
+            )
+            if publish_preparation_result is not None:
+                publish_preparation_result(
+                    operation.preparation,
+                    request.expected_input_digest,
+                    deadline_at,
+                )
+        else:
+            operation = application.reuse_automatic_valuation_operation(
+                request.preparation,
+                shared_preparation,
+                expected_input_digest=request.expected_input_digest,
+                deadline_at=deadline_at,
+            )
         preparation = operation.preparation
         guard_execution_deadline(deadline_at)
-        issues = automatic_approval_issues(
-            policy,
-            preparation,
-            caller_id=caller_id,
-            organization_id=organization_id,
-            expected_input_digest=request.expected_input_digest,
-            source_use_policy_digest=source_policy.digest,
-            received_at=datetime.now(UTC),
-        )
-        if request.approval_policy_digest != policy.digest:
-            issues = tuple(sorted({*issues, "AUTOMATIC_APPROVAL_POLICY_MISMATCH"}))
-        policy_publication = self._publish(
-            f"automatic-valuation-policy:{policy.digest}", policy
-        )
-        preparation_publication = self._publish(
-            f"automatic-valuation-preparation:{sha256_digest(preparation)}",
-            preparation,
-            dependency_hashes=(
-                request.preparation.data_release_manifest_digest,
-                preparation.preparation_digest,
-            ),
-        )
+        with valuation_stage("automatic.policy_checks"):
+            issues = automatic_approval_issues(
+                policy,
+                preparation,
+                caller_id=caller_id,
+                organization_id=organization_id,
+                expected_input_digest=request.expected_input_digest,
+                source_use_policy_digest=source_policy.digest,
+                received_at=datetime.now(UTC),
+            )
+            if request.approval_policy_digest != policy.digest:
+                issues = tuple(sorted({*issues, "AUTOMATIC_APPROVAL_POLICY_MISMATCH"}))
+        with valuation_stage("automatic.publish_policy"):
+            policy_publication = self._publish(
+                f"automatic-valuation-policy:{policy.digest}", policy
+            )
+        with valuation_stage("automatic.publish_preparation"):
+            preparation_publication = self._publish(
+                f"automatic-valuation-preparation:{sha256_digest(preparation)}",
+                preparation,
+                dependency_hashes=(
+                    request.preparation.data_release_manifest_digest,
+                    preparation.preparation_digest,
+                ),
+            )
         value = preparation.input
-        decision = AutomaticApprovalDecisionV1(
-            decision="rejected" if issues else "approved",
-            caller_id=caller_id,
-            organization_id=organization_id,
-            policy_ref=_reference(policy_publication, policy.protocol),
-            preparation_ref=_reference(
-                preparation_publication, "automatic-valuation-preparation-v1"
-            ),
-            expected_input_digest=request.expected_input_digest,
-            input_digest=value.input_digest if value is not None else None,
-            requested_policy_digest=request.approval_policy_digest,
-            source_use_policy_digest=source_policy.digest,
-            issue_codes=issues,
-        )
-        guard_execution_deadline(deadline_at)
-        decision_publication = self._publish(
-            f"automatic-valuation-approval:{sha256_digest(decision)}",
-            decision,
-            dependency_hashes=(
-                decision.policy_ref.content_hash,
-                decision.preparation_ref.content_hash,
-                decision.source_use_policy_digest,
-            ),
-        )
+        with valuation_stage("automatic.decision"):
+            decision = AutomaticApprovalDecisionV1(
+                decision="rejected" if issues else "approved",
+                caller_id=caller_id,
+                organization_id=organization_id,
+                policy_ref=_reference(policy_publication, policy.protocol),
+                preparation_ref=_reference(
+                    preparation_publication, "automatic-valuation-preparation-v1"
+                ),
+                expected_input_digest=request.expected_input_digest,
+                input_digest=value.input_digest if value is not None else None,
+                requested_policy_digest=request.approval_policy_digest,
+                source_use_policy_digest=source_policy.digest,
+                issue_codes=issues,
+            )
+            guard_execution_deadline(deadline_at)
+        with valuation_stage("automatic.publish_decision"):
+            decision_publication = self._publish(
+                f"automatic-valuation-approval:{sha256_digest(decision)}",
+                decision,
+                dependency_hashes=(
+                    decision.policy_ref.content_hash,
+                    decision.preparation_ref.content_hash,
+                    decision.source_use_policy_digest,
+                ),
+            )
         response = AutomaticValuationResponseV1(
             decision=decision,
             policy_publication=policy_publication,
@@ -277,24 +306,27 @@ class AutomaticValuationExecutor:
             correlation_id=f"automatic-valuation:{value.input_digest}",
         )
         guard_execution_deadline(deadline_at)
-        execution = AutomaticValuationExecutionEvidenceV1(
-            approval_ref=_reference(decision_publication, decision.protocol),
-            input_digest=value.input_digest,
-            result_digest=sha256_digest(calculation),
-            result_references=calculation.artifact_references,
-        )
-        execution_publication = self._publish(
-            f"automatic-valuation-execution:{sha256_digest(execution)}",
-            execution,
-            dependency_hashes=(
-                execution.approval_ref.content_hash,
-                *(item.content_hash for item in execution.result_references),
-            ),
-        )
-        return AutomaticValuationResponseV1.model_validate(
-            {
-                **response.model_dump(),
-                "execution_publication": execution_publication,
-                "calculation": calculation,
-            }
-        )
+        with valuation_stage("automatic.execution_evidence"):
+            execution = AutomaticValuationExecutionEvidenceV1(
+                approval_ref=_reference(decision_publication, decision.protocol),
+                input_digest=value.input_digest,
+                result_digest=sha256_digest(calculation),
+                result_references=calculation.artifact_references,
+            )
+        with valuation_stage("automatic.publish_execution"):
+            execution_publication = self._publish(
+                f"automatic-valuation-execution:{sha256_digest(execution)}",
+                execution,
+                dependency_hashes=(
+                    execution.approval_ref.content_hash,
+                    *(item.content_hash for item in execution.result_references),
+                ),
+            )
+        with valuation_stage("automatic.response_validation"):
+            return AutomaticValuationResponseV1.model_validate(
+                {
+                    **response.model_dump(),
+                    "execution_publication": execution_publication,
+                    "calculation": calculation,
+                }
+            )

@@ -4,6 +4,12 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING or __package__:
+    from .process_output import write_stdout
+else:
+    from process_output import write_stdout
 
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
@@ -32,6 +38,7 @@ def read_response(wire: dict) -> bytes:
 def main() -> int:
     try:
         raw = read_response(json.load(sys.stdin))
+        write_stdout(raw)
     except urllib.error.HTTPError as error:
         sys.stderr.write(json.dumps({"http_status": error.code}))
         return 3
@@ -40,7 +47,6 @@ def main() -> int:
         # arbitrary provider response bytes may reach the parent's diagnostics.
         sys.stderr.write(json.dumps({"transport_failed": True}))
         return 3
-    sys.stdout.buffer.write(raw)
     return 0
 
 
