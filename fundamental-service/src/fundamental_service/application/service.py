@@ -1801,6 +1801,40 @@ class FundamentalApplication:
             ) from error
         guard_execution_deadline(deadline_at)
 
+        try:
+            conditional = valuation_release_conditional_capital(
+                manifest,
+                snapshot,
+                evidence.facts,
+                mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
+            )
+            if conditional is not None:
+                load_release_conditional_quote(
+                    manifest,
+                    policy=conditional.policy,
+                    snapshot=snapshot,
+                    artifacts=self.artifact_store,
+                    quote_providers=self.quote_providers,
+                    source_use_policy=self.source_use_policy,
+                )
+            else:
+                load_release_dilution_evidence(
+                    manifest,
+                    snapshot=snapshot,
+                    artifacts=self.artifact_store,
+                    released_facts=evidence.facts,
+                    quote_providers=self.quote_providers,
+                    source_use_policy=self.source_use_policy,
+                )
+        except (DataReleaseError, DilutionError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "DILUTION_EVIDENCE_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        guard_execution_deadline(deadline_at)
+
         return PreparedValuationOperation(
             preparation=preparation,
             _application=self,
