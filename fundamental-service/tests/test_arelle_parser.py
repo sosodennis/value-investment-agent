@@ -6,6 +6,7 @@ import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from zipfile import ZipFile
 
 import pytest
@@ -16,6 +17,7 @@ from fundamental_service.arelle_parser import (
     ArelleValidationFailureV1,
     ArelleValidationProfileV1,
     ParserResourcePolicy,
+    _close_parser_models,
     _directory_hash,
     _dqc_validation_completed,
     _finding_from_log,
@@ -65,6 +67,103 @@ def test_pinned_arelle_parses_captured_xbrl_without_network():
     assert report.offline is True
     assert report.parser_version == "2.47.4"
     assert any(fact.concept.endswith("Revenue") for fact in report.facts)
+
+
+def test_parser_closes_imported_models_before_primary():
+    events = []
+    models = [object(), object(), object()]
+    imported = SimpleNamespace(loadedModelXbrls=models.copy())
+
+    def close_imported(model):
+        events.append(model)
+        imported.loadedModelXbrls.remove(model)
+
+    imported.close = close_imported
+    primary = SimpleNamespace(close=lambda: events.append("primary"))
+    _close_parser_models(
+        SimpleNamespace(xule_vars={"importModelManager": imported}), primary
+    )
+    assert events == [*models, "primary"]
+    assert imported.loadedModelXbrls == []
+
+
+@pytest.mark.parametrize("controller", [object(), SimpleNamespace(xule_vars={})])
+def test_parser_closes_primary_without_imported_models(controller):
+    closed = []
+    _close_parser_models(controller, SimpleNamespace(close=lambda: closed.append(True)))
+    assert closed == [True]
+
+
+def test_parser_closes_primary_when_imported_model_teardown_fails():
+    closed = []
+
+    def unavailable(model):
+        raise OSError("controlled model close failure")
+
+    imported = SimpleNamespace(loadedModelXbrls=[object()], close=unavailable)
+    with pytest.raises(OSError, match="controlled model close failure"):
+        _close_parser_models(
+            SimpleNamespace(xule_vars={"importModelManager": imported}),
+            SimpleNamespace(close=lambda: closed.append(True)),
+        )
+    assert closed == [True]
+
+
+def test_parser_hashes_complete_taxonomy_after_model_teardown(tmp_path, monkeypatch):
+    from fundamental_service import arelle_parser
+
+    (tmp_path / "captured-resource.xml").write_bytes(b"complete taxonomy content")
+    expected_hash = _directory_hash(tmp_path)
+    close_models = arelle_parser._close_parser_models
+    closed = False
+
+    def close(controller, manager):
+        nonlocal closed
+        close_models(controller, manager)
+        closed = True
+
+    def resource_hash(path):
+        assert closed
+        assert path == tmp_path
+        return _directory_hash(path)
+
+    monkeypatch.setattr(arelle_parser, "_close_parser_models", close)
+    monkeypatch.setattr(arelle_parser, "_directory_hash", resource_hash)
+    report = arelle_parser._parse_in_process(
+        Path(__file__).parent / "fixtures" / "simple.xbrl",
+        ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
+        "fixture-taxonomy-v1",
+        tmp_path,
+        None,
+    )
+    assert closed
+    assert report.taxonomy_cache_hash == expected_hash
+    assert any(fact.concept.endswith("Revenue") for fact in report.facts)
+
+
+def test_parser_does_not_hash_or_return_report_after_teardown_failure(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import arelle_parser
+
+    def unavailable(controller, manager):
+        raise ValueError("controlled close failure detail")
+
+    def unexpected_hash(path):
+        pytest.fail("failed model teardown must not produce a resource identity")
+
+    monkeypatch.setattr(arelle_parser, "_close_parser_models", unavailable)
+    monkeypatch.setattr(arelle_parser, "_directory_hash", unexpected_hash)
+    with pytest.raises(ArelleParserError) as failure:
+        arelle_parser._parse_in_process(
+            Path(__file__).parent / "fixtures" / "simple.xbrl",
+            ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
+            "fixture-taxonomy-v1",
+            tmp_path,
+            None,
+        )
+    assert failure.value.code == "XBRL_PARSE_FAILED"
+    assert "controlled close failure detail" not in str(failure.value)
 
 
 @pytest.mark.parametrize(

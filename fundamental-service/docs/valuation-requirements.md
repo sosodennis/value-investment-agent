@@ -30,8 +30,8 @@ nonoperating assets, borrowing and lease principal, preferred/convertible claims
 noncontrolling interests, outstanding common shares and other share classes.
 Instrument-level award inventory and an eligible dated quote still determine
 dilution; historical average shares cannot replace them. Market/policy evidence,
-trusted release, transition filing evidence when applicable and authentic caller
-approval retain their existing gates. A missing finance-lease expense does not
+trusted release and transition filing evidence when applicable retain their
+existing gates. A missing finance-lease expense does not
 imply zero finance-lease principal or authorize a complete issuer valuation.
 
 V4 replaces the full V3 requirements contract. Old profile digests cannot
@@ -56,7 +56,7 @@ Non-operating asset assumptions exclude cash and operating assets. Current debt
 assumptions exclude noncurrent debt and the additional convertible exposure
 declared elsewhere. Every amount represents the complete hypothetical role;
 partial disclosed components do not establish its total. The extension does not
-change financial formulas or grant source, mapping, release or caller approval.
+change financial formulas or grant source, mapping or release approval.
 
 Without this extension the original ten observed balance requirements remain.
 With it, source profiles keep designated roles as supporting evidence and the
@@ -71,8 +71,8 @@ what-if assumptions.
 The recipe is bound into the source configuration/plan digests and the complete
 policy is covered by trusted release signatures and assessment digests. The
 formal composer retains these digests and all unknown roles, prepares provisional
-scenario inputs and requires the real caller's approval of their exact input
-before the existing calculator runs. No company-specific registration is needed
+scenario inputs for direct exact-input calculation after the existing evidence
+and model-quality checks. No company-specific registration is needed
 for this input representation. Real source/model sufficiency and end-to-end
 acceptance must still be established separately.
 
@@ -103,4 +103,4 @@ policy version/digest. Regenerate conditional source plans against the new
 profiles; the ordinary exact V4 profiles and dilution contracts retain their
 existing identities and evidence requirements. Real numerical acceptance still
 requires the eligible quote, market policy, trusted release and exact-input
-caller approval.
+calculation checks.

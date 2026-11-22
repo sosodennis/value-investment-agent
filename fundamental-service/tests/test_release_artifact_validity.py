@@ -1,6 +1,5 @@
 """Retained bytes do not authorize the use of withdrawn release evidence."""
 
-import json
 from types import SimpleNamespace
 
 import pytest
@@ -14,8 +13,44 @@ from fundamental_service.quote_admission import (
     QUOTE_ADMISSION_ROLE,
     QUOTE_TERMS_ROLE,
 )
-from test_automatic_valuation import _case, _execute
+from fundamental_service.testsupport import auth_headers, make_internal_envelope
+from test_conditional_reinvestment_composer import _prepared
 from test_market_policy_deployment import _deployment_fixture, _canary
+
+
+def _case(tmp_path):
+    fixture, client, candidate, prepared = _prepared(tmp_path)
+    request = {
+        "preparation": ValuationEvidenceReadRequestV1(
+            contract_version="fundamental.v1",
+            snapshot_id=fixture.snapshot.snapshot_id,
+            data_release_manifest_digest=candidate.manifest.manifest_digest,
+            model_id="fcff_dcf",
+        ).model_dump(mode="json"),
+        "input": prepared.input,
+    }
+    return fixture, client, candidate, request
+
+
+def _execute(client, request):
+    artifacts = client.app.state.application.artifact_store
+    before = {
+        path.name: path.read_bytes()
+        for path in artifacts.root.iterdir()
+        if path.is_file()
+    }
+    response = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(request["input"].model_dump(mode="json")),
+    )
+    assert response.status_code >= 400, response.text
+    assert {
+        path.name: path.read_bytes()
+        for path in artifacts.root.iterdir()
+        if path.is_file()
+    } == before
+    return response
 
 
 @pytest.mark.parametrize(
@@ -67,7 +102,7 @@ def test_release_evidence_rejects_invalidation_during_read(tmp_path):
 @pytest.mark.parametrize(
     "role", (EQUITY_QUOTE_SOURCE_ROLE, QUOTE_ADMISSION_ROLE, QUOTE_TERMS_ROLE)
 )
-def test_automatic_calculation_rejects_withdrawn_quote_bytes(tmp_path, role):
+def test_calculation_rejects_withdrawn_quote_bytes(tmp_path, role):
     fixture, client, _, request = _case(tmp_path)
     manifest = fixture.metadata.get_data_release_manifest(
         request["preparation"]["data_release_manifest_digest"]
@@ -79,19 +114,12 @@ def test_automatic_calculation_rejects_withdrawn_quote_bytes(tmp_path, role):
     response = _execute(client, request)
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "ARTIFACT_EVIDENCE_INVALID"
-    assert not any(
-        json.loads(path.read_bytes()).get("protocol")
-        == "automatic-valuation-execution-v1"
-        for path in fixture.artifacts.root.glob("*.json.artifact")
-    )
 
 
 @pytest.mark.parametrize(
     "dependency", ("taxonomy", "original", "verification", "mapping")
 )
-def test_automatic_calculation_rejects_withdrawn_release_dependencies(
-    tmp_path, dependency
-):
+def test_calculation_rejects_withdrawn_release_dependencies(tmp_path, dependency):
     fixture, client, _, request = _case(tmp_path)
     digest = request["preparation"]["data_release_manifest_digest"]
     manifest = fixture.metadata.get_data_release_manifest(digest)
@@ -164,7 +192,7 @@ def test_automatic_calculation_rejects_withdrawn_release_dependencies(
         ValuationEvidenceReadRequestV1.model_validate(request["preparation"])
     )
     assert prepared.status == "prepared"
-    request["expected_input_digest"] = prepared.input.input_digest
+    request["input"] = prepared.input
     ref = separate
     retained = fixture.artifacts.read(ref.artifact_id)
     fixture.artifacts.invalidate(ref.artifact_id)
@@ -172,11 +200,6 @@ def test_automatic_calculation_rejects_withdrawn_release_dependencies(
     response = _execute(client, request)
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "ARTIFACT_EVIDENCE_INVALID"
-    assert not any(
-        json.loads(path.read_bytes()).get("protocol")
-        == "automatic-valuation-execution-v1"
-        for path in fixture.artifacts.root.glob("*.json.artifact")
-    )
 
 
 @pytest.mark.parametrize("batch", (False, True))

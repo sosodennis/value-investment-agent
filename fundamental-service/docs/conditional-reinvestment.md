@@ -4,7 +4,7 @@
 original-derived annual core observations. It does not reconstruct historical
 capital expenditure, pure depreciation and amortization, working capital or
 reinvestment. Those amounts remain unknown. It grants no mapping approval,
-release signature, caller approval or valuation authority.
+release signature or valuation authority.
 
 ## Contract and ownership
 
@@ -59,8 +59,8 @@ cannot substitute for this evidence.
 
 The read-only release canary reproduces the bound policy and formal operating
 forecasts, recording the resulting output digests in its content report and
-signed-verification-bound canary digest. These checks grant no source entitlement,
-mapping approval or caller approval. Existing manifests omit the new fields when
+signed-verification-bound canary digest. These checks grant no source entitlement or
+mapping approval. Existing manifests omit the new fields when
 unused, preserving their canonical identity.
 
 `valuation_preparation.compose_conditional_operating_forecasts` is the internal
@@ -91,8 +91,7 @@ bridge and each forward reinvestment rate. It asserts no probability, independen
 combination coverage or economic bound. Existing calculator and uncertainty owners
 execute these inputs. Manual overrides cannot bypass the immutable policy. Before
 calculation, the application reloads the release document, recomposes the complete
-input and compares all operands, scenarios, quality and provenance; caller approval
-must still bind that exact input and authenticated caller.
+input and compares all operands, scenarios, quality and provenance before calculation.
 
 `AutomaticSourcePlanConfigurationV1.conditional_reinvestment_recipe` carries the
 deployment recipe into the automatically compiled source plan. Its source profile
@@ -108,8 +107,8 @@ carries the bound policy and assumption reference to the existing admission and
 trusted signing owners. Reuse checks the recipe, re-reads the document and rebinds
 the selected source facts; it cannot reuse a release with substituted assumptions.
 
-This implementation does not establish real-source completeness, quote entitlement,
-real caller approval or numerical delivery. Real company execution and the original
+This implementation does not establish real-source completeness, quote entitlement or
+numerical delivery. Real company execution and the original
 replay/restart/restore acceptance remain required.
 
 ## Shared accounting rules and candidate evidence

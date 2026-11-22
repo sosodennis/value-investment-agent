@@ -77,7 +77,6 @@ def test_abstentions_are_persisted_with_successful_siblings(tmp_path):
     ]
     assert result["results"][1]["issue_codes"]
     assert result["supported_history_threshold"] is None
-    assert "caller_approval" in result["unestablished_claims"]
 
 
 def test_concurrent_reopened_stores_publish_one_identity(tmp_path):

@@ -25,7 +25,6 @@ from src.analysis_runtime.domain.contracts import (
     InteractionIdentity,
     InteractionRequested,
     TickerSelectionRequest,
-    ValuationApprovalRequest,
     WorkflowActivityIdentity,
     WorkflowAgentOutput,
 )
@@ -674,8 +673,6 @@ class LangGraphRunner(GraphRunner):
                         "candidates": value.get("candidates"),
                     }
                 )
-            elif value.get("type") == "valuation_approval":
-                request = ValuationApprovalRequest.model_validate(value)
             else:
                 raise InvalidRunnerInterruptError("unsupported interrupt request type")
         except InvalidRunnerInterruptError:
@@ -686,11 +683,7 @@ class LangGraphRunner(GraphRunner):
             ) from exc
 
         interrupt_callback_id = _callback_id(raw.get("run_id"))
-        interrupt_owner = (
-            "intent_extraction"
-            if request.type == "ticker_selection"
-            else "fundamental_analysis"
-        )
+        interrupt_owner = "intent_extraction"
         scoped_callbacks = [
             (callback_id, callback)
             for callback_id, callback in active_callbacks.items()

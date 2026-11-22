@@ -269,7 +269,7 @@ batch_import_file() {
 }
 
 completion() {
-  local run_payload run_id="" event_count run_status selection_identity selection_payload approval_count workflow_waiting_count calculation_count artifact_ids artifact_id artifact_count artifact_failures attempt=1 deadline
+  local run_payload run_id="" event_count run_status selection_identity selection_payload pending_count artifact_ids artifact_id artifact_count artifact_failures attempt=1 deadline
   run_payload="$(jq -cn --arg message "${STAGING_COMPLETION_MESSAGE:-Analyze the valuation workflow for AAPL and return a concise result.}" '{message:$message}')"
   while (( attempt <= RETRY_ATTEMPTS )); do
     request POST "/api/v1/threads/$THREAD_ID/runs" "$run_payload" "$CSRF_TOKEN"
@@ -292,16 +292,14 @@ completion() {
     fi
     run_status="$(jq -r '.run_status // "unknown"' "$response_body")"
     selection_identity="$(jq -c '.pending_interactions[]? | select(.kind == "ticker_selection" and .status == "pending") | .identity' "$response_body" | head -n1)"
-    if [[ -n "$selection_identity" ]]; then
+    if [[ "$run_status" == "waiting" && -n "$selection_identity" ]]; then
       selection_payload="$(jq -cn --argjson identity "$selection_identity" '{identity:$identity,response:{type:"ticker_selection",selected_symbol:"AAPL"}}')"
       request POST "/api/v1/threads/$THREAD_ID/runs/$run_id/resume" "$selection_payload" "$CSRF_TOKEN"
       [[ "$REQUEST_CODE" == "202" ]] || { record ticker_selection_response NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"; return 1; }
       record ticker_selection_response VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
       continue
     fi
-    approval_count="$(jq '[.pending_interactions[]? | select(.kind == "valuation_approval" and .status == "pending")] | length' "$response_body")"
-    if [[ "$run_status" == "waiting" ]] && (( approval_count > 0 )); then break; fi
-    [[ "$run_status" == "failed" || "$run_status" == "cancelled" ]] && break
+    [[ "$run_status" == "completed" || "$run_status" == "failed" || "$run_status" == "cancelled" ]] && break
     if (( SECONDS >= deadline )); then
       record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt" "completion_timeout_${run_status}"
       return 1
@@ -310,9 +308,7 @@ completion() {
   done
 
   event_count="$(jq -r '.cursor // 0' "$response_body")"
-  approval_count="$(jq '[.pending_interactions[]? | select(.kind == "valuation_approval" and .status == "pending")] | length' "$response_body")"
-  workflow_waiting_count="$(jq '[.active_activities[]? | select(.status == "waiting" and ([.scope_path[]? | ascii_downcase | contains("calculation")] | any))] | length' "$response_body")"
-  calculation_count="$(jq '([.active_activities[]? | select(((.activity_id // "") | ascii_downcase | contains("calculat")) or ([.scope_path[]? | ascii_downcase | contains("calculat")] | any)) | select(.status != "waiting")] + [.recent_activities[]? | select(((.activity_id // "") | ascii_downcase | contains("calculat")) or ([.scope_path[]? | ascii_downcase | contains("calculat")] | any)) | select(.status == "completed")]) | length' "$response_body")"
+  pending_count="$(jq '[.pending_interactions[]? | select(.status == "pending")] | length' "$response_body")"
   run_status="$(jq -r '.run_status // "unknown"' "$response_body")"
   artifact_ids="$(jq -r --arg run_id "$run_id" '[.completed_outputs[]? | select(.identity.run_id == $run_id) | .artifact_id // empty] | unique | .[]' "$response_body")"
   artifact_count="$(jq -r --arg run_id "$run_id" '[.completed_outputs[]? | select(.identity.run_id == $run_id and .artifact_id != null)] | length' "$response_body")"
@@ -326,15 +322,13 @@ completion() {
     fi
   done <<< "$artifact_ids"
 
-  if (( event_count > 0 && approval_count > 0 && workflow_waiting_count > 0 && calculation_count == 0 )) && [[ "$run_status" == "waiting" ]] && (( artifact_failures == 0 )); then
-    record valuation_approval VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt"
+  if [[ "$run_status" == "completed" ]] && (( event_count > 0 && pending_count == 0 && artifact_count > 0 && artifact_failures == 0 )); then
     record completion VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt"
   else
     local error_code="run_status_${run_status}"
     if (( event_count == 0 )); then error_code="no_workflow_events"; fi
-    if (( approval_count == 0 )); then error_code="missing_pending_valuation_approval"; fi
-    if (( workflow_waiting_count == 0 )); then error_code="workflow_not_waiting"; fi
-    if (( calculation_count > 0 )); then error_code="calculation_activity_detected"; fi
+    if (( pending_count > 0 )); then error_code="pending_workflow_interaction"; fi
+    if (( artifact_count == 0 )); then error_code="missing_completed_output"; fi
     if (( artifact_failures > 0 )); then error_code="artifact_fetch_failed"; fi
     record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt" "$error_code"
     return 1

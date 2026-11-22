@@ -43,7 +43,7 @@ content, XML depth 512, and one million XML elements per document.
 
 This capability preserves multi-file originals. It does not prove accounting
 component completeness, complete awards, supported model eligibility, market-data
-permissions, caller approval, or a successful numerical valuation. Regulatory
+permissions or a successful numerical valuation. Regulatory
 completion mocked in boundary tests is not real release-gate evidence.
 
 ## References

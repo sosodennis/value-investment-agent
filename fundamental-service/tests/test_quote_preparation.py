@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 
 import pytest
 
-from fundamental_service.contracts import SourceRole, CallerApprovalEnvelopeV1
+from fundamental_service.contracts import SourceRole
 from fundamental_service.data_releases import DataReleaseManifestV1
 from fundamental_service.public_acquisition import PublicSourceAcquisitionRequestV1
 from fundamental_service.public_admission import (
@@ -318,20 +318,14 @@ def test_quote_admission_flows_through_runner_composer_and_exact_approval(tmp_pa
         public_admission=fixture.service(),
     )
     waiting = _reader(baseline, _run(runner, plan))
-    assert waiting.status == "approval_required" and waiting.calculation is None
+    assert waiting.status == "prepared" and waiting.calculation is None
     assert waiting.preparation.equity_dilution.incremental_shares == 10
     assert waiting.preparation.quality_status.value == "provisional"
-    approval = CallerApprovalEnvelopeV1(
-        caller_id="operator",
-        decision="approved",
-        input_digest=waiting.preparation.input.input_digest,
-        decided_at=VALUATION_TIME,
-    )
-    first = _run(runner, plan, approval=approval)
+    first = _run(runner, plan, prepare_only=False)
     report = _reader(baseline, first)
     assert report.status == "calculated" and report.calculation is not None
     before = inventory(tmp_path)
-    repeat = _run(runner, plan, approval=approval)
+    repeat = _run(runner, plan, prepare_only=False)
     assert (
         not repeat.wrote
         and repeat.artifact == first.artifact

@@ -6004,22 +6004,7 @@
             "$ref": "#/components/schemas/InteractionIdentity"
           },
           "response": {
-            "discriminator": {
-              "mapping": {
-                "ticker_selection": "#/components/schemas/TickerSelectionResponse",
-                "valuation_approval": "#/components/schemas/ValuationApprovalResponse"
-              },
-              "propertyName": "type"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/TickerSelectionResponse"
-              },
-              {
-                "$ref": "#/components/schemas/ValuationApprovalResponse"
-              }
-            ],
-            "title": "Response"
+            "$ref": "#/components/schemas/TickerSelectionResponse"
           }
         },
         "required": [
@@ -11184,100 +11169,6 @@
         "title": "ValidationError",
         "type": "object"
       },
-      "ValuationApprovalRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_messages": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 100,
-            "title": "Audit Messages",
-            "type": "array"
-          },
-          "contract_version": {
-            "const": "v1",
-            "title": "Contract Version",
-            "type": "string"
-          },
-          "description": {
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Description",
-            "type": "string"
-          },
-          "model_type": {
-            "maxLength": 120,
-            "minLength": 1,
-            "title": "Model Type",
-            "type": "string"
-          },
-          "parameters": {
-            "additionalProperties": true,
-            "title": "Parameters",
-            "type": "object"
-          },
-          "ticker": {
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Ticker",
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          },
-          "type": {
-            "const": "valuation_approval",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "contract_version",
-          "ticker",
-          "model_type",
-          "title",
-          "description",
-          "parameters",
-          "audit_messages"
-        ],
-        "title": "ValuationApprovalRequest",
-        "type": "object"
-      },
-      "ValuationApprovalResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "contract_version": {
-            "const": "v1",
-            "title": "Contract Version",
-            "type": "string"
-          },
-          "decision": {
-            "enum": [
-              "approve",
-              "reject"
-            ],
-            "title": "Decision",
-            "type": "string"
-          },
-          "type": {
-            "const": "valuation_approval",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "contract_version",
-          "decision"
-        ],
-        "title": "ValuationApprovalResponse",
-        "type": "object"
-      },
       "VolumeProfileLevelModel": {
         "properties": {
           "label": {
@@ -11680,55 +11571,22 @@
             "$ref": "#/components/schemas/InteractionIdentity"
           },
           "kind": {
-            "enum": [
-              "ticker_selection",
-              "valuation_approval"
-            ],
+            "const": "ticker_selection",
             "title": "Kind",
             "type": "string"
           },
           "request": {
-            "discriminator": {
-              "mapping": {
-                "ticker_selection": "#/components/schemas/TickerSelectionRequest",
-                "valuation_approval": "#/components/schemas/ValuationApprovalRequest"
-              },
-              "propertyName": "type"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/TickerSelectionRequest"
-              },
-              {
-                "$ref": "#/components/schemas/ValuationApprovalRequest"
-              }
-            ],
-            "title": "Request"
+            "$ref": "#/components/schemas/TickerSelectionRequest"
           },
           "response": {
             "anyOf": [
               {
-                "discriminator": {
-                  "mapping": {
-                    "ticker_selection": "#/components/schemas/TickerSelectionResponse",
-                    "valuation_approval": "#/components/schemas/ValuationApprovalResponse"
-                  },
-                  "propertyName": "type"
-                },
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/TickerSelectionResponse"
-                  },
-                  {
-                    "$ref": "#/components/schemas/ValuationApprovalResponse"
-                  }
-                ]
+                "$ref": "#/components/schemas/TickerSelectionResponse"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Response"
+            ]
           },
           "status": {
             "enum": [

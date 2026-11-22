@@ -103,7 +103,6 @@ def bank_valuation(
                 )
             ).model_dump(),
             "input_digest": None,
-            "caller_approval": None,
         }
     )
     return ValuationInputV1.model_validate(raw)

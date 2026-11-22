@@ -3,14 +3,16 @@ import hashlib
 import json
 import socket
 import urllib.request
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
+import fundamental_service.app as app_module
 from fundamental_service.app import create_app, create_runtime_app
 from fundamental_service.application.service import (
     FundamentalApplication,
@@ -20,7 +22,6 @@ from fundamental_service.application.service import (
 from fundamental_service.contracts import (
     CalculationArtifactV1,
     CalculationEvidenceV1,
-    CallerApprovalEnvelopeV1,
     CanonicalFactV1,
     FactsReadRequestV1,
     PeriodType,
@@ -86,7 +87,6 @@ def _bind_initial_policy(valuation):
 def _with_uncertainty_digest(payload):
     normalized = normalize_uncertainty_payload(payload)
     normalized["input_digest"] = None
-    normalized["caller_approval"] = None
     return UncertaintyRequestV1.model_validate_json(
         json.dumps(normalized)
     ).with_digest()
@@ -710,6 +710,7 @@ def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
     ]
 
     paths = client.app.openapi()["paths"]
+    assert "/v1/valuation/calculate-automatically" not in paths
     assert "requestBody" in paths["/v1/valuation/calculate"]["post"]
     assert "requestBody" in paths["/v1/valuation/calculate-with-policy"]["post"]
     assert "requestBody" in paths["/v1/valuation/validate-with-policy"]["post"]
@@ -928,81 +929,6 @@ def test_policy_calculation_executes_uncertainty_and_preserves_full_input_bindin
     assert explicit_result["base"]["result_hash"] == result["base"]["result_hash"]
 
 
-def test_rejected_caller_approval_never_executes_calculation():
-    valuation = _bind_initial_policy(make_valuation())
-    payload = valuation.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": valuation.input_digest,
-        "decision": "rejected",
-        "caller_id": "subject-test",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
-    response = TestClient(
-        create_app(_SnapshotRepository(), fact_repository=_FactRepository())
-    ).post(
-        "/v1/valuation/calculate",
-        headers=auth_headers(),
-        json=make_internal_envelope(payload),
-    )
-
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "CALLER_APPROVAL_REJECTED"
-
-
-@pytest.mark.parametrize(
-    "route,method",
-    [
-        ("calculate", "calculate_valuation"),
-        ("calculate-with-policy", "calculate_with_policy"),
-        ("uncertainty", "uncertainty_valuation"),
-    ],
-)
-@pytest.mark.parametrize("decision", ["approved", "rejected"])
-@pytest.mark.parametrize("invalid", ["caller", "future"])
-def test_calculation_rejects_unbound_approval_before_application_execution(
-    monkeypatch, route, method, decision, invalid
-):
-    reached = []
-
-    def execute(*args, **kwargs):
-        reached.append(method)
-        raise AssertionError("invalid approval reached calculation")
-
-    monkeypatch.setattr(FundamentalApplication, method, execute)
-    valuation = _bind_initial_policy(make_valuation())
-    if route == "uncertainty":
-        valuation = _with_uncertainty_digest(valuation.model_dump(mode="json"))
-    payload = valuation.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": valuation.input_digest,
-        "decision": decision,
-        "caller_id": "someone-else" if invalid == "caller" else "subject-test",
-        "decided_at": (
-            datetime.now(UTC) + timedelta(days=1)
-            if invalid == "future"
-            else datetime.now(UTC)
-        ).isoformat(),
-    }
-    response = TestClient(create_app()).post(
-        f"/v1/valuation/{route}",
-        headers=auth_headers(),
-        json=make_internal_envelope(payload),
-    )
-
-    assert response.status_code == 403, response.text
-    assert response.json()["error"] == {
-        "code": "CALLER_APPROVAL_IDENTITY_MISMATCH"
-        if invalid == "caller"
-        else "CALLER_APPROVAL_NOT_YET_DECIDED",
-        "message": "caller approval must match the authenticated subject"
-        if invalid == "caller"
-        else "caller approval cannot be decided after receipt",
-        "retryable": False,
-        "retry_after_ms": None,
-    }
-    assert reached == []
-
-
 def test_policy_calculation_rejects_unsupported_model_family():
     bank_model = next(
         model
@@ -1123,28 +1049,162 @@ def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     assert response.json()["error"]["code"] == "internal_context_signature_invalid"
 
 
-def test_validation_error_logs_a_sanitized_field_path(caplog):
+def test_validation_error_logs_only_a_sanitized_count(caplog):
     caplog.set_level("WARNING", logger="fundamental_service")
     client = TestClient(create_app())
     malformed = make_valuation().model_dump(mode="json")
     malformed.pop("model_id")
+    header_correlation = "caller-header-correlation"
+    body_correlation = "caller-body-correlation"
+    headers = auth_headers()
+    headers["X-Correlation-ID"] = header_correlation
 
     response = client.post(
         "/v1/valuation/validate",
-        headers=auth_headers(),
-        json=make_internal_envelope(malformed),
+        headers=headers,
+        json=make_internal_envelope(malformed, correlation_id=body_correlation),
     )
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_request"
+    assert response.headers["X-Correlation-ID"] == body_correlation
+    assert response.json()["correlation_id"] == body_correlation
     records = [
         record
         for record in caplog.records
         if record.getMessage().startswith("fundamental_validation_error")
     ]
     assert len(records) == 1
-    assert records[0].diagnostics[0]["field_path"] == "model_id"
-    assert "input" not in records[0].diagnostics[0]
+    assert records[0].validation_error_count == 1
+    assert records[0].route_template == "/v1/valuation/validate"
+    assert not hasattr(records[0], "diagnostics")
+    assert str(UUID(records[0].request_log_id)) == records[0].request_log_id
+    error_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage().startswith("fundamental_error_response ")
+    )
+    assert error_record.request_log_id == records[0].request_log_id
+    assert "model_id" not in caplog.text
+    assert header_correlation not in caplog.text
+    assert body_correlation not in caplog.text
+    assert "request does not match the versioned service contract" not in caplog.text
+
+
+def test_request_logs_redact_caller_correlation_and_dynamic_path(caplog):
+    correlation = "customer@example.test"
+    path_value = "private-customer-identifier"
+    caller_request_id = "caller-chosen-request-id"
+    caplog.set_level("INFO", logger="fundamental_service")
+    client = TestClient(create_app())
+    response = client.get(
+        f"/v1/data/snapshots/{path_value}",
+        headers={
+            "X-Correlation-ID": correlation,
+            "X-Server-Request-ID": caller_request_id,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.headers["X-Correlation-ID"] == correlation
+    assert response.json()["correlation_id"] == correlation
+    assert correlation not in caplog.text
+    assert path_value not in caplog.text
+    record = next(
+        item
+        for item in caplog.records
+        if item.getMessage().startswith("fundamental_error_response ")
+    )
+    assert str(UUID(record.request_log_id)) == record.request_log_id
+    assert record.request_log_id != correlation
+    assert response.headers["X-Server-Request-ID"] == record.request_log_id
+    assert response.headers["X-Server-Request-ID"] != caller_request_id
+    assert record.route_template == "/v1/data/snapshots/{snapshot_id}"
+    assert record.error_code == "SERVICE_ERROR"
+    assert "invalid_request" not in caplog.text
+    assert "request body is invalid" not in caplog.text
+    assert "correlation_id_sha256" not in caplog.text
+
+    success = client.get(
+        "/livez",
+        headers={
+            "X-Correlation-ID": "successful-caller-correlation",
+            "X-Server-Request-ID": caller_request_id,
+        },
+    )
+    assert success.status_code == 200
+    assert (
+        str(UUID(success.headers["X-Server-Request-ID"]))
+        == success.headers["X-Server-Request-ID"]
+    )
+    assert success.headers["X-Server-Request-ID"] != caller_request_id
+    assert success.headers["X-Correlation-ID"] == "successful-caller-correlation"
+    success_log = next(
+        item
+        for item in caplog.records
+        if item.getMessage().startswith("fundamental_request ")
+        and item.status_code == 200
+    )
+    assert success.headers["X-Server-Request-ID"] == success_log.request_log_id
+
+
+def test_request_log_context_failure_preserves_the_response(monkeypatch, caplog):
+    def fail_context(_request):
+        raise OSError("private random source detail")
+
+    monkeypatch.setattr(app_module, "create_request_log_context", fail_context)
+    correlation = "caller-correlation"
+    headers = auth_headers()
+    headers["X-Correlation-ID"] = correlation
+
+    with caplog.at_level("INFO", logger="fundamental_service"):
+        client = TestClient(
+            create_app(config=OperationsConfig.testing(valuation_diagnostics=True))
+        )
+        response = client.get("/livez", headers={"X-Correlation-ID": correlation})
+        malformed = make_valuation().model_dump(mode="json")
+        malformed.pop("model_id")
+        error_response = client.post(
+            "/v1/valuation/validate",
+            headers=headers,
+            json=make_internal_envelope(malformed, correlation_id=correlation),
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Correlation-ID"] == correlation
+    assert error_response.status_code == 400
+    assert error_response.json()["error"]["code"] == "invalid_request"
+    assert error_response.headers["X-Correlation-ID"] == correlation
+    assert error_response.json()["correlation_id"] == correlation
+    assert "fundamental_request" not in caplog.text
+    assert "fundamental_validation_error" not in caplog.text
+    assert "fundamental_error_response" not in caplog.text
+    assert correlation not in caplog.text
+    assert "private random source detail" not in caplog.text
+
+
+def test_metadata_startup_failure_log_omits_exception_text(caplog):
+    class FailingMetadataStore:
+        @staticmethod
+        def start():
+            raise RuntimeError("private database connection detail")
+
+        @staticmethod
+        def close():
+            return None
+
+    with caplog.at_level("ERROR", logger="fundamental_service"):
+        with TestClient(create_app(metadata_store=FailingMetadataStore())) as client:
+            assert client.get("/livez").status_code == 200
+
+    records = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "fundamental_metadata_startup_failed"
+    ]
+    assert len(records) == 1
+    assert records[0].exc_info is None
+    assert "private database connection detail" not in caplog.text
 
 
 def test_sec_ingestion_route_requires_a_valid_signed_context():
@@ -1210,7 +1270,7 @@ def test_uncertainty_endpoint_runs_the_shared_calculator():
     assert body["result"]["scenario_results"]
 
 
-def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
+def test_uncertainty_digest_covers_sampling_and_scenario_controls():
     valuation = _bind_initial_policy(make_valuation())
     payload = valuation.model_dump(mode="json")
     payload.update(
@@ -1267,12 +1327,6 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
         UncertaintyRequestV1.model_validate_json(json.dumps(changed))
 
     payload = request.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": request.input_digest,
-        "decision": "approved",
-        "caller_id": "subject-test",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
     response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     ).post(
@@ -1288,7 +1342,7 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
     assert result["valid_samples"] == 10
 
 
-def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
+def test_capital_scenarios_bind_digest_and_retrieve_saved_evidence(tmp_path):
     valuation = _bind_initial_policy(make_valuation())
     payload = valuation.model_dump(mode="json")
     payload["uncertainty"] = {
@@ -1320,12 +1374,6 @@ def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
     payload.pop("input_digest")
     validation = type(valuation).model_validate_json(json.dumps(payload)).with_digest()
     payload = validation.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": validation.input_digest,
-        "decision": "approved",
-        "caller_id": "subject-test",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
     client = TestClient(
         create_app(
             _SnapshotRepository(),
@@ -1380,7 +1428,6 @@ def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
     payload["uncertainty"]["scenarios"][1]["assumptions"][
         "assumptions.capital_bridge.debt"
     ] = "31"
-    payload["input_digest"] = None
     rejected = client.post(
         "/v1/valuation/calculate",
         headers=auth_headers(),
@@ -1395,8 +1442,18 @@ def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
         == saved.content
     )
 
+    payload["input_digest"] = None
+    changed = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["result"]["input_digest"] != result["input_digest"]
+    assert changed.json()["result"]["result_hash"] != result["result_hash"]
 
-def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval():
+
+def test_calculate_executes_explicit_monte_carlo_controls():
     valuation = (
         make_valuation()
         .model_copy(
@@ -1439,26 +1496,16 @@ def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval
         == result["base"]["input_digest"]
     )
 
-    approved = valuation.model_copy(
-        update={
-            "caller_approval": CallerApprovalEnvelopeV1(
-                input_digest=valuation.input_digest,
-                decision="approved",
-                caller_id="subject-test",
-                decided_at=datetime.now(UTC),
-            )
-        }
-    )
-    approved_response = TestClient(
+    repeated_response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     ).post(
         "/v1/valuation/calculate",
         headers=auth_headers(),
-        json=make_internal_envelope(approved.model_dump(mode="json")),
+        json=make_internal_envelope(valuation.model_dump(mode="json")),
     )
-    assert approved_response.status_code == 200, approved_response.text
+    assert repeated_response.status_code == 200, repeated_response.text
     assert (
-        approved_response.json()["result"]["base"]["result_hash"]
+        repeated_response.json()["result"]["base"]["result_hash"]
         == result["base"]["result_hash"]
     )
 
@@ -1484,16 +1531,7 @@ def test_calculate_returns_version_bound_replayable_evidence():
     app = create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     client = TestClient(app)
     validation = app.state.application.validate_valuation(make_valuation())
-    request = validation.input.model_copy(
-        update={
-            "caller_approval": CallerApprovalEnvelopeV1(
-                input_digest=validation.input_digest,
-                decision="approved",
-                caller_id="subject-test",
-                decided_at=datetime.now(UTC),
-            )
-        }
-    )
+    request = validation.input
     response = client.post(
         "/v1/valuation/calculate",
         headers=auth_headers(),
@@ -1519,11 +1557,9 @@ def test_calculate_returns_version_bound_replayable_evidence():
         evidence.calculation.trace.policy_digest
         == validation.policy_resolution.policy_digest
     )
-    assert evidence.request.caller_approval is None
-    assert json.loads(content)["request"]["caller_approval"] is None
 
 
-def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
+def test_uncertainty_accepts_the_validated_request():
     valuation = (
         make_valuation()
         .model_copy(
@@ -1554,12 +1590,6 @@ def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
     }
     request = _with_uncertainty_digest(payload)
     payload = request.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": request.input_digest,
-        "decision": "approved",
-        "caller_id": "subject-test",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
     response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     ).post(
@@ -2656,3 +2686,33 @@ def test_metrics_declare_operational_quality_and_dependency_signals():
         "provider_degradation_total",
     ):
         assert f"fundamental_service_{metric}" in body
+
+
+@pytest.mark.parametrize(
+    "route,method",
+    (
+        ("calculate", "calculate_valuation"),
+        ("calculate-with-policy", "calculate_with_policy"),
+        ("uncertainty", "uncertainty_valuation"),
+    ),
+)
+def test_removed_caller_approval_is_rejected_before_application_execution(
+    monkeypatch, route, method
+):
+    reached = []
+
+    def execute(*args, **kwargs):
+        reached.append(method)
+        raise AssertionError("retired field reached calculation")
+
+    monkeypatch.setattr(FundamentalApplication, method, execute)
+    payload = _bind_initial_policy(make_valuation()).model_dump(mode="json")
+    payload["caller_approval"] = None
+    response = TestClient(create_app()).post(
+        f"/v1/valuation/{route}",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "invalid_request"
+    assert reached == []

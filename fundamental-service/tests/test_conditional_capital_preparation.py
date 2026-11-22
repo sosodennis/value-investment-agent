@@ -12,7 +12,6 @@ from fundamental_service.conditional_capital_preparation import (
     ConditionalCapitalBindingV1,
     bind_conditional_capital_recipe,
 )
-from fundamental_service.contracts import CallerApprovalEnvelopeV1
 from fundamental_service.award_disclosures import AWARD_DISCLOSURE_FIELDS
 from fundamental_service.conditional_capital import (
     ConditionalCapitalError,
@@ -32,7 +31,6 @@ from test_issuer_operating_release import inventory
 from test_original_preparation import case, execute
 from test_original_source_plan import compiler_case, configuration
 from test_preparation_runner import (
-    VALUATION_TIME,
     _acquisition,
     _reader,
     _reviewed_candidate,
@@ -262,20 +260,14 @@ def test_source_runner_binds_releases_prepares_and_resumes_approved_conditional_
     prepared = _reader(
         fixture, _run(_runner(fixture, canary=canary), plan, candidate=candidate)
     )
-    assert prepared.status == "approval_required"
+    assert prepared.status == "prepared"
     assert prepared.conditional_capital_binding_ref == ref
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=prepared.preparation.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-    calculated = _run(_runner(fixture), plan, approval=approval)
+    calculated = _run(_runner(fixture), plan, prepare_only=False)
     result = _reader(fixture, calculated)
     assert result.calculation.base.per_share_value is not None
     assert len(result.calculation.scenario_results) == 3
     before = inventory(fixture.artifacts.root)
-    repeated = _run(_runner(fixture), plan, approval=approval)
+    repeated = _run(_runner(fixture), plan, prepare_only=False)
     assert not repeated.wrote and repeated.artifact == calculated.artifact
     assert inventory(fixture.artifacts.root) == before
 
@@ -363,7 +355,7 @@ def test_conditional_candidate_resumes_when_its_snapshot_must_be_acquired(tmp_pa
     runner = _runner(fixture, acquisition=acquisition, canary=canary)
     first = _run(runner, plan, candidate=candidate)
     assert len(acquisition.calls) == 1 and fixture.state.publications == 1
-    assert _reader(fixture, first).status == "approval_required"
+    assert _reader(fixture, first).status == "prepared"
     assert not _run(runner, plan).wrote
 
 

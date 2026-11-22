@@ -85,43 +85,6 @@ const waitingInteraction = [...waitingWorkflow.interactions.values()].find(
 );
 if (!waitingInteraction) throw new Error('Ticker selection fixture failed to parse.');
 
-const approvalActivity = {
-    activity_id: 'fundamental.calculation',
-    thread_id: 'thread-1',
-    run_id: 'run-1',
-    scope_path: ['fundamental_analysis', 'calculation'],
-    kind: 'node',
-    status: 'waiting',
-    label: 'Review valuation assumptions',
-    attempt: 1,
-};
-const approvalInteraction = {
-    identity: {
-        thread_id: 'thread-1',
-        run_id: 'run-1',
-        activity_id: 'fundamental.calculation',
-        interaction_id: 'approval-1',
-    },
-    kind: 'valuation_approval',
-    status: 'pending',
-    request: {
-        type: 'valuation_approval',
-        contract_version: 'v1',
-        ticker: 'AAPL',
-        model_type: 'dcf_growth',
-        title: 'Review valuation assumptions',
-        description: 'Approve before deterministic calculation.',
-        parameters: { wacc: 0.09, terminal_growth: 0.025 },
-        audit_messages: ['PASS: assumptions are consistent'],
-    },
-};
-const approvalWorkflow = workflowState({
-    run_status: 'waiting',
-    active_activities: [approvalActivity],
-    recent_activities: [approvalActivity],
-    pending_interactions: [approvalInteraction],
-});
-
 function defaultHook(overrides: Record<string, unknown> = {}) {
     return {
         messages: [], sendMessage: hook.sendMessage, submitCommand: hook.submitCommand,
@@ -280,37 +243,6 @@ describe('WorkspacePage', () => {
         hook.value = defaultHook({ workflow: workflowState({ run_status: 'cancelled' }) });
         rerender(<WorkspacePage />);
         screen.getByText('Run cancelled');
-    });
-
-    it('summarizes valuation approval in Activity and renders controls in Fundamental', () => {
-        hook.value = defaultHook({
-            workflow: approvalWorkflow,
-            threadId: 'thread-1',
-            runId: 'run-1',
-        });
-        render(<WorkspacePage />);
-
-        expect(screen.getByText('Fundamental review required')).toBeTruthy();
-        const activity = within(screen.getByRole('list', { name: 'Workflow activity' }));
-        expect(activity.queryByRole('button', { name: 'Approve valuation' })).toBeNull();
-        cleanup();
-        const approval = [...approvalWorkflow.interactions.values()].find((item) => item.kind === 'valuation_approval');
-        if (!approval || approval.kind !== 'valuation_approval') throw new Error('Approval fixture failed to parse.');
-        render(<ReportPanel
-            tab="fundamental_analysis"
-            outputs={{}}
-            statuses={{ fundamental_analysis: 'attention' }}
-            ticker="AAPL"
-            pendingApproval={approval}
-            onResumeInteraction={hook.submitCommand}
-        />);
-        expect(screen.getByRole('button', { name: 'Confirm and calculate' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Reject calculation' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm and calculate' }));
-        expect(hook.submitCommand).toHaveBeenCalledWith(
-            expect.objectContaining({ kind: 'valuation_approval' }),
-            { type: 'valuation_approval', contract_version: 'v1', decision: 'approve' },
-        );
     });
 
     it('renders safe typed failure provenance for a failed run', () => {

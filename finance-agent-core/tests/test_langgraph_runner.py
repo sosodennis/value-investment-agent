@@ -718,71 +718,6 @@ async def test_runner_projects_typed_interrupt_and_stops_at_suspension() -> None
 
 
 @pytest.mark.asyncio
-async def test_runner_projects_versioned_valuation_approval_interrupt() -> None:
-    graph = _EventGraph(
-        [
-            {
-                "event": "on_chain_start",
-                "run_id": "calculation-node",
-                "parent_ids": [],
-                "metadata": _metadata(
-                    agent_id="fundamental_analysis",
-                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
-                    activity_label="Calculate intrinsic value",
-                    langgraph_node="calculation",
-                ),
-            },
-            {
-                "event": "on_chain_stream",
-                "run_id": "calculation-node",
-                "parent_ids": [],
-                "metadata": _metadata(
-                    agent_id="fundamental_analysis",
-                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
-                    activity_label="Calculate intrinsic value",
-                    langgraph_node="calculation",
-                ),
-                "data": {
-                    "chunk": {
-                        "__interrupt__": (
-                            Interrupt(
-                                id="approval-1",
-                                value={
-                                    "type": "valuation_approval",
-                                    "contract_version": "v1",
-                                    "ticker": "AAPL",
-                                    "model_type": "dcf_growth",
-                                    "title": "Review valuation assumptions",
-                                    "description": "Approve before deterministic calculation.",
-                                    "parameters": {"wacc": 0.09},
-                                    "audit_messages": ["PASS: parameters are valid"],
-                                },
-                            ),
-                        )
-                    }
-                },
-            },
-        ]
-    )
-
-    activities = [
-        item
-        async for item in LangGraphRunner(graph).run(
-            thread_id="thread-1",
-            run_id="runtime-run-1",
-            input_data={"message": "Apple"},
-            principal_id="principal-1",
-        )
-    ]
-
-    assert isinstance(activities[-1], InteractionRequested)
-    waiting = activities[-1]
-    assert waiting.request.type == "valuation_approval"
-    assert waiting.request.contract_version == "v1"
-    assert waiting.request.parameters == {"wacc": 0.09}
-
-
-@pytest.mark.asyncio
 async def test_runner_assigns_interrupt_to_event_callback_when_parallel_callbacks_are_active() -> (
     None
 ):
@@ -800,39 +735,40 @@ async def test_runner_assigns_interrupt_to_event_callback_when_parallel_callback
             },
             {
                 "event": "on_chain_start",
-                "run_id": "calculation-node",
+                "run_id": "ticker-node",
                 "parent_ids": [],
                 "metadata": _metadata(
-                    agent_id="fundamental_analysis",
-                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
-                    activity_label="Calculate intrinsic value",
-                    langgraph_node="calculation",
+                    agent_id="intent_extraction",
+                    workflow_scope_path=("intent_extraction", "resolve-ticker"),
+                    activity_label="Resolve ticker",
+                    langgraph_node="clarifying",
                 ),
             },
             {
                 "event": "on_chain_stream",
-                "run_id": "calculation-node",
+                "run_id": "ticker-node",
                 "parent_ids": [],
                 "metadata": _metadata(
-                    agent_id="fundamental_analysis",
-                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
-                    activity_label="Calculate intrinsic value",
-                    langgraph_node="calculation",
+                    agent_id="intent_extraction",
+                    workflow_scope_path=("intent_extraction", "resolve-ticker"),
+                    activity_label="Resolve ticker",
+                    langgraph_node="clarifying",
                 ),
                 "data": {
                     "chunk": {
                         "__interrupt__": (
                             Interrupt(
-                                id="approval-parallel-1",
+                                id="ticker-parallel-1",
                                 value={
-                                    "type": "valuation_approval",
-                                    "contract_version": "v1",
-                                    "ticker": "AAPL",
-                                    "model_type": "dcf_standard",
-                                    "title": "Review valuation assumptions",
-                                    "description": "Approve before deterministic calculation.",
-                                    "parameters": {"wacc": 0.09},
-                                    "audit_messages": [],
+                                    "type": "ticker_selection",
+                                    "reason": "Select the security",
+                                    "candidates": [
+                                        {
+                                            "symbol": "AAPL",
+                                            "name": "Apple",
+                                            "confidence": 1.0,
+                                        }
+                                    ],
                                 },
                             ),
                         )
@@ -854,10 +790,10 @@ async def test_runner_assigns_interrupt_to_event_callback_when_parallel_callback
 
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "activity:calculation-node"
+    assert waiting.activity.activity_id == "activity:ticker-node"
     assert waiting.activity.scope_path == (
-        "fundamental_analysis",
-        "calculate-valuation",
+        "intent_extraction",
+        "resolve-ticker",
     )
 
 
@@ -879,34 +815,35 @@ async def test_runner_uses_nearest_active_parent_for_bubbled_parallel_interrupt(
             },
             {
                 "event": "on_chain_start",
-                "run_id": "calculation-node",
+                "run_id": "ticker-node",
                 "parent_ids": ["workflow-root"],
                 "metadata": _metadata(
-                    agent_id="fundamental_analysis",
-                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
-                    activity_label="Calculate intrinsic value",
-                    langgraph_node="calculation",
+                    agent_id="intent_extraction",
+                    workflow_scope_path=("intent_extraction", "resolve-ticker"),
+                    activity_label="Resolve ticker",
+                    langgraph_node="clarifying",
                 ),
             },
             {
                 "event": "on_chain_stream",
                 "run_id": "nested-graph-stream",
-                "parent_ids": ["workflow-root", "calculation-node"],
+                "parent_ids": ["workflow-root", "ticker-node"],
                 "metadata": {"langgraph_checkpoint_ns": "nested"},
                 "data": {
                     "chunk": {
                         "__interrupt__": (
                             Interrupt(
-                                id="approval-bubbled-parallel-1",
+                                id="ticker-bubbled-parallel-1",
                                 value={
-                                    "type": "valuation_approval",
-                                    "contract_version": "v1",
-                                    "ticker": "AAPL",
-                                    "model_type": "dcf_standard",
-                                    "title": "Review valuation assumptions",
-                                    "description": "Approve before deterministic calculation.",
-                                    "parameters": {"wacc": 0.09},
-                                    "audit_messages": [],
+                                    "type": "ticker_selection",
+                                    "reason": "Select the security",
+                                    "candidates": [
+                                        {
+                                            "symbol": "AAPL",
+                                            "name": "Apple",
+                                            "confidence": 1.0,
+                                        }
+                                    ],
                                 },
                             ),
                         )
@@ -928,10 +865,10 @@ async def test_runner_uses_nearest_active_parent_for_bubbled_parallel_interrupt(
 
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "activity:calculation-node"
+    assert waiting.activity.activity_id == "activity:ticker-node"
     assert waiting.activity.scope_path == (
-        "fundamental_analysis",
-        "calculate-valuation",
+        "intent_extraction",
+        "resolve-ticker",
     )
 
 
@@ -953,13 +890,13 @@ async def test_runner_assigns_unscoped_interrupt_by_typed_owner_with_parallel_ag
             },
             {
                 "event": "on_chain_start",
-                "run_id": "calculation-node",
+                "run_id": "ticker-node",
                 "parent_ids": [],
                 "metadata": _metadata(
-                    agent_id="fundamental_analysis",
-                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
-                    activity_label="Calculate intrinsic value",
-                    langgraph_node="calculation",
+                    agent_id="intent_extraction",
+                    workflow_scope_path=("intent_extraction", "resolve-ticker"),
+                    activity_label="Resolve ticker",
+                    langgraph_node="clarifying",
                 ),
             },
             {
@@ -971,16 +908,17 @@ async def test_runner_assigns_unscoped_interrupt_by_typed_owner_with_parallel_ag
                     "chunk": {
                         "__interrupt__": (
                             Interrupt(
-                                id="approval-unscoped-parallel-1",
+                                id="ticker-unscoped-parallel-1",
                                 value={
-                                    "type": "valuation_approval",
-                                    "contract_version": "v1",
-                                    "ticker": "AAPL",
-                                    "model_type": "dcf_standard",
-                                    "title": "Review valuation assumptions",
-                                    "description": "Approve before deterministic calculation.",
-                                    "parameters": {"wacc": 0.09},
-                                    "audit_messages": [],
+                                    "type": "ticker_selection",
+                                    "reason": "Select the security",
+                                    "candidates": [
+                                        {
+                                            "symbol": "AAPL",
+                                            "name": "Apple",
+                                            "confidence": 1.0,
+                                        }
+                                    ],
                                 },
                             ),
                         )
@@ -1002,10 +940,10 @@ async def test_runner_assigns_unscoped_interrupt_by_typed_owner_with_parallel_ag
 
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "activity:calculation-node"
+    assert waiting.activity.activity_id == "activity:ticker-node"
     assert waiting.activity.scope_path == (
-        "fundamental_analysis",
-        "calculate-valuation",
+        "intent_extraction",
+        "resolve-ticker",
     )
 
 
@@ -1027,13 +965,13 @@ async def test_runner_uses_interrupt_scope_when_inner_callback_id_is_not_active(
             },
             {
                 "event": "on_chain_start",
-                "run_id": "calculation-node",
+                "run_id": "ticker-node",
                 "parent_ids": [],
                 "metadata": _metadata(
-                    agent_id="fundamental_analysis",
-                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
-                    activity_label="Calculate intrinsic value",
-                    langgraph_node="calculation",
+                    agent_id="intent_extraction",
+                    workflow_scope_path=("intent_extraction", "resolve-ticker"),
+                    activity_label="Resolve ticker",
+                    langgraph_node="clarifying",
                 ),
             },
             {
@@ -1041,25 +979,26 @@ async def test_runner_uses_interrupt_scope_when_inner_callback_id_is_not_active(
                 "run_id": "nested-graph-stream",
                 "parent_ids": [],
                 "metadata": _metadata(
-                    agent_id="fundamental_analysis",
-                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
-                    activity_label="Calculate intrinsic value",
-                    langgraph_node="calculation",
+                    agent_id="intent_extraction",
+                    workflow_scope_path=("intent_extraction", "resolve-ticker"),
+                    activity_label="Resolve ticker",
+                    langgraph_node="clarifying",
                 ),
                 "data": {
                     "chunk": {
                         "__interrupt__": (
                             Interrupt(
-                                id="approval-nested-stream-1",
+                                id="ticker-nested-stream-1",
                                 value={
-                                    "type": "valuation_approval",
-                                    "contract_version": "v1",
-                                    "ticker": "AAPL",
-                                    "model_type": "dcf_standard",
-                                    "title": "Review valuation assumptions",
-                                    "description": "Approve before deterministic calculation.",
-                                    "parameters": {"wacc": 0.09},
-                                    "audit_messages": [],
+                                    "type": "ticker_selection",
+                                    "reason": "Select the security",
+                                    "candidates": [
+                                        {
+                                            "symbol": "AAPL",
+                                            "name": "Apple",
+                                            "confidence": 1.0,
+                                        }
+                                    ],
                                 },
                             ),
                         )
@@ -1081,15 +1020,18 @@ async def test_runner_uses_interrupt_scope_when_inner_callback_id_is_not_active(
 
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "activity:calculation-node"
+    assert waiting.activity.activity_id == "activity:ticker-node"
     assert waiting.activity.scope_path == (
-        "fundamental_analysis",
-        "calculate-valuation",
+        "intent_extraction",
+        "resolve-ticker",
     )
 
 
 @pytest.mark.asyncio
-async def test_runner_rejects_unsupported_interrupt_payload() -> None:
+@pytest.mark.parametrize("interrupt_type", ["approval", "valuation_approval"])
+async def test_runner_rejects_unsupported_interrupt_payload(
+    interrupt_type: str,
+) -> None:
     graph = _EventGraph(
         [
             {
@@ -1099,7 +1041,7 @@ async def test_runner_rejects_unsupported_interrupt_payload() -> None:
                 "data": {
                     "chunk": {
                         "__interrupt__": (
-                            Interrupt(id="bad", value={"type": "approval"}),
+                            Interrupt(id="bad", value={"type": interrupt_type}),
                         )
                     }
                 },

@@ -27,6 +27,9 @@ class CalculationRefusal(ValueError):
         self.code = code
 
 
+CALCULATOR_RESULT_VERSION = "calculator-v2"
+
+
 def _artifact_digests(
     request: ValuationInputV1,
     *,
@@ -34,9 +37,7 @@ def _artifact_digests(
     per_share: Decimal,
     nodes: list[CalculationNodeV1],
 ) -> tuple[str, str]:
-    expected_input_digest = sha256_digest(
-        request.model_dump(exclude={"input_digest", "caller_approval"})
-    )
+    expected_input_digest = sha256_digest(request.model_dump(exclude={"input_digest"}))
     if (
         request.input_digest is not None
         and request.input_digest != expected_input_digest
@@ -101,14 +102,6 @@ def calculate(
     correlation_id: str = "local",
     allow_provisional: bool = False,
 ) -> CalculationArtifactV1:
-    if (
-        request.caller_approval is not None
-        and request.caller_approval.decision != "approved"
-    ):
-        raise CalculationRefusal(
-            "CALLER_APPROVAL_REJECTED",
-            "caller rejected this exact valuation input",
-        )
     try:
         resolve_operating_model(request.model_id, request.model_version)
     except OperatingProjectionError as error:
@@ -174,9 +167,7 @@ def calculate(
             ),
         )
     )
-    expected_input_digest = sha256_digest(
-        request.model_dump(exclude={"input_digest", "caller_approval"})
-    )
+    expected_input_digest = sha256_digest(request.model_dump(exclude={"input_digest"}))
     if (
         request.input_digest is not None
         and request.input_digest != expected_input_digest
@@ -187,7 +178,7 @@ def calculate(
     input_digest = expected_input_digest
     result = CalculationArtifactV1(
         contract_version="fundamental.v1",
-        calculation_version="calculator-v2",
+        calculation_version=CALCULATOR_RESULT_VERSION,
         calculation_status=CalculationStatus.COMPLETED,
         quality_status=quality_status,
         input_digest=input_digest,

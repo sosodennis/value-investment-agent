@@ -47,7 +47,7 @@ Repeats and retrieval verify the immutable request, receipts, original bytes and
 reproduced selection, returning the same digest with `wrote=false`. Interrupted or
 transient attempts reuse successful captures; retryable failures retain their own
 content identities. Catalog evidence does not approve mappings, prove complete
-accounting coverage, authorize a release/caller input or calculate a valuation.
+accounting coverage, authorize a release or calculate a valuation.
 
 Add `--prepare-originals` to capture and strictly validate each selected original
 before resolving its security identity from original DEI facts:
@@ -250,8 +250,7 @@ and input/output digest. Incomplete identity/original evidence returns
 `status=blocked` with its retained reasons and does not invoke source preparation.
 Otherwise `status=preparation_attempted` means the existing runner was called;
 inspect its saved artifact for `blocked`, `release_required`,
-`approval_required` or `calculated`. This command does not fabricate an approved
-release or caller approval. Repeat requests reuse the existing content-addressed
+`prepared` or `calculated`. Repeat requests reuse the existing content-addressed
 artifacts and return the underlying `wrote=false` dispositions.
 
 For an explicitly current request, add `--current` and supply a recent
@@ -268,7 +267,7 @@ In current mode, `fundamental-prepare-source` also returns the typed
 `current_selection` and `current_selection_publication`. The issuer entrypoint
 checks that selection against its compiled template and verifies the preparation
 receipt references the effective plan. This freezes source availability; market
-admission, trusted release and exact-input caller approval still run through the
+admission, trusted release and exact-input calculation still run through the
 existing owners.
 
 An optional `quote_source_template` in the source-plan configuration supplies
@@ -321,52 +320,18 @@ records deployment-approved rights; it cannot create provider permission.
 
 ## Source preparation command
 
-### Automatic caller approval
+### Direct calculation and preparation only
 
-`POST /v1/valuation/calculate-automatically` uses the same signed internal
-context and bearer authentication as calculation. Its input contains
-`preparation` (the existing release/snapshot/model selector),
-`expected_input_digest` and `approval_policy_digest`. The caller cannot supply
-valuation parameters, an approval envelope, or its own identity in this payload.
-The service recomposes the input through the formal composer, checks the exact
-digest and evaluates its deployment-authorized caller policy before calculation.
+The issuer and source commands calculate the exact prepared input after source,
+mapping, trusted-release and model-policy checks. Requests use the authenticated
+internal calculation boundary. The service recomposes conditional inputs, verifies
+their digests, and rechecks current release and source evidence before calculation.
+Failed checks retain explicit reasons and publish no execution.
 
-Automatic approval is disabled until the deployment supplies both
-`FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_FILE` and
-`FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_DIGEST`. Mount the file read-only and pin
-the canonical `AutomaticValuationApprovalPolicyV1.digest`. Invalid or incomplete
-configuration stops composition. There is no default caller grant. The policy
-names authorized caller/organization pairs, exact model/policy versions, an
-authorization window and the deployed source-use policy digest. Provisional
-quality and uncalibrated conditional what-if scenarios each need explicit
-authorization. Only enumerated issue codes and missing-evidence categories may
-proceed; manual overrides and Monte Carlo are not supported by this path.
-Exceptions authorize the stated calculation scope, not factual completeness,
-provider rights, calibrated estimates or economic error bounds.
-
-Policy, recomposed preparation and automatic decision are retained as immutable
-artifacts. Refusals retain their reasons and do not call the calculator. Approved
-execution uses the existing calculator and retains an artifact joining the
-decision to the saved numerical evidence. Decision content is deterministic;
-storage publication and authenticated request logs supply event timing, rather
-than adding the request clock to the reusable decision's identity. Every retry
-recomposes and checks the policy authorization window again. The decision is
-explicitly automatic and does not represent a human approval. Independent source
-release signatures and all calculation/source-use gates remain enforced.
-
-Set `FUNDAMENTAL_AUTOMATIC_APPROVAL_SERVICE_URL` to the service origin in the
-issuer command's environment. With the pinned approval policy and service
-credential configured, the company/date CLI retrieves the exact preparation
-through the authenticated artifact API and invokes automatic calculation. It
-verifies the preparation bytes and decision identities, carries the remaining
-original command deadline, refuses redirects and bounds responses to 8 MiB.
-The output adds `automatic_execution` and a joined lineage stage. Source
-refusals stay blocked; policy refusals retain their decision without calculation.
-An explicitly supplied `--approval` selects the existing explicit caller path.
-`--prepare-only` stops after source preparation and requests no calculation.
-`compose/verification/docker-compose.automatic-caller.yml` mounts a deployment
-policy read-only and configures the in-container issuer client against the
-service. It creates no grant or policy on the operator's behalf.
+Add `--prepare-only` to either command to persist the exact input with
+`status=prepared` and skip calculation. Without that flag, a valid exact input
+calculates directly. Source-use permissions, mapping approvals and trusted release
+signatures remain separate controls.
 
 Mapping input artifacts use `fundamental.mapping-input-artifact.v2`: each field
 and batch retains its request metadata and original evidence metadata, with a
@@ -466,11 +431,10 @@ metadata and bytes through the authenticated `/v1/artifacts/{artifact_id}` and
 `wrote=false`; corrupt or conflicting evidence fails without replacement.
 
 The stored outcome is `release_required` for an acquired but unreleased snapshot,
-`blocked` for retained evidence failures, or `approval_required` when the formal
-composer prepares an input. To calculate, pass `--approval <approval.json>` with
-the caller's explicit approval of that exact prepared input digest. `calculated`
+`blocked` for retained evidence failures, `prepared` when `--prepare-only` stops
+after composition, or `calculated` after direct calculation. The calculation
 retains the existing calculator's uncertainty report and provenance. The command
-does not own a valuation session or job, and it never manufactures caller approval.
+does not own a valuation session or job.
 
 The #361 complete-flow acceptance remains pending. Synthetic fixtures prove
 coordination and persistence mechanics; they do not certify real issuer mappings,
@@ -537,7 +501,7 @@ The versioned `conditional-arithmetic-v1` scope independently expands joint
 scenarios and sensitivities and compares every scenario graph with the reference
 equations. It preserves verified or provisional quality and checks input/result
 identities. This check certifies arithmetic agreement only; source completeness,
-usage rights, caller approval, forecast calibration and historical performance
+usage rights, forecast calibration and historical performance
 require their own evidence. It supports explicit scenarios, not Monte Carlo.
 The existing deterministic cohort gate retains its verified-only default.
 
@@ -581,5 +545,4 @@ digest includes the catalog and file hashes; the report records the selected
 namespace and hash, and serving requires that evidence. An empty setting keeps
 the existing single-ruleset profile. Adding supported filing years requires
 matching taxonomy dependencies and rulesets; changing the year list alone does
-not establish support. This setting grants no source-use permission or caller
-approval.
+not establish support. This setting grants no source-use permission.

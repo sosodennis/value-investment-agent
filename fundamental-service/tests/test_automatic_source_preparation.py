@@ -10,7 +10,6 @@ import sys
 import pytest
 from pydantic import ValidationError
 
-from fundamental_service.contracts import CallerApprovalEnvelopeV1
 from fundamental_service.data_releases import DataReleaseError
 from fundamental_service.operations import ServiceError
 from fundamental_service.snapshots import SnapshotError
@@ -78,6 +77,7 @@ def runner_case(tmp_path, monkeypatch):
 
 
 def run(runner, plan, **kwargs):
+    kwargs.setdefault("prepare_only", True)
     return runner.run(
         plan,
         actor_id="caller",
@@ -359,22 +359,6 @@ def test_plan_rejects_incoherent_model_or_source_revision(
         AutomaticSourcePreparationPlanV1.model_validate(
             {**plan.model_dump(), **changes}
         )
-
-
-def test_invalid_caller_approval_refuses_before_automatic_source_io(
-    tmp_path, monkeypatch
-):
-    plan, runner, state, metadata, _ = runner_case(tmp_path, monkeypatch)
-    approval = CallerApprovalEnvelopeV1(
-        input_digest="a" * 64,
-        decision="approved",
-        caller_id="different-caller",
-        decided_at=datetime.now(UTC),
-    )
-    with pytest.raises(ServiceError):
-        run(runner, plan, approval=approval)
-    assert state.provider_calls == state.parser_calls == 0
-    assert not metadata.acquisitions and not metadata.mappings
 
 
 def test_cli_rejects_wrong_automatic_plan_digest_before_startup(

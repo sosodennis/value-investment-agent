@@ -135,9 +135,7 @@ export function useAgent(assistantId = 'agent') {
         if (submittingInteractionRef.current === interactionId) return;
         submittingInteractionRef.current = interactionId;
         setSubmittingInteractionId(interactionId);
-        const text = response.type === 'ticker_selection'
-            ? `Selected ${response.selected_symbol}`
-            : response.decision === 'approve' ? 'Approved valuation' : 'Rejected valuation';
+        const text = `Selected ${response.selected_symbol}`;
         addUserMessage({ id: `user_${Date.now()}`, role: 'user', content: text, type: 'text' });
         try {
             const run = await resumeWorkflowRun(state.threadId, state.runId, {

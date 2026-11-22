@@ -14,8 +14,6 @@ from src.analysis_runtime.domain.contracts import (
     TickerCandidate,
     TickerSelectionRequest,
     TickerSelectionResponse,
-    ValuationApprovalRequest,
-    ValuationApprovalResponse,
     WorkflowActivityIdentity,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
@@ -237,7 +235,7 @@ class InterruptingRunner:
         )
 
 
-class ApprovalInterruptingRunner:
+class TickerInterruptingRunner:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
         self.responses: list[dict[str, object]] = []
@@ -247,13 +245,13 @@ class ApprovalInterruptingRunner:
         input_data = kwargs["input_data"]
         if "interrupt_response" not in input_data:
             activity = Activity(
-                activity_id="fundamental.calculation",
+                activity_id="intent.clarifying",
                 thread_id=kwargs["thread_id"],
                 run_id=kwargs["run_id"],
-                scope_path=("fundamental_analysis", "calculation"),
+                scope_path=("intent_extraction", "clarifying"),
                 kind="node",
                 status="waiting",
-                label="Review valuation assumptions",
+                label="Select ticker",
                 attempt=1,
             )
             yield InteractionRequested(
@@ -262,17 +260,15 @@ class ApprovalInterruptingRunner:
                     thread_id=kwargs["thread_id"],
                     run_id=kwargs["run_id"],
                     activity_id=activity.activity_id,
-                    interaction_id="approval-interaction-1",
+                    interaction_id="ticker-interaction-1",
                 ),
-                request=ValuationApprovalRequest(
-                    type="valuation_approval",
-                    contract_version="v1",
-                    ticker="AAPL",
-                    model_type="dcf_growth",
-                    title="Review valuation assumptions",
-                    description="Approve to run the deterministic valuation.",
-                    parameters={"wacc": 0.09, "terminal_growth": 0.025},
-                    audit_messages=["PASS: assumptions are consistent"],
+                request=TickerSelectionRequest(
+                    type="ticker_selection",
+                    title="Choose ticker",
+                    description="Select the resolved security.",
+                    candidates=[
+                        TickerCandidate(symbol="AAPL", name="Apple", confidence=1.0)
+                    ],
                 ),
             )
             return
@@ -287,7 +283,7 @@ class ApprovalInterruptingRunner:
             scope_path=tuple(input_data["resuming_scope_path"]),
             kind="node",
             status="completed",
-            label="Review valuation assumptions",
+            label="Select ticker",
             attempt=input_data["resuming_attempt"] + 1,
         )
 
@@ -734,9 +730,9 @@ async def test_claimed_resume_recovers_after_runtime_restart() -> None:
 
 
 @pytest.mark.asyncio
-async def test_versioned_approval_resumes_once_and_rejects_stale_duplicate() -> None:
+async def test_ticker_selection_resumes_once_and_rejects_stale_duplicate() -> None:
     repository = InMemoryActivityRepository()
-    runner = ApprovalInterruptingRunner()
+    runner = TickerInterruptingRunner()
     service = AnalysisRuntimeService(
         repository=repository,
         owner=Owner(),
@@ -751,24 +747,21 @@ async def test_versioned_approval_resumes_once_and_rejects_stale_duplicate() -> 
         principal_id="user", thread_id="thread", run_id=run_id
     )
     interaction = waiting.pending_interactions[0]
-    assert interaction.kind == "valuation_approval"
-    assert interaction.request.contract_version == "v1"
+    assert interaction.kind == "ticker_selection"
 
     with pytest.raises(InvalidInteractionResponseError):
         await service.resume(
             principal_id="user",
             identity=interaction.identity,
             response=TickerSelectionResponse(
-                type="ticker_selection", selected_symbol="AAPL"
+                type="ticker_selection", selected_symbol="MSFT"
             ),
         )
     assert (
         await service.snapshot(principal_id="user", thread_id="thread", run_id=run_id)
     ).run_status == "waiting"
 
-    response = ValuationApprovalResponse(
-        type="valuation_approval", contract_version="v1", decision="approve"
-    )
+    response = TickerSelectionResponse(type="ticker_selection", selected_symbol="AAPL")
     assert (
         await service.resume(
             principal_id="user", identity=interaction.identity, response=response
@@ -828,9 +821,9 @@ async def test_ticker_resume_preserves_original_valuation_request() -> None:
 
 
 @pytest.mark.asyncio
-async def test_approval_resume_command_recovers_after_runtime_restart() -> None:
+async def test_ticker_resume_command_recovers_after_runtime_restart() -> None:
     repository = InMemoryActivityRepository()
-    initial_runner = ApprovalInterruptingRunner()
+    initial_runner = TickerInterruptingRunner()
     service = AnalysisRuntimeService(
         repository=repository,
         owner=Owner(),
@@ -845,9 +838,7 @@ async def test_approval_resume_command_recovers_after_runtime_restart() -> None:
         principal_id="user", thread_id="thread", run_id=run_id
     )
     interaction = waiting.pending_interactions[0]
-    response = ValuationApprovalResponse(
-        type="valuation_approval", contract_version="v1", decision="reject"
-    )
+    response = TickerSelectionResponse(type="ticker_selection", selected_symbol="AAPL")
     await repository.claim_interaction_response(
         identity=interaction.identity,
         response=response,
@@ -855,7 +846,7 @@ async def test_approval_resume_command_recovers_after_runtime_restart() -> None:
         now=datetime.now(timezone.utc),
     )
 
-    recovered_runner = ApprovalInterruptingRunner()
+    recovered_runner = TickerInterruptingRunner()
     restarted = AnalysisRuntimeService(
         repository=repository,
         owner=Owner(),

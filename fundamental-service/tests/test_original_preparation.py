@@ -1,6 +1,7 @@
 """Original bootstrap reuses validation while retaining every refusal."""
 
 import json
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
@@ -486,6 +487,110 @@ def test_original_failure_retains_other_selected_original(tmp_path, monkeypatch)
     before = _inventory(tmp_path)
     again, repeated = execute(value)
     assert again == result and not repeated.wrote and _inventory(tmp_path) == before
+
+
+def test_producer_releases_reports_before_next_validation_and_read_reconstructs(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch, multiple_originals=True)
+    validate = value.service._validation
+    reports = []
+    events = []
+
+    def observed(*args):
+        assert all(report() is None for report in reports)
+        events.append("validation")
+        result = validate(*args)
+        if result.original is not None:
+            reports.append(weakref.ref(result.original.report))
+        return result
+
+    from fundamental_service import original_preparation as preparation
+
+    resolve = preparation.resolve_original_filing_identity
+
+    def identity(**kwargs):
+        assert events.count("validation") == 2
+        events.append("identity")
+        return resolve(**kwargs)
+
+    monkeypatch.setattr(value.service, "_validation", observed)
+    monkeypatch.setattr(preparation, "resolve_original_filing_identity", identity)
+    result, _ = execute(value)
+    assert all(report() is None for report in reports)
+    assert value.service.read(result.artifact_id) == result
+
+
+def test_published_producer_models_are_released_before_independent_reconstruction(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch, multiple_originals=True)
+    validate = value.acquisition.validate_original_filing
+    read = value.service.read_validation
+    produced = {}
+    reconstructed = set()
+
+    def produce(*args, **kwargs):
+        result = validate(*args, **kwargs)
+        produced[result.artifact_id] = (
+            weakref.ref(result),
+            weakref.ref(result.original.report)
+            if result.original is not None
+            else None,
+            canonical_bytes(result),
+        )
+        return result
+
+    def reconstruct(artifact_id, **kwargs):
+        expected = produced.get(artifact_id)
+        if expected is not None:
+            evidence, report, _ = expected
+            assert evidence() is None
+            assert report is None or report() is None
+        result = read(artifact_id, **kwargs)
+        if expected is not None:
+            assert canonical_bytes(result) == expected[2]
+            reconstructed.add(artifact_id)
+        return result
+
+    monkeypatch.setattr(value.acquisition, "validate_original_filing", produce)
+    monkeypatch.setattr(value.service, "read_validation", reconstruct)
+    result, publication = execute(value)
+    assert publication.wrote and len(result.filings) == 2
+    assert len(produced) == 2 and reconstructed == produced.keys()
+    assert any(report is not None for _, report, _ in produced.values())
+    assert value.service.read(result.artifact_id) == result
+
+
+def test_complete_selection_guard_precedes_identity_resolution(tmp_path, monkeypatch):
+    value = case(tmp_path, monkeypatch, multiple_originals=True)
+    validate = value.service._validation
+    count = 0
+
+    def changed(*args):
+        nonlocal count
+        result = validate(*args)
+        count += 1
+        return (
+            result.model_copy(
+                update={
+                    "request": result.request.model_copy(update={"cik": "0000000002"})
+                }
+            )
+            if count == 2
+            else result
+        )
+
+    def forbidden(**kwargs):
+        raise AssertionError("resolver ran before the whole-sequence guard")
+
+    monkeypatch.setattr(value.service, "_validation", changed)
+    monkeypatch.setattr(
+        "fundamental_service.original_preparation.resolve_original_filing_identity",
+        forbidden,
+    )
+    with pytest.raises(SnapshotError, match="selected originals differ"):
+        execute(value)
 
 
 def test_corrupt_retained_receipt_refuses_without_replacement_io(tmp_path, monkeypatch):

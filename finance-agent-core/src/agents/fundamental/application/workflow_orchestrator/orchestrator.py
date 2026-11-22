@@ -72,15 +72,13 @@ class FundamentalOrchestrator:
         state: Mapping[str, object],
         *,
         client: FundamentalServiceClient,
-        request_approval_fn: Callable[[JSONObject], object],
         timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     ) -> FundamentalNodeResult:
-        """Run caller-owned approval around the stateless Fundamental service."""
+        """Run validated exact input through the stateless Fundamental service."""
 
         return await run_service_valuation_flow(
             self,
             state,
             client=client,
-            request_approval_fn=request_approval_fn,
             timeout_seconds=timeout_seconds,
         )

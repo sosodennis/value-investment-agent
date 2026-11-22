@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react';
-import { CircleAlert, ExternalLink, Pencil, Search, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Pencil, Search, ShieldCheck } from 'lucide-react';
 import type {
     FundamentalAssumptionEvidence,
     FundamentalAutomaticPreparation,
 } from '@/types/agents/fundamental-service-facts';
-import { parseFundamentalAutomaticPreparation } from '@/types/agents/fundamental-service-facts';
-import type { InteractionResponse, WorkflowInteraction } from '@/features/workflow';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,11 +19,6 @@ import type {
 
 type Props = {
     preparation?: FundamentalAutomaticPreparation;
-    pendingApproval?: Extract<WorkflowInteraction, { kind: 'valuation_approval' }> | null;
-    onResumeInteraction?: (
-        interaction: WorkflowInteraction,
-        response: InteractionResponse
-    ) => Promise<void>;
     isSubmitting?: boolean;
     onRecalculate?: (manualOverride: Record<string, unknown>) => void;
     ticker?: string | null;
@@ -64,8 +57,6 @@ const formatMethod = (method: FundamentalAssumptionEvidence['method']): string =
 
 export function FundamentalReviewPanel({
     preparation,
-    pendingApproval = null,
-    onResumeInteraction,
     isSubmitting = false,
     onRecalculate,
     ticker = null,
@@ -75,21 +66,11 @@ export function FundamentalReviewPanel({
     onResearchForwardEvidence,
     onApplyForwardEvidence,
 }: Props) {
-    const preparationFromApproval = useMemo(() => {
-        const candidate = pendingApproval?.request.parameters.automatic_preparation;
-        if (candidate === undefined) return undefined;
-        try {
-            return parseFundamentalAutomaticPreparation(candidate);
-        } catch {
-            return undefined;
-        }
-    }, [pendingApproval]);
-    const effectivePreparation = preparation ?? preparationFromApproval;
     const editableEvidence = useMemo(
-        () => effectivePreparation?.assumptions_evidence.filter(
+        () => preparation?.assumptions_evidence.filter(
             (item) => item.editable && item.method !== 'manual'
         ) ?? [],
-        [effectivePreparation]
+        [preparation]
     );
     const [draftValues, setDraftValues] = useState<Record<string, string>>({});
     const [reason, setReason] = useState('');
@@ -101,17 +82,8 @@ export function FundamentalReviewPanel({
         ? researchPath
         : editableEvidence[0]?.path ?? '';
 
-    const respond = (decision: 'approve' | 'reject') => {
-        if (!pendingApproval || !onResumeInteraction) return;
-        void onResumeInteraction(pendingApproval, {
-            type: 'valuation_approval',
-            contract_version: pendingApproval.request.contract_version,
-            decision,
-        });
-    };
-
     const submitOverride = (evidence: FundamentalAssumptionEvidence) => {
-        if (!effectivePreparation || !onRecalculate) return;
+        if (!preparation || !onRecalculate) return;
         const value = (draftValues[evidence.path] ?? formatValue(evidence.value)).trim();
         if (!value) {
             setError(`Enter a value for ${evidence.path}.`);
@@ -124,34 +96,34 @@ export function FundamentalReviewPanel({
         setError(null);
         onRecalculate({
             contract_version: 'fundamental.v1',
-            preparation: effectivePreparation,
+            preparation,
             path: evidence.path,
             value,
             provenance: {
                 author: 'workspace-user',
                 modified_at: new Date().toISOString(),
                 reason: reason.trim(),
-                automatic_preparation_digest: effectivePreparation.preparation_digest,
+                automatic_preparation_digest: preparation.preparation_digest,
             },
         });
     };
 
     const applyForwardEvidence = (claim: ForwardEvidenceClaim) => {
-        if (!effectivePreparation || !claim.assumption_path || !onApplyForwardEvidence) return;
-        const evidence = effectivePreparation.assumptions_evidence.find(
+        if (!preparation || !claim.assumption_path || !onApplyForwardEvidence) return;
+        const evidence = preparation.assumptions_evidence.find(
             (item) => item.path === claim.assumption_path && item.editable && item.method !== 'manual'
         );
         if (!evidence || claim.status !== 'accepted' || !claim.source.license_reference) return;
         onApplyForwardEvidence({
             contract_version: 'fundamental.v1',
-            preparation: effectivePreparation,
+            preparation,
             path: claim.assumption_path,
             value: claim.value,
             provenance: {
                 author: 'workspace-user',
                 modified_at: new Date().toISOString(),
                 reason: `Applied cited forward evidence ${claim.claim_id}.`,
-                automatic_preparation_digest: effectivePreparation.preparation_digest,
+                automatic_preparation_digest: preparation.preparation_digest,
                 forward_reference: {
                     claim_id: claim.claim_id,
                     source_url: claim.source.source_url,
@@ -165,95 +137,58 @@ export function FundamentalReviewPanel({
 
     return (
         <section className="grid gap-4" aria-label="Fundamental preparation review">
-            {pendingApproval && (
-                <Alert variant="warning" role="alert">
-                    <CircleAlert className="size-4" />
-                    <AlertTitle>{pendingApproval.request.title}</AlertTitle>
-                    <div className="grid gap-3 text-sm opacity-90">
-                        <p>{pendingApproval.request.description}</p>
-                        <p className="font-medium text-foreground">
-                            {pendingApproval.request.ticker} · {pendingApproval.request.model_type}
-                        </p>
-                        {pendingApproval.request.audit_messages.length > 0 && (
-                            <ul className="grid gap-1 text-sm">
-                                {pendingApproval.request.audit_messages.map((message, index) => (
-                                    <li key={`${index}:${message}`}>{message}</li>
-                                ))}
-                            </ul>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                            <Button
-                                type="button"
-                                disabled={isSubmitting || !onResumeInteraction}
-                                onClick={() => respond('approve')}
-                            >
-                                Confirm and calculate
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={isSubmitting || !onResumeInteraction}
-                                onClick={() => respond('reject')}
-                            >
-                                Reject calculation
-                            </Button>
-                        </div>
-                    </div>
-                </Alert>
-            )}
-
-            {effectivePreparation && (
+            {preparation && (
                 <Card>
                     <CardHeader className="gap-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <CardTitle className="text-base">Automatic valuation preparation</CardTitle>
-                            <Badge variant={effectivePreparation.quality_status === 'verified' ? 'success' : 'warning'}>
-                                {QUALITY_LABELS[effectivePreparation.quality_status]}
+                            <Badge variant={preparation.quality_status === 'verified' ? 'success' : 'warning'}>
+                                {QUALITY_LABELS[preparation.quality_status]}
                             </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                            {effectivePreparation.model_id} · {effectivePreparation.model_version} · policy {effectivePreparation.policy_version}
+                            {preparation.model_id} · {preparation.model_version} · policy {preparation.policy_version}
                         </p>
                     </CardHeader>
                     <CardContent className="grid gap-4">
                         <dl className="grid gap-2 text-xs sm:grid-cols-2">
                             <div>
                                 <dt className="text-muted-foreground">Preparation digest</dt>
-                                <dd className="break-all font-mono">{effectivePreparation.preparation_digest}</dd>
+                                <dd className="break-all font-mono">{preparation.preparation_digest}</dd>
                             </div>
                             <div>
                                 <dt className="text-muted-foreground">Evidence profile</dt>
-                                <dd className="break-all font-mono">{effectivePreparation.profile_id}</dd>
+                                <dd className="break-all font-mono">{preparation.profile_id}</dd>
                             </div>
                             <div>
                                 <dt className="text-muted-foreground">Policy</dt>
-                                <dd className="break-words">{effectivePreparation.policy_id}</dd>
+                                <dd className="break-words">{preparation.policy_id}</dd>
                             </div>
                             <div>
                                 <dt className="text-muted-foreground">Status</dt>
-                                <dd>{effectivePreparation.status}</dd>
+                                <dd>{preparation.status}</dd>
                             </div>
                         </dl>
 
-                        {effectivePreparation.issue_codes.length > 0 && (
+                        {preparation.issue_codes.length > 0 && (
                             <Alert variant="warning">
                                 <ShieldCheck className="size-4" />
                                 <AlertTitle>Quality notes</AlertTitle>
                                 <div className="text-sm opacity-90">
                                     <ul className="grid gap-1">
-                                        {effectivePreparation.issue_codes.map((code) => <li key={code}>{code}</li>)}
+                                        {preparation.issue_codes.map((code) => <li key={code}>{code}</li>)}
                                     </ul>
                                 </div>
                             </Alert>
                         )}
 
-                        {effectivePreparation.missing_evidence.length > 0 && (
+                        {preparation.missing_evidence.length > 0 && (
                             <p className="text-sm text-warning">
-                                Missing evidence: {effectivePreparation.missing_evidence.join(', ')}
+                                Missing evidence: {preparation.missing_evidence.join(', ')}
                             </p>
                         )}
 
-                        {onResearchForwardEvidence && effectivePreparation.status === 'prepared' && ticker && (
+                        {onResearchForwardEvidence && preparation.status === 'prepared' && ticker && (
                             <div className="grid gap-3 border-t pt-4" aria-label="Optional forward evidence">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -307,21 +242,21 @@ export function FundamentalReviewPanel({
                             </div>
                         )}
 
-                        {effectivePreparation.assumptions_evidence.length > 0 && (
+                        {preparation.assumptions_evidence.length > 0 && (
                             <div className="grid gap-3">
                                 <div>
                                     <h3 className="text-sm font-semibold">Assumptions and evidence</h3>
                                     <p className="text-xs text-muted-foreground">
                                         Values come from Fundamental Service. Overrides retain the automatic evidence and create a new input digest.
                                     </p>
-                                    {effectivePreparation.assumptions_evidence_truncated !== undefined && (
+                                    {preparation.assumptions_evidence_truncated !== undefined && (
                                         <p className="mt-1 text-xs text-muted-foreground">
-                                            {effectivePreparation.assumptions_evidence_truncated} additional evidence entries are omitted from this compact review.
+                                            {preparation.assumptions_evidence_truncated} additional evidence entries are omitted from this compact review.
                                         </p>
                                     )}
                                 </div>
                                 <div className="grid gap-3">
-                                    {effectivePreparation.assumptions_evidence.map((evidence) => {
+                                    {preparation.assumptions_evidence.map((evidence) => {
                                         const currentValue = draftValues[evidence.path] ?? formatValue(evidence.value);
                                         return (
                                             <div key={`${evidence.path}:${evidence.method}`} className="grid gap-2 border p-3">

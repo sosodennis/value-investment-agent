@@ -27,6 +27,39 @@ _DEI_NAMESPACE = re.compile(r"http://xbrl\.(?:sec\.gov|us)/dei/\d{4}(?:-\d{2}-\d
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
+_ORIGINAL_IDENTITY_EVIDENCE_CONCEPTS = ORIGINAL_IDENTITY_CONCEPTS | {
+    "dei:NoTradingSymbolFlag"
+}
+_MAX_PROJECTED_IDENTITY_FACTS = 4096
+
+
+def _original_currency_unit_candidate(fact: ParsedXbrlFactV1) -> bool:
+    return bool(
+        _GAAP_NAMESPACE.fullmatch(fact.namespace_uri or "")
+        and fact.is_numeric
+        and fact.unit is not None
+        and re.fullmatch(r"iso4217:[A-Z]{3}", fact.unit)
+        and not fact.dimensions
+        and fact.consolidation_scope == "consolidated"
+    )
+
+
+def original_identity_evidence_facts(
+    facts: tuple[ParsedXbrlFactV1, ...],
+) -> tuple[ParsedXbrlFactV1, ...]:
+    """Keep ordered identity inputs; bound extra references without losing facts."""
+    selected: list[ParsedXbrlFactV1] = []
+    for fact in facts:
+        if (
+            fact.concept in _ORIGINAL_IDENTITY_EVIDENCE_CONCEPTS
+            or _original_currency_unit_candidate(fact)
+        ):
+            if len(selected) == _MAX_PROJECTED_IDENTITY_FACTS:
+                return facts
+            selected.append(fact)
+    return tuple(selected)
+
+
 OriginalSecuritySelectionPolicy = Literal[
     "original-dei-single-common-stock-v1",
     "original-dei-paired-common-stock-v2",
@@ -660,12 +693,7 @@ def validate_original_filing_identity(
     monetary_units = {
         fact.unit
         for fact in facts
-        if _GAAP_NAMESPACE.fullmatch(fact.namespace_uri or "")
-        and fact.is_numeric
-        and fact.unit is not None
-        and re.fullmatch(r"iso4217:[A-Z]{3}", fact.unit)
-        and not fact.dimensions
-        and fact.consolidation_scope == "consolidated"
+        if _original_currency_unit_candidate(fact)
         and (fact.period_end == report_end or fact.instant == report_end)
         and (fact.entity_identifier or "").isascii()
         and (fact.entity_identifier or "").isdigit()

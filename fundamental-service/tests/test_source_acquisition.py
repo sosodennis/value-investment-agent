@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
+from fastapi.testclient import TestClient
+from fundamental_service.app import create_app
 from fundamental_service.arelle_parser import ArelleValidationProfileV1
 from fundamental_service.contracts import (
     IdentityV1,
@@ -20,12 +22,13 @@ from fundamental_service.historical_dqc import (
     OFFICIAL_SOURCE_SHA256,
 )
 from fundamental_service.serialization import sha256_digest
-from fundamental_service.snapshots import FilesystemContentStore
+from fundamental_service.snapshots import FilesystemContentStore, SnapshotError
 from fundamental_service.source_acquisition import (
     SecAcquisitionUseCase,
     parse_supported_filing_forms,
     parse_supported_filing_years,
 )
+from fundamental_service.testsupport import auth_headers, make_internal_envelope
 
 
 def test_sec_filing_index_selects_only_primary_schema_and_linkbases():
@@ -550,6 +553,77 @@ def _sec_request() -> SecIngestionRequestV1:
         taxonomy_version="us-gaap-2023-2024",
         policy_version="sec-public-pit-v1",
     )
+
+
+def test_mapping_rejection_leaves_logging_to_the_http_boundary(caplog):
+    class MissingMappingMetadata:
+        @staticmethod
+        def get_mapping(_decision_id):
+            raise SnapshotError("PRIVATE_MAPPING_DETAIL", "private mapping detail")
+
+    use_case = object.__new__(SecAcquisitionUseCase)
+    use_case.metadata = MissingMappingMetadata()
+    request = _sec_request().model_copy(
+        update={
+            "mappings": (
+                SecMappingReferenceV1(
+                    decision_id="private-decision-id",
+                    mapping_version="sec-us-gaap-v1",
+                    normalized_field="private-normalized-field",
+                ),
+            )
+        }
+    )
+
+    with caplog.at_level("WARNING", logger="fundamental_service"):
+        with pytest.raises(ServiceError) as raised:
+            use_case._resolve_mappings(request)
+
+    assert raised.value.code == "FACT_MAPPING_UNRESOLVED"
+    assert raised.value.message == "requested mapping release is unavailable"
+    assert caplog.records == []
+
+
+def test_mapping_error_logs_safe_http_boundary_context(monkeypatch, caplog):
+    def fail_mapping(_self, *_args, **_kwargs):
+        raise ServiceError(
+            "FACT_MAPPING_UNRESOLVED",
+            "private mapping release detail",
+            status_code=422,
+            retryable=False,
+        )
+
+    monkeypatch.setattr(SecAcquisitionUseCase, "execute", fail_mapping)
+    use_case = object.__new__(SecAcquisitionUseCase)
+    client = TestClient(create_app(sec_acquisition=use_case))
+    correlation = "caller-mapping-correlation"
+    headers = auth_headers()
+    headers["X-Correlation-ID"] = correlation
+
+    with caplog.at_level("WARNING", logger="fundamental_service"):
+        response = client.post(
+            "/v1/data/ingestions",
+            headers=headers,
+            json=make_internal_envelope(
+                _sec_request().model_dump(mode="json"), correlation_id=correlation
+            ),
+        )
+
+    assert response.status_code == 422
+    assert response.headers["X-Correlation-ID"] == correlation
+    assert response.json()["correlation_id"] == correlation
+    record = next(
+        item
+        for item in caplog.records
+        if item.getMessage().startswith("fundamental_error_response ")
+    )
+    assert record.error_code == "FACT_MAPPING_UNRESOLVED"
+    assert record.route_template == "/v1/data/ingestions"
+    assert record.request_log_id != correlation
+    assert "private mapping release detail" not in caplog.text
+    assert "private-decision-id" not in caplog.text
+    assert "private-normalized-field" not in caplog.text
+    assert correlation not in caplog.text
 
 
 def _runtime_settings() -> SimpleNamespace:

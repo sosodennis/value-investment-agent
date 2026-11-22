@@ -536,7 +536,6 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
     from fundamental_service.automatic_source_mapping import (
         AutomaticSecIngestionRequestV1,
     )
-    from fundamental_service.contracts import CallerApprovalEnvelopeV1
     from fundamental_service.preparation_runner import SourcePreparationRunner
     from fundamental_service.source_plan_contracts import (
         AutomaticSourcePreparationPlanV1,
@@ -549,7 +548,6 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
         _acquisition,
         _run,
         _reader,
-        VALUATION_TIME,
     )
 
     fixture = _fixture(tmp_path, released=False)
@@ -655,20 +653,14 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
         monkeypatch.setattr(runner, "_persist", persist)
     first = _run(runner, plan)
     report = _reader(fixture, first)
-    assert report.status == "approval_required" and report.calculation is None
+    assert report.status == "prepared" and report.calculation is None
     assert len(report.source_outcomes) == 1 and report.automatic_release_ref is None
     assert report.fact_evidence_inventory is not None
     second = _run(runner, plan)
     assert second.artifact == first.artifact and not second.wrote
     assert len(calls) == 1 and len(acquisition.calls) == 1
     assert fixture.state.publications == 1
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=report.preparation.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-    calculated = _reader(fixture, _run(runner, plan, approval=approval))
+    calculated = _reader(fixture, _run(runner, plan, prepare_only=False))
     assert (
         calculated.status == "calculated"
         and calculated.calculation.base.per_share_value > 0

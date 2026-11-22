@@ -8,7 +8,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from fundamental_service.application.service import ServiceError
 from fundamental_service.contracts import (
-    CallerApprovalEnvelopeV1,
     QualityStatus,
     ValuationEvidenceReadRequestV1,
 )
@@ -370,7 +369,7 @@ def test_source_runner_publishes_policy_before_activation_and_formal_preparation
     )
     first = _run(runner, fixture.plan, **kwargs)
     report = _reader(fixture, first)
-    assert report.status == "approval_required"
+    assert report.status == "prepared"
     assert report.preparation.input.policy_id == case.expected.policy_id
     assert report.market_policy_deployment_ref is not None
     assert report.market_policy_deployment_ref.content_hash in (
@@ -380,19 +379,13 @@ def test_source_runner_publishes_policy_before_activation_and_formal_preparation
     repeated = _run(runner, fixture.plan, **kwargs)
     assert repeated.artifact == first.artifact and not repeated.wrote
     assert _files(tmp_path) == before
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=report.preparation.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=fixture.snapshot.valuation_timestamp,
-    )
-    calculated = _run(runner, fixture.plan, approval=approval, **kwargs)
+    calculated = _run(runner, fixture.plan, prepare_only=False, **kwargs)
     result = _reader(fixture, calculated)
     assert result.status == "calculated"
     assert result.calculation.base.per_share_value > 0
     assert result.calculation.base.quality_status is QualityStatus.PROVISIONAL
     before = _files(tmp_path)
-    repeated = _run(runner, fixture.plan, approval=approval, **kwargs)
+    repeated = _run(runner, fixture.plan, prepare_only=False, **kwargs)
     assert repeated.artifact == calculated.artifact and not repeated.wrote
     assert _files(tmp_path) == before
 

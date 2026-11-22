@@ -8,6 +8,7 @@ from fundamental_service import mapping_input_identity as identity
 from fundamental_service.contracts import IdentityV1
 from fundamental_service.mapping_input_identity import MappingInputDigests
 from fundamental_service.serialization import sha256_digest
+from fundamental_service.arelle_parser import fact_semantic_digest
 from test_automatic_mapping import case
 from test_automatic_mapping_batch import batch_case
 
@@ -166,3 +167,65 @@ def test_accounting_observation_index_preserves_ids_and_retention_budget(tmp_pat
     assert dict(tiny.report_facts(report)) == dict(observed)
     assert tiny.report_facts(report) is not tiny.report_facts(report)
     assert tiny._size <= tiny._max_bytes and not tiny._reports
+
+
+@pytest.mark.parametrize(
+    "limits", ({}, {"max_bytes": 0}, {"max_reports": 0}, {"max_bytes": 1})
+)
+@pytest.mark.parametrize("offset", (0, 8))
+@pytest.mark.parametrize("reverse", (False, True))
+def test_all_lazy_identities_preserve_full_wire_bytes_with_duplicates_and_budgets(
+    tmp_path, limits, offset, reverse
+):
+    report = case(tmp_path)[0].original.report
+    facts = (*report.facts, report.facts[0], report.facts[-1])
+    if reverse:
+        facts = tuple(reversed(facts))
+    report = report.model_copy(
+        update={
+            "facts": facts,
+            "parsed_at": report.parsed_at.astimezone(timezone(timedelta(hours=offset))),
+            "execution_evidence": ("test-execution-proof",),
+        }
+    )
+    full = report.model_dump(mode="json")
+    semantic = {
+        "fact_count": len(facts),
+        "facts": sorted(full["facts"], key=sha256_digest),
+    }
+    replay = {
+        name: full[name]
+        for name in (
+            "parser_version",
+            "taxonomy_version",
+            "validation_profile_digest",
+            "source_content_hash",
+            "taxonomy_cache_hash",
+            "validation_engines",
+            "validation_evidence",
+            "offline",
+            "network_attempt_count",
+        )
+    }
+    replay.update(
+        facts=semantic["facts"], findings=sorted(full["findings"], key=sha256_digest)
+    )
+    computation = {
+        key: value for key, value in full.items() if key != "execution_evidence"
+    }
+    computation["parsed_at"] = report.parsed_at
+    checks = MappingInputDigests(**limits)
+    for _ in range(2):
+        assert checks.report_content_digest(report) == sha256_digest(full)
+        assert (
+            checks.report_replay_digest(report)
+            == sha256_digest(replay)
+            == report.replay_digest()
+        )
+        assert (
+            checks.report_fact_digest(report)
+            == sha256_digest(semantic)
+            == fact_semantic_digest(report)
+        )
+        assert checks.report_computation_digest(report) == sha256_digest(computation)
+        assert dict(checks.report_facts(report)) == {sha256_digest(f): f for f in facts}

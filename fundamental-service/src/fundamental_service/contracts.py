@@ -1639,20 +1639,6 @@ class ProvenanceInputV1(StrictModel):
     )
 
 
-class CallerApprovalEnvelopeV1(StrictModel):
-    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    decision: Literal["approved", "rejected"]
-    caller_id: str = Field(min_length=1)
-    decided_at: datetime
-
-    @field_validator("decided_at")
-    @classmethod
-    def decision_has_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("decided_at must include a timezone")
-        return value
-
-
 class ValuationInputV1(StrictModel):
     model_config = ConfigDict(json_schema_extra=_valuation_input_json_schema)
 
@@ -1668,7 +1654,6 @@ class ValuationInputV1(StrictModel):
     model_version: str = Field(min_length=1)
     policy_id: str | None = None
     input_digest: str | None = None
-    caller_approval: CallerApprovalEnvelopeV1 | None = None
 
     @model_validator(mode="after")
     def model_assumptions_present(self) -> ValuationInputV1:
@@ -1713,24 +1698,17 @@ class ValuationInputV1(StrictModel):
         return self
 
     @model_validator(mode="after")
-    def digest_and_approval(self) -> ValuationInputV1:
-        payload = self.model_dump(exclude={"input_digest", "caller_approval"})
+    def validate_digest(self) -> ValuationInputV1:
+        payload = self.model_dump(exclude={"input_digest"})
         computed = sha256_digest(payload)
         if self.input_digest is not None and (
             not is_digest(self.input_digest) or self.input_digest != computed
         ):
             raise ValueError("input_digest does not match canonical valuation input")
-        if (
-            self.caller_approval is not None
-            and self.caller_approval.input_digest != computed
-        ):
-            raise ValueError("caller approval is bound to a different input_digest")
         return self
 
     def with_digest(self) -> ValuationInputV1:
-        digest = sha256_digest(
-            self.model_dump(exclude={"input_digest", "caller_approval"})
-        )
+        digest = sha256_digest(self.model_dump(exclude={"input_digest"}))
         return self.model_copy(update={"input_digest": digest})
 
 
@@ -1787,7 +1765,6 @@ class PolicyValuationInputV1(StrictModel):
     model_version: str = Field(min_length=1)
     policy_id: str = Field(min_length=1)
     input_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    caller_approval: CallerApprovalEnvelopeV1 | None = None
 
 
 class ValidationResponseV1(StrictModel):
@@ -1910,8 +1887,6 @@ class CalculationEvidenceV1(StrictModel):
         trace = calculation.trace
         if trace is None:
             raise ValueError("calculation evidence requires a complete trace")
-        if self.request.caller_approval is not None:
-            raise ValueError("caller approval evidence must not be persisted")
         if (
             calculation.input_digest != self.request.input_digest
             or calculation.snapshot_id != trace.snapshot_id

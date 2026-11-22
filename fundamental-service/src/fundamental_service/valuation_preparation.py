@@ -876,7 +876,6 @@ def apply_manual_override(
             "assumptions": assumptions,
             "uncertainty": UncertaintyV1(mode="none"),
             "input_digest": None,
-            "caller_approval": None,
         }
     ).with_digest()
     if preparation.input.uncertainty.mode == "monte_carlo":

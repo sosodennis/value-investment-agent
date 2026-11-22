@@ -117,7 +117,6 @@ class EnterpriseResearchReportV1(StrictModel):
         "quote_entitlement",
         "common_equity_value",
         "per_share_value",
-        "caller_approval",
         "validated_history_threshold",
     )
 

@@ -197,7 +197,7 @@ marker references this record. Fresh `sec-parser-action-use-v2` audit events
 separately retain genuine use time and hit/miss, referencing that binding.
 Thus same-delivery reuses preserve report/issuer/mapping identity; new delivery
 bindings remain distinguishable while the body keeps its original `parsed_at`.
-Neither record grants source-use permission or exact-input approval. Existing
+Neither record grants source-use permission. Existing
 PostgreSQL exact-key locking, recoverable attempts and atomic result indexing
 remain the only parser action coordination mechanism.
 

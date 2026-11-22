@@ -253,23 +253,19 @@ Canonical acquisition outcomes are stored under the pinned plan identity and
 retained across release, preparation and calculation reports, including restarts.
 Invalid or changed outcome evidence refuses before release resolution. Repeated
 outcomes and reports reuse their artifacts without new writes. This source check
-does not approve a release, establish award/market completeness, supply caller
-approval or promote the history threshold.
+does not approve a release, establish award/market completeness or promote the
+history threshold.
 
 For supported combined evidence, the runner checks the retained batch input,
 model, policy, evaluator, source and per-role decisions against the immutable
 release. `--candidate` still requires the independent release canary and
-authorization. `--approval` still requires the caller's decision for the exact
-prepared input. The command does not infer either approval from a machine
+authorization. The command never infers trusted release authority from a machine
 mapping certificate. Existing `source-preparation-v2` manual plans remain valid.
 
-Supplied valuation approvals must identify the authenticated request subject.
-The calculation, policy-calculation and uncertainty HTTP endpoints reject another
-`caller_id` or a decision later than receipt before invoking the application.
-`decided_at` must include a timezone. Direct calculation retains optional
-approval; `fundamental-prepare-source` requires approval of its exact prepared
-input before calculation and applies the same actor/time check before source or
-release access. Approval remains outside persisted public calculation evidence.
+The calculation, policy-calculation and uncertainty HTTP endpoints require internal
+authentication and validate exact input digests. Source and issuer commands
+calculate valid prepared inputs directly; `--prepare-only` persists `prepared`
+evidence without calculating. Source-use, mapping and release checks still run.
 
 Mapping approval uses Fundamental Service's `source-bound-us-gaap-v25` policy.
 It handles a narrow table of direct role/QName combinations, including
@@ -304,8 +300,8 @@ in the pinned profile and receive no SEC mapping approval. The batch decision
 references the exact child decisions and certificates. Its content digest excludes
 write receipts, so complete repeats preserve the report bytes and return aggregate
 `wrote=false`. Partial writes can be resumed through the existing immutable stores.
-Mapping coverage alone does not establish complete periods, a trusted release,
-valuation readiness or caller approval.
+Mapping coverage alone does not establish complete periods, a trusted release or
+valuation readiness.
 
 Create an `AutomaticMappingRequestV1` from retained original issuer evidence,
 its matching SEC integrity record, a provisional mapping proposal and ordered
@@ -385,15 +381,11 @@ selects again. Current released mapping/fact checks and independent canary
 verification still run. Missing acquisitions remain a release miss so a new
 plan can acquire them; corrupt evidence remains an error. This reuse does not
 change input identities, signatures or the absolute execution deadline.
-The authenticated automatic caller obtains a `PreparedValuationOperation` from
-the application owner. It carries the formal preparation through the policy
-decision under the original deadline, then supplies that same expected input to
-the existing conditional calculator checks. The operation accepts approval of
-the exact input, checks for preparation mutation, and rechecks current release
-artifacts, every declared fact row and pinned approved mapping metadata before
-calculation. It is an in-process
-stage, not a serialized authorization flag. Direct calculation requests still
-recompose conditional inputs; each new automatic request prepares again.
+After source preparation and release checks, the issuer command calculates the
+exact prepared input. The authenticated calculation boundary recomposes conditional
+inputs and rechecks current release artifacts, every declared fact row and pinned
+approved mapping metadata before calculation. Invalid evidence refuses without
+publishing an execution. `--prepare-only` ends with `prepared` evidence.
 Only approved decisions receive `AutomaticMappingApprovalV1` certificates.
 Receipts record exact `source_revision`, input/output digests and separate
 publication results. Identical inputs and retained evidence return `wrote=false`
@@ -414,7 +406,7 @@ reproduce approved observations. A signature alone cannot admit a fabricated
 mapping. Optional `security_identity` checks the exact original's historical DEI
 before producing security-bound disclosure rules. That binding does not establish
 complete economic-class or award coverage. This command does not activate
-releases, grant exact-input caller approval or run a valuation. History thresholds
+releases or run a valuation. History thresholds
 remain null.
 
 ## Sign an independent mapping review
@@ -466,7 +458,7 @@ publish signed evidence or print private keys, source bytes or validation values
 The statement's time is supplied by the reviewer, never generated by the command.
 
 This command does not run semantic review or the release canary, activate a
-release, approve financial policy, supply caller approval, or verify an estimated
+release, approve financial policy or verify an estimated
 history threshold. Continue with the existing signed release verification and
 canary workflow; an authentic signature alone does not establish those gates.
 
@@ -526,7 +518,7 @@ not force an approval or reuse an earlier automatic policy certificate.
 The release canary reproduces the policy evaluation and accounting facts before
 accepting machine approval. Unsupported classifications and absence claims still
 abstain; a machine signature does not fill evidence gaps. Release verification,
-authentic caller approval, numerical acceptance and PR review remain required.
+numerical acceptance and PR review remain required.
 
 ## Recovery checks
 
@@ -590,7 +582,7 @@ does not modify existing content files.
 
 Deployment secrets, trust roots, parser/taxonomy assets and service configuration
 are not data backup contents. Restore their separately pinned deployment inputs
-before starting the service; existing release-trust and caller-approval checks
+before starting the service; existing release-trust and exact-input checks
 remain enforced. After restore, check `/readyz`, retrieve a known snapshot and
 valuation artifact, and rerun its pinned preparation/calculation. Compare all
 source/input/output digests with the recorded evidence. A successful copy alone
@@ -609,7 +601,7 @@ classification policy is supported. Preparation rejects positive observation
 overlap with cash/working capital; these checks do not infer complete semantics.
 Existing artifacts and policies remain retained under their original identities.
 Old model versions are refused by the current graph. Prepare the new model input
-and obtain its exact caller approval before calculation.
+and calculate it after the current evidence checks.
 
 The v3 initial policies supply eligibility metadata with no default assumptions
 or market inputs. The earlier v2 bootstrap market inputs asserted approval
@@ -622,8 +614,8 @@ reproduce source/selection/time evidence before signing; generating a signature
 cannot substitute for that evaluation.
 
 Automatic FCFF inputs identify `fcff-forecast-composer-v5` in
-`provenance.preparation_version`, which participates in the input digest and
-caller approval. This composer implements the declared `lease-treatment-v1`:
+`provenance.preparation_version`, which participates in the input digest. This
+composer implements the declared `lease-treatment-v1`:
 only current/noncurrent finance lease obligations enter the equity-bridge lease
 deduction. Operating lease costs remain in FCFF; operating lease balances remain
 required source observations without a second equity deduction. The lease
@@ -658,7 +650,7 @@ once; sensitivity paths must be distinct. One-at-a-time sensitivity cannot
 express a coupled hypothesis: use a scenario when operands must change together.
 
 The complete parent request binds every scenario and sensitivity value to its
-input digest and optional caller approval. Saved uncertainty evidence includes
+input digest. Saved uncertainty evidence includes
 the full controls and resulting calculation artifacts; replay uses the pinned
 runtime. Provisional input quality remains provisional. These execution paths
 provide no source completeness, probability, claim bounds or release authority.
@@ -718,7 +710,7 @@ path reject mismatches and missing source bytes. The formal composer applies the
 treasury-stock method under the existing Decimal policy and preserves per-class
 anti-dilution exclusions. Unknown performance conditions, missing inventory or
 quote, stale/future evidence and unsupported share scope refuse per-share preparation.
-The full bundle digest participates in the prepared input and caller approval;
+The full bundle digest participates in the prepared input;
 equal numerical share counts do not make different quote evidence interchangeable.
 These contracts provide no independent review or release authority themselves.
 
@@ -812,7 +804,7 @@ fresh worker-thread calls.
 
 This fixes ambient-context drift while preserving the intended 50-digit FCFF
 formulas, public schemas, model identities and canonical results. Stored
-artifacts and caller approvals are not rewritten. It does not include the
+artifacts are not rewritten. It does not include the
 separate #361 lease/composer-version/provider changes. A precision34 migration
 requires its own versioned numerical policy and evidence; the former target
 table contradicted the model inventory's released50-digit policy.

@@ -98,10 +98,12 @@ staging account. With `STAGING_KEY_IMPORT_FILE` set, it imports the whole CSV
 as one asynchronous batch, requires every non-empty CSV row to be imported or
 reported as a duplicate with no invalid or retryable rows, and tests every
 labelled key against the live provider service. It then starts the AAPL
-workflow and waits for the required valuation approval checkpoint. The
-acceptance run must stop at that checkpoint. Do not approve the valuation and
-do not run the deterministic calculation during this infrastructure
-acceptance.
+workflow, answers ticker selection when needed, and waits for completion with
+no pending interaction. It requires workflow events, at least one completed
+output, and authenticated retrieval of every output artifact. Calculations use
+the service's input and evidence checks. This infrastructure smoke establishes
+workflow completion and artifact access; numerical acceptance remains a separate
+check against the valuation's exact inputs and evidence.
 
 For organization and notification acceptance, run the fresh-staging harness
 after the infrastructure smoke. It creates four disposable users, two
@@ -196,7 +198,7 @@ that alters any of the following:
 - Required environment variables, generated key types, secret sources, or
   credential rotation procedures.
 - The staging smoke endpoints, asynchronous import contract, provider test,
-  AAPL workflow, approval checkpoint, or report redaction checks.
+  AAPL workflow completion, artifact access, or report redaction checks.
 - Organization membership, directory search, invitation lifecycle, inbox
   notification, organization context selection, provider/Search sharing or
   isolation, and browser acceptance routes.

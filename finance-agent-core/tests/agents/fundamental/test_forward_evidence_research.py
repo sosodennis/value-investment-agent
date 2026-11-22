@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -157,7 +157,7 @@ async def test_research_calls_search_llm_and_service_only_after_opt_in() -> None
             subject_id="user-1", organization_id="org-1", membership_id="member-1"
         ),
         correlation_id="corr-1",
-        deadline_at=datetime(2026, 11, 11, 0, 1, tzinfo=UTC),
+        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
     )
 
     assert result.status == "prepared"
@@ -184,7 +184,7 @@ async def test_search_failure_does_not_call_llm_or_fundamental_service() -> None
             subject_id="user-1", organization_id="org-1", membership_id="member-1"
         ),
         correlation_id="corr-1",
-        deadline_at=datetime(2026, 11, 11, 0, 1, tzinfo=UTC),
+        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
     )
 
     assert result.status == "unavailable"
@@ -205,7 +205,7 @@ async def test_llm_failure_is_optional_and_does_not_degrade_baseline() -> None:
             subject_id="user-1", organization_id="org-1", membership_id="member-1"
         ),
         correlation_id="corr-1",
-        deadline_at=datetime(2026, 11, 11, 0, 1, tzinfo=UTC),
+        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
     )
 
     assert result.status == "unavailable"
@@ -225,7 +225,7 @@ async def test_source_budget_blocks_oversized_discovery_payload_before_llm() -> 
             subject_id="user-1", organization_id="org-1", membership_id="member-1"
         ),
         correlation_id="corr-1",
-        deadline_at=datetime(2026, 11, 11, 0, 1, tzinfo=UTC),
+        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
     )
 
     assert result.status == "unavailable"
@@ -251,7 +251,7 @@ async def test_expired_deadline_skips_optional_providers() -> None:
             subject_id="user-1", organization_id="org-1", membership_id="member-1"
         ),
         correlation_id="corr-1",
-        deadline_at=datetime(2026, 10, 31, 23, 59, tzinfo=UTC),
+        deadline_at=datetime.now(UTC) - timedelta(seconds=1),
     )
 
     assert result.status == "unavailable"

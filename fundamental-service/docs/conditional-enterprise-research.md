@@ -49,8 +49,8 @@ Requests canonicalize facts, scenario order and evidence references. Reports
 retain the complete operating preparation, discount scenarios, model-spec
 digest and input/output digests. Existing immutable artifact storage can persist
 requests/reports by digest, using its locks and temporary-file/atomic-rename
-writer. The research functions perform no I/O, signing, release activation,
-caller approval or HTTP orchestration. This is a callable research method;
+writer. The research functions perform no I/O, signing, release activation or
+HTTP orchestration. This is a callable research method;
 it is not automatically substituted into production valuation preparation.
 
 `fundamental-research-enterprise` persists this method through the Service's
@@ -80,6 +80,6 @@ release assertion; exact-commit acceptance must separately establish that the
 installed source matches the claimed commit. A changed revision, source or
 runtime produces a different execution identity, even when the numerical result
 is reusable. Output paths, run IDs, wall time and random values do not define
-identity. This command grants no source rights, mapping/release authority,
-caller approval or threshold promotion, and does not turn a research result
+identity. This command grants no source rights, mapping/release authority or
+threshold promotion, and does not turn a research result
 into a complete equity valuation.

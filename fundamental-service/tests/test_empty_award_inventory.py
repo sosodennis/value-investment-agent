@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from fundamental_service.contracts import CallerApprovalEnvelopeV1, QualityStatus
+from fundamental_service.contracts import QualityStatus
 from fundamental_service.equity_award_evidence import verify_dilution_fact_bindings
 from fundamental_service.equity_dilution import (
     DilutionError,
@@ -15,7 +15,6 @@ from fundamental_service.equity_dilution import (
 from fundamental_service.serialization import canonical_bytes
 from test_equity_dilution import VALUATION, _inputs
 from test_preparation_runner import (
-    VALUATION_TIME,
     _fixture,
     _reader,
     _reviewed_candidate,
@@ -123,14 +122,8 @@ def test_signed_empty_inventory_prepares_calculates_and_reuses_without_zero_fact
         fact.normalized_field.startswith("equity_award_")
         for fact in fixture.facts.list()
     )
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=prepared.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-    first = _run(runner, fixture.plan, approval=approval)
-    repeated = _run(runner, fixture.plan, approval=approval, correlation="repeat")
+    first = _run(runner, fixture.plan, prepare_only=False)
+    repeated = _run(runner, fixture.plan, prepare_only=False, correlation="repeat")
     result = _reader(fixture, first)
     assert result.status == "calculated"
     assert result.calculation.base.per_share_value > 0

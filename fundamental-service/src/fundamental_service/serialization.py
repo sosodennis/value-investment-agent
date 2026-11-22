@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import Enum
@@ -48,6 +49,41 @@ def canonical_bytes(value: Any) -> bytes:
 
 def sha256_digest(value: Any) -> str:
     return hashlib.sha256(canonical_bytes(value)).hexdigest()
+
+
+def canonical_array_parts(items: Iterable[bytes]) -> Iterator[bytes]:
+    yield b"["
+    for index, item in enumerate(items):
+        if index:
+            yield b","
+        yield item
+    yield b"]"
+
+
+def canonical_object_parts(
+    fields: Mapping[str, Any], embedded: Mapping[str, Iterable[bytes]]
+) -> Iterator[bytes]:
+    """Compose owner-produced canonical JSON values without expanding them."""
+    if fields.keys() & embedded.keys():
+        raise ValueError("canonical object fields must be distinct")
+    yield b"{"
+    for index, key in enumerate(sorted((*fields, *embedded))):
+        if index:
+            yield b","
+        yield canonical_bytes(key)
+        yield b":"
+        if key in embedded:
+            yield from embedded[key]
+        else:
+            yield canonical_bytes(fields[key])
+    yield b"}"
+
+
+def sha256_parts(parts: Iterable[bytes]) -> str:
+    digest = hashlib.sha256()
+    for part in parts:
+        digest.update(part)
+    return digest.hexdigest()
 
 
 def is_digest(value: str) -> bool:

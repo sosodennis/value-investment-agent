@@ -53,7 +53,6 @@ def _args(tmp_path, annual_request):
         candidate=None,
         automatic_release_policy=None,
         release_private_key=None,
-        approval=None,
         prepare_only=False,
         market_policy_authorization=None,
         market_policy_authorization_digest=None,
@@ -96,10 +95,10 @@ def _discovery_result(evidence, prepared, *, wrote=False):
     }
 
 
+@pytest.mark.parametrize("prepare_only", (False, True))
 @pytest.mark.parametrize("automatic_release", (False, True))
-@pytest.mark.parametrize("automatic_caller", (False, True))
 def test_issuer_entry_compiles_then_runs_formal_preparation(
-    tmp_path, monkeypatch, automatic_release, automatic_caller
+    tmp_path, monkeypatch, automatic_release, prepare_only
 ):
     original_case = case(tmp_path, monkeypatch)
     prepared, _ = execute(original_case)
@@ -108,34 +107,6 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(
     calls = []
     clock_ticks = iter(range(100, 200))
     run_number = 0
-    automatic_calls = []
-
-    class Caller:
-        def execute(self, record, **kwargs):
-            from fundamental_service.replay import (
-                ArtifactPublicationV1,
-                ArtifactRecordV1,
-            )
-
-            automatic_calls.append((record, kwargs))
-            publication = ArtifactPublicationV1(
-                artifact=ArtifactRecordV1(
-                    artifact_id="synthetic-automatic-execution",
-                    content_hash="e" * 64,
-                ),
-                wrote=run_number == 1,
-            )
-            return SimpleNamespace(
-                calculation=object(),
-                decision=SimpleNamespace(expected_input_digest="f" * 64),
-                execution_publication=publication,
-                decision_publication=publication,
-            )
-
-    monkeypatch.setattr(
-        "fundamental_service.issuer_preparation_runner.DeploymentAutomaticCaller.from_env",
-        lambda: Caller() if automatic_caller else None,
-    )
 
     monkeypatch.setattr(
         "fundamental_service.issuer_preparation_runner.monotonic",
@@ -159,6 +130,7 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(
         assert arguments[arguments.index("--actor") + 1] == "service-operator"
         assert arguments[arguments.index("--organization") + 1] == "test-organization"
         assert "--approval" not in arguments
+        assert ("--prepare-only" in arguments) == prepare_only
         assert ("--automatic-release-policy" in arguments) == automatic_release
         assert ("--release-private-key" in arguments) == automatic_release
         return {
@@ -174,6 +146,7 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(
         "fundamental_service.issuer_preparation_runner._run_child", invoke
     )
     args = _args(tmp_path, original_case.annual_request)
+    args.prepare_only = prepare_only
     if automatic_release:
         args.automatic_release_policy = tmp_path / "deployment-policy.json"
         args.release_private_key = tmp_path / "release-key.pem"
@@ -185,18 +158,9 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(
         "preparation_runner",
     ]
     assert [timeout for _, _, timeout in calls] == [118, 116, 118, 116]
-    assert result["status"] == (
-        "calculated" if automatic_caller else "preparation_attempted"
-    )
-    assert len(automatic_calls) == (2 if automatic_caller else 0)
-    for record, kwargs in automatic_calls:
-        assert record.artifact_id == "source-preparation:abc"
-        assert kwargs["caller_id"] == args.actor
-        assert kwargs["organization_id"] == args.organization
-    if automatic_caller:
-        assert result["lineage"]["automatic_valuation"]["source_artifact_id"] == (
-            "source-preparation:abc"
-        )
+    assert result["status"] == "preparation_attempted"
+    assert "automatic_execution" not in result
+    assert "automatic_valuation" not in result["lineage"]
     assert result["original_preparation_artifact_id"] == prepared.artifact_id
     assert result["source_plan_ref"].content_hash == evidence.plan.digest
     assert result["preparation"]["wrote"] is True
@@ -459,17 +423,6 @@ def test_configuration_digest_is_checked_before_source_commands(tmp_path, monkey
         assert str(error) == "source-plan configuration digest differs"
     else:
         raise AssertionError("mismatched configuration digest was accepted")
-
-
-def test_prepare_only_rejects_explicit_approval_before_source_work(
-    tmp_path, monkeypatch
-):
-    original_case = case(tmp_path, monkeypatch)
-    args = _args(tmp_path, original_case.annual_request)
-    args.prepare_only = True
-    args.approval = tmp_path / "approval.json"
-    with pytest.raises(ValueError, match="prepare-only"):
-        _execute(args)
 
 
 def test_child_timeout_is_bounded_and_classified(monkeypatch):

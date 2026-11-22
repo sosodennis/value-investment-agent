@@ -17,10 +17,10 @@ from ..calculator import (
     validate,
     with_calculation_result_hash,
 )
+from ..valuation_diagnostics import timed_valuation_stage, valuation_stage
 from ..contracts import (
     ArtifactReferenceV1,
     CanonicalFactV1,
-    CallerApprovalEnvelopeV1,
     CalculationArtifactV1,
     CalculationEvidenceV1,
     CalculationTraceV1,
@@ -149,45 +149,6 @@ from ..conditional_reinvestment_release import (
 )
 
 
-@dataclass(frozen=True)
-class PreparedValuationOperation:
-    """Owner-created preparation consumed within its original execution budget."""
-
-    preparation: AutomaticValuationPreparationV1
-    _application: FundamentalApplication = dataclass_field(repr=False)
-    _preparation_digest: str = dataclass_field(repr=False)
-    _deadline_at: datetime = dataclass_field(repr=False)
-
-    def calculate(
-        self,
-        approval: CallerApprovalEnvelopeV1,
-        *,
-        correlation_id: str,
-    ) -> CalculationArtifactV1 | UncertaintyReportV1:
-        guard_execution_deadline(self._deadline_at)
-        if sha256_digest(self.preparation) != self._preparation_digest:
-            raise ServiceError(
-                "PREPARED_VALUATION_CHANGED",
-                "prepared valuation changed during the operation",
-                status_code=409,
-                retryable=False,
-            )
-        value = self.preparation.input
-        if self.preparation.status != "prepared" or value is None:
-            raise ServiceError(
-                "VALUATION_INPUT_NOT_PREPARED",
-                "the operation has no prepared calculation input",
-                status_code=422,
-                retryable=False,
-            )
-        return self._application._calculate_valuation(
-            value.model_copy(update={"caller_approval": approval}),
-            correlation_id=correlation_id,
-            deadline_at=self._deadline_at,
-            preparation=self.preparation,
-        )
-
-
 class UncertaintyRequestV1(ValuationInputV1):
     """Valuation input with caller-owned uncertainty controls."""
 
@@ -196,11 +157,10 @@ class UncertaintyRequestV1(ValuationInputV1):
     monte_carlo: MonteCarloRequestV1 | None = None
 
     @model_validator(mode="after")
-    def digest_and_approval(self) -> UncertaintyRequestV1:
+    def validate_digest(self) -> UncertaintyRequestV1:
         payload = self.model_dump(
             exclude={
                 "input_digest",
-                "caller_approval",
             }
         )
         computed = sha256_digest(payload)
@@ -208,21 +168,15 @@ class UncertaintyRequestV1(ValuationInputV1):
             not is_digest(self.input_digest) or self.input_digest != computed
         ):
             raise ValueError("input_digest does not match complete uncertainty request")
-        if (
-            self.caller_approval is not None
-            and self.caller_approval.input_digest != computed
-        ):
-            raise ValueError("caller approval is bound to a different input_digest")
         return self
 
     def base_input(self) -> ValuationInputV1:
         payload = self.model_dump(exclude={"scenarios", "sensitivity", "monte_carlo"})
         payload["input_digest"] = None
-        payload["caller_approval"] = None
         return ValuationInputV1.model_validate(payload)
 
     def with_digest(self) -> UncertaintyRequestV1:
-        payload = self.model_dump(exclude={"input_digest", "caller_approval"})
+        payload = self.model_dump(exclude={"input_digest"})
         return self.model_copy(update={"input_digest": sha256_digest(payload)})
 
 
@@ -384,7 +338,6 @@ def _policy_error(error: PolicyError) -> ServiceError:
         retryable = False
     elif error.code in {
         "POLICY_AMBIGUOUS",
-        "CALLER_APPROVAL_CONFLICT",
         "INPUT_DIGEST_MISMATCH",
     }:
         status_code = 409
@@ -476,6 +429,7 @@ class FundamentalApplication:
             )
         )
 
+    @timed_valuation_stage("release.fact_references")
     def _verify_fact_references(self, value: ValuationInputV1) -> None:
         if self.snapshot_repository is None or self.fact_repository is None:
             raise ServiceError(
@@ -592,6 +546,7 @@ class FundamentalApplication:
             )
         return manifest
 
+    @timed_valuation_stage("release.current_artifacts")
     def _verify_current_release_artifacts(
         self, manifest: DataReleaseManifestV1, *, deadline_at: datetime | None = None
     ) -> None:
@@ -834,6 +789,7 @@ class FundamentalApplication:
             )
         return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
 
+    @timed_valuation_stage("release.snapshot_facts")
     def _release_snapshot_facts(
         self, manifest: DataReleaseManifestV1, snapshot: SourceSnapshotV1
     ) -> tuple[CanonicalFactV1, ...]:
@@ -935,6 +891,7 @@ class FundamentalApplication:
                 retryable=False,
             )
 
+    @timed_valuation_stage("policy.resolve")
     def _resolve_policy(self, value: ValuationInputV1) -> tuple[ValuationInputV1, Any]:
         if self.policy_registry is None:
             raise ServiceError(
@@ -1072,6 +1029,7 @@ class FundamentalApplication:
             )
 
     @staticmethod
+    @timed_valuation_stage("calculation.trace")
     def _trace(
         request: ValuationInputV1,
         result: CalculationArtifactV1,
@@ -1126,6 +1084,7 @@ class FundamentalApplication:
             calculation_version=result.calculation_version,
         )
 
+    @timed_valuation_stage("calculation.persist_evidence")
     def _persist_evidence(
         self,
         request: ValuationInputV1,
@@ -1149,10 +1108,9 @@ class FundamentalApplication:
         # Transport correlation IDs are per request; persisted evidence must be
         # byte-stable so the same deterministic result can be safely retried.
         stable_result = result.model_copy(update={"correlation_id": "persisted"})
-        evidence_request = request.model_copy(update={"caller_approval": None})
         evidence = CalculationEvidenceV1(
             contract_version="fundamental.v1",
-            request=evidence_request,
+            request=request,
             calculation=stable_result,
         )
         evidence_digest = sha256_digest(evidence.model_dump(mode="json"))
@@ -1188,6 +1146,7 @@ class FundamentalApplication:
             result.model_copy(update={"artifact_references": (reference,)})
         )
 
+    @timed_valuation_stage("uncertainty.persist_evidence")
     def _persist_uncertainty_evidence(
         self,
         result: UncertaintyReportV1,
@@ -1331,6 +1290,7 @@ class FundamentalApplication:
             facts=facts,
         )
 
+    @timed_valuation_stage("release.current_mappings")
     def _current_release_mappings(
         self, manifest: DataReleaseManifestV1
     ) -> tuple[CanonicalMappingV1, ...] | None:
@@ -1466,6 +1426,7 @@ class FundamentalApplication:
             facts=selection.facts,
         )
 
+    @timed_valuation_stage("preparation.compose")
     def prepare_valuation(
         self,
         request: ValuationEvidenceReadRequestV1,
@@ -1642,20 +1603,6 @@ class FundamentalApplication:
         )
         guard_execution_deadline(deadline_at)
         return preparation
-
-    def prepare_valuation_operation(
-        self,
-        request: ValuationEvidenceReadRequestV1,
-        *,
-        deadline_at: datetime,
-    ) -> PreparedValuationOperation:
-        preparation = self.prepare_valuation(request, deadline_at=deadline_at)
-        return PreparedValuationOperation(
-            preparation=preparation,
-            _application=self,
-            _preparation_digest=sha256_digest(preparation),
-            _deadline_at=deadline_at,
-        )
 
     def apply_manual_override(
         self, request: ManualValuationOverrideRequestV1
@@ -2025,7 +1972,6 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
-        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
@@ -2042,7 +1988,6 @@ class FundamentalApplication:
             resolution,
             correlation_id=correlation_id,
             deadline_at=deadline_at,
-            preparation=preparation,
         )
 
     def calculate_with_policy(
@@ -2058,12 +2003,12 @@ class FundamentalApplication:
             resolved, resolution, correlation_id=correlation_id, deadline_at=deadline_at
         )
 
+    @timed_valuation_stage("release.conditional_input")
     def _is_released_conditional_input(
         self,
         value: ValuationInputV1,
         *,
         deadline_at: datetime | None = None,
-        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> bool:
         manifest = self._data_release_manifest(
             value.valuation_context.data_release_manifest_digest
@@ -2093,27 +2038,23 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             )
-        expected = preparation
-        if expected is None:
-            expected = self.prepare_valuation(
-                ValuationEvidenceReadRequestV1(
-                    contract_version="fundamental.v1",
-                    snapshot_id=value.valuation_context.data_snapshot_id,
-                    data_release_manifest_digest=manifest.manifest_digest,
-                    model_id=value.model_id,
-                ),
-                policy_id=value.policy_id,
-                deadline_at=deadline_at,
-            )
+        expected = self.prepare_valuation(
+            ValuationEvidenceReadRequestV1(
+                contract_version="fundamental.v1",
+                snapshot_id=value.valuation_context.data_snapshot_id,
+                data_release_manifest_digest=manifest.manifest_digest,
+                model_id=value.model_id,
+            ),
+            policy_id=value.policy_id,
+            deadline_at=deadline_at,
+        )
         if expected.input is not None:
             resolved, _ = self._resolve_policy(expected.input)
         else:
             resolved = None
         if resolved is None or canonical_bytes(
-            resolved.model_dump(exclude={"input_digest", "caller_approval"})
-        ) != canonical_bytes(
-            value.model_dump(exclude={"input_digest", "caller_approval"})
-        ):
+            resolved.model_dump(exclude={"input_digest"})
+        ) != canonical_bytes(value.model_dump(exclude={"input_digest"})):
             raise ServiceError(
                 f"{prefix}_INPUT_MISMATCH",
                 "conditional calculation requires the exact recomposed release input and joint scenarios",
@@ -2122,6 +2063,7 @@ class FundamentalApplication:
             )
         return True
 
+    @timed_valuation_stage("calculation.resolved")
     def _calculate_resolved(
         self,
         resolved: ValuationInputV1,
@@ -2129,7 +2071,6 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
-        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         if resolution.input_digest != resolved.input_digest:
@@ -2155,35 +2096,15 @@ class FundamentalApplication:
                     error.code, str(error), status_code=422, retryable=False
                 ) from error
         self._verify_fact_references(resolved)
-        if preparation is not None and manifest is not None:
-            self._release_snapshot_facts(manifest, snapshot)
-            self._current_release_mappings(manifest)
         guard_execution_deadline(deadline_at)
         released_conditional = self._is_released_conditional_input(
-            resolved, deadline_at=deadline_at, preparation=preparation
+            resolved, deadline_at=deadline_at
         )
         guard_execution_deadline(deadline_at)
-        if released_conditional and resolved.caller_approval is None:
-            raise ServiceError(
-                "CALLER_APPROVAL_REQUIRED",
-                "conditional scenarios require caller approval of the exact full input",
-                status_code=422,
-                retryable=False,
-            )
         has_uncertainty = resolved.uncertainty.mode != "none"
         calculation_input = resolved
         calculation_resolution = resolution
         if has_uncertainty:
-            if (
-                resolved.caller_approval is not None
-                and resolved.caller_approval.decision != "approved"
-            ):
-                raise ServiceError(
-                    "CALLER_APPROVAL_REJECTED",
-                    "caller rejected this exact valuation input",
-                    status_code=422,
-                    retryable=False,
-                )
             try:
                 validate_uncertainty_controls(resolved)
             except ValueError as error:
@@ -2197,7 +2118,6 @@ class FundamentalApplication:
                 update={
                     "uncertainty": UncertaintyV1(mode="none"),
                     "input_digest": None,
-                    "caller_approval": None,
                 }
             ).with_digest()
             calculation_resolution = resolution.model_copy(
@@ -2208,11 +2128,12 @@ class FundamentalApplication:
                 released_conditional or is_service_owned_monte_carlo(resolved)
             )
             guard_execution_deadline(deadline_at)
-            result = calculate(
-                calculation_input,
-                correlation_id=correlation_id,
-                allow_provisional=service_owned_uncertainty,
-            )
+            with valuation_stage("calculation.raw_result"):
+                result = calculate(
+                    calculation_input,
+                    correlation_id=correlation_id,
+                    allow_provisional=service_owned_uncertainty,
+                )
         except CalculationRefusal as error:
             raise ServiceError(
                 error.code,
@@ -2220,6 +2141,7 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
+        guard_execution_deadline(deadline_at)
         trace = self._trace(calculation_input, result, snapshot, calculation_resolution)
         result = with_calculation_result_hash(
             result.model_copy(
@@ -2234,11 +2156,12 @@ class FundamentalApplication:
             return result
         try:
             guard_execution_deadline(deadline_at)
-            uncertainty = run_uncertainty(
-                resolved,
-                base_result=result,
-                allow_provisional=service_owned_uncertainty,
-            )
+            with valuation_stage("uncertainty.run"):
+                uncertainty = run_uncertainty(
+                    resolved,
+                    base_result=result,
+                    allow_provisional=service_owned_uncertainty,
+                )
         except (CalculationRefusal, ValueError) as error:
             raise ServiceError(
                 getattr(error, "code", "uncertainty_invalid"),
@@ -2253,9 +2176,7 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             )
-        uncertainty_request = resolved.model_dump(
-            exclude={"input_digest", "caller_approval"}
-        )
+        uncertainty_request = resolved.model_dump(exclude={"input_digest"})
         guard_execution_deadline(deadline_at)
         uncertainty = self._persist_uncertainty_evidence(
             uncertainty, uncertainty_request
@@ -2308,16 +2229,6 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             )
-        if (
-            value.caller_approval is not None
-            and value.caller_approval.decision != "approved"
-        ):
-            raise ServiceError(
-                "CALLER_APPROVAL_REJECTED",
-                "caller rejected this exact valuation input",
-                status_code=422,
-                retryable=False,
-            )
         try:
             validate_uncertainty_controls(
                 value.base_input(),
@@ -2338,7 +2249,6 @@ class FundamentalApplication:
         deterministic_base = base_value.model_copy(
             update={
                 "uncertainty": UncertaintyV1(mode="none"),
-                "caller_approval": None,
             }
         ).with_digest()
         resolved, _ = self._resolve_policy(deterministic_base)
@@ -2348,23 +2258,8 @@ class FundamentalApplication:
                 "assumptions": resolved.assumptions,
                 "provenance": resolved.provenance,
                 "input_digest": None,
-                "caller_approval": None,
             }
         ).with_digest()
-        if (
-            value.caller_approval is not None
-            and value.caller_approval.input_digest != resolved_value.input_digest
-        ):
-            raise ServiceError(
-                "CALLER_APPROVAL_CONFLICT",
-                "caller approval is bound to a different resolved input_digest",
-                status_code=409,
-                retryable=False,
-            )
-        if value.caller_approval is not None:
-            resolved_value = resolved_value.model_copy(
-                update={"caller_approval": value.caller_approval}
-            )
         monte_carlo = value.monte_carlo
         if monte_carlo is not None:
             monte_carlo = monte_carlo.model_copy(
@@ -2402,9 +2297,7 @@ class FundamentalApplication:
                 retryable=False,
             )
         result = result.model_copy(update={"base": base})
-        evidence_request = resolved_value.model_dump(
-            exclude={"input_digest", "caller_approval"}
-        )
+        evidence_request = resolved_value.model_dump(exclude={"input_digest"})
         guard_execution_deadline(deadline_at)
         result = self._persist_uncertainty_evidence(result, evidence_request)
         self.metrics.increment("quality_status_total")

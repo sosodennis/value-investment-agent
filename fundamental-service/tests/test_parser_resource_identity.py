@@ -4,6 +4,7 @@ import os
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from functools import partial
 
 import pytest
 
@@ -15,6 +16,7 @@ from fundamental_service.parser_action_identity import (
 )
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.snapshots import SnapshotError
+from fundamental_service.resource_hashing import ResourceHashReader
 from test_parser_actions import case
 
 
@@ -42,6 +44,10 @@ def test_one_read_preserves_both_resource_digests_and_their_distinct_orders(
     tmp_path, monkeypatch
 ):
     contents = resource_tree(tmp_path)
+    monkeypatch.setattr(
+        "fundamental_service.parser_action_identity.ResourceHashReader",
+        partial(ResourceHashReader, direct=False),
+    )
     assert sorted((Path("a.xml"), Path("a/z.xml"))) != [
         Path(name) for name in sorted(("a.xml", "a/z.xml"))
     ]
@@ -134,6 +140,10 @@ def test_resource_read_or_enumeration_failure_never_omits_dependencies(
     tmp_path, monkeypatch, operation
 ):
     resource_tree(tmp_path)
+    monkeypatch.setattr(
+        "fundamental_service.parser_action_identity.ResourceHashReader",
+        partial(ResourceHashReader, direct=False),
+    )
     target = tmp_path / "__pycache__"
     if operation == "open":
         target /= "ignored.xml"

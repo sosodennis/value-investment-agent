@@ -9,8 +9,8 @@ import tempfile
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from functools import partial
 from pathlib import Path
+from threading import get_ident
 from time import monotonic
 from typing import Any, Literal, ParamSpec, TypeVar
 
@@ -24,12 +24,10 @@ from starlette.concurrency import run_in_threadpool
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
-from .automatic_approval import AutomaticValuationApprovalPolicyV1
-from .automatic_valuation import (
-    AutomaticValuationExecutor,
-    AutomaticValuationRequestV1,
-    AutomaticValuationResponseV1,
-    load_runtime_automatic_approval_policy,
+from .valuation_diagnostics import (
+    ValuationDiagnosticSink,
+    diagnostic_error_code,
+    valuation_diagnostic_scope,
 )
 from .contracts import (
     CalculationArtifactV1,
@@ -87,10 +85,12 @@ from .operations import (
     OperationalMetrics,
     OperationsConfig,
     RateLimiter,
+    REQUEST_LOG_ID_HEADER,
+    RequestLogContext,
     ServiceError,
     correlation_id,
+    create_request_log_context,
     guard_body_size,
-    guard_caller_approval,
     guard_execution_deadline,
 )
 from .policies import (
@@ -133,35 +133,60 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
+def _log_valuation_diagnostic(
+    *,
+    request: Request,
+    sink: ValuationDiagnosticSink,
+    operation: str | None,
+    event: str,
+    trace_started: float,
+    deadline_at: datetime | None,
+    **fields: object,
+) -> None:
+    """Emit one machine-readable, opt-in execution phase record."""
+    log_context = getattr(request.state, "log_context", None)
+    if not isinstance(log_context, RequestLogContext):
+        return
+    payload: dict[str, object] = {
+        "event": event,
+        "request_log_id": log_context.request_log_id,
+        "route_template": log_context.route_template,
+        "operation": operation,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "elapsed_ms": round((monotonic() - trace_started) * 1000, 3),
+        "deadline_at": deadline_at.isoformat() if deadline_at is not None else None,
+        "deadline_remaining_ms": (
+            round((deadline_at - datetime.now(UTC)).total_seconds() * 1000, 3)
+            if deadline_at is not None
+            else None
+        ),
+        "diagnostic_sink": sink.status(),
+        **fields,
+    }
+    sink.submit(
+        "fundamental_valuation_diagnostic",
+        json.dumps(payload, sort_keys=True, separators=(",", ":")),
+        extra={
+            "request_log_id": log_context.request_log_id,
+            "valuation_diagnostic_event": event,
+        },
+    )
+
+
 def _validation_error(
     request: Request, error: ValidationError | RequestValidationError | None = None
 ) -> JSONResponse:
-    if error is not None:
-        diagnostics = tuple(
-            {
-                "field_path": ".".join(str(part) for part in item.get("loc", ())),
-                "error_type": str(item.get("type", "validation_error")),
-                "message": str(item.get("msg", "request validation failed"))[:256],
-            }
-            for item in error.errors()
-        )
-        diagnostic_payload = json.dumps(
-            {
-                "correlation_id": getattr(request.state, "correlation_id", "unknown"),
-                "path": request.url.path,
-                "diagnostics": diagnostics,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+    log_context = getattr(request.state, "log_context", None)
+    if error is not None and isinstance(log_context, RequestLogContext):
+        payload = {
+            "request_log_id": log_context.request_log_id,
+            "route_template": log_context.route_template,
+            "validation_error_count": len(error.errors()),
+        }
         LOGGER.warning(
             "fundamental_validation_error %s",
-            diagnostic_payload,
-            extra={
-                "correlation_id": getattr(request.state, "correlation_id", "unknown"),
-                "path": request.url.path,
-                "diagnostics": diagnostics,
-            },
+            json.dumps(payload, sort_keys=True, separators=(",", ":")),
+            extra=payload,
         )
     return error_response(
         request,
@@ -191,7 +216,6 @@ def create_app(
     macro_providers: tuple[MacroSeriesProviderPort, ...] | None = None,
     reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
     source_use_policy: SourceUsePolicyV1 | None = None,
-    automatic_approval_policy: AutomaticValuationApprovalPolicyV1 | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -214,6 +238,7 @@ def create_app(
             )
     metrics = OperationalMetrics()
     limiter = RateLimiter(runtime_config.rate_limit_per_minute)
+    diagnostic_sink = ValuationDiagnosticSink()
     application = FundamentalApplication(
         snapshot_repository=snapshot_repository,
         artifact_store=artifact_store,
@@ -261,12 +286,13 @@ def create_app(
                             policy_version=policy.policy_version,
                         )
             except Exception:
-                LOGGER.exception("fundamental metadata startup failed")
+                LOGGER.error("fundamental_metadata_startup_failed")
         app.state.accepting_requests = True
         try:
             yield
         finally:
             app.state.accepting_requests = False
+            diagnostic_sink.close()
             if metadata_store is not None:
                 metadata_store.close()
 
@@ -282,6 +308,7 @@ def create_app(
     app.state.model_inventory = model_inventory
     app.state.sec_acquisition = sec_acquisition
     app.state.identity_resolution = identity_resolution
+    app.state.valuation_diagnostic_sink = diagnostic_sink
     sec_acquisition_limiter = RateLimiter(
         runtime_config.ingestion_rate_limit_per_minute
     )
@@ -292,14 +319,111 @@ def create_app(
     ) -> T:
         deadline_at = request.state.deadline
         guard_execution_deadline(deadline_at)
+        trace_enabled = runtime_config.valuation_diagnostics
+        trace_started = getattr(request.state, "valuation_trace_started", monotonic())
+        log_context = getattr(request.state, "log_context", None)
+        operation_name = getattr(
+            operation,
+            "__qualname__",
+            getattr(operation, "__name__", type(operation).__name__),
+        )
+        queue_started = monotonic()
+        worker_started: float | None = None
+        if trace_enabled:
+            _log_valuation_diagnostic(
+                request=request,
+                sink=diagnostic_sink,
+                operation=operation_name,
+                event="queue_wait_started",
+                trace_started=trace_started,
+                deadline_at=deadline_at,
+                queue_wait_started_at=datetime.now(UTC).isoformat(),
+            )
+
+        def execute_on_worker() -> T:
+            nonlocal worker_started
+            worker_started = monotonic()
+            if trace_enabled:
+                _log_valuation_diagnostic(
+                    request=request,
+                    sink=diagnostic_sink,
+                    operation=operation_name,
+                    event="worker_acquired",
+                    trace_started=trace_started,
+                    deadline_at=deadline_at,
+                    queue_wait_ms=round((worker_started - queue_started) * 1000, 3),
+                    worker_thread_id=get_ident(),
+                )
+                _log_valuation_diagnostic(
+                    request=request,
+                    sink=diagnostic_sink,
+                    operation=operation_name,
+                    event="execution_started",
+                    trace_started=trace_started,
+                    deadline_at=deadline_at,
+                    worker_thread_id=get_ident(),
+                )
+            try:
+                with valuation_diagnostic_scope(
+                    log_context if trace_enabled else None, diagnostic_sink
+                ):
+                    result = operation(*args, **kwargs)
+            except BaseException as error:
+                if trace_enabled:
+                    _log_valuation_diagnostic(
+                        request=request,
+                        sink=diagnostic_sink,
+                        operation=operation_name,
+                        event="execution_failed",
+                        trace_started=trace_started,
+                        deadline_at=deadline_at,
+                        execution_ms=round((monotonic() - worker_started) * 1000, 3),
+                        error_type=type(error).__name__,
+                        error_code=diagnostic_error_code(getattr(error, "code", None)),
+                        worker_thread_id=get_ident(),
+                    )
+                raise
+            if trace_enabled:
+                _log_valuation_diagnostic(
+                    request=request,
+                    sink=diagnostic_sink,
+                    operation=operation_name,
+                    event="execution_finished",
+                    trace_started=trace_started,
+                    deadline_at=deadline_at,
+                    execution_ms=round((monotonic() - worker_started) * 1000, 3),
+                    worker_thread_id=get_ident(),
+                )
+            return result
+
         try:
             with fail_after((deadline_at - datetime.now(UTC)).total_seconds()) as scope:
                 result = await to_thread.run_sync(
-                    partial(operation, *args, **kwargs), limiter=valuation_limiter
+                    execute_on_worker, limiter=valuation_limiter
                 )
         except TimeoutError as error:
             if not scope.cancel_called:
                 raise
+            if trace_enabled:
+                _log_valuation_diagnostic(
+                    request=request,
+                    sink=diagnostic_sink,
+                    operation=operation_name,
+                    event="deadline_expired",
+                    trace_started=trace_started,
+                    deadline_at=deadline_at,
+                    timeout_phase="queue_wait"
+                    if worker_started is None
+                    else "execution",
+                    queue_wait_ms=round(
+                        ((worker_started or monotonic()) - queue_started) * 1000, 3
+                    ),
+                    execution_ms=(
+                        round((monotonic() - worker_started) * 1000, 3)
+                        if worker_started is not None
+                        else None
+                    ),
+                )
             raise ServiceError(
                 "REQUEST_DEADLINE_EXCEEDED",
                 "request deadline expired while waiting for valuation execution",
@@ -334,12 +458,32 @@ def create_app(
     @app.middleware("http")
     async def operations_boundary(request: Request, call_next):
         started = monotonic()
+        try:
+            request.state.log_context = create_request_log_context(request)
+        except Exception:
+            request.state.log_context = None
         request.state.correlation_id = correlation_id(request)
+        request.state.valuation_trace_started = started
+        trace_enabled = (
+            runtime_config.valuation_diagnostics
+            and request.url.path.startswith("/v1/valuation/")
+        )
+        request.state.trace_valuation_response = trace_enabled
         status_code = 500
+        response: Response | None = None
         try:
             guard_body_size(request, runtime_config)
             if request.url.path.startswith("/v1/"):
                 context, _ = await authorize_operation(request, runtime_config)
+                if trace_enabled:
+                    _log_valuation_diagnostic(
+                        request=request,
+                        sink=diagnostic_sink,
+                        operation=None,
+                        event="request_admitted",
+                        trace_started=started,
+                        deadline_at=getattr(request.state, "deadline", None),
+                    )
                 if not limiter.allow(context.principal.subject_id):
                     metrics.increment("rate_limited_total")
                     raise ServiceError(
@@ -386,21 +530,12 @@ def create_app(
                     )
                     status_code = response.status_code
             response.headers[CORRELATION_HEADER] = request.state.correlation_id
+            log_context = getattr(request.state, "log_context", None)
+            if isinstance(log_context, RequestLogContext):
+                response.headers[REQUEST_LOG_ID_HEADER] = log_context.request_log_id
             return response
         except ServiceError as error:
             status_code = error.status_code
-            failed_context = getattr(request.state, "context", None)
-            LOGGER.warning(
-                "fundamental_request_failed path=%s status_code=%s error_code=%s "
-                "error_message=%s organization_id=%s",
-                request.url.path,
-                error.status_code,
-                error.code,
-                error.message,
-                getattr(
-                    getattr(failed_context, "principal", None), "organization_id", None
-                ),
-            )
             if (
                 error.code.startswith("internal_auth")
                 or error.code == "invalid_context"
@@ -410,10 +545,11 @@ def create_app(
                 metrics.increment("calculation_budget_failures_total")
             if error.code.startswith("request_deadline"):
                 metrics.increment("deadline_failures_total")
-            return error_response(request, error)
+            response = error_response(request, error)
+            return response
         except Exception:  # pragma: no cover - final redacted safety net
             status_code = 500
-            return error_response(
+            response = error_response(
                 request,
                 ServiceError(
                     "internal_failure",
@@ -422,16 +558,32 @@ def create_app(
                     retryable=False,
                 ),
             )
+            return response
         finally:
-            LOGGER.info(
-                "fundamental_request",
-                extra={
-                    "correlation_id": request.state.correlation_id,
-                    "path": request.url.path,
+            if trace_enabled:
+                _log_valuation_diagnostic(
+                    request=request,
+                    sink=diagnostic_sink,
+                    operation=None,
+                    event="response_emitted",
+                    trace_started=started,
+                    deadline_at=getattr(request.state, "deadline", None),
+                    status_code=status_code,
+                    **getattr(request.state, "valuation_response_metadata", {}),
+                )
+            log_context = getattr(request.state, "log_context", None)
+            if isinstance(log_context, RequestLogContext):
+                payload = {
+                    "request_log_id": log_context.request_log_id,
+                    "route_template": log_context.route_template,
                     "status_code": status_code,
                     "elapsed_ms": round((monotonic() - started) * 1000, 3),
-                },
-            )
+                }
+                LOGGER.info(
+                    "fundamental_request %s",
+                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    extra=payload,
+                )
             metrics.observe_request(
                 status_code=status_code,
                 elapsed_ms=(monotonic() - started) * 1000,
@@ -883,35 +1035,6 @@ def create_app(
         return success_response(request, application.validate_with_policy(value))
 
     @app.post(
-        "/v1/valuation/calculate-automatically",
-        response_model=TypedFundamentalResponseEnvelopeV1[AutomaticValuationResponseV1],
-        openapi_extra={
-            "requestBody": {
-                "required": True,
-                "content": {
-                    "application/json": {
-                        "schema": {
-                            "$ref": "#/components/schemas/FundamentalAutomaticValuationRequestEnvelopeV1"
-                        }
-                    }
-                },
-            }
-        },
-    )
-    async def calculate_automatically(request: Request) -> JSONResponse:
-        value = decode_input(request, AutomaticValuationRequestV1)
-        principal = request.state.context.principal
-        result = await run_valuation_operation(
-            request,
-            AutomaticValuationExecutor(application, automatic_approval_policy).execute,
-            value,
-            caller_id=principal.subject_id,
-            organization_id=principal.organization_id,
-            deadline_at=request.state.deadline,
-        )
-        return success_response(request, result)
-
-    @app.post(
         "/v1/valuation/calculate",
         response_model=TypedFundamentalResponseEnvelopeV1[
             CalculationArtifactV1 | UncertaintyReportV1
@@ -934,11 +1057,6 @@ def create_app(
     )
     async def calculate_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationInputV1)
-        guard_caller_approval(
-            value.caller_approval,
-            caller_id=request.state.context.principal.subject_id,
-            received_at=datetime.now(UTC),
-        )
         result = await run_valuation_operation(
             request,
             application.calculate_valuation,
@@ -971,11 +1089,6 @@ def create_app(
     )
     async def calculate_with_policy(request: Request) -> JSONResponse:
         value = decode_input(request, PolicyValuationInputV1)
-        guard_caller_approval(
-            value.caller_approval,
-            caller_id=request.state.context.principal.subject_id,
-            received_at=datetime.now(UTC),
-        )
         result = await run_valuation_operation(
             request,
             application.calculate_with_policy,
@@ -995,11 +1108,6 @@ def create_app(
         value = UncertaintyRequestV1.model_validate_json(
             json.dumps(normalize_uncertainty_payload(request.state.operation_input))
         )
-        guard_caller_approval(
-            value.caller_approval,
-            caller_id=request.state.context.principal.subject_id,
-            received_at=datetime.now(UTC),
-        )
         result = await run_valuation_operation(
             request,
             application.uncertainty_valuation,
@@ -1015,10 +1123,6 @@ def create_app(
             return app.openapi_schema
         schema = base_openapi()
         request_models = (
-            (
-                "FundamentalAutomaticValuationRequestEnvelopeV1",
-                TypedFundamentalRequestEnvelopeV1[AutomaticValuationRequestV1],
-            ),
             (
                 "FundamentalCalculationRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[ValuationInputV1],
@@ -1096,7 +1200,6 @@ def create_runtime_app() -> FastAPI:
 
     config = OperationsConfig.from_env()
     source_use_policy = load_runtime_source_use_policy()
-    automatic_approval_policy = load_runtime_automatic_approval_policy()
     root_value = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
     database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
     if not root_value or not database_url:
@@ -1104,7 +1207,6 @@ def create_runtime_app() -> FastAPI:
             config=config,
             require_metadata=True,
             source_use_policy=source_use_policy,
-            automatic_approval_policy=automatic_approval_policy,
         )
     root = Path(root_value)
     data_release_trust_roots_file = os.getenv(
@@ -1189,7 +1291,6 @@ def create_runtime_app() -> FastAPI:
         sec_acquisition=sec_acquisition,
         identity_resolution=identity_resolution,
         source_use_policy=source_use_policy,
-        automatic_approval_policy=automatic_approval_policy,
     )
 
 

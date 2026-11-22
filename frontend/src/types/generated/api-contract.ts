@@ -2964,8 +2964,7 @@ export interface components {
         /** ResumeRequest */
         ResumeRequest: {
             identity: components["schemas"]["InteractionIdentity"];
-            /** Response */
-            response: components["schemas"]["TickerSelectionResponse"] | components["schemas"]["ValuationApprovalResponse"];
+            response: components["schemas"]["TickerSelectionResponse"];
         };
         /** RetryCommand */
         RetryCommand: {
@@ -4391,8 +4390,8 @@ export interface components {
             /** Title */
             title: string;
             /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
+             * Type
+             * @constant
              */
             type: "ticker_selection";
         };
@@ -4401,8 +4400,8 @@ export interface components {
             /** Selected Symbol */
             selected_symbol: string;
             /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
+             * Type
+             * @constant
              */
             type: "ticker_selection";
         };
@@ -4417,51 +4416,6 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
-        };
-        /** ValuationApprovalRequest */
-        ValuationApprovalRequest: {
-            /** Audit Messages */
-            audit_messages: string[];
-            /**
-             * Contract Version
-             * @constant
-             */
-            contract_version: "v1";
-            /** Description */
-            description: string;
-            /** Model Type */
-            model_type: string;
-            /** Parameters */
-            parameters: {
-                [key: string]: unknown;
-            };
-            /** Ticker */
-            ticker: string;
-            /** Title */
-            title: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "valuation_approval";
-        };
-        /** ValuationApprovalResponse */
-        ValuationApprovalResponse: {
-            /**
-             * Contract Version
-             * @constant
-             */
-            contract_version: "v1";
-            /**
-             * Decision
-             * @enum {string}
-             */
-            decision: "approve" | "reject";
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "valuation_approval";
         };
         /** VolumeProfileLevelModel */
         VolumeProfileLevelModel: {
@@ -4577,13 +4531,11 @@ export interface components {
             identity: components["schemas"]["InteractionIdentity"];
             /**
              * Kind
-             * @enum {string}
+             * @constant
              */
-            kind: "ticker_selection" | "valuation_approval";
-            /** Request */
-            request: components["schemas"]["TickerSelectionRequest"] | components["schemas"]["ValuationApprovalRequest"];
-            /** Response */
-            response?: (components["schemas"]["TickerSelectionResponse"] | components["schemas"]["ValuationApprovalResponse"]) | null;
+            kind: "ticker_selection";
+            request: components["schemas"]["TickerSelectionRequest"];
+            response?: components["schemas"]["TickerSelectionResponse"] | null;
             /**
              * Status
              * @enum {string}

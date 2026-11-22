@@ -29,6 +29,7 @@ from .original_source_plan import (
     OriginalSourcePlanRequestV1,
 )
 from .public_acquisition import PostgresPublicCaptureLock
+from .process_output import write_stdout
 from .serialization import canonical_bytes
 from .snapshots import SnapshotError
 from .valuation_requirements import valuation_requirements_profile
@@ -334,6 +335,7 @@ def main(argv: list[str] | None = None) -> int:
             history_identity_policy=DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY,
         )
         result = asyncio.run(_run_command(args))
+        write_stdout(canonical_bytes(result) + b"\n")
     except (SnapshotError, ServiceError) as error:
         print(
             canonical_bytes(
@@ -351,7 +353,6 @@ def main(argv: list[str] | None = None) -> int:
     except (ValueError, TypeError):
         print('{"error_code":"ANNUAL_DISCOVERY_INPUT_INVALID"}', file=sys.stderr)
         return 2
-    print(canonical_bytes(result).decode())
     return 0
 
 

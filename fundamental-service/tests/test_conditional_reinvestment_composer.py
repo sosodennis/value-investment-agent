@@ -34,7 +34,7 @@ from fundamental_service.valuation_requirements import (
 )
 from test_api import _release_manifest_for
 from test_conditional_capital_release import _conditional_fixture
-from test_conditional_capital_composer import _approved, _calculate
+from test_conditional_capital_composer import _calculate
 from test_conditional_reinvestment import _recipe
 from test_preparation_runner import _reviewed_candidate
 from test_valuation_release_inputs import _client, _manifest_with, _prepare
@@ -175,12 +175,7 @@ def test_joint_forward_and_capital_scenarios_use_the_formal_calculator_and_save(
     assert _prepare(client, fixture, candidate).json()["result"] == prepared.model_dump(
         mode="json"
     )
-    # Synthetic caller envelope exercises the boundary only; it is not real approval.
-    assert (
-        _calculate(client, prepared.input).json()["error"]["code"]
-        == "CALLER_APPROVAL_REQUIRED"
-    )
-    response = _calculate(client, _approved(prepared.input))
+    response = _calculate(client, prepared.input)
     assert response.status_code == 200, response.text
     result = response.json()["result"]
     assert result["base"]["per_share_value"] is not None
@@ -212,7 +207,7 @@ def test_joint_forward_and_capital_scenarios_use_the_formal_calculator_and_save(
         json.loads(saved.content)["request"]["assumptions"]
         == prepared.input.model_dump(mode="json")["assumptions"]
     )
-    assert _calculate(client, _approved(prepared.input)).json()["result"] == result
+    assert _calculate(client, prepared.input).json()["result"] == result
 
 
 @pytest.mark.parametrize(
@@ -222,9 +217,7 @@ def test_changed_forward_input_is_rejected_even_with_new_synthetic_approval(
     tmp_path, mutation
 ):
     _, client, _, prepared = _prepared(tmp_path)
-    payload = prepared.input.model_dump(
-        mode="json", exclude={"input_digest", "caller_approval"}
-    )
+    payload = prepared.input.model_dump(mode="json", exclude={"input_digest"})
     if mutation == "rate":
         payload["uncertainty"]["scenarios"][1]["assumptions"][
             "assumptions.forecast.reinvestment_rate[0]"
@@ -240,7 +233,7 @@ def test_changed_forward_input_is_rejected_even_with_new_synthetic_approval(
     else:
         payload["provenance"]["preparation_version"] = "caller-version"
     value = ValuationInputV1.model_validate_json(json.dumps(payload)).with_digest()
-    response = _calculate(client, _approved(value))
+    response = _calculate(client, value)
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "CONDITIONAL_REINVESTMENT_INPUT_MISMATCH"
 

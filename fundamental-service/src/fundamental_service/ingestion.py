@@ -610,6 +610,7 @@ class SecIngestionService:
                     raw_manifest, media_type="application/json"
                 )
 
+            del members
             build_checks = build_checks or ParserBuildChecks()
 
             def parse_representation(

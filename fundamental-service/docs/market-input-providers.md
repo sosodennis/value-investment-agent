@@ -25,7 +25,7 @@ the issuer's complete geographic revenue or country-risk exposure.
 
 These adapters exist independently of complete real-issuer valuation acceptance.
 An approved source or mapping does not establish all accounting roles, a quote,
-an approved release, caller approval or a verified history threshold.
+an approved release or a verified history threshold.
 
 ## Ordinary issuer market preparation
 
@@ -57,8 +57,8 @@ An eligible bundle exposes the exact reference plan, terminal plan, automatic
 decision and bundle references needed for a release. Source preparation refuses
 a candidate or active release missing those exact references before activation
 or composer execution. These references are prepared evidence: the existing
-trusted deployment policy, signed release canary, formal #352 composer and exact
-caller approval still enforce their own contracts. This stage does not install
+trusted deployment policy, signed release canary and formal #352 composer
+still enforce their own contracts. This stage does not install
 a deployment policy or approve historical sufficiency.
 
 The release boundary's `assemble_authorized_market_policy_record` can build an
@@ -78,8 +78,8 @@ signed `--candidate`, `--market-policy-authorization`, its canonical
 `--runtime-source-revision`. Publication requires the deployment's authorized
 organization. The command reproduces source admissions and runs the independent
 signed release canary with the proposed policy before publishing it. It then
-uses the existing release publication/activation, formal composer and exact
-caller approval flow. This command never creates a trust key or substitutes
+uses the existing release publication/activation, formal composer and direct
+calculation flow. This command never creates a trust key or substitutes
 source preparation for deployment authority.
 
 Every assembled policy pins `data_release_manifest_digest`. Serving,
@@ -341,7 +341,7 @@ selection. The selection contains the exact frozen plan, and ordinary reports
 include `public_source_cutoff` with every capture. The request digest identifies
 `current-source-preparation-v1` wrapping the full template; it differs from the
 template's `--plan-digest`. Keep the original template and digest for retry,
-candidate-release and caller-approval invocations. Reopening the same selection
+candidate-release and calculation invocations. Reopening the same selection
 days later returns the same plan with `wrote=false`; it cannot move the cutoff
 again. A distinct current valuation requires its own explicit business request.
 
@@ -354,7 +354,7 @@ the command; transient selections use content-addressed attempt identities.
 Corruption refuses without repair, and cached selections recheck the current
 source register without HTTP access. Neither mode grants source-use permission,
 creates an issuer market policy, approves a release or bypasses exact-input
-caller approval. Current data never establishes historical availability.
+calculation checks. Current data never establishes historical availability.
 
 If current selection fails, the command also acquires or reuses the compiled SEC
 requests at the original requested time. Its `source_acquisitions_publication`
@@ -436,8 +436,8 @@ existing result with `wrote=false`, including blocked/abstained results.
 Automatic source-use admission, accounting mapping and market-policy approval
 are separate executable decisions. Trusted machine signing binds those decisions
 to the admitted evidence and deployment policy. The release canary reproduces
-them before use. Missing or unsupported evidence still refuses. Authentic
-caller approval remains bound to the exact prepared valuation input.
+them before use. Missing or unsupported evidence still refuses. Calculation remains bound to
+the exact prepared valuation input.
 
 Neither a new provider nor automatic approval changes
 `supported_history_threshold=null` or promotes provisional valuation quality.
@@ -487,7 +487,7 @@ An admitted result exposes exact quote-original, terms and quote-admission
 `release_refs`; candidate/active-release checks require these refs. Issuer
 market policy preparation consumes macro/reference admissions separately.
 Neither quote admission nor transport creates complete award inventories,
-financial policies, release signatures or exact-input caller approval.
+financial policies or release signatures.
 Repeated/concurrent/reopened preparation reuses the existing capture and
 immutable result, returning `wrote=false` when unchanged.
 

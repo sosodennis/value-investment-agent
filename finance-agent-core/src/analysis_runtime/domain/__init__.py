@@ -12,8 +12,6 @@ from .contracts import (
     RunStatus,
     TickerSelectionRequest,
     TickerSelectionResponse,
-    ValuationApprovalRequest,
-    ValuationApprovalResponse,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
     WorkflowEvent,
@@ -62,7 +60,5 @@ __all__ = [
     "WorkflowInteractionEvent",
     "TickerSelectionRequest",
     "TickerSelectionResponse",
-    "ValuationApprovalRequest",
-    "ValuationApprovalResponse",
     "WorkflowSnapshot",
 ]

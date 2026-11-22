@@ -8,7 +8,6 @@ from fundamental_service.conditional_reinvestment_preparation import (
     ConditionalReinvestmentBindingV1,
     prepare_conditional_reinvestment,
 )
-from fundamental_service.contracts import CallerApprovalEnvelopeV1
 from fundamental_service.data_releases import DataReleaseError
 from fundamental_service.facts import (
     FilesystemCanonicalFactRepository,
@@ -34,7 +33,6 @@ from test_original_source_plan import (
     working_capital_recipe_template,
 )
 from test_preparation_runner import (
-    VALUATION_TIME,
     _acquisition,
     _reader,
     _reviewed_candidate,
@@ -221,16 +219,10 @@ def test_source_runner_binds_prepares_and_resumes_joint_forward_input(
     prepared = _reader(
         fixture, _run(_runner(fixture, canary=canary), plan, candidate=candidate)
     )
-    assert prepared.status == "approval_required", prepared.issue_codes
+    assert prepared.status == "prepared", prepared.issue_codes
     assert prepared.conditional_reinvestment_binding_ref == ref
     # Synthetic approval exercises the boundary; it is not real caller acceptance.
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=prepared.preparation.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-    calculated = _run(_runner(fixture), plan, approval=approval)
+    calculated = _run(_runner(fixture), plan, prepare_only=False)
     result = _reader(fixture, calculated)
     assert result.calculation.base.per_share_value is not None
     assert len(result.calculation.scenario_results) == 3
@@ -239,7 +231,7 @@ def test_source_runner_binds_prepares_and_resumes_joint_forward_input(
     )
     assert arithmetic.status == "pass", arithmetic.findings
     before = inventory(fixture.artifacts.root)
-    repeat = _run(_runner(fixture), plan, approval=approval)
+    repeat = _run(_runner(fixture), plan, prepare_only=False)
     assert not repeat.wrote and repeat.artifact == calculated.artifact
     assert inventory(fixture.artifacts.root) == before
 
@@ -297,7 +289,7 @@ def test_active_release_rechecks_assumption_bytes_before_reuse(tmp_path, monkeyp
     fixture.application = _client(fixture).app.state.application
     runner = _runner(fixture, canary=canary)
     first = _run(runner, plan, candidate=candidate)
-    assert _reader(fixture, first).status == "approval_required"
+    assert _reader(fixture, first).status == "prepared"
     original_read = fixture.artifacts.read
     document_id = fixture.forward_policy.recipe.assumption_document_uri.removeprefix(
         "artifact://"

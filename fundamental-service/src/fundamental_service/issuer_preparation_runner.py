@@ -8,12 +8,11 @@ import os
 import subprocess
 import sys
 import tempfile
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from time import monotonic
 
 from .annual_discovery import AnnualDiscoveryParametersV1
-from .automatic_caller import DeploymentAutomaticCaller
 from .current_preparation import CurrentSourcePreparationPublicationV1
 from .data_releases import ArtifactRefV1
 from .original_preparation import OriginalSecuritySelectionV1
@@ -24,6 +23,7 @@ from .original_source_plan import (
 from .source_plan_contracts import SOURCE_PREPARATION_PLAN
 from .replay import ArtifactRecordV1
 from .serialization import canonical_bytes
+from .process_output import write_stdout
 from .valuation_requirements import valuation_requirements_profile
 
 
@@ -91,13 +91,6 @@ def _remaining_seconds(deadline: float) -> float:
 
 
 def _execute(args: argparse.Namespace) -> dict[str, object]:
-    if args.prepare_only and args.approval is not None:
-        raise ValueError("prepare-only cannot supply a calculation approval")
-    automatic_caller = (
-        DeploymentAutomaticCaller.from_env()
-        if args.approval is None and not args.prepare_only
-        else None
-    )
     if (args.automatic_release_policy is None) != (args.release_private_key is None):
         raise ValueError("automatic release requires deployment policy and signing key")
     if args.automatic_release_policy is not None and args.candidate is not None:
@@ -283,11 +276,12 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
         ]
         if args.current:
             preparation_arguments.append("--current")
+        if args.prepare_only:
+            preparation_arguments.append("--prepare-only")
         for flag, path in (
             ("--candidate", args.candidate),
             ("--automatic-release-policy", args.automatic_release_policy),
             ("--release-private-key", args.release_private_key),
-            ("--approval", args.approval),
             ("--market-policy-authorization", args.market_policy_authorization),
         ):
             _append_path_argument(preparation_arguments, flag, path)
@@ -378,30 +372,6 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
         "status": "preparation_attempted",
         "preparation": preparation,
     }
-    if automatic_caller is not None:
-        execution = automatic_caller.execute(
-            publication_record,
-            caller_id=args.actor,
-            organization_id=args.organization,
-            deadline_at=datetime.now(UTC)
-            + timedelta(seconds=_remaining_seconds(deadline)),
-        )
-        result["automatic_execution"] = execution
-        if execution is not None:
-            result["status"] = (
-                "calculated" if execution.calculation is not None else "blocked"
-            )
-            execution_publication = (
-                execution.execution_publication or execution.decision_publication
-            )
-            complete_lineage["automatic_valuation"] = {
-                "artifact_id": execution_publication.artifact.artifact_id,
-                "input_digest": execution.decision.expected_input_digest,
-                "output_digest": execution_publication.artifact.content_hash,
-                "wrote": execution_publication.wrote,
-                "source_artifact_id": publication_record.artifact_id,
-                "source_digest": publication_record.content_hash,
-            }
     return result
 
 
@@ -441,9 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--automatic-release-policy", type=Path)
     parser.add_argument("--release-private-key", type=Path)
-    approval_mode = parser.add_mutually_exclusive_group()
-    approval_mode.add_argument("--approval", type=Path)
-    approval_mode.add_argument(
+    parser.add_argument(
         "--prepare-only",
         action="store_true",
         help="prepare sources and exact input without requesting automatic calculation",
@@ -457,10 +425,10 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("market-policy authorization requires its exact digest")
         result = _execute(args)
+        write_stdout(canonical_bytes(result) + b"\n")
     except (OSError, RuntimeError, TypeError, ValueError) as error:
         print(str(error), file=sys.stderr)
         return 2
-    print(canonical_bytes(result).decode("utf-8"))
     return 0
 
 

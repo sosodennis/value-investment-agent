@@ -759,7 +759,7 @@ jobs:
       - name: Test acceptance scopes and runtime gates
         run: |
           python3 -m pip install pytest==8.4.2
-          python3 -m pytest scripts/tests/test_validate_acceptance_manifest.py scripts/tests/test_validate_compose_inputs.py scripts/tests/test_acceptance_service_preflight.py -q
+          python3 -m pytest scripts/tests/test_validate_acceptance_manifest.py scripts/tests/test_validate_compose_inputs.py scripts/tests/test_acceptance_service_preflight.py scripts/tests/test_refactor_staging_smoke.py -q
 
       - name: Validate issue-scoped acceptance policy
         env:
