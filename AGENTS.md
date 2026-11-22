@@ -65,12 +65,12 @@ The **Neuro-Symbolic Valuation Engine** employs a hierarchical multi-agent syste
 **Role**: Authorize the exact calculation input
 
 *   **Trigger**: Before the deterministic calculation runs.
-*   **Default path**: Use an authenticated automated caller governed by a deployment-authorized, versioned approval policy. Eligible inputs proceed without per-valuation human confirmation.
+*   **Default path**: Use the authenticated internal calculation boundary with an explicit caller approval for the exact input. Eligibility never creates caller approval implicitly.
 *   **Decision scope**: Evaluate the resolved security, valuation date, model, exact parameters, source-use permissions, provenance, audit results and treatment of unknowns against that policy. Explicit scenarios and estimates retain their assumptions, limitations and quality classification.
 *   **Evidence**: Bind each approval or refusal to the exact input digest, caller identity, policy identity/version and decision evidence. Revalidate that binding before calculation; changed inputs require a new decision.
 *   **Failure behavior**: Missing authorization, failed checks or inputs outside the supported policy scope retain explicit refusal reasons and do not run the calculator. Agents and UI must not fabricate approval or bypass the owning service.
-*   **Human decisions**: Require human review only when explicitly selected by deployment policy or the user. A human approval must remain distinguishable from an automatic policy decision.
-*   **Implementation status**: Fundamental Service provides a deployment-configured automatic caller endpoint that recomposes and binds the exact input before execution. The company/date CLI invokes it when the deployment configures automatic approval. Real runtime acceptance remains outstanding; existing explicit caller contracts remain enforced on other paths. Documentation alone grants no runtime authorization.
+*   **Human decisions**: An explicit caller approval is required for valuation calculation. It remains distinguishable from automatic source, mapping and release policy decisions.
+*   **Implementation status**: Fundamental Service accepts explicit exact-input caller approvals through the authenticated calculation boundary. The company/date CLI prepares the input and requires `--approval` to request calculation. Deployment automatic-caller endpoints, policy files and CLI fallbacks are retired; source-use, mapping and release policies remain separate controls. Documentation alone grants no runtime authorization.
 
 ### **7. The Engine (Calculator Node)**
 

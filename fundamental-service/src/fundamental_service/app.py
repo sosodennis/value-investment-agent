@@ -24,19 +24,11 @@ from starlette.concurrency import run_in_threadpool
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
-from .automatic_approval import AutomaticValuationApprovalPolicyV1
-from .automatic_valuation import (
-    AutomaticValuationExecutor,
-    AutomaticValuationRequestV1,
-    AutomaticValuationResponseV1,
-    load_runtime_automatic_approval_policy,
-)
 from .valuation_diagnostics import (
     ValuationDiagnosticSink,
     diagnostic_error_code,
     valuation_diagnostic_scope,
 )
-from .calculation_flights import AutomaticValuationFlightRegistry
 from .contracts import (
     CalculationArtifactV1,
     FactsReadRequestV1,
@@ -136,34 +128,10 @@ from .forward_evidence import (
     ForwardEvidenceReviewResponseV1,
     review_forward_evidence,
 )
-from .serialization import sha256_digest
 
 LOGGER = logging.getLogger("fundamental_service")
 P = ParamSpec("P")
 T = TypeVar("T")
-
-
-def _automatic_valuation_flight_key(
-    request: AutomaticValuationRequestV1,
-    *,
-    caller_id: str,
-    organization_id: str,
-    automatic_policy_digest: str,
-    source_use_policy_digest: str,
-    runtime_identity: str,
-) -> str:
-    """Key a possible match; each request still validates its own input."""
-    return sha256_digest(
-        {
-            "protocol": "automatic-valuation-preparation-flight-v1",
-            "runtime_identity": runtime_identity,
-            "request": request,
-            "caller_id": caller_id,
-            "organization_id": organization_id,
-            "automatic_policy_digest": automatic_policy_digest,
-            "source_use_policy_digest": source_use_policy_digest,
-        }
-    )
 
 
 def _log_valuation_diagnostic(
@@ -249,7 +217,6 @@ def create_app(
     macro_providers: tuple[MacroSeriesProviderPort, ...] | None = None,
     reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
     source_use_policy: SourceUsePolicyV1 | None = None,
-    automatic_approval_policy: AutomaticValuationApprovalPolicyV1 | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -272,7 +239,6 @@ def create_app(
             )
     metrics = OperationalMetrics()
     limiter = RateLimiter(runtime_config.rate_limit_per_minute)
-    valuation_flights = AutomaticValuationFlightRegistry()
     diagnostic_sink = ValuationDiagnosticSink()
     application = FundamentalApplication(
         snapshot_repository=snapshot_repository,
@@ -327,7 +293,6 @@ def create_app(
             yield
         finally:
             app.state.accepting_requests = False
-            valuation_flights.close()
             diagnostic_sink.close()
             if metadata_store is not None:
                 metadata_store.close()
@@ -344,7 +309,6 @@ def create_app(
     app.state.model_inventory = model_inventory
     app.state.sec_acquisition = sec_acquisition
     app.state.identity_resolution = identity_resolution
-    app.state.automatic_valuation_flights = valuation_flights
     app.state.valuation_diagnostic_sink = diagnostic_sink
     sec_acquisition_limiter = RateLimiter(
         runtime_config.ingestion_rate_limit_per_minute
@@ -1072,133 +1036,6 @@ def create_app(
         return success_response(request, application.validate_with_policy(value))
 
     @app.post(
-        "/v1/valuation/calculate-automatically",
-        response_model=TypedFundamentalResponseEnvelopeV1[AutomaticValuationResponseV1],
-        openapi_extra={
-            "requestBody": {
-                "required": True,
-                "content": {
-                    "application/json": {
-                        "schema": {
-                            "$ref": "#/components/schemas/FundamentalAutomaticValuationRequestEnvelopeV1"
-                        }
-                    }
-                },
-            }
-        },
-    )
-    async def calculate_automatically(request: Request) -> JSONResponse:
-        value = decode_input(request, AutomaticValuationRequestV1)
-        principal = request.state.context.principal
-        executor = AutomaticValuationExecutor(
-            application, automatic_approval_policy
-        ).execute
-        flight_key = _automatic_valuation_flight_key(
-            value,
-            caller_id=principal.subject_id,
-            organization_id=principal.organization_id,
-            automatic_policy_digest=(
-                automatic_approval_policy.digest
-                if automatic_approval_policy is not None
-                else "automatic-approval-unconfigured"
-            ),
-            source_use_policy_digest=(
-                application.source_use_policy.digest
-                if application.source_use_policy is not None
-                else "source-use-policy-unavailable"
-            ),
-            runtime_identity=valuation_flights.runtime_identity,
-        )
-        lease = valuation_flights.join(flight_key)
-        if lease is None:
-            if runtime_config.valuation_diagnostics:
-                _log_valuation_diagnostic(
-                    request=request,
-                    sink=diagnostic_sink,
-                    operation="AutomaticValuationExecutor.execute",
-                    event="preparation_flight_admission_rejected",
-                    trace_started=getattr(
-                        request.state, "valuation_trace_started", monotonic()
-                    ),
-                    deadline_at=request.state.deadline,
-                    reason="bounded_registry_capacity",
-                )
-            raise ServiceError(
-                "AUTOMATIC_VALUATION_CAPACITY_EXCEEDED",
-                "automatic valuation capacity is full; retry after current work completes",
-                status_code=503,
-                retryable=True,
-                retry_after_ms=250,
-            )
-
-        shared_preparation = None
-
-        try:
-            if lease is not None and not lease.is_owner:
-                wait_started = monotonic()
-                if runtime_config.valuation_diagnostics:
-                    _log_valuation_diagnostic(
-                        request=request,
-                        sink=diagnostic_sink,
-                        operation="AutomaticValuationExecutor.execute",
-                        event="preparation_flight_wait_started",
-                        trace_started=getattr(
-                            request.state, "valuation_trace_started", wait_started
-                        ),
-                        deadline_at=request.state.deadline,
-                        runtime_identity=valuation_flights.runtime_identity,
-                    )
-                try:
-                    shared_preparation = await lease.wait(request.state.deadline)
-                except ServiceError as error:
-                    if runtime_config.valuation_diagnostics:
-                        _log_valuation_diagnostic(
-                            request=request,
-                            sink=diagnostic_sink,
-                            operation="AutomaticValuationExecutor.execute",
-                            event="deadline_expired",
-                            trace_started=getattr(
-                                request.state,
-                                "valuation_trace_started",
-                                wait_started,
-                            ),
-                            deadline_at=request.state.deadline,
-                            timeout_phase="preparation_flight_wait",
-                            wait_ms=round((monotonic() - wait_started) * 1000, 3),
-                            error_code=diagnostic_error_code(error.code),
-                        )
-                    raise
-                if runtime_config.valuation_diagnostics:
-                    _log_valuation_diagnostic(
-                        request=request,
-                        sink=diagnostic_sink,
-                        operation="AutomaticValuationExecutor.execute",
-                        event="preparation_flight_wait_finished",
-                        trace_started=getattr(
-                            request.state, "valuation_trace_started", wait_started
-                        ),
-                        deadline_at=request.state.deadline,
-                        wait_ms=round((monotonic() - wait_started) * 1000, 3),
-                        reusable_preparation=shared_preparation is not None,
-                    )
-            result = await run_valuation_operation(
-                request,
-                executor,
-                value,
-                caller_id=principal.subject_id,
-                organization_id=principal.organization_id,
-                deadline_at=request.state.deadline,
-                shared_preparation=shared_preparation,
-                publish_preparation_result=(
-                    lease.publish if lease is not None and lease.is_owner else None
-                ),
-            )
-            return success_response(request, result)
-        finally:
-            if lease is not None:
-                lease.close()
-
-    @app.post(
         "/v1/valuation/calculate",
         response_model=TypedFundamentalResponseEnvelopeV1[
             CalculationArtifactV1 | UncertaintyReportV1
@@ -1303,10 +1140,6 @@ def create_app(
         schema = base_openapi()
         request_models = (
             (
-                "FundamentalAutomaticValuationRequestEnvelopeV1",
-                TypedFundamentalRequestEnvelopeV1[AutomaticValuationRequestV1],
-            ),
-            (
                 "FundamentalCalculationRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[ValuationInputV1],
             ),
@@ -1383,7 +1216,6 @@ def create_runtime_app() -> FastAPI:
 
     config = OperationsConfig.from_env()
     source_use_policy = load_runtime_source_use_policy()
-    automatic_approval_policy = load_runtime_automatic_approval_policy()
     root_value = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
     database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
     if not root_value or not database_url:
@@ -1391,7 +1223,6 @@ def create_runtime_app() -> FastAPI:
             config=config,
             require_metadata=True,
             source_use_policy=source_use_policy,
-            automatic_approval_policy=automatic_approval_policy,
         )
     root = Path(root_value)
     data_release_trust_roots_file = os.getenv(
@@ -1476,7 +1307,6 @@ def create_runtime_app() -> FastAPI:
         sec_acquisition=sec_acquisition,
         identity_resolution=identity_resolution,
         source_use_policy=source_use_policy,
-        automatic_approval_policy=automatic_approval_policy,
     )
 
 

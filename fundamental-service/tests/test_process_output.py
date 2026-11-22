@@ -1,16 +1,11 @@
 """Subprocess protocols retain complete bytes despite short unbuffered writes."""
 
 import importlib
-import io
-import json
-import subprocess
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from fundamental_service import automatic_caller_http
 from fundamental_service.process_output import write_stdout
 from fundamental_service.serialization import canonical_bytes
 
@@ -61,55 +56,6 @@ def test_stdout_flush_failure_propagates(monkeypatch):
     monkeypatch.setattr(sys, "stdout", SimpleNamespace(buffer=writer))
     with pytest.raises(OSError, match="private output failure"):
         write_stdout(b"complete")
-
-
-def test_http_main_emits_complete_body_without_newline(monkeypatch):
-    writer = ShortWriter()
-    raw = canonical_bytes({"body": "數值" * 2000})
-    monkeypatch.setattr(sys, "stdout", SimpleNamespace(buffer=writer))
-    monkeypatch.setattr(sys, "stdin", io.StringIO("{}"))
-    monkeypatch.setattr(automatic_caller_http, "read_response", lambda wire: raw)
-    assert automatic_caller_http.main() == 0
-    assert bytes(writer.raw) == raw
-    assert writer.flushed
-
-
-@pytest.mark.parametrize("failure", ["zero", "none", "write", "flush"])
-def test_http_main_sanitizes_output_failures(monkeypatch, failure):
-    stop = {
-        "zero": lambda: 0,
-        "none": lambda: None,
-        "write": OSError("private credential"),
-        "flush": None,
-    }[failure]
-    writer = ShortWriter(stop=stop, fail_flush=failure == "flush")
-    stderr = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", SimpleNamespace(buffer=writer))
-    monkeypatch.setattr(sys, "stderr", stderr)
-    monkeypatch.setattr(sys, "stdin", io.StringIO("{}"))
-    monkeypatch.setattr(automatic_caller_http, "read_response", lambda wire: b"x" * 100)
-    assert automatic_caller_http.main() == 3
-    assert json.loads(stderr.getvalue()) == {"transport_failed": True}
-
-
-@pytest.mark.parametrize("as_module", [False, True])
-def test_http_worker_imports_standalone_and_as_package(tmp_path, as_module):
-    source = Path(automatic_caller_http.__file__).resolve()
-    command = (
-        ["-m", "fundamental_service.automatic_caller_http"]
-        if as_module
-        else [str(source)]
-    )
-    result = subprocess.run(
-        [sys.executable, "-u", *command],
-        input=b"{}",
-        capture_output=True,
-        cwd=tmp_path,
-        timeout=15,
-    )
-    assert result.returncode == 3
-    assert result.stdout == b""
-    assert json.loads(result.stderr) == {"transport_failed": True}
 
 
 @pytest.mark.parametrize(

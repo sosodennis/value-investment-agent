@@ -97,9 +97,8 @@ def _discovery_result(evidence, prepared, *, wrote=False):
 
 
 @pytest.mark.parametrize("automatic_release", (False, True))
-@pytest.mark.parametrize("automatic_caller", (False, True))
 def test_issuer_entry_compiles_then_runs_formal_preparation(
-    tmp_path, monkeypatch, automatic_release, automatic_caller
+    tmp_path, monkeypatch, automatic_release
 ):
     original_case = case(tmp_path, monkeypatch)
     prepared, _ = execute(original_case)
@@ -108,34 +107,6 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(
     calls = []
     clock_ticks = iter(range(100, 200))
     run_number = 0
-    automatic_calls = []
-
-    class Caller:
-        def execute(self, record, **kwargs):
-            from fundamental_service.replay import (
-                ArtifactPublicationV1,
-                ArtifactRecordV1,
-            )
-
-            automatic_calls.append((record, kwargs))
-            publication = ArtifactPublicationV1(
-                artifact=ArtifactRecordV1(
-                    artifact_id="synthetic-automatic-execution",
-                    content_hash="e" * 64,
-                ),
-                wrote=run_number == 1,
-            )
-            return SimpleNamespace(
-                calculation=object(),
-                decision=SimpleNamespace(expected_input_digest="f" * 64),
-                execution_publication=publication,
-                decision_publication=publication,
-            )
-
-    monkeypatch.setattr(
-        "fundamental_service.issuer_preparation_runner.DeploymentAutomaticCaller.from_env",
-        lambda: Caller() if automatic_caller else None,
-    )
 
     monkeypatch.setattr(
         "fundamental_service.issuer_preparation_runner.monotonic",
@@ -185,18 +156,9 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(
         "preparation_runner",
     ]
     assert [timeout for _, _, timeout in calls] == [118, 116, 118, 116]
-    assert result["status"] == (
-        "calculated" if automatic_caller else "preparation_attempted"
-    )
-    assert len(automatic_calls) == (2 if automatic_caller else 0)
-    for record, kwargs in automatic_calls:
-        assert record.artifact_id == "source-preparation:abc"
-        assert kwargs["caller_id"] == args.actor
-        assert kwargs["organization_id"] == args.organization
-    if automatic_caller:
-        assert result["lineage"]["automatic_valuation"]["source_artifact_id"] == (
-            "source-preparation:abc"
-        )
+    assert result["status"] == "preparation_attempted"
+    assert "automatic_execution" not in result
+    assert "automatic_valuation" not in result["lineage"]
     assert result["original_preparation_artifact_id"] == prepared.artifact_id
     assert result["source_plan_ref"].content_hash == evidence.plan.digest
     assert result["preparation"]["wrote"] is True

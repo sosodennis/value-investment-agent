@@ -385,15 +385,16 @@ selects again. Current released mapping/fact checks and independent canary
 verification still run. Missing acquisitions remain a release miss so a new
 plan can acquire them; corrupt evidence remains an error. This reuse does not
 change input identities, signatures or the absolute execution deadline.
-The authenticated automatic caller obtains a `PreparedValuationOperation` from
-the application owner. It carries the formal preparation through the policy
-decision under the original deadline, then supplies that same expected input to
-the existing conditional calculator checks. The operation accepts approval of
-the exact input, checks for preparation mutation, and rechecks current release
-artifacts, every declared fact row and pinned approved mapping metadata before
-calculation. It is an in-process
-stage, not a serialized authorization flag. Direct calculation requests still
-recompose conditional inputs; each new automatic request prepares again.
+The issuer command does not obtain caller approval from deployment environment
+configuration. After source preparation and release checks, it returns
+`approval_required` until the operator supplies an explicit `--approval` envelope
+for the exact prepared input. The authenticated calculation boundary recomposes
+the input, verifies the caller and organization, checks the approval's exact
+input digest, and rechecks current release artifacts, every declared fact row
+and pinned approved mapping metadata before calculation. Changed or invalid
+approvals refuse without publishing an execution. `--prepare-only` ends after
+preparation. Direct calculation requests use the same explicit exact-input
+caller contract.
 Only approved decisions receive `AutomaticMappingApprovalV1` certificates.
 Receipts record exact `source_revision`, input/output digests and separate
 publication results. Identical inputs and retained evidence return `wrote=false`

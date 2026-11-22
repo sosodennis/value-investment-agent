@@ -321,52 +321,37 @@ records deployment-approved rights; it cannot create provider permission.
 
 ## Source preparation command
 
-### Automatic caller approval
+### Exact-input caller approval
 
-`POST /v1/valuation/calculate-automatically` uses the same signed internal
-context and bearer authentication as calculation. Its input contains
-`preparation` (the existing release/snapshot/model selector),
-`expected_input_digest` and `approval_policy_digest`. The caller cannot supply
-valuation parameters, an approval envelope, or its own identity in this payload.
-The service recomposes the input through the formal composer, checks the exact
-digest and evaluates its deployment-authorized caller policy before calculation.
+The issuer command prepares and persists the exact valuation input after source,
+mapping, trusted-release and model-policy checks. It stops with
+`status=approval_required` until the caller supplies an approval envelope for
+that exact input:
 
-Automatic approval is disabled until the deployment supplies both
-`FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_FILE` and
-`FUNDAMENTAL_AUTOMATIC_APPROVAL_POLICY_DIGEST`. Mount the file read-only and pin
-the canonical `AutomaticValuationApprovalPolicyV1.digest`. Invalid or incomplete
-configuration stops composition. There is no default caller grant. The policy
-names authorized caller/organization pairs, exact model/policy versions, an
-authorization window and the deployed source-use policy digest. Provisional
-quality and uncalibrated conditional what-if scenarios each need explicit
-authorization. Only enumerated issue codes and missing-evidence categories may
-proceed; manual overrides and Monte Carlo are not supported by this path.
-Exceptions authorize the stated calculation scope, not factual completeness,
-provider rights, calibrated estimates or economic error bounds.
+```sh
+fundamental-prepare-issuer \
+  --cik 0000724910 --valuation-timestamp 2025-06-01T00:00:00Z \
+  --source-revision <installed-source-commit> \
+  --source-plan-configuration /run/config/source-plan.json \
+  --configuration-digest <canonical-configuration-sha256> \
+  --actor <operator-id> --organization <authorized-organization> \
+  --machine-private-key /run/secrets/mapping-evaluator.pem \
+  --approval /run/config/approval.json
+```
 
-Policy, recomposed preparation and automatic decision are retained as immutable
-artifacts. Refusals retain their reasons and do not call the calculator. Approved
-execution uses the existing calculator and retains an artifact joining the
-decision to the saved numerical evidence. Decision content is deterministic;
-storage publication and authenticated request logs supply event timing, rather
-than adding the request clock to the reusable decision's identity. Every retry
-recomposes and checks the policy authorization window again. The decision is
-explicitly automatic and does not represent a human approval. Independent source
-release signatures and all calculation/source-use gates remain enforced.
+`--approval` is checked by the authenticated internal calculation boundary. The
+service recomposes the input, binds the caller and organization to its exact
+input digest, rechecks the current release and source evidence, and refuses
+changed or invalid approvals before the deterministic calculator runs. A
+refusal retains its reason and publishes no execution. `--prepare-only` stops
+after preparation and deliberately requests no calculation.
 
-Set `FUNDAMENTAL_AUTOMATIC_APPROVAL_SERVICE_URL` to the service origin in the
-issuer command's environment. With the pinned approval policy and service
-credential configured, the company/date CLI retrieves the exact preparation
-through the authenticated artifact API and invokes automatic calculation. It
-verifies the preparation bytes and decision identities, carries the remaining
-original command deadline, refuses redirects and bounds responses to 8 MiB.
-The output adds `automatic_execution` and a joined lineage stage. Source
-refusals stay blocked; policy refusals retain their decision without calculation.
-An explicitly supplied `--approval` selects the existing explicit caller path.
-`--prepare-only` stops after source preparation and requests no calculation.
-`compose/verification/docker-compose.automatic-caller.yml` mounts a deployment
-policy read-only and configures the in-container issuer client against the
-service. It creates no grant or policy on the operator's behalf.
+There is no deployment automatic-caller endpoint, caller-policy file, or CLI
+fallback. Source-use, automatic mapping/release, trusted-release and calculator
+policies remain separate controls; none of them grants exact-input caller
+approval. Every calculation therefore uses an explicit approval envelope, and
+the caller must obtain that approval through the existing authenticated service
+boundary.
 
 Mapping input artifacts use `fundamental.mapping-input-artifact.v2`: each field
 and batch retains its request metadata and original evidence metadata, with a

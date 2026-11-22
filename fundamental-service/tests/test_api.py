@@ -712,6 +712,7 @@ def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
     ]
 
     paths = client.app.openapi()["paths"]
+    assert "/v1/valuation/calculate-automatically" not in paths
     assert "requestBody" in paths["/v1/valuation/calculate"]["post"]
     assert "requestBody" in paths["/v1/valuation/calculate-with-policy"]["post"]
     assert "requestBody" in paths["/v1/valuation/validate-with-policy"]["post"]

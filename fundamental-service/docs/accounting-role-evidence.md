@@ -12,8 +12,9 @@ Recapturing an original or changing the parser can preserve the accounting
 amount while producing a distinct immutable fact with its own provenance.
 Repeating the same source and evaluation reuses the fact identity. Automatic
 policy `source-bound-us-gaap-v26` pins this identity rule. Retained earlier facts
-remain readable; replaying their automatic approval requires its original
-executable policy and runtime.
+remain readable; replaying their mapping approval requires its original
+executable policy and runtime. Mapping approval is separate from the
+exact-input caller approval required before valuation calculation.
 
 New mappings use a supported deterministic automatic policy for semantic
 approval. Unsupported classifications retain abstentions; this document does
