@@ -12,8 +12,6 @@ from src.analysis_runtime.domain.contracts import (
     TickerCandidate,
     TickerSelectionRequest,
     TickerSelectionResponse,
-    ValuationApprovalRequest,
-    ValuationApprovalResponse,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
     WorkflowEvent,
@@ -116,79 +114,6 @@ def test_interaction_event_enforces_lifecycle_identity_and_candidate() -> None:
         )
 
 
-def test_versioned_valuation_approval_contract_enforces_kind_version_and_response() -> (
-    None
-):
-    request = ValuationApprovalRequest(
-        type="valuation_approval",
-        contract_version="v1",
-        ticker="AAPL",
-        model_type="dcf_growth",
-        title="Review valuation assumptions",
-        description="Approve to run the deterministic valuation.",
-        parameters={"wacc": 0.09, "terminal_growth": 0.025},
-        audit_messages=["PASS: parameters are internally consistent"],
-    )
-    approval = WorkflowInteraction(
-        identity=_identity(),
-        kind="valuation_approval",
-        status="pending",
-        request=request,
-    )
-    event = WorkflowInteractionEvent(
-        event_id="event-approval",
-        seq_id=2,
-        thread_id="thread-1",
-        run_id="run-1",
-        occurred_at=_NOW,
-        payload=approval,
-    )
-
-    assert _EVENTS.validate_python(event.model_dump(mode="json")) == event
-    responded = approval.model_copy(
-        update={
-            "status": "responded",
-            "response": ValuationApprovalResponse(
-                type="valuation_approval",
-                contract_version="v1",
-                decision="approve",
-            ),
-        }
-    )
-    assert responded.response.decision == "approve"
-    with pytest.raises(ValidationError, match="kind"):
-        WorkflowInteraction(
-            identity=_identity(),
-            kind="ticker_selection",
-            status="pending",
-            request=request,
-        )
-    with pytest.raises(ValidationError, match="response type"):
-        WorkflowInteraction(
-            identity=_identity(),
-            kind="valuation_approval",
-            status="responded",
-            request=request,
-            response=TickerSelectionResponse(
-                type="ticker_selection", selected_symbol="AAPL"
-            ),
-        )
-    with pytest.raises(ValidationError, match="contract_version"):
-        ValuationApprovalRequest.model_validate(
-            {
-                **request.model_dump(),
-                "contract_version": "v2",
-            }
-        )
-    with pytest.raises(ValidationError, match="16 KiB"):
-        ValuationApprovalRequest(
-            **{
-                **request.model_dump(),
-                "parameters": {"source": "x" * (16 * 1024)},
-            }
-        )
-
-
 def test_agent_output_bounds_serialized_utf8_preview_and_keeps_artifact_reference() -> (
     None
 ):
@@ -222,3 +147,23 @@ def test_agent_output_bounds_serialized_utf8_preview_and_keeps_artifact_referenc
             preview={"value": "é" * 8187},
             artifact_id="artifact-1",
         )
+
+
+@pytest.mark.parametrize("payload_field", ["request", "response"])
+def test_interaction_contract_rejects_retired_valuation_approval(
+    payload_field: str,
+) -> None:
+    payload = {
+        "identity": _identity().model_dump(),
+        "kind": "ticker_selection",
+        "status": "responded",
+        "request": _request().model_dump(),
+        "response": {"type": "ticker_selection", "selected_symbol": "AAPL"},
+    }
+    payload[payload_field] = {
+        "type": "valuation_approval",
+        "contract_version": "v1",
+        "decision": "approve",
+    }
+    with pytest.raises(ValidationError):
+        WorkflowInteraction.model_validate(payload)

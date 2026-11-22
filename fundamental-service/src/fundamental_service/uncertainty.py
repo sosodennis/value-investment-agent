@@ -79,8 +79,6 @@ class UncertaintyEvidenceV1(BaseModel):
 
     @model_validator(mode="after")
     def evidence_is_digest_bound(self) -> UncertaintyEvidenceV1:
-        if "caller_approval" in self.request:
-            raise ValueError("caller approval evidence must not be persisted")
         if sha256_digest(self.request) != self.report.input_digest:
             raise ValueError(
                 "uncertainty evidence request digest does not match report"
@@ -148,7 +146,7 @@ def _with_paths(
             values[index] = number
             assumptions[group][field] = tuple(values)
     payload = request.model_dump(
-        include=set(ValuationInputV1.model_fields) - {"input_digest", "caller_approval"}
+        include=set(ValuationInputV1.model_fields) - {"input_digest"}
     )
     payload["assumptions"] = assumptions
     return ValuationInputV1.model_validate(payload).with_digest()
@@ -308,7 +306,6 @@ def run_uncertainty(
     deterministic_request = deterministic_request.model_copy(
         update={
             "uncertainty": UncertaintyV1(mode="none"),
-            "caller_approval": None,
             "input_digest": None,
         }
     ).with_digest()

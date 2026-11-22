@@ -4,8 +4,8 @@
 option count and average exercise price can establish when individual strikes
 are unavailable. It is a pure Fundamental Service research method. The formal
 composer and release canary continue to refuse unresolved aggregate strikes.
-It supplies no valuation, security identity, complete inventory, release or
-caller approval, and cannot establish a history threshold.
+It supplies no valuation, security identity, complete inventory or release,
+and cannot establish a history threshold.
 
 The request retains the complete `OriginalIssuerEvidenceV1` and the exact parsed
 quantity and average-price fact digests. The method supports only the standard

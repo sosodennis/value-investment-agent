@@ -12,7 +12,6 @@ import pytest
 
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
-    CallerApprovalEnvelopeV1,
     QualityStatus,
     SecIngestionResponseV1,
     SecMappingReferenceV1,
@@ -302,12 +301,13 @@ def _fixture(
     )
 
 
-def _run(runner, plan, *, correlation="first", **kwargs):
+def _run(runner, plan, *, correlation="first", prepare_only=True, **kwargs):
     return runner.run(
         plan,
         actor_id="operator",
         organization_id="operators",
         correlation_id=correlation,
+        prepare_only=prepare_only,
         deadline_at=datetime.now(UTC) + timedelta(minutes=2),
         **kwargs,
     )
@@ -495,7 +495,7 @@ def test_released_source_uses_formal_composer_and_reuses_artifact_after_restart(
     with ThreadPoolExecutor(max_workers=1) as pool:
         after_restart = pool.submit(_run, restarted, fixture.plan).result()
 
-    assert prepared.status == "approval_required"
+    assert prepared.status == "prepared"
     assert prepared.preparation.status == "prepared"
     assert prepared.preparation.input.provenance.preparation_version == (
         "fcff-forecast-composer-v5"
@@ -708,7 +708,7 @@ def test_reviewed_candidate_resumes_acquisition_into_formal_preparation(tmp_path
     repeated = _run(runner, fixture.plan)
     evidence = _reader(fixture, first)
 
-    assert evidence.status == "approval_required"
+    assert evidence.status == "prepared"
     assert evidence.data_release_manifest_digest == candidate.manifest.manifest_digest
     assert len(acquisition.calls) == 1
     assert fixture.state.publications == 1
@@ -724,7 +724,7 @@ def test_reviewed_candidate_reuses_retained_snapshot_before_activation(tmp_path)
     first = _run(runner, fixture.plan, candidate=candidate)
     repeated = _run(runner, fixture.plan)
 
-    assert _reader(fixture, first).status == "approval_required"
+    assert _reader(fixture, first).status == "prepared"
     assert fixture.state.publications == 1
     assert repeated.wrote is False
     assert repeated.artifact == first.artifact
@@ -818,81 +818,13 @@ def test_denial_or_transient_acquisition_does_not_publish_evidence(
     assert tuple((tmp_path / "artifacts").rglob("*.json")) == before
 
 
-def test_approval_is_bound_to_prepared_input_and_rejection_never_calculates(tmp_path):
+def test_direct_preparation_calculates_and_repeat_is_unchanged(tmp_path):
     fixture = _fixture(tmp_path)
     runner = _runner(fixture)
-    preparation = _reader(fixture, _run(runner, fixture.plan)).preparation
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=preparation.input.input_digest,
-        decision="rejected",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-    rejected = _reader(fixture, _run(runner, fixture.plan, approval=approval))
-    assert rejected.status == "blocked"
-    assert rejected.issue_codes == ("CALLER_APPROVAL_REJECTED",)
-    assert rejected.calculation is None
-    with pytest.raises(ValueError, match="different valuation input"):
-        _run(
-            runner,
-            fixture.plan,
-            approval=approval.model_copy(update={"input_digest": "f" * 64}),
-        )
-    with pytest.raises(ServiceError, match="authenticated subject"):
-        _run(
-            runner,
-            fixture.plan,
-            approval=approval.model_copy(update={"caller_id": "other"}),
-        )
+    _reader(fixture, _run(runner, fixture.plan)).preparation
 
-
-@pytest.mark.parametrize("invalid", ["caller", "future"])
-def test_unbound_approval_refuses_before_source_or_release_access(
-    tmp_path, monkeypatch, invalid
-):
-    fixture = _fixture(tmp_path)
-    runner = _runner(fixture)
-    reached = []
-
-    def resolve(*args):
-        reached.append("resolve")
-        raise AssertionError("invalid approval reached stored source resolution")
-
-    monkeypatch.setattr(runner, "_resolve", resolve)
-    approval = CallerApprovalEnvelopeV1(
-        input_digest="a" * 64,
-        decision="approved",
-        caller_id="someone-else" if invalid == "caller" else "operator",
-        decided_at=datetime.now(UTC) + timedelta(days=1)
-        if invalid == "future"
-        else VALUATION_TIME,
-    )
-    with pytest.raises(ServiceError) as error:
-        _run(runner, fixture.plan, approval=approval)
-
-    assert error.value.code == (
-        "CALLER_APPROVAL_IDENTITY_MISMATCH"
-        if invalid == "caller"
-        else "CALLER_APPROVAL_NOT_YET_DECIDED"
-    )
-    assert error.value.status_code == 403
-    assert error.value.retryable is False
-    assert reached == []
-
-
-def test_approved_preparation_calculates_and_repeat_is_unchanged(tmp_path):
-    fixture = _fixture(tmp_path)
-    runner = _runner(fixture)
-    preparation = _reader(fixture, _run(runner, fixture.plan)).preparation
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=preparation.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-
-    first = _run(runner, fixture.plan, approval=approval)
-    repeated = _run(runner, fixture.plan, correlation="different", approval=approval)
+    first = _run(runner, fixture.plan, prepare_only=False)
+    repeated = _run(runner, fixture.plan, correlation="different", prepare_only=False)
     evidence = _reader(fixture, first)
 
     assert evidence.status == "calculated"
@@ -911,18 +843,12 @@ def test_expired_stage_cannot_start_the_next_valuation_or_publication(
     import fundamental_service.operations as operations
 
     fixture = _fixture(tmp_path, released=stage != "activation")
-    candidate = canary = approval = None
+    candidate = canary = None
     if stage == "activation":
         candidate, canary = _reviewed_candidate(fixture)
     runner = _runner(fixture, canary=canary)
     if stage == "calculation":
-        prepared = _reader(fixture, _run(runner, fixture.plan)).preparation
-        approval = CallerApprovalEnvelopeV1(
-            input_digest=prepared.input.input_digest,
-            decision="approved",
-            caller_id="operator",
-            decided_at=VALUATION_TIME,
-        )
+        _run(runner, fixture.plan)
     deadline = datetime.now(UTC) + timedelta(minutes=1)
     target, method = {
         "composition": (runner, "_resolve"),
@@ -949,7 +875,7 @@ def test_expired_stage_cannot_start_the_next_valuation_or_publication(
             organization_id="operators",
             correlation_id="expired-stage",
             deadline_at=deadline,
-            approval=approval,
+            prepare_only=False,
             candidate=candidate,
         )
     assert error.value.code == "REQUEST_DEADLINE_EXCEEDED"
@@ -1257,16 +1183,10 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
                 )
             )
         prepared = _run(runner, plan, candidate=candidate)
-        preparation = SourcePreparationEvidenceV1.model_validate_json(
+        SourcePreparationEvidenceV1.model_validate_json(
             artifacts.read(prepared.artifact.artifact_id)
         ).preparation
-        approval = CallerApprovalEnvelopeV1(
-            input_digest=preparation.input.input_digest,
-            decision="approved",
-            caller_id="operator",
-            decided_at=VALUATION_TIME,
-        )
-        calculated = _run(runner, plan, approval=approval)
+        calculated = _run(runner, plan, prepare_only=False)
         evidence = SourcePreparationEvidenceV1.model_validate_json(
             artifacts.read(calculated.artifact.artifact_id)
         )
@@ -1296,7 +1216,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
         restarted, _, restored_artifacts = wire(store)
         with localcontext(Context(prec=7, rounding=ROUND_DOWN)) as context:
             context.traps[Inexact] = True
-            repeated = _run(restarted, plan, approval=approval, correlation="restart")
+            repeated = _run(restarted, plan, prepare_only=False, correlation="restart")
         assert repeated.artifact == calculated.artifact
         assert repeated.wrote is False
         assert restored_artifacts.read(
@@ -1336,7 +1256,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
                     _run,
                     restored_runner,
                     plan,
-                    approval=approval,
+                    prepare_only=False,
                     correlation="restore",
                 ).result()
             assert restored_result.artifact == calculated.artifact
@@ -1779,20 +1699,13 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
         plan,
         candidate=candidate,
     )
-    assert _reader(fixture, approved).status == "approval_required"
+    assert _reader(fixture, approved).status == "prepared"
     assert _reader(fixture, approved).source_outcomes == first.source_outcomes
     assert tuple(calls) == calls_before
-    preparation = _reader(fixture, approved).preparation
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=preparation.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-    calculated = _run(_runner(fixture), plan, approval=approval)
+    calculated = _run(_runner(fixture), plan, prepare_only=False)
     assert _reader(fixture, calculated).calculation.base.per_share_value > 0
     assert _reader(fixture, calculated).source_outcomes == first.source_outcomes
-    assert _run(_runner(fixture), plan, approval=approval).wrote is False
+    assert _run(_runner(fixture), plan, prepare_only=False).wrote is False
     assert tuple(calls) == calls_before
     altered = _changed(originals[0], policy_version="tampered")
     (fixture.snapshots.root / f"{originals[0].snapshot_id}.json").write_bytes(
@@ -1804,7 +1717,7 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
     for operation in (
         lambda: fixture.application.snapshot(history.snapshot_id),
         lambda: fixture.application.resolve_snapshot(plan.resolution_request()),
-        lambda: _run(_runner(fixture), plan, approval=approval),
+        lambda: _run(_runner(fixture), plan, prepare_only=False),
     ):
         with pytest.raises(ServiceError) as serving_error:
             operation()
@@ -1812,7 +1725,7 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
     assert tuple(calls) == calls_before
     (fixture.snapshots.root / f"{originals[0].snapshot_id}.json").unlink()
     with pytest.raises(ServiceError) as missing_error:
-        _run(runner, plan, approval=approval)
+        _run(runner, plan, prepare_only=False)
     assert missing_error.value.code == "HISTORY_COMPONENT_UNAVAILABLE"
     assert tuple(calls) == calls_before
 
@@ -1897,7 +1810,7 @@ def test_required_public_source_runs_before_formal_preparation_and_reuses_report
     runner = _runner(fixture, public_acquisition=use_case)
     first = _run(runner, plan)
     report = _reader(fixture, first)
-    assert report.status == "approval_required"
+    assert report.status == "prepared"
     assert report.preparation.status == "prepared"
     baseline = _reader(fixture, _run(_runner(fixture), fixture.plan))
     assert report.preparation == baseline.preparation
@@ -2272,3 +2185,81 @@ def test_command_reports_stable_source_refusal_code_and_retryability(
     assert result["plan_digest"] == "a" * 64
     assert command.main(args) == 2
     assert capsys.readouterr().err == first.err
+
+
+def test_source_runner_calculates_valid_input_by_default(tmp_path):
+    fixture = _fixture(tmp_path)
+    receipt = _runner(fixture).run(
+        fixture.plan,
+        actor_id="operator",
+        organization_id="operators",
+        correlation_id="direct-default",
+        deadline_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
+    evidence = _reader(fixture, receipt)
+    assert evidence.status == "calculated"
+    assert evidence.calculation.base.per_share_value > 0
+    assert evidence.preparation.input.input_digest == evidence.calculation.input_digest
+
+
+def test_source_preparation_rejects_retired_status(tmp_path):
+    fixture = _fixture(tmp_path)
+    evidence = _reader(fixture, _run(_runner(fixture), fixture.plan))
+    with pytest.raises(ValueError):
+        SourcePreparationEvidenceV1.model_validate(
+            evidence.model_dump() | {"status": "approval_required"}
+        )
+
+
+@pytest.mark.parametrize("prepare_only", (False, True))
+def test_source_command_calculates_by_default_and_honors_prepare_only(
+    tmp_path, monkeypatch, capsys, prepare_only
+):
+    import importlib
+    from contextlib import asynccontextmanager
+    import json
+
+    app_module = importlib.import_module("fundamental_service.app")
+    fixture = _fixture(tmp_path)
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        yield
+
+    monkeypatch.delenv("FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE", raising=False)
+    monkeypatch.setattr(
+        app_module,
+        "app",
+        SimpleNamespace(
+            router=SimpleNamespace(lifespan_context=lifespan),
+            state=SimpleNamespace(
+                application=fixture.application,
+                metadata_store=fixture.metadata,
+                sec_acquisition=None,
+            ),
+        ),
+    )
+    path = tmp_path / "plan.json"
+    path.write_bytes(canonical_bytes(fixture.plan))
+    arguments = [
+        "--plan",
+        str(path),
+        "--plan-digest",
+        fixture.plan.digest,
+        "--actor",
+        "operator",
+        "--organization",
+        "operators",
+    ]
+    if prepare_only:
+        arguments.append("--prepare-only")
+    assert main(arguments) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    evidence = SourcePreparationEvidenceV1.model_validate_json(
+        fixture.artifacts.read(receipt["artifact"]["artifact_id"])
+    )
+    assert evidence.status == ("prepared" if prepare_only else "calculated")
+    if prepare_only:
+        assert evidence.calculation is None
+    else:
+        assert evidence.calculation.base.per_share_value > 0

@@ -14,7 +14,7 @@ Repeating the same source and evaluation reuses the fact identity. Automatic
 policy `source-bound-us-gaap-v26` pins this identity rule. Retained earlier facts
 remain readable; replaying their mapping approval requires its original
 executable policy and runtime. Mapping approval is separate from the
-exact-input caller approval required before valuation calculation.
+authenticated calculation boundary.
 
 New mappings use a supported deterministic automatic policy for semantic
 approval. Unsupported classifications retain abstentions; this document does
@@ -467,7 +467,7 @@ Source membership and deterministic scaling establish transcription only. The
 supported policy or retained independent review must establish currency, period,
 scope, completeness and overlap. For example, a rounded RSU-only cost cannot
 automatically supply total stock-based compensation. A provisional transcription
-stays provisional; it grants no release, caller approval, absence assertion or
+stays provisional; it grants no release, absence assertion or
 numerical valuation.
 
 A `confirmed_absent` period supplies zero only with exact cited original
@@ -486,10 +486,10 @@ valuation serving and backup verification compare each computed role with its
 mapping and independently validated original integrity evidence. Restoring a
 computed fact also requires its retained mapping and original snapshot.
 
-These rules do not approve a mapping, waive EFM/DQC, activate a release, or grant
-caller approval. Existing trusted reviews cover the entire mapping digest,
+These rules do not approve a mapping, waive EFM/DQC or activate a release.
+Existing trusted reviews cover the entire mapping digest,
 including its accounting rules. Numerical valuation still requires the existing
-#352 preparation and caller approval. `supported_history_threshold` remains null.
+#352 preparation. `supported_history_threshold` remains null.
 
 The Agent's fact projection preserves the JSON evidence as service-owned data;
 it evaluates no accounting or valuation rules. No Agent/UI workflow changes are
@@ -526,7 +526,7 @@ The ordinary automatic batch proposes this registered concept, then uses the
 existing integrity/taxonomy verification, machine signature and replay checks.
 Canonical candidates retain the original values, concepts and scoped report
 digests. This adds no manual mapping queue, calculation formula, source-use
-permission, full financial coverage, trusted release or caller approval.
+permission, full financial coverage, or trusted release.
 
 ### Registered NVE noncontrolling equity
 
@@ -682,7 +682,7 @@ components refuse. Equivalent duplicates and input order are deterministic.
 These are reported carrying-amount zeros, not `confirmed_absent` assertions.
 They prove neither current borrowing classifications nor annual finance lease
 expense: a lease paid off during the year could have expense and no closing
-balance. No award, market input, release, caller approval or verified valuation
+balance. No award, market input, release or verified valuation
 is inferred. The remaining gaps stay visible and history thresholds remain null.
 
 ### Direct observations at reported precision
@@ -830,7 +830,7 @@ operating fraction remains an explicit estimate under the existing composite
 working-capital policy. This instant carrying-amount result is not a
 `confirmed_absent` assertion, does not establish annual finance-lease expense,
 and supplies no preferred/convertible/share-class or award absence. Those gaps,
-market/release/caller-approval requirements and the null history threshold remain.
+market/release requirements and the null history threshold remain.
 
 ### Single dated disclosure balances
 
@@ -1013,7 +1013,7 @@ scope is `mapped_observations_not_completeness_or_model_readiness`: presence
 does not establish a complete history, instrument inventory, component scope,
 agreement, quote permission or release approval. A conditional model's unknown
 historical supporting roles remain unknown. Existing binding, release, composer
-and exact-input caller approval gates determine whether calculation can proceed.
+and model-quality gates determine whether calculation can proceed.
 
 The report is additive and omitted when the exact-plan snapshot or mappings are
 unavailable. It uses no company registrations, source downloads, separate

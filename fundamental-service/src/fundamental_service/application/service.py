@@ -157,11 +157,10 @@ class UncertaintyRequestV1(ValuationInputV1):
     monte_carlo: MonteCarloRequestV1 | None = None
 
     @model_validator(mode="after")
-    def digest_and_approval(self) -> UncertaintyRequestV1:
+    def validate_digest(self) -> UncertaintyRequestV1:
         payload = self.model_dump(
             exclude={
                 "input_digest",
-                "caller_approval",
             }
         )
         computed = sha256_digest(payload)
@@ -169,21 +168,15 @@ class UncertaintyRequestV1(ValuationInputV1):
             not is_digest(self.input_digest) or self.input_digest != computed
         ):
             raise ValueError("input_digest does not match complete uncertainty request")
-        if (
-            self.caller_approval is not None
-            and self.caller_approval.input_digest != computed
-        ):
-            raise ValueError("caller approval is bound to a different input_digest")
         return self
 
     def base_input(self) -> ValuationInputV1:
         payload = self.model_dump(exclude={"scenarios", "sensitivity", "monte_carlo"})
         payload["input_digest"] = None
-        payload["caller_approval"] = None
         return ValuationInputV1.model_validate(payload)
 
     def with_digest(self) -> UncertaintyRequestV1:
-        payload = self.model_dump(exclude={"input_digest", "caller_approval"})
+        payload = self.model_dump(exclude={"input_digest"})
         return self.model_copy(update={"input_digest": sha256_digest(payload)})
 
 
@@ -345,7 +338,6 @@ def _policy_error(error: PolicyError) -> ServiceError:
         retryable = False
     elif error.code in {
         "POLICY_AMBIGUOUS",
-        "CALLER_APPROVAL_CONFLICT",
         "INPUT_DIGEST_MISMATCH",
     }:
         status_code = 409
@@ -1116,10 +1108,9 @@ class FundamentalApplication:
         # Transport correlation IDs are per request; persisted evidence must be
         # byte-stable so the same deterministic result can be safely retried.
         stable_result = result.model_copy(update={"correlation_id": "persisted"})
-        evidence_request = request.model_copy(update={"caller_approval": None})
         evidence = CalculationEvidenceV1(
             contract_version="fundamental.v1",
-            request=evidence_request,
+            request=request,
             calculation=stable_result,
         )
         evidence_digest = sha256_digest(evidence.model_dump(mode="json"))
@@ -1981,7 +1972,6 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
-        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
@@ -1998,7 +1988,6 @@ class FundamentalApplication:
             resolution,
             correlation_id=correlation_id,
             deadline_at=deadline_at,
-            preparation=preparation,
         )
 
     def calculate_with_policy(
@@ -2020,7 +2009,6 @@ class FundamentalApplication:
         value: ValuationInputV1,
         *,
         deadline_at: datetime | None = None,
-        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> bool:
         manifest = self._data_release_manifest(
             value.valuation_context.data_release_manifest_digest
@@ -2050,27 +2038,23 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             )
-        expected = preparation
-        if expected is None:
-            expected = self.prepare_valuation(
-                ValuationEvidenceReadRequestV1(
-                    contract_version="fundamental.v1",
-                    snapshot_id=value.valuation_context.data_snapshot_id,
-                    data_release_manifest_digest=manifest.manifest_digest,
-                    model_id=value.model_id,
-                ),
-                policy_id=value.policy_id,
-                deadline_at=deadline_at,
-            )
+        expected = self.prepare_valuation(
+            ValuationEvidenceReadRequestV1(
+                contract_version="fundamental.v1",
+                snapshot_id=value.valuation_context.data_snapshot_id,
+                data_release_manifest_digest=manifest.manifest_digest,
+                model_id=value.model_id,
+            ),
+            policy_id=value.policy_id,
+            deadline_at=deadline_at,
+        )
         if expected.input is not None:
             resolved, _ = self._resolve_policy(expected.input)
         else:
             resolved = None
         if resolved is None or canonical_bytes(
-            resolved.model_dump(exclude={"input_digest", "caller_approval"})
-        ) != canonical_bytes(
-            value.model_dump(exclude={"input_digest", "caller_approval"})
-        ):
+            resolved.model_dump(exclude={"input_digest"})
+        ) != canonical_bytes(value.model_dump(exclude={"input_digest"})):
             raise ServiceError(
                 f"{prefix}_INPUT_MISMATCH",
                 "conditional calculation requires the exact recomposed release input and joint scenarios",
@@ -2087,7 +2071,6 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
-        preparation: AutomaticValuationPreparationV1 | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         if resolution.input_digest != resolved.input_digest:
@@ -2113,35 +2096,15 @@ class FundamentalApplication:
                     error.code, str(error), status_code=422, retryable=False
                 ) from error
         self._verify_fact_references(resolved)
-        if preparation is not None and manifest is not None:
-            self._release_snapshot_facts(manifest, snapshot)
-            self._current_release_mappings(manifest)
         guard_execution_deadline(deadline_at)
         released_conditional = self._is_released_conditional_input(
-            resolved, deadline_at=deadline_at, preparation=preparation
+            resolved, deadline_at=deadline_at
         )
         guard_execution_deadline(deadline_at)
-        if released_conditional and resolved.caller_approval is None:
-            raise ServiceError(
-                "CALLER_APPROVAL_REQUIRED",
-                "conditional scenarios require caller approval of the exact full input",
-                status_code=422,
-                retryable=False,
-            )
         has_uncertainty = resolved.uncertainty.mode != "none"
         calculation_input = resolved
         calculation_resolution = resolution
         if has_uncertainty:
-            if (
-                resolved.caller_approval is not None
-                and resolved.caller_approval.decision != "approved"
-            ):
-                raise ServiceError(
-                    "CALLER_APPROVAL_REJECTED",
-                    "caller rejected this exact valuation input",
-                    status_code=422,
-                    retryable=False,
-                )
             try:
                 validate_uncertainty_controls(resolved)
             except ValueError as error:
@@ -2155,7 +2118,6 @@ class FundamentalApplication:
                 update={
                     "uncertainty": UncertaintyV1(mode="none"),
                     "input_digest": None,
-                    "caller_approval": None,
                 }
             ).with_digest()
             calculation_resolution = resolution.model_copy(
@@ -2214,9 +2176,7 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             )
-        uncertainty_request = resolved.model_dump(
-            exclude={"input_digest", "caller_approval"}
-        )
+        uncertainty_request = resolved.model_dump(exclude={"input_digest"})
         guard_execution_deadline(deadline_at)
         uncertainty = self._persist_uncertainty_evidence(
             uncertainty, uncertainty_request
@@ -2269,16 +2229,6 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             )
-        if (
-            value.caller_approval is not None
-            and value.caller_approval.decision != "approved"
-        ):
-            raise ServiceError(
-                "CALLER_APPROVAL_REJECTED",
-                "caller rejected this exact valuation input",
-                status_code=422,
-                retryable=False,
-            )
         try:
             validate_uncertainty_controls(
                 value.base_input(),
@@ -2299,7 +2249,6 @@ class FundamentalApplication:
         deterministic_base = base_value.model_copy(
             update={
                 "uncertainty": UncertaintyV1(mode="none"),
-                "caller_approval": None,
             }
         ).with_digest()
         resolved, _ = self._resolve_policy(deterministic_base)
@@ -2309,23 +2258,8 @@ class FundamentalApplication:
                 "assumptions": resolved.assumptions,
                 "provenance": resolved.provenance,
                 "input_digest": None,
-                "caller_approval": None,
             }
         ).with_digest()
-        if (
-            value.caller_approval is not None
-            and value.caller_approval.input_digest != resolved_value.input_digest
-        ):
-            raise ServiceError(
-                "CALLER_APPROVAL_CONFLICT",
-                "caller approval is bound to a different resolved input_digest",
-                status_code=409,
-                retryable=False,
-            )
-        if value.caller_approval is not None:
-            resolved_value = resolved_value.model_copy(
-                update={"caller_approval": value.caller_approval}
-            )
         monte_carlo = value.monte_carlo
         if monte_carlo is not None:
             monte_carlo = monte_carlo.model_copy(
@@ -2363,9 +2297,7 @@ class FundamentalApplication:
                 retryable=False,
             )
         result = result.model_copy(update={"base": base})
-        evidence_request = resolved_value.model_dump(
-            exclude={"input_digest", "caller_approval"}
-        )
+        evidence_request = resolved_value.model_dump(exclude={"input_digest"})
         guard_execution_deadline(deadline_at)
         result = self._persist_uncertainty_evidence(result, evidence_request)
         self.metrics.increment("quality_status_total")

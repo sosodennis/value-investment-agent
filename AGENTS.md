@@ -60,24 +60,13 @@ The **Neuro-Symbolic Valuation Engine** employs a hierarchical multi-agent syste
     *   Flags hallucinations or data inconsistencies.
 *   **Output**: `AuditOutput` (Pass/Fail with messages).
 
-### **6. Policy-Based Automatic Approval**
-
-**Role**: Authorize the exact calculation input
-
-*   **Trigger**: Before the deterministic calculation runs.
-*   **Default path**: Use the authenticated internal calculation boundary with an explicit caller approval for the exact input. Eligibility never creates caller approval implicitly.
-*   **Decision scope**: Evaluate the resolved security, valuation date, model, exact parameters, source-use permissions, provenance, audit results and treatment of unknowns against that policy. Explicit scenarios and estimates retain their assumptions, limitations and quality classification.
-*   **Evidence**: Bind each approval or refusal to the exact input digest, caller identity, policy identity/version and decision evidence. Revalidate that binding before calculation; changed inputs require a new decision.
-*   **Failure behavior**: Missing authorization for a flow that requires it, failed checks or inputs outside the supported policy scope retain explicit refusal reasons and do not run the calculator. Agents and UI must not fabricate approval or bypass the owning service.
-*   **Human decisions**: The issuer preparation workflow and conditional scenarios require explicit caller approval. Direct non-conditional calculation may use the existing optional approval contract; any supplied approval remains distinguishable from automatic source, mapping and release policy decisions.
-*   **Implementation status**: Fundamental Service accepts explicit exact-input caller approvals through the authenticated calculation boundary. The company/date CLI prepares the input and requires `--approval` to request calculation. Deployment automatic-caller endpoints, policy files and CLI fallbacks are retired; source-use, mapping and release policies remain separate controls. Documentation alone grants no runtime authorization.
-
-### **7. The Engine (Calculator Node)**
+### **6. The Engine (Calculator Node)**
 
 **Role**: Deterministic Execution
 
 *   **Responsibility**:
-    *   Receives validated parameters.
+    *   Receives validated parameters through the authenticated Fundamental Service boundary.
+    *   Rechecks source-use permissions, retained evidence, freshness, exact input digests and model policy before execution. Invalid inputs retain explicit refusal reasons.
     *   Executes the `CalculationGraph` (a DAG of pure Python functions).
     *   Produces the final Intrinsic Value and sensitivity analysis.
     *   **Zero-Hallucination Guarantee**: No LLMs are used in this step.
@@ -97,10 +86,8 @@ graph TD
         Executor --> Auditor[Auditor<br/>(The Compliance Officer)]
     end
 
-    Auditor --> Approval{Versioned Approval Policy}
-
-    Approval -->|Approved| Calc[Calculator<br/>(The Engine)]
-    Approval -->|Refused or Unsupported| End([End])
+    Auditor -->|Validated| Calc[Calculator<br/>(The Engine)]
+    Auditor -->|Invalid or Unsupported| End([End])
 
     subgraph "Symbolic (Deterministic)"
         Calc

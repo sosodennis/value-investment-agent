@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from src.agents.fundamental.application.fundamental_service_port import (
@@ -51,13 +51,10 @@ class FundamentalWorkflowRunner:
     async def run_valuation(
         self,
         state: Mapping[str, object],
-        *,
-        request_approval: Callable[[Mapping[str, object]], object],
     ) -> FundamentalNodeResult:
         return await self.orchestrator.run_service_valuation(
             state,
             client=self.fundamental_service_client,
-            request_approval_fn=lambda payload: request_approval(payload),
             timeout_seconds=self.service_timeout_seconds,
         )
 

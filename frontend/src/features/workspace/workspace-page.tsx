@@ -89,14 +89,6 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
             adaptAgentOutput(evidenceAgent.id, output, `workspace_evidence.${evidenceAgent.id}`),
         );
     }, [agent.agentOutputs, evidenceAgent]);
-    const pendingValuationApproval = useMemo(
-        () => [...(agent.workflow?.interactions.values() ?? [])].find(
-            (interaction): interaction is Extract<WorkflowInteraction, { kind: 'valuation_approval' }> =>
-                interaction.kind === 'valuation_approval' && interaction.status === 'pending'
-        ) ?? null,
-        [agent.workflow?.interactions]
-    );
-
     const currentRunId = agent.runId ?? null;
     const forwardEvidence = forwardEvidenceState.runId === currentRunId ? forwardEvidenceState.value : null;
     const researchError = researchErrorState.runId === currentRunId ? researchErrorState.value : null;
@@ -216,7 +208,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} pendingApproval={pendingValuationApproval} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRecalculate={recalculateFromFundamental} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={researchForwardEvidence} onApplyForwardEvidence={applyForwardEvidence} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} isSubmitting={agent.isSubmittingInteraction} onRecalculate={recalculateFromFundamental} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={researchForwardEvidence} onApplyForwardEvidence={applyForwardEvidence} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>
@@ -257,10 +249,8 @@ function ActivityPanel({ workflow, connectionState, onResumeInteraction, isSubmi
         (item): item is Extract<WorkflowInteraction, { kind: 'ticker_selection' }> =>
             item.status === 'pending' && item.kind === 'ticker_selection'
     );
-    const valuationApprovalPending = [...workflow.interactions.values()].some((item) => item.status === 'pending' && item.kind === 'valuation_approval');
     return <div className="grid gap-4">
         {workflow.runStatus === 'waiting' && pendingInteractions.length === 0 && <Alert variant="warning"><CircleAlert className="size-4" /><AlertTitle>Workflow is waiting</AlertTitle><AlertDescription>The workflow is waiting for an interaction request that is not available in this activity snapshot.</AlertDescription></Alert>}
-        {valuationApprovalPending && <Alert variant="warning"><CircleAlert className="size-4" /><AlertTitle>Fundamental review required</AlertTitle><AlertDescription>Open the Fundamental tab to review the prepared valuation evidence and confirm or reject calculation.</AlertDescription></Alert>}
         {workflow.runStatus === 'failed' && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertTitle>Run failed</AlertTitle><AlertDescription><span className="block">{workflow.failure?.message ?? activities.find((item) => item.status === 'failed')?.label ?? 'The workflow ended with a failure.'}</span>{workflow.failure && <span className="mt-1 block text-xs">Code: {workflow.failure.code} · {workflow.failure.retryable ? 'Retry may succeed' : 'Retry is not expected to change the result'}</span>}{workflow.failure?.retryable && workflow.failure.checkpoint && <Button type="button" size="sm" variant="outline" className="mt-3" disabled={isRetrying} onClick={() => void onRetry()}><RotateCcw className={isRetrying ? 'animate-spin' : undefined} />{isRetrying ? 'Retrying…' : 'Retry from checkpoint'}</Button>}</AlertDescription></Alert>}
         {workflow.runStatus === 'cancelled' && <Alert variant="warning"><AlertTitle>Run cancelled</AlertTitle><AlertDescription>The workflow was cancelled and its current run has ended.</AlertDescription></Alert>}
         {workflow.runStatus === 'completed' && <Alert variant="success"><AlertTitle>Run completed</AlertTitle><AlertDescription>Agent activity has finished. Select a report tab to inspect available results.</AlertDescription></Alert>}
@@ -353,7 +343,7 @@ function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
     </Card>;
 }
 
-export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, selectedEvidenceId, pendingApproval, onResumeInteraction, isSubmitting, onRecalculate, forwardEvidence, isResearchingForwardEvidence, researchError, onResearchForwardEvidence, onApplyForwardEvidence }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; selectedEvidenceId?: string | null; pendingApproval?: Extract<WorkflowInteraction, { kind: 'valuation_approval' }> | null; onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>; isSubmitting?: boolean; onRecalculate?: (manualOverride: Record<string, unknown>) => void; forwardEvidence?: ForwardEvidenceReview | null; isResearchingForwardEvidence?: boolean; researchError?: string | null; onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>; onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void }) {
+export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, selectedEvidenceId, isSubmitting, onRecalculate, forwardEvidence, isResearchingForwardEvidence, researchError, onResearchForwardEvidence, onApplyForwardEvidence }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; selectedEvidenceId?: string | null; isSubmitting?: boolean; onRecalculate?: (manualOverride: Record<string, unknown>) => void; forwardEvidence?: ForwardEvidenceReview | null; isResearchingForwardEvidence?: boolean; researchError?: string | null; onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>; onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void }) {
     const output = outputs[tab] ?? null;
     const config = AGENT_CONFIGS.find((item) => item.id === tab);
     const status = statuses[tab] ?? 'idle';
@@ -368,5 +358,5 @@ export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, 
         role: config.role,
         status,
     };
-    return <WorkspaceOutputPanel agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} selectedEvidenceId={selectedEvidenceId} pendingApproval={pendingApproval} onResumeInteraction={onResumeInteraction} isSubmitting={isSubmitting} onRecalculate={onRecalculate} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={onResearchForwardEvidence} onApplyForwardEvidence={onApplyForwardEvidence} />;
+    return <WorkspaceOutputPanel agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} selectedEvidenceId={selectedEvidenceId} isSubmitting={isSubmitting} onRecalculate={onRecalculate} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={onResearchForwardEvidence} onApplyForwardEvidence={onApplyForwardEvidence} />;
 }

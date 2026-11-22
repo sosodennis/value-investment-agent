@@ -47,7 +47,7 @@ Repeats and retrieval verify the immutable request, receipts, original bytes and
 reproduced selection, returning the same digest with `wrote=false`. Interrupted or
 transient attempts reuse successful captures; retryable failures retain their own
 content identities. Catalog evidence does not approve mappings, prove complete
-accounting coverage, authorize a release/caller input or calculate a valuation.
+accounting coverage, authorize a release or calculate a valuation.
 
 Add `--prepare-originals` to capture and strictly validate each selected original
 before resolving its security identity from original DEI facts:
@@ -250,8 +250,7 @@ and input/output digest. Incomplete identity/original evidence returns
 `status=blocked` with its retained reasons and does not invoke source preparation.
 Otherwise `status=preparation_attempted` means the existing runner was called;
 inspect its saved artifact for `blocked`, `release_required`,
-`approval_required` or `calculated`. This command does not fabricate an approved
-release or caller approval. Repeat requests reuse the existing content-addressed
+`prepared` or `calculated`. Repeat requests reuse the existing content-addressed
 artifacts and return the underlying `wrote=false` dispositions.
 
 For an explicitly current request, add `--current` and supply a recent
@@ -268,7 +267,7 @@ In current mode, `fundamental-prepare-source` also returns the typed
 `current_selection` and `current_selection_publication`. The issuer entrypoint
 checks that selection against its compiled template and verifies the preparation
 receipt references the effective plan. This freezes source availability; market
-admission, trusted release and exact-input caller approval still run through the
+admission, trusted release and exact-input calculation still run through the
 existing owners.
 
 An optional `quote_source_template` in the source-plan configuration supplies
@@ -321,39 +320,18 @@ records deployment-approved rights; it cannot create provider permission.
 
 ## Source preparation command
 
-### Exact-input caller approval
+### Direct calculation and preparation only
 
-The issuer command prepares and persists the exact valuation input after source,
-mapping, trusted-release and model-policy checks. It stops with
-`status=approval_required` until the caller supplies an approval envelope for
-that exact input:
+The issuer and source commands calculate the exact prepared input after source,
+mapping, trusted-release and model-policy checks. Requests use the authenticated
+internal calculation boundary. The service recomposes conditional inputs, verifies
+their digests, and rechecks current release and source evidence before calculation.
+Failed checks retain explicit reasons and publish no execution.
 
-```sh
-fundamental-prepare-issuer \
-  --cik 0000724910 --valuation-timestamp 2025-06-01T00:00:00Z \
-  --source-revision <installed-source-commit> \
-  --source-plan-configuration /run/config/source-plan.json \
-  --configuration-digest <canonical-configuration-sha256> \
-  --actor <operator-id> --organization <authorized-organization> \
-  --machine-private-key /run/secrets/mapping-evaluator.pem \
-  --approval /run/config/approval.json
-```
-
-`--approval` is checked by the authenticated internal calculation boundary. The
-service recomposes the input, binds the caller and organization to its exact
-input digest, rechecks the current release and source evidence, and refuses
-changed or invalid approvals before the deterministic calculator runs. A
-refusal retains its reason and publishes no execution. `--prepare-only` stops
-after preparation and deliberately requests no calculation.
-
-There is no deployment automatic-caller endpoint, caller-policy file, or CLI
-fallback. Source-use, automatic mapping/release, trusted-release and calculator
-policies remain separate controls; none of them grants exact-input caller
-approval. The issuer preparation workflow and conditional scenarios require an
-explicit approval envelope. Direct calculation requests may omit approval only
-where the existing calculation policy permits it; when approval is supplied, the
-authenticated boundary checks its caller and exact input. No path creates caller
-approval implicitly.
+Add `--prepare-only` to either command to persist the exact input with
+`status=prepared` and skip calculation. Without that flag, a valid exact input
+calculates directly. Source-use permissions, mapping approvals and trusted release
+signatures remain separate controls.
 
 Mapping input artifacts use `fundamental.mapping-input-artifact.v2`: each field
 and batch retains its request metadata and original evidence metadata, with a
@@ -453,11 +431,10 @@ metadata and bytes through the authenticated `/v1/artifacts/{artifact_id}` and
 `wrote=false`; corrupt or conflicting evidence fails without replacement.
 
 The stored outcome is `release_required` for an acquired but unreleased snapshot,
-`blocked` for retained evidence failures, or `approval_required` when the formal
-composer prepares an input. To calculate, pass `--approval <approval.json>` with
-the caller's explicit approval of that exact prepared input digest. `calculated`
+`blocked` for retained evidence failures, `prepared` when `--prepare-only` stops
+after composition, or `calculated` after direct calculation. The calculation
 retains the existing calculator's uncertainty report and provenance. The command
-does not own a valuation session or job, and it never manufactures caller approval.
+does not own a valuation session or job.
 
 The #361 complete-flow acceptance remains pending. Synthetic fixtures prove
 coordination and persistence mechanics; they do not certify real issuer mappings,
@@ -524,7 +501,7 @@ The versioned `conditional-arithmetic-v1` scope independently expands joint
 scenarios and sensitivities and compares every scenario graph with the reference
 equations. It preserves verified or provisional quality and checks input/result
 identities. This check certifies arithmetic agreement only; source completeness,
-usage rights, caller approval, forecast calibration and historical performance
+usage rights, forecast calibration and historical performance
 require their own evidence. It supports explicit scenarios, not Monte Carlo.
 The existing deterministic cohort gate retains its verified-only default.
 
@@ -568,5 +545,4 @@ digest includes the catalog and file hashes; the report records the selected
 namespace and hash, and serving requires that evidence. An empty setting keeps
 the existing single-ruleset profile. Adding supported filing years requires
 matching taxonomy dependencies and rulesets; changing the year list alone does
-not establish support. This setting grants no source-use permission or caller
-approval.
+not establish support. This setting grants no source-use permission.

@@ -35,7 +35,7 @@ This guide defines the visual system and component-source policy for the financi
 - Present agent work as explicit steps with stable status, ownership, and progress. Keep partial output, final reports, and human decisions visually distinct.
 - Present debate output by round and speaker. Keep Bull, Bear, and Moderator contributions distinguishable, preserve their sequence, and place the final synthesis after the arguments it evaluates.
 - Place a required human interaction inside its waiting activity or owning agent section. Keep it visible until backend confirmation; avoid modal interruption as the default.
-- Make retry, cancel, approve, and reject states explicit. Disable duplicate actions while a request is pending and do not claim completion before the backend confirms it.
+- Make retry, cancel, and ticker selection states explicit. Disable duplicate actions while a request is pending and do not claim completion before the backend confirms it.
 - Use brief transitions only when they clarify a state change. Respect reduced-motion preferences and avoid animation on every streamed token.
 
 ## Review

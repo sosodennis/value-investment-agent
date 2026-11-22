@@ -91,8 +91,6 @@ def _remaining_seconds(deadline: float) -> float:
 
 
 def _execute(args: argparse.Namespace) -> dict[str, object]:
-    if args.prepare_only and args.approval is not None:
-        raise ValueError("prepare-only cannot supply a calculation approval")
     if (args.automatic_release_policy is None) != (args.release_private_key is None):
         raise ValueError("automatic release requires deployment policy and signing key")
     if args.automatic_release_policy is not None and args.candidate is not None:
@@ -278,11 +276,12 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
         ]
         if args.current:
             preparation_arguments.append("--current")
+        if args.prepare_only:
+            preparation_arguments.append("--prepare-only")
         for flag, path in (
             ("--candidate", args.candidate),
             ("--automatic-release-policy", args.automatic_release_policy),
             ("--release-private-key", args.release_private_key),
-            ("--approval", args.approval),
             ("--market-policy-authorization", args.market_policy_authorization),
         ):
             _append_path_argument(preparation_arguments, flag, path)
@@ -412,9 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--automatic-release-policy", type=Path)
     parser.add_argument("--release-private-key", type=Path)
-    approval_mode = parser.add_mutually_exclusive_group()
-    approval_mode.add_argument("--approval", type=Path)
-    approval_mode.add_argument(
+    parser.add_argument(
         "--prepare-only",
         action="store_true",
         help="prepare sources and exact input without requesting automatic calculation",

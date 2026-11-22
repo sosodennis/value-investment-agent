@@ -13,7 +13,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
-import type { InteractionResponse, WorkflowInteraction } from '@/features/workflow';
 import { FundamentalReviewPanel } from './FundamentalReviewPanel';
 import type {
     ForwardEvidenceManualOverride,
@@ -42,8 +41,6 @@ export interface FundamentalAnalysisOutputProps {
     resolvedTicker: string | null | undefined;
     status: AgentStatus;
     onSelectEvidence?: (item: EvidenceSelection) => void;
-    pendingApproval?: Extract<WorkflowInteraction, { kind: 'valuation_approval' }> | null;
-    onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
     isSubmitting?: boolean;
     onRecalculate?: (manualOverride: Record<string, unknown>) => void;
     forwardEvidence?: ForwardEvidenceReview | null;
@@ -59,8 +56,6 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     resolvedTicker,
     status,
     onSelectEvidence,
-    pendingApproval = null,
-    onResumeInteraction,
     isSubmitting = false,
     onRecalculate,
     forwardEvidence = null,
@@ -738,11 +733,9 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     </AlertDescription>
                 </Alert>
             )}
-            {(automaticPreparation || pendingApproval) && (
+            {automaticPreparation && (
                 <FundamentalReviewPanel
                     preparation={automaticPreparation}
-                    pendingApproval={pendingApproval}
-                    onResumeInteraction={onResumeInteraction}
                     isSubmitting={isSubmitting}
                     onRecalculate={onRecalculate}
                     ticker={requestTicker}

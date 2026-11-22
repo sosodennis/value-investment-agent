@@ -3,7 +3,7 @@ import hashlib
 import json
 import socket
 import urllib.request
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,7 +22,6 @@ from fundamental_service.application.service import (
 from fundamental_service.contracts import (
     CalculationArtifactV1,
     CalculationEvidenceV1,
-    CallerApprovalEnvelopeV1,
     CanonicalFactV1,
     FactsReadRequestV1,
     PeriodType,
@@ -88,7 +87,6 @@ def _bind_initial_policy(valuation):
 def _with_uncertainty_digest(payload):
     normalized = normalize_uncertainty_payload(payload)
     normalized["input_digest"] = None
-    normalized["caller_approval"] = None
     return UncertaintyRequestV1.model_validate_json(
         json.dumps(normalized)
     ).with_digest()
@@ -931,81 +929,6 @@ def test_policy_calculation_executes_uncertainty_and_preserves_full_input_bindin
     assert explicit_result["base"]["result_hash"] == result["base"]["result_hash"]
 
 
-def test_rejected_caller_approval_never_executes_calculation():
-    valuation = _bind_initial_policy(make_valuation())
-    payload = valuation.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": valuation.input_digest,
-        "decision": "rejected",
-        "caller_id": "subject-test",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
-    response = TestClient(
-        create_app(_SnapshotRepository(), fact_repository=_FactRepository())
-    ).post(
-        "/v1/valuation/calculate",
-        headers=auth_headers(),
-        json=make_internal_envelope(payload),
-    )
-
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "CALLER_APPROVAL_REJECTED"
-
-
-@pytest.mark.parametrize(
-    "route,method",
-    [
-        ("calculate", "calculate_valuation"),
-        ("calculate-with-policy", "calculate_with_policy"),
-        ("uncertainty", "uncertainty_valuation"),
-    ],
-)
-@pytest.mark.parametrize("decision", ["approved", "rejected"])
-@pytest.mark.parametrize("invalid", ["caller", "future"])
-def test_calculation_rejects_unbound_approval_before_application_execution(
-    monkeypatch, route, method, decision, invalid
-):
-    reached = []
-
-    def execute(*args, **kwargs):
-        reached.append(method)
-        raise AssertionError("invalid approval reached calculation")
-
-    monkeypatch.setattr(FundamentalApplication, method, execute)
-    valuation = _bind_initial_policy(make_valuation())
-    if route == "uncertainty":
-        valuation = _with_uncertainty_digest(valuation.model_dump(mode="json"))
-    payload = valuation.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": valuation.input_digest,
-        "decision": decision,
-        "caller_id": "someone-else" if invalid == "caller" else "subject-test",
-        "decided_at": (
-            datetime.now(UTC) + timedelta(days=1)
-            if invalid == "future"
-            else datetime.now(UTC)
-        ).isoformat(),
-    }
-    response = TestClient(create_app()).post(
-        f"/v1/valuation/{route}",
-        headers=auth_headers(),
-        json=make_internal_envelope(payload),
-    )
-
-    assert response.status_code == 403, response.text
-    assert response.json()["error"] == {
-        "code": "CALLER_APPROVAL_IDENTITY_MISMATCH"
-        if invalid == "caller"
-        else "CALLER_APPROVAL_NOT_YET_DECIDED",
-        "message": "caller approval must match the authenticated subject"
-        if invalid == "caller"
-        else "caller approval cannot be decided after receipt",
-        "retryable": False,
-        "retry_after_ms": None,
-    }
-    assert reached == []
-
-
 def test_policy_calculation_rejects_unsupported_model_family():
     bank_model = next(
         model
@@ -1347,7 +1270,7 @@ def test_uncertainty_endpoint_runs_the_shared_calculator():
     assert body["result"]["scenario_results"]
 
 
-def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
+def test_uncertainty_digest_covers_sampling_and_scenario_controls():
     valuation = _bind_initial_policy(make_valuation())
     payload = valuation.model_dump(mode="json")
     payload.update(
@@ -1404,12 +1327,6 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
         UncertaintyRequestV1.model_validate_json(json.dumps(changed))
 
     payload = request.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": request.input_digest,
-        "decision": "approved",
-        "caller_id": "subject-test",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
     response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     ).post(
@@ -1425,7 +1342,7 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
     assert result["valid_samples"] == 10
 
 
-def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
+def test_capital_scenarios_bind_digest_and_retrieve_saved_evidence(tmp_path):
     valuation = _bind_initial_policy(make_valuation())
     payload = valuation.model_dump(mode="json")
     payload["uncertainty"] = {
@@ -1457,12 +1374,6 @@ def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
     payload.pop("input_digest")
     validation = type(valuation).model_validate_json(json.dumps(payload)).with_digest()
     payload = validation.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": validation.input_digest,
-        "decision": "approved",
-        "caller_id": "subject-test",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
     client = TestClient(
         create_app(
             _SnapshotRepository(),
@@ -1517,7 +1428,6 @@ def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
     payload["uncertainty"]["scenarios"][1]["assumptions"][
         "assumptions.capital_bridge.debt"
     ] = "31"
-    payload["input_digest"] = None
     rejected = client.post(
         "/v1/valuation/calculate",
         headers=auth_headers(),
@@ -1532,8 +1442,18 @@ def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
         == saved.content
     )
 
+    payload["input_digest"] = None
+    changed = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["result"]["input_digest"] != result["input_digest"]
+    assert changed.json()["result"]["result_hash"] != result["result_hash"]
 
-def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval():
+
+def test_calculate_executes_explicit_monte_carlo_controls():
     valuation = (
         make_valuation()
         .model_copy(
@@ -1576,26 +1496,16 @@ def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval
         == result["base"]["input_digest"]
     )
 
-    approved = valuation.model_copy(
-        update={
-            "caller_approval": CallerApprovalEnvelopeV1(
-                input_digest=valuation.input_digest,
-                decision="approved",
-                caller_id="subject-test",
-                decided_at=datetime.now(UTC),
-            )
-        }
-    )
-    approved_response = TestClient(
+    repeated_response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     ).post(
         "/v1/valuation/calculate",
         headers=auth_headers(),
-        json=make_internal_envelope(approved.model_dump(mode="json")),
+        json=make_internal_envelope(valuation.model_dump(mode="json")),
     )
-    assert approved_response.status_code == 200, approved_response.text
+    assert repeated_response.status_code == 200, repeated_response.text
     assert (
-        approved_response.json()["result"]["base"]["result_hash"]
+        repeated_response.json()["result"]["base"]["result_hash"]
         == result["base"]["result_hash"]
     )
 
@@ -1621,16 +1531,7 @@ def test_calculate_returns_version_bound_replayable_evidence():
     app = create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     client = TestClient(app)
     validation = app.state.application.validate_valuation(make_valuation())
-    request = validation.input.model_copy(
-        update={
-            "caller_approval": CallerApprovalEnvelopeV1(
-                input_digest=validation.input_digest,
-                decision="approved",
-                caller_id="subject-test",
-                decided_at=datetime.now(UTC),
-            )
-        }
-    )
+    request = validation.input
     response = client.post(
         "/v1/valuation/calculate",
         headers=auth_headers(),
@@ -1656,11 +1557,9 @@ def test_calculate_returns_version_bound_replayable_evidence():
         evidence.calculation.trace.policy_digest
         == validation.policy_resolution.policy_digest
     )
-    assert evidence.request.caller_approval is None
-    assert json.loads(content)["request"]["caller_approval"] is None
 
 
-def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
+def test_uncertainty_accepts_the_validated_request():
     valuation = (
         make_valuation()
         .model_copy(
@@ -1691,12 +1590,6 @@ def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
     }
     request = _with_uncertainty_digest(payload)
     payload = request.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": request.input_digest,
-        "decision": "approved",
-        "caller_id": "subject-test",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
     response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     ).post(
@@ -2793,3 +2686,33 @@ def test_metrics_declare_operational_quality_and_dependency_signals():
         "provider_degradation_total",
     ):
         assert f"fundamental_service_{metric}" in body
+
+
+@pytest.mark.parametrize(
+    "route,method",
+    (
+        ("calculate", "calculate_valuation"),
+        ("calculate-with-policy", "calculate_with_policy"),
+        ("uncertainty", "uncertainty_valuation"),
+    ),
+)
+def test_removed_caller_approval_is_rejected_before_application_execution(
+    monkeypatch, route, method
+):
+    reached = []
+
+    def execute(*args, **kwargs):
+        reached.append(method)
+        raise AssertionError("retired field reached calculation")
+
+    monkeypatch.setattr(FundamentalApplication, method, execute)
+    payload = _bind_initial_policy(make_valuation()).model_dump(mode="json")
+    payload["caller_approval"] = None
+    response = TestClient(create_app()).post(
+        f"/v1/valuation/{route}",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "invalid_request"
+    assert reached == []

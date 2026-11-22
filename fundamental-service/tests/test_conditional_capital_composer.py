@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fundamental_service.contracts import CallerApprovalEnvelopeV1, ValuationInputV1
+from fundamental_service.contracts import ValuationInputV1
 from fundamental_service.equity_award_evidence import EQUITY_DILUTION_ARTIFACT_ROLE
 from fundamental_service.data_releases import ArtifactRefV1, DataReleaseError
 from fundamental_service.quote_admission import (
@@ -49,19 +49,6 @@ def _prepared_case(tmp_path, *, balance_hypotheses=None):
     return fixture, client, candidate, prepared
 
 
-def _approved(value):
-    return value.model_copy(
-        update={
-            "caller_approval": CallerApprovalEnvelopeV1(
-                input_digest=value.input_digest,
-                decision="approved",
-                caller_id="subject-test",
-                decided_at=datetime.now(UTC),
-            )
-        }
-    )
-
-
 def _calculate(client, value):
     return client.post(
         "/v1/valuation/calculate",
@@ -95,7 +82,7 @@ def test_conditional_http_preparation_and_approved_scenarios_save_and_replay(tmp
     )
     repeat = _prepare(client, fixture, candidate)
     assert repeat.json()["result"] == prepared.model_dump(mode="json")
-    value = _approved(prepared.input)
+    value = prepared.input
     first = _calculate(client, value)
     assert first.status_code == 200, first.text
     result = first.json()["result"]
@@ -126,9 +113,6 @@ def test_conditional_http_preparation_and_approved_scenarios_save_and_replay(tmp
     )
     assert saved.status_code == 200, saved.text
     evidence = UncertaintyEvidenceV1.model_validate_json(saved.content)
-    assert evidence.request == value.model_dump(
-        mode="json", exclude={"input_digest", "caller_approval"}
-    )
     assert evidence.report.input_digest == value.input_digest
     second = _calculate(client, value)
     assert second.status_code == 200, second.text
@@ -141,35 +125,6 @@ def test_conditional_http_preparation_and_approved_scenarios_save_and_replay(tmp
     )
 
 
-def test_conditional_input_requires_explicit_exact_caller_approval(tmp_path):
-    _, client, _, prepared = _prepared_case(tmp_path)
-    response = _calculate(client, prepared.input)
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "CALLER_APPROVAL_REQUIRED"
-    rejected = _approved(prepared.input)
-    rejected = rejected.model_copy(
-        update={
-            "caller_approval": rejected.caller_approval.model_copy(
-                update={"decision": "rejected"}
-            )
-        }
-    )
-    response = _calculate(client, rejected)
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "CALLER_APPROVAL_REJECTED"
-    foreign = _approved(prepared.input)
-    foreign = foreign.model_copy(
-        update={
-            "caller_approval": foreign.caller_approval.model_copy(
-                update={"caller_id": "another-subject"}
-            )
-        }
-    )
-    response = _calculate(client, foreign)
-    assert response.status_code == 403
-    assert response.json()["error"]["code"] == "CALLER_APPROVAL_IDENTITY_MISMATCH"
-
-
 @pytest.mark.parametrize(
     "mutation", ["scenario", "remove_scenarios", "quality", "trace", "version", "base"]
 )
@@ -177,9 +132,7 @@ def test_caller_cannot_turn_conditional_release_into_different_authorized_input(
     tmp_path, mutation
 ):
     _, client, _, prepared = _prepared_case(tmp_path)
-    payload = prepared.input.model_dump(
-        mode="json", exclude={"input_digest", "caller_approval"}
-    )
+    payload = prepared.input.model_dump(mode="json", exclude={"input_digest"})
     if mutation == "scenario":
         payload["uncertainty"]["scenarios"][1]["assumptions"][
             "assumptions.capital_bridge.debt"
@@ -195,14 +148,14 @@ def test_caller_cannot_turn_conditional_release_into_different_authorized_input(
     else:
         payload["assumptions"]["capital_bridge"]["debt"] = "999"
     value = ValuationInputV1.model_validate_json(json.dumps(payload)).with_digest()
-    response = _calculate(client, _approved(value))
+    response = _calculate(client, value)
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "CONDITIONAL_CAPITAL_INPUT_MISMATCH"
 
 
-def test_old_approval_does_not_authorize_one_changed_conditional_operand(tmp_path):
+def test_changed_conditional_operand_is_rejected_after_recomposition(tmp_path):
     _, client, _, prepared = _prepared_case(tmp_path)
-    payload = _approved(prepared.input).model_dump(mode="json")
+    payload = prepared.input.model_dump(mode="json")
     payload["uncertainty"]["scenarios"][1]["assumptions"][
         "assumptions.capital_bridge.preferred_stock"
     ] = "9"
@@ -212,15 +165,15 @@ def test_old_approval_does_not_authorize_one_changed_conditional_operand(tmp_pat
         headers=auth_headers(),
         json=make_internal_envelope(payload),
     )
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "invalid_request"
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "CONDITIONAL_CAPITAL_INPUT_MISMATCH"
 
 
 def test_pinned_conditional_input_replays_after_new_effective_policy_is_registered(
     tmp_path,
 ):
     fixture, client, candidate, prepared = _prepared_case(tmp_path)
-    value = _approved(prepared.input)
+    value = prepared.input
     first = _calculate(client, value)
     assert first.status_code == 200, first.text
     registry = client.app.state.application.policy_registry

@@ -97,7 +97,6 @@ class OptionPoolResearchReportV1(StrictModel):
         "mapping_review",
         "capital_claim_completeness",
         "data_release_authority",
-        "caller_approval",
         "issuer_valuation",
     )
 

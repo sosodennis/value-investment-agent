@@ -19,8 +19,6 @@ from uuid import uuid4
 from fastapi import Request
 from starlette.routing import Match
 
-from .contracts import CallerApprovalEnvelopeV1
-
 AUTH_HEADER: Final[str] = "Authorization"
 CORRELATION_HEADER: Final[str] = "X-Correlation-ID"
 REQUEST_LOG_ID_HEADER: Final[str] = "X-Server-Request-ID"
@@ -50,31 +48,6 @@ class ServiceError(RuntimeError):
         self.status_code = status_code
         self.retryable = retryable
         self.retry_after_ms = retry_after_ms
-
-
-def guard_caller_approval(
-    approval: CallerApprovalEnvelopeV1 | None,
-    *,
-    caller_id: str,
-    received_at: datetime,
-) -> None:
-    """Bind a supplied decision to its authenticated actor before side effects."""
-    if approval is None:
-        return
-    if approval.caller_id != caller_id:
-        raise ServiceError(
-            "CALLER_APPROVAL_IDENTITY_MISMATCH",
-            "caller approval must match the authenticated subject",
-            status_code=403,
-            retryable=False,
-        )
-    if approval.decided_at > received_at:
-        raise ServiceError(
-            "CALLER_APPROVAL_NOT_YET_DECIDED",
-            "caller approval cannot be decided after receipt",
-            status_code=403,
-            retryable=False,
-        )
 
 
 @dataclass(frozen=True)

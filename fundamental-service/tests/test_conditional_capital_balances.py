@@ -202,7 +202,7 @@ def test_composite_working_capital_still_requires_its_observed_debt_exclusion(tm
 def test_formal_composer_calculates_and_retains_explicit_balance_scenarios(
     tmp_path, forward
 ):
-    from test_conditional_capital_composer import _approved, _calculate, _prepared_case
+    from test_conditional_capital_composer import _calculate, _prepared_case
     from test_conditional_reinvestment_composer import _prepared
 
     fields = (
@@ -219,7 +219,7 @@ def test_formal_composer_calculates_and_retains_explicit_balance_scenarios(
     )
     assert set(fields) <= set(prepared.missing_evidence)
     assert prepared.conditional_capital.policy.balance_hypotheses == hypotheses
-    value = _approved(prepared.input)
+    value = prepared.input
     response = _calculate(client, value)
     assert response.status_code == 200, response.text
     result = response.json()["result"]

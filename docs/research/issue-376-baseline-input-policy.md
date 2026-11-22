@@ -42,7 +42,7 @@ is omitted when absent. Old artifacts are retained and are not reinterpreted.
 
 Conditional labels retain their strict v1 allocation policy and require observed
 capex in both periods. Complete/full valuation, authenticated releases, mapping
-reviews, Transition's filed operating evidence and caller approval remain separate
+reviews and Transition's filed operating evidence remain separate
 gates. Neither policy grants source approval or verified quality.
 
 The first case is fixed to NEWMARKET CIK `0001282637`, origin

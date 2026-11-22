@@ -24,7 +24,6 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalValuationEvidenceReadResultV1,
     FundamentalValuationPreparationResultV1,
 )
-from src.analysis_runtime.domain.contracts import ValuationApprovalRequest
 from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.internal_services import (
@@ -717,11 +716,6 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
             runtime,
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -841,11 +835,6 @@ async def test_cutover_binds_release_digest_to_context_without_provenance_leak()
             _Runtime(),
             {"valuation_request": payload},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -890,11 +879,6 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
                 "fundamental_analysis": {"model_type": "dcf_standard"},
             },
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
             clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
         )
     finally:
@@ -940,7 +924,6 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
 async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() -> None:
     client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
     runtime = _Runtime()
-    approval_calls: list[object] = []
     token = set_request_principal(
         InternalPrincipal(
             subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
@@ -954,7 +937,6 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
                 "fundamental_analysis": {"model_type": "dcf_standard"},
             },
             client=client,
-            request_approval_fn=lambda request: approval_calls.append(request),
         )
     finally:
         reset_request_principal(token)
@@ -971,7 +953,6 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
             "required_fields": _FCFF_REQUIRED_FIELDS,
         }
     ]
-    assert approval_calls == []
     assert result.update["fundamental_analysis"]["valuation_status"] == "not_requested"
     assert result.update["fundamental_analysis"]["quality_status"] == "verified"
     assert result.update["artifact_references"]["financial_reports"]["artifact_id"] == (
@@ -1018,9 +999,6 @@ async def test_production_orchestrator_persists_facts_artifact() -> None:
                 "fundamental_analysis": {"model_type": "dcf_standard"},
             },
             client=client,
-            request_approval_fn=lambda request: pytest.fail(
-                "facts-only reporting must not request valuation approval"
-            ),
         )
     finally:
         reset_request_principal(token)
@@ -1064,9 +1042,6 @@ async def test_cutover_rejects_facts_outside_the_resolved_snapshot(
                 "fundamental_analysis": {"model_type": "dcf_standard"},
             },
             client=client,
-            request_approval_fn=lambda _request: pytest.fail(
-                "facts-only reporting must not request valuation approval"
-            ),
             clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
         )
     finally:
@@ -1131,11 +1106,6 @@ async def test_cutover_rejects_unbound_policy_evidence(
             _Runtime(),
             {"valuation_request": _input()},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1173,11 +1143,6 @@ async def test_cutover_binds_resolved_source_policy_version_to_calculation_trace
             _Runtime(),
             {"valuation_request": payload},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1193,7 +1158,7 @@ async def test_cutover_binds_resolved_source_policy_version_to_calculation_trace
 
 
 @pytest.mark.asyncio
-async def test_cutover_preserves_input_and_binds_caller_approval() -> None:
+async def test_cutover_preserves_input_and_binds_calculation_digest() -> None:
     client = _Client()
     state = {"fundamental_analysis": {"valuation_request": _input()}}
     token = set_request_principal(
@@ -1203,18 +1168,11 @@ async def test_cutover_preserves_input_and_binds_caller_approval() -> None:
             membership_id="membership-1",
         )
     )
-    approvals: list[dict[str, object]] = []
     try:
         result = await run_service_valuation_flow(
             _Runtime(),
             state,
             client=client,
-            request_approval_fn=lambda request: approvals.append(request)
-            or {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1228,165 +1186,13 @@ async def test_cutover_preserves_input_and_binds_caller_approval() -> None:
         client.calls[1][1]["uncertainty"]
         == state["fundamental_analysis"]["valuation_request"]["uncertainty"]
     )
-    assert client.calls[1][1]["caller_approval"] == {
-        "input_digest": "a" * 64,
-        "decision": "approved",
-        "caller_id": "caller-1",
-        "decided_at": client.calls[1][1]["caller_approval"]["decided_at"],
-    }
-    assert approvals[0]["parameters"]["input_digest"] == "a" * 64
+    assert client.calls[1][1]["input_digest"] == "a" * 64
+    assert "caller_approval" not in client.calls[1][1]
     assert result.update["fundamental_analysis"]["result_hash"] == "b" * 64
     assert (
         result.update["fundamental_analysis"]["valuation_request"]
         == state["fundamental_analysis"]["valuation_request"]
     )
-
-
-@pytest.mark.asyncio
-async def test_cutover_bounds_automatic_preparation_in_approval_request() -> None:
-    client = _FactsOnlyClient(preparation_padding="x" * 20_000)
-    runtime = _Runtime()
-    approval_calls: list[dict[str, object]] = []
-    token = set_request_principal(
-        InternalPrincipal(
-            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
-        )
-    )
-    try:
-        result = await run_service_valuation_flow(
-            runtime,
-            {
-                "valuation_request": {
-                    "model_id": "fcff_dcf",
-                    "requested_as_of": "2026-11-04T00:00:00Z",
-                },
-                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
-                "fundamental_analysis": {"model_type": "dcf_standard"},
-            },
-            client=client,
-            request_approval_fn=lambda request: approval_calls.append(request)
-            or {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "reject",
-            },
-            clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
-        )
-    finally:
-        reset_request_principal(token)
-
-    assert result.update["fundamental_analysis"]["valuation_status"] == (
-        "approval_rejected"
-    )
-    request = ValuationApprovalRequest.model_validate(approval_calls[0])
-    preparation = request.parameters["automatic_preparation"]
-    assert isinstance(preparation, dict)
-    assert "input" not in preparation
-    assert "assumptions" not in request.parameters
-    assert "uncertainty" not in request.parameters
-    assert preparation["preparation_digest"] == "e" * 64
-    assert len(client.calls[4][1]["provenance"]["source_evidence"]) == 20_000
-    assert (
-        len(
-            json.dumps(
-                request.parameters, ensure_ascii=False, separators=(",", ":")
-            ).encode("utf-8")
-        )
-        < 16 * 1024
-    )
-
-
-@pytest.mark.asyncio
-async def test_cutover_compacts_nested_automatic_preparation_evidence() -> None:
-    client = _FactsOnlyClient()
-    runtime = _Runtime()
-    approval_calls: list[dict[str, object]] = []
-    token = set_request_principal(
-        InternalPrincipal(
-            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
-        )
-    )
-    preparation_metrics = {
-        "profile_id": "fcff-valuation-requirements-v3",
-        "profile_digest": "d" * 64,
-        "quality_status": "provisional",
-        "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"] * 64,
-        "missing_evidence": ["forecast_history"] * 64,
-        "metrics": [
-            {
-                "metric_id": f"metric-{index}",
-                "fiscal_year": 2000 + index,
-                "value": "0.123456",
-                "unit": "ratio",
-                "formula": "formula " + ("x" * 2000),
-                "fact_ids": [f"fact-{index}-{item}" for item in range(20)],
-                "source_refs": ["a" * 64 for _ in range(20)],
-                "period_end": f"20{index:02d}-12-31",
-            }
-            for index in range(64)
-        ],
-    }
-    assumptions_evidence = [
-        {
-            "path": f"assumptions.forecast.revenue_growth[{index}]",
-            "value": "0.123456",
-            "method": "derived",
-            "formula": "formula " + ("y" * 2000),
-            "fact_ids": [f"fact-{index}-{item}" for item in range(20)],
-            "source_refs": ["b" * 64 for _ in range(20)],
-            "policy_version": "fcff_dcf-v2-quality-v1",
-            "as_of": "2026-11-01T00:00:00Z",
-            "editable": True,
-        }
-        for index in range(64)
-    ]
-    client.preparation_padding = ""
-    original_prepare = client.prepare_valuation
-
-    async def prepare_with_large_evidence(input_payload, **kwargs):
-        result = await original_prepare(input_payload, **kwargs)
-        return result.model_copy(
-            update={
-                "historical_metrics": preparation_metrics,
-                "assumptions_evidence": tuple(assumptions_evidence),
-            }
-        )
-
-    client.prepare_valuation = prepare_with_large_evidence
-    try:
-        result = await run_service_valuation_flow(
-            runtime,
-            {
-                "valuation_request": {
-                    "model_id": "fcff_dcf",
-                    "requested_as_of": "2026-11-04T00:00:00Z",
-                },
-                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
-                "fundamental_analysis": {"model_type": "dcf_standard"},
-            },
-            client=client,
-            request_approval_fn=lambda request: approval_calls.append(request)
-            or {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "reject",
-            },
-            clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
-        )
-    finally:
-        reset_request_principal(token)
-
-    assert result.update["fundamental_analysis"]["valuation_status"] == (
-        "approval_rejected"
-    )
-    request = ValuationApprovalRequest.model_validate(approval_calls[0])
-    preparation = request.parameters["automatic_preparation"]
-    assert isinstance(preparation, dict)
-    assert preparation["historical_metrics"]["issue_codes_truncated"] > 0
-    assert preparation["historical_metrics"]["metrics_truncated"] > 0
-    assert preparation["assumptions_evidence"][-1] == {"truncated_count": 56}
-    assert preparation["historical_metrics"]["metrics"][0]["formula"].endswith("...")
-    assert len(json.dumps(request.parameters, separators=(",", ":"))) < 16 * 1024
 
 
 @pytest.mark.asyncio
@@ -1428,11 +1234,6 @@ async def test_cutover_accepts_canonical_defaults_without_changing_caller_values
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1459,17 +1260,12 @@ async def test_cutover_routes_explicit_monte_carlo_controls_to_calculation_repor
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input(monte_carlo=True)}},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
 
     assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
-    assert client.calls[1][1]["caller_approval"]["input_digest"] == "a" * 64
+    assert client.calls[1][1]["input_digest"] == "a" * 64
     assert client.calls[1][1]["uncertainty"] == _input(monte_carlo=True)["uncertainty"]
     assert client.calls[1][1]["uncertainty"]["samples"] == 10
     assert result.update["fundamental_analysis"]["quality_status"] == "verified"
@@ -1499,11 +1295,6 @@ async def test_cutover_rejects_uncertainty_report_for_different_caller_input() -
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1537,11 +1328,6 @@ async def test_cutover_rejects_uncertainty_evidence_reference_mismatch() -> None
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1572,11 +1358,6 @@ async def test_cutover_rejects_unapproved_assumption_defaults() -> None:
             _Runtime(),
             {"valuation_request": payload},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1602,11 +1383,6 @@ async def test_cutover_accepts_service_defined_optional_assumption_defaults() ->
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1631,11 +1407,6 @@ async def test_cutover_rejects_service_assumption_rewrite() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1667,11 +1438,6 @@ async def test_cutover_rejects_service_uncertainty_rewrite() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1695,11 +1461,6 @@ async def test_cutover_rejects_calculation_digest_mismatch() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1723,11 +1484,6 @@ async def test_cutover_rejects_uncertainty_base_digest_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1751,11 +1507,6 @@ async def test_cutover_rejects_uncertainty_base_artifact_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1781,11 +1532,6 @@ async def test_cutover_rejects_uncertainty_base_policy_trace_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1818,11 +1564,6 @@ async def test_cutover_rejects_wrong_model_version_or_missing_artifact_reference
                 _Runtime(),
                 {"valuation_request": _input()},
                 client=client,
-                request_approval_fn=lambda _request: {
-                    "type": "valuation_approval",
-                    "contract_version": "v1",
-                    "decision": "approve",
-                },
             )
         finally:
             reset_request_principal(token)
@@ -1853,11 +1594,6 @@ async def test_service_failure_is_degraded_without_a_local_calculation() -> None
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
-            request_approval_fn=lambda _request: {
-                "type": "valuation_approval",
-                "contract_version": "v1",
-                "decision": "approve",
-            },
         )
     finally:
         reset_request_principal(token)
@@ -1894,8 +1630,11 @@ def test_service_input_accepts_minimal_compact_request() -> None:
     assert read_service_valuation_input({"valuation_request": request}) == request
 
 
-def test_service_input_rejects_extensions_outside_the_frozen_contract() -> None:
+@pytest.mark.parametrize("field", ["monte_carlo", "caller_approval"])
+def test_service_input_rejects_extensions_outside_the_frozen_contract(
+    field: str,
+) -> None:
     with pytest.raises(ValueError, match="outside the frozen ValuationInputV1"):
         read_service_valuation_input(
-            {"valuation_request": {**_input(monte_carlo=True), "monte_carlo": {}}}
+            {"valuation_request": {**_input(monte_carlo=True), field: {}}}
         )

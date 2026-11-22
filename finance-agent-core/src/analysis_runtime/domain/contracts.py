@@ -86,54 +86,8 @@ class TickerSelectionResponse(BaseModel):
     selected_symbol: str = Field(min_length=1, max_length=32)
 
 
-class ValuationApprovalRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["valuation_approval"]
-    contract_version: Literal["v1"]
-    ticker: str = Field(min_length=1, max_length=32)
-    model_type: str = Field(min_length=1, max_length=120)
-    title: str = Field(min_length=1, max_length=160)
-    description: str = Field(min_length=1, max_length=500)
-    parameters: dict[str, object]
-    audit_messages: list[str] = Field(max_length=100)
-
-    @model_validator(mode="after")
-    def bound_parameters(self) -> ValuationApprovalRequest:
-        try:
-            size = len(
-                json.dumps(
-                    self.parameters,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                    separators=(",", ":"),
-                ).encode("utf-8")
-            )
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                "approval parameters must contain finite JSON values"
-            ) from exc
-        if size > MAX_AGENT_OUTPUT_PREVIEW_BYTES:
-            raise ValueError("approval parameters exceed 16 KiB")
-        return self
-
-
-class ValuationApprovalResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["valuation_approval"]
-    contract_version: Literal["v1"]
-    decision: Literal["approve", "reject"]
-
-
-InteractionRequest = Annotated[
-    TickerSelectionRequest | ValuationApprovalRequest,
-    Field(discriminator="type"),
-]
-InteractionResponse = Annotated[
-    TickerSelectionResponse | ValuationApprovalResponse,
-    Field(discriminator="type"),
-]
+InteractionRequest = TickerSelectionRequest
+InteractionResponse = TickerSelectionResponse
 
 
 class WorkflowActivityIdentity(BaseModel):
@@ -198,7 +152,7 @@ class WorkflowInteraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     identity: InteractionIdentity
-    kind: Literal["ticker_selection", "valuation_approval"]
+    kind: Literal["ticker_selection"]
     status: Literal["pending", "responded", "cancelled"]
     request: InteractionRequest
     response: InteractionResponse | None = None

@@ -569,14 +569,6 @@ def resolve_policy(
                 ),
             }
         ).with_digest()
-        if (
-            request.caller_approval is not None
-            and request.caller_approval.input_digest != resolved_input.input_digest
-        ):
-            raise PolicyError(
-                "CALLER_APPROVAL_CONFLICT",
-                "caller approval is bound to a different resolved input_digest",
-            )
         assert resolved_input.input_digest is not None
         return resolved_input, PolicyResolutionV1(
             contract_version="fundamental.v1",
@@ -646,14 +638,6 @@ def resolve_policy(
         }
     )
     resolved_input = resolved_input.with_digest()
-    if (
-        request.caller_approval is not None
-        and request.caller_approval.input_digest != resolved_input.input_digest
-    ):
-        raise PolicyError(
-            "CALLER_APPROVAL_CONFLICT",
-            "caller approval is bound to a different resolved input_digest",
-        )
     assert resolved_input.input_digest is not None
     resolution = PolicyResolutionV1(
         contract_version="fundamental.v1",
@@ -793,18 +777,6 @@ def resolve_policy_overrides(
         raise PolicyError(
             "INPUT_DIGEST_MISMATCH",
             "input_digest does not match the resolved policy calculation input",
-        )
-    if (
-        request.caller_approval is not None
-        and request.caller_approval.input_digest != resolved.input_digest
-    ):
-        raise PolicyError(
-            "CALLER_APPROVAL_CONFLICT",
-            "caller approval is bound to a different resolved input_digest",
-        )
-    if request.caller_approval is not None:
-        resolved = resolved.model_copy(
-            update={"caller_approval": request.caller_approval}
         )
 
     assert resolved.input_digest is not None

@@ -116,11 +116,9 @@ def test_current_command_receipt_binds_selection_and_effective_preparation(
         assert receipt.artifact == final.artifact
 
 
-def test_current_freezes_after_capture_and_formal_composer_still_requires_exact_approval(
+def test_current_freezes_after_capture_and_calculates_prepared_input(
     tmp_path,
 ):
-    from fundamental_service.contracts import CallerApprovalEnvelopeV1
-
     fixture = current_fixture(tmp_path)
     selected, first = select(fixture)
     plan = selected.plan
@@ -134,29 +132,19 @@ def test_current_freezes_after_capture_and_formal_composer_still_requires_exact_
 
     runner = _runner(fixture.baseline, public_acquisition=fixture.public)
     waiting = _reader(fixture.baseline, _run(runner, plan))
-    assert waiting.status == "approval_required" and waiting.calculation is None
+    assert waiting.status == "prepared" and waiting.calculation is None
     assert waiting.public_source_cutoff == plan.public_source_cutoff
-    approval = CallerApprovalEnvelopeV1(
-        caller_id="operator",
-        decision="approved",
-        input_digest=waiting.preparation.input.input_digest,
-        decided_at=VALUATION_TIME,
-    )
-    calculated = _run(runner, plan, approval=approval)
+    calculated = _run(runner, plan, prepare_only=False)
     report = _reader(fixture.baseline, calculated)
     assert report.status == "calculated"
-    assert report.preparation.input.input_digest == approval.input_digest
+    assert (
+        report.preparation.input.input_digest == waiting.preparation.input.input_digest
+    )
     assert report.public_source_outcomes == selected.captures
     before = inventory(tmp_path)
-    repeated = _run(runner, plan, approval=approval)
+    repeated = _run(runner, plan, prepare_only=False)
     assert not repeated.wrote and repeated.artifact == calculated.artifact
     assert inventory(tmp_path) == before and len(fixture.provider.calls) == 1
-    with pytest.raises(ValueError, match="different valuation input"):
-        _run(
-            runner,
-            plan,
-            approval=approval.model_copy(update={"input_digest": "0" * 64}),
-        )
 
 
 @pytest.mark.parametrize(
@@ -527,46 +515,32 @@ def test_out_of_window_capture_is_retained_without_a_frozen_plan(tmp_path, offse
     assert fixture.selector().read(first.artifact.artifact_id) == selected
 
 
-@pytest.mark.parametrize("invalid", ["actor", "approval"])
-def test_current_command_rejects_invalid_caller_before_source_or_runtime_access(
-    tmp_path, capsys, invalid
+def test_current_command_rejects_invalid_actor_before_source_or_runtime_access(
+    tmp_path, capsys
 ):
-    from fundamental_service.contracts import CallerApprovalEnvelopeV1
     from fundamental_service.preparation_runner import main
     from fundamental_service.serialization import canonical_bytes
 
     fixture = current_fixture(tmp_path)
     path = tmp_path / "plan.json"
     path.write_bytes(canonical_bytes(fixture.request.template))
-    args = [
-        "--current",
-        "--plan",
-        str(path),
-        "--plan-digest",
-        fixture.request.template.digest,
-        "--actor",
-        " " if invalid == "actor" else "operator",
-        "--organization",
-        "operators",
-    ]
-    if invalid == "approval":
-        approval = tmp_path / "approval.json"
-        approval.write_bytes(
-            canonical_bytes(
-                CallerApprovalEnvelopeV1(
-                    caller_id="different-caller",
-                    decision="approved",
-                    input_digest="a" * 64,
-                    decided_at=VALUATION_TIME,
-                )
-            )
-        )
-        args.extend(("--approval", str(approval)))
-    assert main(args) == 2
-    error = capsys.readouterr().err
     assert (
-        "actor and organization" if invalid == "actor" else "authenticated subject"
-    ) in error
+        main(
+            [
+                "--current",
+                "--plan",
+                str(path),
+                "--plan-digest",
+                fixture.request.template.digest,
+                "--actor",
+                " ",
+                "--organization",
+                "operators",
+            ]
+        )
+        == 2
+    )
+    assert "actor and organization" in capsys.readouterr().err
     assert not fixture.provider.calls
 
 

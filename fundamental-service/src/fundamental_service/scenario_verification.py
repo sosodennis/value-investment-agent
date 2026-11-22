@@ -49,7 +49,7 @@ class ConditionalArithmeticCheckV1(BaseModel):
     limitations: tuple[str, ...] = (
         "Arithmetic agreement only; source completeness and usage rights are not certified.",
         "Provisional quality and what-if assumptions remain unchanged.",
-        "No forecast calibration, error bounds, historical performance or caller approval is certified.",
+        "No forecast calibration, error bounds or historical performance is certified.",
     )
 
     @property
@@ -74,7 +74,7 @@ def _number(value: object) -> Decimal:
 def _variant(
     request: ValuationInputV1, changes: Mapping[str, object]
 ) -> ValuationInputV1:
-    payload = request.model_dump(exclude={"caller_approval", "input_digest"})
+    payload = request.model_dump(exclude={"input_digest"})
     assumptions = payload["assumptions"]
     for path, value in changes.items():
         number = _number(value)
@@ -162,8 +162,8 @@ def verify_conditional_arithmetic(
 ) -> ConditionalArithmeticCheckV1:
     """Compare each declared joint scenario and sensitivity with reference equations.
 
-    This reads a completed report; it never admits sources, signs a release,
-    invokes the production calculator, or creates caller approval.
+    This reads a completed report; it never admits sources, signs a release
+    or invokes the production calculator.
     """
     request = ValuationInputV1.model_validate(request.model_dump()).with_digest()
     assert request.input_digest is not None

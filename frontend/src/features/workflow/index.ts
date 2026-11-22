@@ -26,8 +26,6 @@ export type {
     TickerCandidate,
     TickerSelectionRequest,
     TickerSelectionResponse,
-    ValuationApprovalRequest,
-    ValuationApprovalResponse,
     InteractionResponse,
     ConnectionState,
     WorkflowActivity,

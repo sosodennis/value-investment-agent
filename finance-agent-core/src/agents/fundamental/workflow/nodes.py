@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Protocol
 
 from langgraph.graph import END
-from langgraph.types import Command, interrupt
+from langgraph.types import Command
 
 from src.agents.fundamental.workflow.state import FundamentalAnalysisState
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
@@ -23,8 +23,6 @@ class FundamentalWorkflowRunner(Protocol):
     async def run_valuation(
         self,
         state: Mapping[str, object],
-        *,
-        request_approval: Callable[[Mapping[str, object]], object],
     ) -> WorkflowNodeResult: ...
 
 
@@ -51,7 +49,6 @@ def build_fundamental_nodes(
     async def valuation_node(state: FundamentalAnalysisState) -> Command[object]:
         result = await runner.run_valuation(
             state,
-            request_approval=lambda payload: interrupt(dict(payload)),
         )
         return Command(
             update=result.update,

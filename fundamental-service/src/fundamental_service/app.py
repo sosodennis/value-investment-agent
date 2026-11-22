@@ -91,7 +91,6 @@ from .operations import (
     correlation_id,
     create_request_log_context,
     guard_body_size,
-    guard_caller_approval,
     guard_execution_deadline,
 )
 from .policies import (
@@ -1058,11 +1057,6 @@ def create_app(
     )
     async def calculate_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationInputV1)
-        guard_caller_approval(
-            value.caller_approval,
-            caller_id=request.state.context.principal.subject_id,
-            received_at=datetime.now(UTC),
-        )
         result = await run_valuation_operation(
             request,
             application.calculate_valuation,
@@ -1095,11 +1089,6 @@ def create_app(
     )
     async def calculate_with_policy(request: Request) -> JSONResponse:
         value = decode_input(request, PolicyValuationInputV1)
-        guard_caller_approval(
-            value.caller_approval,
-            caller_id=request.state.context.principal.subject_id,
-            received_at=datetime.now(UTC),
-        )
         result = await run_valuation_operation(
             request,
             application.calculate_with_policy,
@@ -1118,11 +1107,6 @@ def create_app(
     async def uncertainty_valuation(request: Request) -> JSONResponse:
         value = UncertaintyRequestV1.model_validate_json(
             json.dumps(normalize_uncertainty_payload(request.state.operation_input))
-        )
-        guard_caller_approval(
-            value.caller_approval,
-            caller_id=request.state.context.principal.subject_id,
-            received_at=datetime.now(UTC),
         )
         result = await run_valuation_operation(
             request,

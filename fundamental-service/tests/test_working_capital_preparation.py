@@ -6,7 +6,6 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from fundamental_service.contracts import CallerApprovalEnvelopeV1
 from fundamental_service.automatic_source_mapping import AutomaticSecIngestionRequestV1
 from fundamental_service.facts import FilesystemCanonicalFactRepository
 from fundamental_service.source_plan_contracts import (
@@ -23,7 +22,6 @@ from test_composite_source_preparation import _plan
 from test_automatic_source_mapping import source_case
 from test_issuer_operating_release import inventory
 from test_preparation_runner import (
-    VALUATION_TIME,
     _acquisition,
     _reader,
     _reviewed_candidate,
@@ -90,15 +88,9 @@ def test_recipe_acquires_then_binds_formal_inputs_and_reuses_numerical_result(tm
     prepared = _reader(
         fixture, _run(_runner(fixture, canary=canary), plan, candidate=candidate)
     )
-    assert prepared.status == "approval_required"
+    assert prepared.status == "prepared"
     assert prepared.working_capital_binding_ref == binding_ref
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=prepared.preparation.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-    calculated = _run(_runner(fixture), plan, approval=approval)
+    calculated = _run(_runner(fixture), plan, prepare_only=False)
     result = _reader(fixture, calculated)
     assert result.calculation.base.per_share_value > 0
     assert result.calculation.base.quality_status.value == "provisional"
@@ -108,7 +100,7 @@ def test_recipe_acquires_then_binds_formal_inputs_and_reuses_numerical_result(tm
     )
     assert plan.requirements_profile.supported_history_threshold is None
     before = inventory(fixture.artifacts.root)
-    repeated = _run(_runner(fixture), plan, approval=approval, correlation="reopened")
+    repeated = _run(_runner(fixture), plan, prepare_only=False, correlation="reopened")
     assert repeated.artifact == calculated.artifact and not repeated.wrote
     assert inventory(fixture.artifacts.root) == before
 

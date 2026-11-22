@@ -147,12 +147,12 @@ The analysis runtime keeps the latest `workflow_runs` row for active-run coordin
 
 ### Human-required workflow interactions
 
-- Model each user-required pause as a versioned, discriminated interaction request and response. Do not encode approvals as an untyped boolean or derive them from activity labels.
+- Model each user-required pause as a versioned, discriminated interaction request and response. Do not encode interactions as an untyped boolean or derive them from activity labels.
 - Bind each interaction to its `thread_id`, `run_id`, `activity_id`, and stable `interaction_id`. A pending interaction belongs to a waiting activity and waiting run; snapshots and replayed events expose the same lifecycle state.
 - Validate each response against the stored request and authenticated thread owner. Reject stale, cross-run, cross-user, and unsupported responses explicitly. Make duplicate submissions idempotent.
-- For approval gates, include the exact validated model, parameters, audit outcome, and evidence references presented for approval. Revalidate the approved inputs before deterministic execution; rejection must not run the calculation.
+- Before deterministic execution, validate the exact model, parameters, audit outcome, and evidence references in the owning service. Recheck input digests, source permissions and current evidence; refused inputs must not run the calculation.
 - Persist request and response state so reconnect, snapshot hydration, replay, and process restart cannot lose a pending decision or report it complete before acceptance.
-- Keep large evidence in artifact storage and expose typed, owner-scoped references. Test waiting, approval, rejection, duplicate and stale responses, ownership, replay, and resume through public runtime contracts.
+- Keep large evidence in artifact storage and expose typed, owner-scoped references. Test waiting, ticker selection, duplicate and stale responses, ownership, replay, and resume through public runtime contracts.
 
 The locked LangGraph version is the supported API. Check its version-specific documentation before adopting APIs described only for a newer release.
 

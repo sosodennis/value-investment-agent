@@ -376,7 +376,7 @@ def test_ordinary_preparation_pins_admission_before_formal_composer(
     assert result.source_admission_outcomes == (admission,)
     assert admission.digest in receipt.artifact.dependency_hashes
     if bind_release:
-        assert result.status == "approval_required"
+        assert result.status == "prepared"
         assert (
             result.preparation.input.model_version
             == baseline.preparation.input.model_version
@@ -386,7 +386,6 @@ def test_ordinary_preparation_pins_admission_before_formal_composer(
             == baseline.preparation.input.assumptions
         )
         from fundamental_service.contracts import (
-            CallerApprovalEnvelopeV1,
             QualityStatus,
         )
 
@@ -395,12 +394,7 @@ def test_ordinary_preparation_pins_admission_before_formal_composer(
             _run(
                 runner,
                 plan,
-                approval=CallerApprovalEnvelopeV1(
-                    input_digest=result.preparation.input.input_digest,
-                    decision="approved",
-                    caller_id="operator",
-                    decided_at=VALUATION_TIME,
-                ),
+                prepare_only=False,
             ),
         )
         assert calculated.status == "calculated"

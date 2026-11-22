@@ -64,7 +64,6 @@ _REQUIRED_INPUT_FIELDS = frozenset(
 _SUPPORTED_INPUT_FIELDS = _REQUIRED_INPUT_FIELDS | {
     "policy_id",
     "input_digest",
-    "caller_approval",
     "snapshot_selector",
     "requested_as_of",
     "fiscal_period_selector",
@@ -578,218 +577,6 @@ def _caller_values_preserved(
     return _payload_equal(supplied, returned)
 
 
-_APPROVAL_PREPARATION_FIELDS = (
-    "contract_version",
-    "status",
-    "model_id",
-    "model_version",
-    "profile_id",
-    "profile_digest",
-    "policy_id",
-    "policy_version",
-    "quality_status",
-    "issue_codes",
-    "missing_evidence",
-    "historical_metrics",
-    "assumptions_evidence",
-    "preparation_digest",
-)
-
-_APPROVAL_PROJECTION_ITEM_LIMIT = 8
-_APPROVAL_PROJECTION_ID_LIMIT = 6
-_APPROVAL_PROJECTION_TEXT_LIMIT = 192
-
-
-def _bounded_projection_text(value: object) -> object:
-    if not isinstance(value, str) or len(value) <= _APPROVAL_PROJECTION_TEXT_LIMIT:
-        return value
-    return value[:_APPROVAL_PROJECTION_TEXT_LIMIT] + "..."
-
-
-def _bounded_projection_list(
-    value: object,
-    *,
-    limit: int,
-) -> tuple[list[object], int]:
-    if not isinstance(value, list | tuple):
-        return [], 0
-    items = list(value)
-    bounded = [_bounded_projection_text(item) for item in items[:limit]]
-    return bounded, max(0, len(items) - limit)
-
-
-def _compact_historical_metrics(value: object) -> JSONObject:
-    if not isinstance(value, Mapping):
-        return {}
-    projected: JSONObject = {}
-    for field in (
-        "profile_id",
-        "profile_digest",
-        "quality_status",
-    ):
-        if field in value:
-            projected[field] = _bounded_projection_text(value[field])
-    for field in ("issue_codes", "missing_evidence"):
-        items, omitted = _bounded_projection_list(
-            value.get(field), limit=_APPROVAL_PROJECTION_ITEM_LIMIT
-        )
-        projected[field] = items
-        if omitted:
-            projected[f"{field}_truncated"] = omitted
-
-    raw_metrics = value.get("metrics")
-    metrics: list[JSONObject] = []
-    if isinstance(raw_metrics, list | tuple):
-        for raw_metric in raw_metrics[:_APPROVAL_PROJECTION_ITEM_LIMIT]:
-            if not isinstance(raw_metric, Mapping):
-                continue
-            metric: JSONObject = {}
-            for field in (
-                "metric_id",
-                "fiscal_year",
-                "value",
-                "unit",
-                "period_end",
-            ):
-                if field in raw_metric:
-                    metric[field] = _bounded_projection_text(raw_metric[field])
-            if "formula" in raw_metric:
-                metric["formula"] = _bounded_projection_text(raw_metric["formula"])
-            for field in ("fact_ids", "source_refs"):
-                items, omitted = _bounded_projection_list(
-                    raw_metric.get(field), limit=_APPROVAL_PROJECTION_ID_LIMIT
-                )
-                metric[field] = items
-                if omitted:
-                    metric[f"{field}_truncated"] = omitted
-            metrics.append(metric)
-    projected["metrics"] = metrics
-    if isinstance(raw_metrics, list | tuple) and len(raw_metrics) > len(metrics):
-        projected["metrics_truncated"] = len(raw_metrics) - len(metrics)
-    return projected
-
-
-def _compact_assumptions_evidence(value: object) -> list[JSONObject]:
-    if not isinstance(value, list | tuple):
-        return []
-    evidence: list[JSONObject] = []
-    for raw_evidence in value[:_APPROVAL_PROJECTION_ITEM_LIMIT]:
-        if not isinstance(raw_evidence, Mapping):
-            continue
-        item: JSONObject = {}
-        for field in (
-            "path",
-            "value",
-            "method",
-            "as_of",
-            "policy_version",
-            "editable",
-        ):
-            if field in raw_evidence:
-                item[field] = _bounded_projection_text(raw_evidence[field])
-        if "formula" in raw_evidence:
-            item["formula"] = _bounded_projection_text(raw_evidence["formula"])
-        for field in ("fact_ids", "source_refs"):
-            items, omitted = _bounded_projection_list(
-                raw_evidence.get(field), limit=_APPROVAL_PROJECTION_ID_LIMIT
-            )
-            item[field] = items
-            if omitted:
-                item[f"{field}_truncated"] = omitted
-        evidence.append(item)
-    if len(value) > len(evidence):
-        evidence.append({"truncated_count": len(value) - len(evidence)})
-    return evidence
-
-
-def _approval_preparation_projection(
-    preparation: Mapping[str, object],
-) -> JSONObject:
-    """Keep approval interaction bounded while retaining service-owned evidence."""
-
-    projection: JSONObject = {
-        field: _bounded_projection_text(preparation[field])
-        for field in _APPROVAL_PREPARATION_FIELDS
-        if field in preparation
-        and field
-        not in {
-            "issue_codes",
-            "missing_evidence",
-            "historical_metrics",
-            "assumptions_evidence",
-        }
-    }
-    for field in ("issue_codes", "missing_evidence"):
-        items, omitted = _bounded_projection_list(
-            preparation.get(field), limit=_APPROVAL_PROJECTION_ITEM_LIMIT
-        )
-        projection[field] = items
-        if omitted:
-            projection[f"{field}_truncated"] = omitted
-    projection["historical_metrics"] = _compact_historical_metrics(
-        preparation.get("historical_metrics")
-    )
-    projection["assumptions_evidence"] = _compact_assumptions_evidence(
-        preparation.get("assumptions_evidence")
-    )
-    return projection
-
-
-def _approval_request(
-    *,
-    input_payload: Mapping[str, object],
-    input_digest: str,
-    quality_status: str,
-    validation_result: Mapping[str, object],
-    automatic_preparation: Mapping[str, object] | None = None,
-) -> JSONObject:
-    issues = validation_result.get("issue_codes")
-    issue_codes = (
-        [item for item in issues if isinstance(item, str)]
-        if isinstance(issues, list | tuple)
-        else []
-    )
-    missing = validation_result.get("missing_evidence")
-    missing_evidence = (
-        [item for item in missing if isinstance(item, str)]
-        if isinstance(missing, list | tuple)
-        else []
-    )
-    assumptions = input_payload.get("assumptions")
-    uncertainty = input_payload.get("uncertainty")
-    parameters: JSONObject = {
-        "model_id": input_payload["model_id"],
-        "model_version": input_payload["model_version"],
-        "input_digest": input_digest,
-        "quality_status": quality_status,
-    }
-    if automatic_preparation is None:
-        parameters.update(
-            {
-                "assumptions": assumptions,
-                "uncertainty": uncertainty,
-            }
-        )
-    else:
-        parameters["automatic_preparation"] = _approval_preparation_projection(
-            automatic_preparation
-        )
-    request: JSONObject = {
-        "type": "valuation_approval",
-        "contract_version": "v1",
-        "ticker": _ticker_from_input(input_payload),
-        "model_type": str(input_payload["model_id"]),
-        "title": "Review Fundamental service assumptions",
-        "description": (
-            "The Fundamental service validated the explicit valuation input. "
-            "Approve to run the stateless calculation, or reject to stop."
-        ),
-        "parameters": parameters,
-        "audit_messages": issue_codes + missing_evidence,
-    }
-    return request
-
-
 def _ticker_from_input(input_payload: Mapping[str, object]) -> str:
     identity = input_payload.get("identity")
     if isinstance(identity, Mapping):
@@ -800,16 +587,6 @@ def _ticker_from_input(input_payload: Mapping[str, object]) -> str:
         if isinstance(issuer_id, str) and issuer_id:
             return issuer_id
     return "UNKNOWN"
-
-
-def _approval_is_accepted(value: object) -> bool:
-    return (
-        isinstance(value, Mapping)
-        and value.get("type") == "valuation_approval"
-        and value.get("contract_version") == "v1"
-        and value.get("decision") in {"approve", "reject"}
-        and set(value) == {"type", "contract_version", "decision"}
-    )
 
 
 def _uncertainty_projection(
@@ -1700,7 +1477,6 @@ async def run_service_valuation_flow(
     state: Mapping[str, object],
     *,
     client: FundamentalServiceClient,
-    request_approval_fn: Callable[[JSONObject], object],
     timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     clock: Callable[[], datetime] | None = None,
 ) -> FundamentalNodeResult:
@@ -1902,51 +1678,12 @@ async def run_service_valuation_flow(
             resolved_ticker=resolved_ticker,
         )
 
-    approval_request = _approval_request(
-        input_payload=validated_input,
-        input_digest=input_digest,
-        quality_status=quality_status,
-        validation_result=validation_result,
-        automatic_preparation=automatic_preparation,
-    )
-    approval_response = request_approval_fn(approval_request)
-    if not _approval_is_accepted(approval_response):
-        return await _service_error_update(
-            runtime=runtime,
-            fundamental=fundamental,
-            error=ValueError("valuation approval response has an invalid contract"),
-            resolved_ticker=resolved_ticker,
-        )
-    if approval_response["decision"] == "reject":
-        updated = dict(fundamental)
-        updated.update(
-            {
-                "valuation_status": "approval_rejected",
-                "quality_status": quality_status,
-                "input_digest": input_digest,
-            }
-        )
-        return FundamentalNodeResult(
-            update={
-                "fundamental_analysis": updated,
-                "active_activity_id": "calculation",
-                "workflow_activity_updates": {"calculation": "done"},
-            },
-            goto="END",
-        )
-
-    approved_input = dict(validated_input)
-    approved_input["input_digest"] = input_digest
-    approved_input["caller_approval"] = {
-        "input_digest": input_digest,
-        "decision": "approved",
-        "caller_id": principal.subject_id,
-        "decided_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-    }
+    calculation_input = dict(validated_input)
+    calculation_input["input_digest"] = input_digest
     try:
         calculation_response = await client.execute(
             "calculate",
-            approved_input,
+            calculation_input,
             principal=principal,
             correlation_id=correlation_id,
             deadline_at=deadline_at,
@@ -2112,7 +1849,7 @@ async def run_service_valuation_flow(
             )
         artifact_payload = _service_valuation_artifact_payload(
             projection=projection,
-            input_payload=approved_input,
+            input_payload=calculation_input,
             input_digest=input_digest,
             validation_quality_status=quality_status,
             calculation_trace=calculation_trace,
@@ -2149,13 +1886,13 @@ async def run_service_valuation_flow(
             "fundamental_service": projection,
             "assumption_breakdown": {
                 "source": "fundamental-service",
-                "assumptions": approved_input["assumptions"],
-                "uncertainty": approved_input["uncertainty"],
+                "assumptions": calculation_input["assumptions"],
+                "uncertainty": calculation_input["uncertainty"],
             },
             "artifact": _build_fundamental_output_artifact(
                 summary=(
                     f"Fundamental valuation ready for "
-                    f"{resolved_ticker or _ticker_from_input(approved_input)}"
+                    f"{resolved_ticker or _ticker_from_input(calculation_input)}"
                 ),
                 artifact_id=artifact_id,
             ),

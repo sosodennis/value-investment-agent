@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from fundamental_service.contracts import (
-    CallerApprovalEnvelopeV1,
     SecMappingReferenceV1,
 )
 from fundamental_service.automatic_source_mapping import AutomaticSecIngestionRequestV1
@@ -24,7 +23,6 @@ from test_postgres_metadata import _sec_ingestion_request
 from test_automatic_source_mapping import source_case
 from test_preparation_runner import (
     REVISION,
-    VALUATION_TIME,
     _reader,
     _reviewed_candidate,
     _run,
@@ -115,7 +113,7 @@ def test_explicit_composite_plan_uses_formal_flow_and_reuses_calculation(tmp_pat
     runner = _runner(fixture, canary=canary)
     prepared_receipt = _run(runner, plan, candidate=candidate)
     prepared = _reader(fixture, prepared_receipt)
-    assert prepared.status == "approval_required"
+    assert prepared.status == "prepared"
     assert prepared.preparation.input is not None
     assert (
         prepared.preparation.historical_metrics.working_capital_inputs == fixture.inputs
@@ -127,19 +125,13 @@ def test_explicit_composite_plan_uses_formal_flow_and_reuses_calculation(tmp_pat
         in plan.requirements_profile.supporting_fact_fields
     )
     assert "current_assets" in plan.resolution_request().required_fields
-    approval = CallerApprovalEnvelopeV1(
-        input_digest=prepared.preparation.input.input_digest,
-        decision="approved",
-        caller_id="operator",
-        decided_at=VALUATION_TIME,
-    )
-    calculated = _run(runner, plan, approval=approval)
+    calculated = _run(runner, plan, prepare_only=False)
     evidence = _reader(fixture, calculated)
     assert evidence.status == "calculated"
     assert evidence.calculation.base.per_share_value > 0
     assert evidence.calculation.base.quality_status.value == "provisional"
     before = inventory(fixture.artifacts.root)
-    repeated = _run(_runner(fixture), plan, approval=approval, correlation="second")
+    repeated = _run(_runner(fixture), plan, prepare_only=False, correlation="second")
     assert repeated.artifact == calculated.artifact and repeated.wrote is False
     assert inventory(fixture.artifacts.root) == before
 

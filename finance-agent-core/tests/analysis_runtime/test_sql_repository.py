@@ -17,8 +17,6 @@ from src.analysis_runtime.domain.contracts import (
     TickerCandidate,
     TickerSelectionRequest,
     TickerSelectionResponse,
-    ValuationApprovalRequest,
-    ValuationApprovalResponse,
     WorkflowFailure,
     WorkflowInteractionEvent,
 )
@@ -177,11 +175,11 @@ async def test_sql_resume_claim_is_atomic_and_validates_candidate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sql_approval_response_is_versioned_and_restart_recoverable() -> None:
+async def test_sql_ticker_response_is_restart_recoverable() -> None:
     await init_db()
-    thread_id = f"approval-resume-test-{uuid.uuid4()}"
+    thread_id = f"ticker-resume-test-{uuid.uuid4()}"
     run_id = str(uuid.uuid4())
-    activity_id = "fundamental.calculation"
+    activity_id = "intent.clarifying"
     now = datetime.now(timezone.utc)
     repository = SqlAlchemyActivityRepository()
     identity = InteractionIdentity(
@@ -195,22 +193,18 @@ async def test_sql_approval_response_is_versioned_and_restart_recoverable() -> N
             activity_id=activity_id,
             thread_id=thread_id,
             run_id=run_id,
-            scope_path=("fundamental_analysis", "calculation"),
+            scope_path=("intent_extraction", "clarifying"),
             kind="node",
             status="waiting",
-            label="Review valuation assumptions",
+            label="Select ticker",
             attempt=1,
         ),
         identity=identity,
-        request=ValuationApprovalRequest(
-            type="valuation_approval",
-            contract_version="v1",
-            ticker="AAPL",
-            model_type="dcf_growth",
-            title="Review valuation assumptions",
-            description="Approve before calculation.",
-            parameters={"wacc": 0.09},
-            audit_messages=["PASS: parameter set is valid"],
+        request=TickerSelectionRequest(
+            type="ticker_selection",
+            title="Choose ticker",
+            description="Select the resolved security.",
+            candidates=[TickerCandidate(symbol="AAPL", name="Apple", confidence=1.0)],
         ),
     )
     await repository.set_run(
@@ -224,15 +218,13 @@ async def test_sql_approval_response_is_versioned_and_restart_recoverable() -> N
         requested=requested, principal_id="user-1", now=now
     )
 
-    response = ValuationApprovalResponse(
-        type="valuation_approval", contract_version="v1", decision="reject"
-    )
+    response = TickerSelectionResponse(type="ticker_selection", selected_symbol="AAPL")
     try:
         with pytest.raises(InvalidInteractionResponseError):
             await repository.claim_interaction_response(
                 identity=identity,
                 response=TickerSelectionResponse(
-                    type="ticker_selection", selected_symbol="AAPL"
+                    type="ticker_selection", selected_symbol="MSFT"
                 ),
                 principal_id="user-1",
                 now=now,
@@ -248,7 +240,7 @@ async def test_sql_approval_response_is_versioned_and_restart_recoverable() -> N
         assert len(pending) == 1
         assert pending[0].identity == identity
         assert pending[0].response == response
-        assert pending[0].response.decision == "reject"
+        assert pending[0].response.selected_symbol == "AAPL"
     finally:
         async with AsyncSessionLocal() as session:
             await session.execute(

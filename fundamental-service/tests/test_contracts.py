@@ -4,7 +4,6 @@ from decimal import Decimal
 import pytest
 from fundamental_service.contracts import (
     AssumptionsV1,
-    CallerApprovalEnvelopeV1,
     CapitalBridgeAssumptionsV1,
     ForecastAssumptionsV1,
     IdentityV1,
@@ -84,34 +83,13 @@ def valuation() -> ValuationInputV1:
     )
 
 
-def test_digest_is_stable_and_approval_binds_to_exact_input():
+def test_digest_is_stable_for_exact_input():
     request = valuation().with_digest()
     assert request.input_digest == request.with_digest().input_digest
-    approved = request.model_copy(
-        update={
-            "caller_approval": CallerApprovalEnvelopeV1(
-                input_digest=request.input_digest,
-                decision="approved",
-                caller_id="caller",
-                decided_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            )
-        }
+    assert (
+        request.input_digest
+        == "beea4b2faa9e397268676a4cd84d8f1865d283643ac00ebae9f2bc6f4d786f06"
     )
-    assert approved.caller_approval is not None
-
-
-def test_caller_approval_requires_an_unambiguous_decision_time():
-    payload = {
-        "input_digest": "a" * 64,
-        "decision": "approved",
-        "caller_id": "caller",
-        "decided_at": datetime(2026, 1, 1, 12),
-    }
-    with pytest.raises(ValidationError, match="decided_at must include a timezone"):
-        CallerApprovalEnvelopeV1.model_validate(payload)
-    payload["decided_at"] = datetime.fromisoformat("2026-01-01T12:00:00+08:00")
-    approval = CallerApprovalEnvelopeV1.model_validate(payload)
-    assert approval.decided_at.utcoffset().total_seconds() == 8 * 3600
 
 
 def test_preparation_version_is_bound_to_input_digest_and_roundtrips():
@@ -185,3 +163,10 @@ def test_sec_ingestion_accepts_transition_fcff_evidence_set():
 
     assert len(request.required_fields) == 33
     assert len(request.mappings) == 33
+
+
+def test_calculation_contract_rejects_removed_caller_approval():
+    payload = valuation().model_dump() | {"caller_approval": None}
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        ValuationInputV1.model_validate(payload)
+    assert "caller_approval" not in ValuationInputV1.model_json_schema()["properties"]

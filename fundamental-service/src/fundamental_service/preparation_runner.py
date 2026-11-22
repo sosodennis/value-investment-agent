@@ -44,7 +44,6 @@ from .application import FundamentalApplication
 from .annual_history import AnnualHistoryError, resolve_annual_history
 from .contracts import (
     CanonicalFactV1,
-    CallerApprovalEnvelopeV1,
     QualityStatus,
     SecIntegrityEvidenceV1,
     SecIngestionResponseV1,
@@ -64,7 +63,7 @@ from .data_releases import (
     DataReleaseTrustRootsV1,
 )
 from .facts import CanonicalMappingV1, canonical_fact_digest
-from .operations import ServiceError, guard_caller_approval, guard_execution_deadline
+from .operations import ServiceError, guard_execution_deadline
 from .history_composition import compose_original_history
 from .issuer_market_preparation import (
     IssuerMarketPreparation,
@@ -189,7 +188,7 @@ class SourcePreparationEvidenceV1(StrictModel):
     automatic_release_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
-    status: Literal["approval_required", "blocked", "calculated", "release_required"]
+    status: Literal["prepared", "blocked", "calculated", "release_required"]
     snapshot_id: str | None = None
     snapshot_manifest_digest: str | None = Field(
         default=None, pattern=r"^[0-9a-f]{64}$"
@@ -320,7 +319,7 @@ class SourcePreparationEvidenceV1(StrictModel):
             raise ValueError("release_required must retain the unreleased snapshot")
         if (self.status == "calculated") != (self.calculation is not None):
             raise ValueError("calculated status must match calculation evidence")
-        if self.status in {"approval_required", "calculated"} and (
+        if self.status in {"prepared", "calculated"} and (
             self.preparation is None or self.preparation.status != "prepared"
         ):
             raise ValueError("calculation flow requires a prepared valuation")
@@ -1894,7 +1893,7 @@ class SourcePreparationRunner:
         correlation_id: str,
         deadline_at: datetime,
         candidate: DataReleaseCandidatePublishRequestV1 | None = None,
-        approval: CallerApprovalEnvelopeV1 | None = None,
+        prepare_only: bool = False,
         market_policy_authorization: PolicyRecordV1 | None = None,
         market_policy_authorization_digest: str | None = None,
     ) -> ArtifactPublicationV1:
@@ -1912,7 +1911,7 @@ class SourcePreparationRunner:
                     correlation_id=correlation_id,
                     deadline_at=deadline_at,
                     candidate=candidate,
-                    approval=approval,
+                    prepare_only=prepare_only,
                     market_policy_authorization=market_policy_authorization,
                     market_policy_authorization_digest=market_policy_authorization_digest,
                 )
@@ -1924,7 +1923,7 @@ class SourcePreparationRunner:
                     correlation_id=correlation_id,
                     deadline_at=deadline_at,
                     candidate=candidate,
-                    approval=approval,
+                    prepare_only=prepare_only,
                     market_policy_authorization=market_policy_authorization,
                     market_policy_authorization_digest=market_policy_authorization_digest,
                 )
@@ -1940,7 +1939,7 @@ class SourcePreparationRunner:
         correlation_id: str,
         deadline_at: datetime,
         candidate: DataReleaseCandidatePublishRequestV1 | None = None,
-        approval: CallerApprovalEnvelopeV1 | None = None,
+        prepare_only: bool = False,
         market_policy_authorization: PolicyRecordV1 | None = None,
         market_policy_authorization_digest: str | None = None,
     ) -> ArtifactPublicationV1:
@@ -1949,7 +1948,6 @@ class SourcePreparationRunner:
         received_at = datetime.now(UTC)
         if deadline_at.tzinfo is None or deadline_at <= received_at:
             raise ValueError("runner deadline must be an unexpired zoned timestamp")
-        guard_caller_approval(approval, caller_id=actor_id, received_at=received_at)
         if self._automatic_release is not None and (
             not isinstance(plan, AutomaticSourcePreparationPlanV1)
             or candidate is not None
@@ -2527,7 +2525,7 @@ class SourcePreparationRunner:
                 ),
                 prepared_facts=prepared_facts,
             )
-        if approval is None:
+        if prepare_only:
             return self._persist(
                 plan,
                 SourcePreparationEvidenceV1(
@@ -2536,35 +2534,12 @@ class SourcePreparationRunner:
                     public_source_cutoff=plan.public_source_cutoff,
                     source_admission_outcomes=admission_outcomes,
                     plan_digest=plan.digest,
-                    status="approval_required",
+                    status="prepared",
                     snapshot_id=resolution.snapshot_id,
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     market_policy_deployment_ref=deployment_ref,
                     automatic_release_ref=automatic_release_ref,
-                    source_outcomes=outcomes,
-                    preparation=preparation,
-                ),
-                prepared_facts=prepared_facts,
-            )
-        if approval.input_digest != preparation.input.input_digest:
-            raise ValueError("caller approval is bound to a different valuation input")
-        if approval.decision != "approved":
-            return self._persist(
-                plan,
-                SourcePreparationEvidenceV1(
-                    source_revision=plan.source_revision,
-                    public_source_outcomes=public_outcomes,
-                    public_source_cutoff=plan.public_source_cutoff,
-                    source_admission_outcomes=admission_outcomes,
-                    plan_digest=plan.digest,
-                    status="blocked",
-                    snapshot_id=resolution.snapshot_id,
-                    snapshot_manifest_digest=snapshot_digest,
-                    data_release_manifest_digest=resolution.data_release_manifest_digest,
-                    market_policy_deployment_ref=deployment_ref,
-                    automatic_release_ref=automatic_release_ref,
-                    issue_codes=("CALLER_APPROVAL_REJECTED",),
                     source_outcomes=outcomes,
                     preparation=preparation,
                 ),
@@ -2572,7 +2547,7 @@ class SourcePreparationRunner:
             )
         self._verify_original_boundary(plan)
         calculation = self._application.calculate_valuation(
-            preparation.input.model_copy(update={"caller_approval": approval}),
+            preparation.input,
             correlation_id=correlation_id,
             deadline_at=deadline_at,
         )
@@ -2657,11 +2632,6 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
         if args.candidate
         else None
     )
-    approval = (
-        CallerApprovalEnvelopeV1.model_validate_json(args.approval.read_bytes())
-        if args.approval
-        else None
-    )
     authorization = (
         PolicyRecordV1.model_validate_json(
             args.market_policy_authorization.read_bytes()
@@ -2683,7 +2653,6 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
     deadline_at = received_at + timedelta(seconds=args.timeout_seconds)
     if not args.actor.strip() or not args.organization.strip():
         raise ValueError("runner requires an actor and organization")
-    guard_caller_approval(approval, caller_id=args.actor, received_at=received_at)
     async with app.router.lifespan_context(app):
         application = app.state.application
         if not application.ready or app.state.metadata_store is None:
@@ -2947,7 +2916,7 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             correlation_id=f"source-preparation:{plan.digest[:32]}",
             deadline_at=deadline_at,
             candidate=candidate,
-            approval=approval,
+            prepare_only=args.prepare_only,
             market_policy_authorization=authorization,
             market_policy_authorization_digest=args.market_policy_authorization_digest,
         )
@@ -2974,7 +2943,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--market-policy-authorization", type=Path)
     parser.add_argument("--market-policy-authorization-digest")
-    parser.add_argument("--approval", type=Path)
+    parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--machine-private-key", type=Path)
     parser.add_argument("--automatic-release-policy", type=Path)
     parser.add_argument("--release-private-key", type=Path)
