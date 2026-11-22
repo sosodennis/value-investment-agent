@@ -349,9 +349,11 @@ after preparation and deliberately requests no calculation.
 There is no deployment automatic-caller endpoint, caller-policy file, or CLI
 fallback. Source-use, automatic mapping/release, trusted-release and calculator
 policies remain separate controls; none of them grants exact-input caller
-approval. Every calculation therefore uses an explicit approval envelope, and
-the caller must obtain that approval through the existing authenticated service
-boundary.
+approval. The issuer preparation workflow and conditional scenarios require an
+explicit approval envelope. Direct calculation requests may omit approval only
+where the existing calculation policy permits it; when approval is supplied, the
+authenticated boundary checks its caller and exact input. No path creates caller
+approval implicitly.
 
 Mapping input artifacts use `fundamental.mapping-input-artifact.v2`: each field
 and batch retains its request metadata and original evidence metadata, with a
