@@ -64,6 +64,12 @@ const validResponse = {
 };
 
 describe('parseForwardEvidenceReview', () => {
+    it('preserves a retained terminal review and rejects malformed witness references', () => {
+        const reviewRef = { artifact_id: `forward-review-v1-${'d'.repeat(64)}`, content_hash: 'd'.repeat(64), media_type: 'application/json' };
+        const result = { ...validResponse.result, review_ref: reviewRef, claims: [{ ...validResponse.result.claims[0], metric: 'terminal_growth', assumption_path: 'assumptions.terminal_growth' }] };
+        expect(parseForwardEvidenceReview({ result }).review_ref).toEqual(reviewRef);
+        expect(() => parseForwardEvidenceReview({ result: { ...result, review_ref: { ...reviewRef, artifact_id: 'unretained' } } })).toThrow(/reference/);
+    });
     it('returns a typed review with nested source provenance', () => {
         const review = parseForwardEvidenceReview(validResponse);
         expect(review.claims[0]?.source.source_url).toBe('https://issuer.example/guidance');

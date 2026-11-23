@@ -8,7 +8,8 @@ import {
 } from './valuation-revision';
 
 type ForwardReference = NonNullable<FundamentalRevision['forward_reference']>;
-type Draft = { percentage: string; reason: string; forwardReference: ForwardReference | null };
+type AppliedEvidence = { forwardReference: ForwardReference; forwardReviewRef: NonNullable<FundamentalRevision['forward_review_ref']> };
+type Draft = { percentage: string; reason: string; evidence: AppliedEvidence | null };
 type FieldErrors = { value: string | null; reason: string | null };
 type ResearchState =
     | { kind: 'idle' }
@@ -34,7 +35,7 @@ type RevisionAction = { sourceKey: string } & (
     | { type: 'research-started'; operationId: string }
     | { type: 'research-ready'; operationId: string; review: ForwardEvidenceReview }
     | { type: 'research-failed'; operationId: string; message: string }
-    | { type: 'claim-applied'; claimId: string; percentage: string; forwardReference: ForwardReference }
+    | { type: 'claim-applied'; claimId: string; percentage: string; evidence: AppliedEvidence }
     | { type: 'claim-rejected'; message: string }
     | { type: 'draft-invalid'; errors: FieldErrors }
     | { type: 'recalculation-started'; operationId: string }
@@ -45,7 +46,7 @@ type RevisionAction = { sourceKey: string } & (
 export function createValuationRevisionState(context: ValuationRevisionContext): ValuationRevisionState {
     return {
         sourceKey: context.sourceKey,
-        draft: { percentage: ratioToPercentText(context.savedValue), reason: '', forwardReference: null },
+        draft: { percentage: ratioToPercentText(context.savedValue), reason: '', evidence: null },
         fieldErrors: { value: null, reason: null },
         research: { kind: 'idle' },
         apply: { kind: 'idle' },
@@ -62,7 +63,7 @@ export function valuationRevisionReducer(
         case 'value-edited':
             return {
                 ...state,
-                draft: { ...state.draft, percentage: action.percentage, forwardReference: null },
+                draft: { ...state.draft, percentage: action.percentage, evidence: null },
                 fieldErrors: { ...state.fieldErrors, value: null },
                 apply: { kind: 'idle' },
                 recalculation: { kind: 'idle' },
@@ -94,7 +95,7 @@ export function valuationRevisionReducer(
                 draft: {
                     percentage: action.percentage,
                     reason: state.draft.reason || `Applied external evidence ${action.claimId}.`,
-                    forwardReference: action.forwardReference,
+                    evidence: action.evidence,
                 },
                 fieldErrors: { value: null, reason: null },
                 apply: { kind: 'applied', claimId: action.claimId },
@@ -155,7 +156,7 @@ export function validateValuationRevisionDraft(
             path: TERMINAL_GROWTH_FIELD.path,
             value,
             reason,
-            ...(draft.forwardReference ? { forward_reference: draft.forwardReference } : {}),
+            ...(draft.evidence ? { forward_reference: draft.evidence.forwardReference, forward_review_ref: draft.evidence.forwardReviewRef } : {}),
         },
     };
 }
@@ -165,8 +166,10 @@ export function applyValuationClaim(
     review: ForwardEvidenceReview,
     claim: ForwardEvidenceClaim,
 ):
-    | { kind: 'applied'; percentage: string; forwardReference: ForwardReference }
+    | { kind: 'applied'; percentage: string; evidence: AppliedEvidence }
     | { kind: 'error'; message: string } {
+    if (!context.canApplyResearch)
+        return { kind: 'error', message: 'Research cannot be applied to this report.' };
     if (
         review.automatic_preparation_digest !== context.source.preparation_digest ||
         claim.issuer_id !== context.issuerId ||
@@ -178,6 +181,7 @@ export function applyValuationClaim(
         claim.status !== 'accepted' ||
         !review.accepted_claim_ids.includes(claim.claim_id) ||
         claim.assumption_path !== TERMINAL_GROWTH_FIELD.path ||
+        claim.metric !== 'terminal_growth' ||
         claim.unit !== 'ratio'
     )
         return { kind: 'error', message: 'This claim is not accepted for the terminal growth assumption.' };
@@ -190,16 +194,21 @@ export function applyValuationClaim(
             kind: 'error',
             message: 'Applying a claim requires an approved license and a retained citation.',
         };
+    if (!review.review_ref)
+        return { kind: 'error', message: 'Applying a claim requires its retained service review.' };
     try {
         return {
             kind: 'applied',
             percentage: ratioToPercentText(claim.value),
-            forwardReference: {
-                claim_id: claim.claim_id,
-                source_url: claim.source.source_url,
-                source_content_hash: claim.source.content_hash,
-                citation: claim.source.retained_passage,
-                license_reference: claim.source.license_reference,
+            evidence: {
+                forwardReviewRef: review.review_ref,
+                forwardReference: {
+                    claim_id: claim.claim_id,
+                    source_url: claim.source.source_url,
+                    source_content_hash: claim.source.content_hash,
+                    citation: claim.source.retained_passage,
+                    license_reference: claim.source.license_reference,
+                },
             },
         };
     } catch {

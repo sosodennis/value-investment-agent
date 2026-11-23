@@ -97,7 +97,7 @@ export function ValuationRevisionPanel({
                 sourceKey,
                 claimId: claim.claim_id,
                 percentage: applied.percentage,
-                forwardReference: applied.forwardReference,
+                evidence: applied.evidence,
             });
     }
 
@@ -213,7 +213,7 @@ export function ValuationRevisionPanel({
                     {recalculating ? 'Recalculating…' : 'Recalculate'}
                 </Button>
             </form>
-            <details className="border-t pt-3 text-sm">
+            {context.canApplyResearch ? <details className="border-t pt-3 text-sm">
                 <summary className="cursor-pointer font-medium">
                     Research external evidence (optional)
                 </summary>
@@ -253,7 +253,7 @@ export function ValuationRevisionPanel({
                         />
                     )}
                 </div>
-            </details>
+            </details> : <p className="text-xs text-muted-foreground">Research cannot be applied to this report. You can enter a value and reason above.</p>}
         </div>
     );
 }

@@ -23,6 +23,7 @@ export type FundamentalRevisionControl =
       };
 
 export type ValuationRevisionContext = {
+    canApplyResearch: boolean;
     source: FundamentalRevisionSource;
     sourceKey: string;
     savedValue: string;
@@ -66,6 +67,7 @@ export function valuationRevisionAvailability(report: FundamentalReportModel): V
     return {
         kind: 'available',
         context: {
+            canApplyResearch: preparation.canApplyResearch,
             source,
             sourceKey: JSON.stringify(source),
             savedValue: field.value.raw,

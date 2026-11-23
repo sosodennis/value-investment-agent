@@ -11,6 +11,11 @@ export interface EvidenceSelection {
     title: string;
     value: string;
     source?: string;
+    citation?: string;
+    licenseReference?: string;
+    author?: string;
+    modifiedAt?: string;
+    rationale?: string;
     period?: string;
     formula?: string;
     confidence?: string;
@@ -150,6 +155,11 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                 </div>
                 <dl className="grid gap-2 text-xs">
                     <EvidenceField label="Source" value={item.source} />
+                    <EvidenceField label="Citation" value={item.citation} />
+                    <EvidenceField label="License" value={item.licenseReference} />
+                    <EvidenceField label="Author" value={item.author} />
+                    <EvidenceField label="Modified" value={item.modifiedAt} />
+                    <EvidenceField label="Reason" value={item.rationale} />
                     <EvidenceField label="Period" value={item.period} />
                     <EvidenceField label="Formula" value={item.formula} />
                     <EvidenceField label="Confidence" value={item.confidence} />

@@ -47,6 +47,7 @@ type CalculationModel = {
 };
 export type PreparationSummary = {
     digest: string;
+    canApplyResearch: boolean;
     status: Contracts['FundamentalValuationPreparationResultV1']['status'];
     modelId: Contracts['FundamentalValuationPreparationResultV1']['model_id'];
     modelVersion: string;
@@ -222,6 +223,7 @@ function calculationModel(result: Calculation, currency: string, identity: Funda
 function preparationSummary(preparation: Contracts['FundamentalValuationPreparationResultV1'], identity: FundamentalReportIdentity): PreparationSummary {
     return {
         digest: preparation.preparation_digest, status: preparation.status,
+        canApplyResearch: preparation.conditional_capital != null || preparation.conditional_operating != null,
         modelId: preparation.model_id, modelVersion: preparation.model_version,
         policyId: preparation.policy_id, policyVersion: preparation.policy_version,
         quality: preparation.quality_status, isRevised: isRevisedFundamentalPreparation(preparation), issueCodes: preparation.issue_codes, missingEvidence: preparation.missing_evidence,
@@ -230,7 +232,14 @@ function preparationSummary(preparation: Contracts['FundamentalValuationPreparat
             isManual: item.method === 'manual' || item.manual_provenance != null, formula: item.formula,
             evidence: {
                 id: evidenceKey(identity, 'assumption', `${item.path}:${index}`), title: `Assumption · ${item.path}`,
-                value: item.value, formula: item.formula, source: item.source_refs.join(', '),
+                value: item.value, formula: item.formula,
+                source: item.manual_provenance?.forward_reference?.source_url ?? item.source_refs.join(', '),
+                citation: item.manual_provenance?.forward_reference?.citation,
+                licenseReference: item.manual_provenance?.forward_reference?.license_reference,
+                sourceHash: item.manual_provenance?.forward_reference?.source_content_hash,
+                author: item.manual_provenance?.author,
+                modifiedAt: item.manual_provenance?.modified_at,
+                rationale: item.manual_provenance?.reason,
                 period: item.as_of, confidence: item.method, inputs: item.fact_ids, ...evidenceIdentity(identity),
             },
         })),

@@ -2369,7 +2369,7 @@ export interface components {
             max_source_bytes: number;
             /**
              * Policy Version
-             * @default forward-evidence-policy-v1
+             * @default forward-evidence-policy-v2
              */
             policy_version: string;
         };
@@ -2402,7 +2402,7 @@ export interface components {
              * Metric
              * @enum {string}
              */
-            metric: "revenue_growth" | "operating_margin" | "reinvestment_rate" | "debt_term";
+            metric: "revenue_growth" | "operating_margin" | "reinvestment_rate" | "terminal_growth" | "debt_term";
             /**
              * Model Id
              * @enum {string}
@@ -2433,6 +2433,19 @@ export interface components {
             unit: "ratio" | "currency" | "days" | "text";
             /** Value */
             value: string;
+        };
+        /** FundamentalForwardEvidenceReviewRefV1 */
+        FundamentalForwardEvidenceReviewRefV1: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Media Type
+             * @default application/json
+             * @constant
+             */
+            media_type: "application/json";
         };
         /** FundamentalForwardEvidenceReviewResultV1 */
         FundamentalForwardEvidenceReviewResultV1: {
@@ -2473,6 +2486,7 @@ export interface components {
             policy_version: string;
             /** Reference Digest */
             reference_digest: string;
+            review_ref?: components["schemas"]["FundamentalForwardEvidenceReviewRefV1"] | null;
             /**
              * Status
              * @enum {string}
@@ -3232,6 +3246,7 @@ export interface components {
         /** FundamentalValuationRevisionV1 */
         FundamentalValuationRevisionV1: {
             forward_reference?: components["schemas"]["FundamentalRevisionForwardReferenceV1"] | null;
+            forward_review_ref?: components["schemas"]["FundamentalForwardEvidenceReviewRefV1"] | null;
             /**
              * Path
              * @constant

@@ -94,6 +94,7 @@ const parseClaim = (value: unknown, context: string): ForwardEvidenceClaim => {
         metric !== 'revenue_growth' &&
         metric !== 'operating_margin' &&
         metric !== 'reinvestment_rate' &&
+        metric !== 'terminal_growth' &&
         metric !== 'debt_term'
     ) {
         throw new TypeError(`${context}.metric is unsupported.`);
@@ -179,6 +180,10 @@ export function parseForwardEvidenceReview(value: unknown): ForwardEvidenceRevie
     if (result.contract_version !== 'fundamental.v1' || result.label !== 'forward-looking external evidence') {
         throw new TypeError('forward evidence response has an invalid contract identity.');
     }
+    const reviewRef = result.review_ref == null ? null : parseRecord(result.review_ref, 'forward evidence review reference');
+    if (reviewRef && (typeof reviewRef.artifact_id !== 'string' || !/^forward-review-v1-[0-9a-f]{64}$/.test(reviewRef.artifact_id) || reviewRef.media_type !== 'application/json')) {
+        throw new TypeError('forward evidence review reference is invalid.');
+    }
     return {
         contract_version: 'fundamental.v1',
         status: parseStatus(result.status, 'forward evidence response.result.status'),
@@ -197,6 +202,11 @@ export function parseForwardEvidenceReview(value: unknown): ForwardEvidenceRevie
         budget: parseBudget(result.budget, 'forward evidence response.result.budget'),
         usage: parseUsage(result.usage, 'forward evidence response.result.usage'),
         reference_digest: parseDigest(result.reference_digest, 'forward evidence response.result.reference_digest'),
+        review_ref: reviewRef ? {
+            artifact_id: parseString(reviewRef.artifact_id, 'forward evidence review artifact id'),
+            content_hash: parseDigest(reviewRef.content_hash, 'forward evidence review content hash'),
+            media_type: 'application/json',
+        } : null,
     };
 }
 

@@ -71,6 +71,7 @@ describe('Fundamental report projection', () => {
         if (!assumption) throw new Error('Expected assumption fixture.');
         automatic.assumptions_evidence.push({ ...assumption, method: 'manual', value: '0.09', manual_provenance: {
             author: 'user-1', automatic_preparation_digest: automatic.preparation_digest, modified_at: assumption.as_of, reason: 'Updated expectation.',
+            forward_reference: { claim_id: 'claim-1', source_url: 'https://source.example/outlook', source_content_hash: rootHash, citation: 'The exact retained passage used for this revision.', license_reference: 'issuer-terms-v1' },
         } });
         const source = uncertaintyReport({ scenario_results: [calculation(), calculation()] });
         source.automatic_preparation = automatic;
@@ -79,6 +80,7 @@ describe('Fundamental report projection', () => {
         expect(inventory.sourceKey).toBe(fundamentalReportSourceKey({ threadId: 'thread-1', reference }));
         expect(new Set(inventory.items.map((item) => item.id)).size).toBe(inventory.items.length);
         expect(inventory.items.filter((item) => item.title.startsWith('Assumption'))).toHaveLength(2);
+        expect(inventory.items.find((item) => item.author === 'user-1')).toMatchObject({ source: 'https://source.example/outlook', sourceHash: rootHash, citation: 'The exact retained passage used for this revision.', licenseReference: 'issuer-terms-v1', rationale: 'Updated expectation.' });
         expect(inventory.items.filter((item) => item.title.startsWith('Calculation'))).toHaveLength(3);
         expect(inventory.items.find((item) => item.title.startsWith('Calculation'))).toMatchObject({
             inputs: ['enterprise_value', 'cash', 'debt'], source: 'revenue-1', inputDigest: baseDigest, resultHash: baseHash,

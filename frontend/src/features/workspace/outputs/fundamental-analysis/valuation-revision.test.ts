@@ -47,12 +47,12 @@ describe('source-bound revision draft', () => {
         const applied = applyValuationClaim(context, review, claim);
         if (applied.kind !== 'applied') throw new Error('Expected applicable claim.');
         const staged = valuationRevisionReducer(createValuationRevisionState(context), { type: 'claim-applied', sourceKey: context.sourceKey, claimId: claim.claim_id, ...applied });
-        expect(staged.draft).toMatchObject({ percentage: '3', forwardReference: { claim_id: 'claim-1', citation: claim.source.retained_passage, license_reference: 'issuer-terms-v1' } });
+        expect(staged.draft).toMatchObject({ percentage: '3', evidence: { forwardReference: { claim_id: 'claim-1', citation: claim.source.retained_passage, license_reference: 'issuer-terms-v1' }, forwardReviewRef: review.review_ref } });
         const edited = valuationRevisionReducer(staged, { type: 'value-edited', sourceKey: context.sourceKey, percentage: '2.5' });
-        expect(edited.draft.forwardReference).toBeNull();
+        expect(edited.draft.evidence).toBeNull();
         expect(edited.apply.kind).toBe('idle');
     });
-    it.each(['digest', 'issuer', 'path', 'license'] as const)('refuses a claim with mismatched %s', (field) => {
+    it.each(['digest', 'issuer', 'path', 'license', 'metric', 'review'] as const)('refuses a claim with mismatched %s', (field) => {
         const review = forwardReview();
         const claim = review.claims[0];
         if (!claim) throw new Error('Expected claim fixture.');
@@ -60,6 +60,8 @@ describe('source-bound revision draft', () => {
         if (field === 'issuer') claim.issuer_id = 'other-issuer';
         if (field === 'path') claim.assumption_path = 'assumptions.wacc';
         if (field === 'license') claim.source.license_status = 'unknown';
+        if (field === 'metric') claim.metric = 'revenue_growth';
+        if (field === 'review') review.review_ref = null;
         expect(applyValuationClaim(revisionContext(), review, claim).kind).toBe('error');
     });
     it('ignores late results from another source or superseded research operation', () => {

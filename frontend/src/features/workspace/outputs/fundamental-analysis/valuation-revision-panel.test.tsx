@@ -9,6 +9,12 @@ function openResearch() {
 
 describe('valuation revision panel', () => {
     afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+    it('keeps manual edits available when the service cannot apply research to this preparation', () => {
+        render(<ValuationRevisionPanel context={{ ...revisionContext(), canApplyResearch: false }} isPending={false} onRecalculate={vi.fn()} />);
+        expect(screen.queryByText('Research external evidence (optional)')).toBeNull();
+        screen.getByText(/Research cannot be applied to this report/);
+        expect(screen.getByRole('button', { name: 'Recalculate' }).hasAttribute('disabled')).toBe(false);
+    });
     it('validates blank fields and submits exact zero with one explicit Recalculate action', async () => {
         const pending = deferred<void>();
         const recalculate = vi.fn(() => pending.promise);
@@ -60,7 +66,7 @@ describe('valuation revision panel', () => {
         expect(recalculate).not.toHaveBeenCalled();
         screen.getByText('Applied claim-1 to the draft. Recalculate to run the valuation.');
         await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Recalculate' })));
-        expect(recalculate).toHaveBeenCalledWith(expect.objectContaining({ value: '0.03', source: context.source, forward_reference: expect.objectContaining({ claim_id: 'claim-1', source_content_hash: 'f'.repeat(64), license_reference: 'issuer-terms-v1' }) }), 'EXAMPLE');
+        expect(recalculate).toHaveBeenCalledWith(expect.objectContaining({ value: '0.03', source: context.source, forward_reference: expect.objectContaining({ claim_id: 'claim-1', source_content_hash: 'f'.repeat(64), license_reference: 'issuer-terms-v1' }), forward_review_ref: forwardReview().review_ref }), 'EXAMPLE');
         const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
         expect(body).toMatchObject({ opt_in: true, ticker: 'EXAMPLE', assumption_path: 'assumptions.terminal_growth', automatic_preparation_digest: context.source.preparation_digest });
         expect(body).not.toHaveProperty('preparation');

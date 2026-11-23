@@ -4346,7 +4346,7 @@
             "type": "integer"
           },
           "policy_version": {
-            "default": "forward-evidence-policy-v1",
+            "default": "forward-evidence-policy-v2",
             "title": "Policy Version",
             "type": "string"
           }
@@ -4416,6 +4416,7 @@
               "revenue_growth",
               "operating_margin",
               "reinvestment_rate",
+              "terminal_growth",
               "debt_term"
             ],
             "title": "Metric",
@@ -4494,6 +4495,33 @@
         "title": "FundamentalForwardEvidenceClaimV1",
         "type": "object"
       },
+      "FundamentalForwardEvidenceReviewRefV1": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "pattern": "^forward-review-v1-[0-9a-f]{64}$",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "media_type": {
+            "const": "application/json",
+            "default": "application/json",
+            "title": "Media Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "content_hash"
+        ],
+        "title": "FundamentalForwardEvidenceReviewRefV1",
+        "type": "object"
+      },
       "FundamentalForwardEvidenceReviewResultV1": {
         "additionalProperties": false,
         "properties": {
@@ -4555,6 +4583,16 @@
             "pattern": "^[0-9a-f]{64}$",
             "title": "Reference Digest",
             "type": "string"
+          },
+          "review_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalForwardEvidenceReviewRefV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "enum": [
@@ -6418,6 +6456,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/FundamentalRevisionForwardReferenceV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forward_review_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalForwardEvidenceReviewRefV1"
               },
               {
                 "type": "null"
