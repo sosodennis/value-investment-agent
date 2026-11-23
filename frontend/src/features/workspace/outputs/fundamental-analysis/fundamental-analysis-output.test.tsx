@@ -13,6 +13,32 @@ function model(artifact: unknown) {
 
 describe('Fundamental report', () => {
     afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+    it.each([true, false])('distinguishes retained and manual terminal-growth sources with application confirmed=%s', (confirmed) => {
+        const source = editableReport();
+        const automatic = source.automatic_preparation;
+        if (!automatic) throw new Error('Expected preparation fixture.');
+        const original = automatic.assumptions_evidence[0];
+        if (!original) throw new Error('Expected assumption fixture.');
+        automatic.input = confirmed ? { assumptions: { terminal_growth: '0.025' } } : {};
+        automatic.assumptions_evidence = [
+            { ...original, value: '0.0492' },
+            { ...original, value: '0.025', method: 'manual', manual_provenance: { author: 'user-1', automatic_preparation_digest: automatic.preparation_digest, modified_at: original.as_of, reason: 'Updated outlook.' } },
+        ];
+        const report = model(source);
+        const selectEvidence = vi.fn();
+        render(<FundamentalReport report={report} onSelectEvidence={selectEvidence} />);
+        const manualLabel = confirmed ? 'Applied manual assumption' : 'Manual assumption · application unconfirmed';
+        screen.getByText('Original retained assumption');
+        screen.getByText(manualLabel);
+        fireEvent.click(screen.getByRole('button', { name: 'Inspect Original retained assumption · assumptions.terminal_growth' }));
+        fireEvent.click(screen.getByRole('button', { name: `Inspect ${manualLabel} · assumptions.terminal_growth` }));
+        if (report.kind !== 'valuation') throw new Error('Expected valuation.');
+        const rows = report.preparationSummary?.assumptions;
+        expect(selectEvidence.mock.calls.map(([item]) => item)).toEqual(rows?.map((item) => item.evidence));
+        expect(selectEvidence.mock.calls[0]?.[0]).toMatchObject({ value: '0.0492', title: 'Original retained assumption · assumptions.terminal_growth' });
+        expect(selectEvidence.mock.calls[1]?.[0]).toMatchObject({ value: '0.025', title: `${manualLabel} · assumptions.terminal_growth`, author: 'user-1' });
+        expect(selectEvidence.mock.calls[0]?.[0].id).not.toBe(selectEvidence.mock.calls[1]?.[0].id);
+    });
     it.each(['history', 'revised'] as const)('keeps the %s report read-only even when the service field is editable', async (mode) => {
         const source = editableReport();
         if (mode === 'revised' && source.automatic_preparation) source.automatic_preparation.input = { ...source.automatic_preparation.input, provenance: { conditional_revision_ref: 'source-revision' } };

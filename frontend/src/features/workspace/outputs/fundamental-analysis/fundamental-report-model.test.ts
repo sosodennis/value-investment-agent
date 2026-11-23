@@ -96,4 +96,59 @@ describe('Fundamental report projection', () => {
         const next = projectFundamentalReport({ artifact, reference: { ...reference, download_url: '/api/v1/artifacts/report-1?run_id=run-2' }, threadId: 'thread-2', ticker: 'EXAMPLE' });
         expect(first.facts[0]?.evidence.id).not.toBe(next.facts[0]?.evidence.id);
     });
+    it.each([
+        { input: { assumptions: { terminal_growth: '0.025' } }, label: 'Applied manual assumption' },
+        { input: { assumptions: { terminal_growth: '0.0250' } }, label: 'Manual assumption · application unconfirmed' },
+        { input: { assumptions: { terminal_growth: 0.025 } }, label: 'Manual assumption · application unconfirmed' },
+        { input: {}, label: 'Manual assumption · application unconfirmed' },
+    ])('confirms each terminal-growth manual value against exact preparation input $input', ({ input, label }) => {
+        const automatic = preparation({ input });
+        const original = automatic.assumptions_evidence[0];
+        if (!original) throw new Error('Expected assumption fixture.');
+        automatic.assumptions_evidence = [
+            { ...original, path: 'assumptions.terminal_growth', value: '0.0492' },
+            { ...original, path: 'assumptions.terminal_growth', method: 'manual', value: '0.025', manual_provenance: { author: 'user-1', automatic_preparation_digest: automatic.preparation_digest, modified_at: original.as_of, reason: 'Updated outlook.' } },
+        ];
+        const report = project(valuationReport({ automatic_preparation: automatic }));
+        if (report.kind !== 'valuation') throw new Error('Expected valuation.');
+        const rows = report.preparationSummary?.assumptions;
+        expect(rows?.map((item) => [item.value.raw, item.revisionLabel])).toEqual([
+            ['0.0492', 'Original retained assumption'], ['0.025', label],
+        ]);
+        expect(rows?.[0]?.evidence.title).toBe('Original retained assumption · assumptions.terminal_growth');
+        expect(rows?.[1]?.evidence.title).toBe(`${label} · assumptions.terminal_growth`);
+        expect(rows?.map((item) => JSON.parse(item.evidence.id).slice(-2))).toEqual([
+            ['assumption', 'assumptions.terminal_growth:0'], ['assumption', 'assumptions.terminal_growth:1'],
+        ]);
+    });
+    it('confirms matching manual evidence independently of order and leaves other paths unchanged', () => {
+        const automatic = preparation({ input: { assumptions: { terminal_growth: '0.025' } } });
+        const original = automatic.assumptions_evidence[0];
+        if (!original) throw new Error('Expected assumption fixture.');
+        const manual = { ...original, path: 'assumptions.terminal_growth', method: 'manual', manual_provenance: { author: 'user-1', automatic_preparation_digest: automatic.preparation_digest, modified_at: original.as_of, reason: 'Updated outlook.' } } satisfies typeof original;
+        automatic.assumptions_evidence = [original, { ...original, path: 'assumptions.terminal_growth' }, { ...manual, value: '0.025' }, { ...manual, value: '0.03' }];
+        const report = project(valuationReport({ automatic_preparation: automatic }));
+        if (report.kind !== 'valuation') throw new Error('Expected valuation.');
+        expect(report.preparationSummary?.assumptions.map((item) => item.revisionLabel)).toEqual([
+            null, 'Original retained assumption', 'Applied manual assumption', 'Manual assumption · application unconfirmed',
+        ]);
+        expect(report.preparationSummary?.assumptions[0]?.evidence.title).toBe('Assumption · assumptions.wacc');
+    });
+    it('leaves an original terminal-growth assumption unchanged when no manual evidence exists', () => {
+        const automatic = preparation();
+        automatic.assumptions_evidence = automatic.assumptions_evidence.map((item) => ({ ...item, path: 'assumptions.terminal_growth' }));
+        const report = project(valuationReport({ automatic_preparation: automatic }));
+        if (report.kind !== 'valuation') throw new Error('Expected valuation.');
+        expect(report.preparationSummary?.assumptions[0]).toMatchObject({ revisionLabel: null, evidence: { title: 'Assumption · assumptions.terminal_growth' } });
+    });
+    it('keeps manual application unconfirmed when a preparation outcome has no input', () => {
+        const source = preparationOutcome();
+        const automatic = source.automatic_preparation;
+        const original = automatic.assumptions_evidence[0];
+        if (!original) throw new Error('Expected assumption fixture.');
+        automatic.assumptions_evidence = [{ ...original, path: 'assumptions.terminal_growth', method: 'manual', value: '0.025', manual_provenance: { author: 'user-1', automatic_preparation_digest: automatic.preparation_digest, modified_at: original.as_of, reason: 'Updated outlook.' } }];
+        const report = project(source);
+        if (report.kind !== 'preparation-outcome') throw new Error('Expected preparation outcome.');
+        expect(report.preparationSummary.assumptions[0]?.revisionLabel).toBe('Manual assumption · application unconfirmed');
+    });
 });

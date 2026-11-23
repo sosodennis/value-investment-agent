@@ -9,6 +9,7 @@ type Calculation = Contracts['FundamentalCalculationResultV1'];
 type Fact = Contracts['FundamentalCanonicalFactV1'];
 type Quality = Calculation['quality_status'];
 type Binding = { inputDigest: string; resultHash: string };
+type AssumptionRevisionLabel = 'Original retained assumption' | 'Applied manual assumption' | 'Manual assumption · application unconfirmed';
 
 export type ExactNumber = { raw: string; coordinate: number | null };
 export type ExactAmount = ExactNumber & { currency: string; basis: 'equity-total' | 'per-share' };
@@ -57,7 +58,7 @@ export type PreparationSummary = {
     isRevised: boolean;
     issueCodes: string[];
     missingEvidence: string[];
-    assumptions: { path: string; value: ExactNumber; method: string; editable: boolean; isManual: boolean; formula: string; evidence: EvidenceSelection }[];
+    assumptions: { path: string; value: ExactNumber; method: string; editable: boolean; isManual: boolean; revisionLabel: AssumptionRevisionLabel | null; formula: string; evidence: EvidenceSelection }[];
     historicalMetrics: { id: string; year: number; value: ExactNumber; unit: string; periodEnd: string; formula: string; factIds: string[] }[];
 };
 type UncertaintyModel = {
@@ -221,28 +222,43 @@ function calculationModel(result: Calculation, currency: string, identity: Funda
 }
 
 function preparationSummary(preparation: Contracts['FundamentalValuationPreparationResultV1'], identity: FundamentalReportIdentity): PreparationSummary {
+    const hasManualTerminalGrowth = preparation.assumptions_evidence.some((item) => item.path === 'assumptions.terminal_growth' && (item.method === 'manual' || item.manual_provenance != null));
+    const assumptions = preparation.input?.assumptions;
+    const appliedTerminalGrowth = typeof assumptions === 'object' && assumptions !== null && !Array.isArray(assumptions) && 'terminal_growth' in assumptions
+        ? assumptions.terminal_growth
+        : undefined;
     return {
         digest: preparation.preparation_digest, status: preparation.status,
         canApplyResearch: preparation.conditional_capital != null || preparation.conditional_operating != null,
         modelId: preparation.model_id, modelVersion: preparation.model_version,
         policyId: preparation.policy_id, policyVersion: preparation.policy_version,
         quality: preparation.quality_status, isRevised: isRevisedFundamentalPreparation(preparation), issueCodes: preparation.issue_codes, missingEvidence: preparation.missing_evidence,
-        assumptions: preparation.assumptions_evidence.map((item, index) => ({
-            path: item.path, value: exactNumber(item.value), method: item.method, editable: item.editable,
-            isManual: item.method === 'manual' || item.manual_provenance != null, formula: item.formula,
-            evidence: {
-                id: evidenceKey(identity, 'assumption', `${item.path}:${index}`), title: `Assumption · ${item.path}`,
-                value: item.value, formula: item.formula,
-                source: item.manual_provenance?.forward_reference?.source_url ?? item.source_refs.join(', '),
-                citation: item.manual_provenance?.forward_reference?.citation,
-                licenseReference: item.manual_provenance?.forward_reference?.license_reference,
-                sourceHash: item.manual_provenance?.forward_reference?.source_content_hash,
-                author: item.manual_provenance?.author,
-                modifiedAt: item.manual_provenance?.modified_at,
-                rationale: item.manual_provenance?.reason,
-                period: item.as_of, confidence: item.method, inputs: item.fact_ids, ...evidenceIdentity(identity),
-            },
-        })),
+        assumptions: preparation.assumptions_evidence.map((item, index) => {
+            const isManual = item.method === 'manual' || item.manual_provenance != null;
+            const revisionLabel: AssumptionRevisionLabel | null = item.path !== 'assumptions.terminal_growth' || !hasManualTerminalGrowth
+                ? null
+                : !isManual
+                    ? 'Original retained assumption'
+                    : typeof appliedTerminalGrowth === 'string' && item.value === appliedTerminalGrowth
+                        ? 'Applied manual assumption'
+                        : 'Manual assumption · application unconfirmed';
+            return {
+                path: item.path, value: exactNumber(item.value), method: item.method, editable: item.editable,
+                isManual, revisionLabel, formula: item.formula,
+                evidence: {
+                    id: evidenceKey(identity, 'assumption', `${item.path}:${index}`), title: `${revisionLabel ?? 'Assumption'} · ${item.path}`,
+                    value: item.value, formula: item.formula,
+                    source: item.manual_provenance?.forward_reference?.source_url ?? item.source_refs.join(', '),
+                    citation: item.manual_provenance?.forward_reference?.citation,
+                    licenseReference: item.manual_provenance?.forward_reference?.license_reference,
+                    sourceHash: item.manual_provenance?.forward_reference?.source_content_hash,
+                    author: item.manual_provenance?.author,
+                    modifiedAt: item.manual_provenance?.modified_at,
+                    rationale: item.manual_provenance?.reason,
+                    period: item.as_of, confidence: item.method, inputs: item.fact_ids, ...evidenceIdentity(identity),
+                },
+            };
+        }),
         historicalMetrics: preparation.historical_metrics.metrics.map((metric) => ({
             id: metric.metric_id, year: metric.fiscal_year, value: exactNumber(metric.value),
             unit: metric.unit, periodEnd: metric.period_end, formula: metric.formula, factIds: metric.fact_ids,

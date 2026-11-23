@@ -31,6 +31,7 @@ export function ValuationAssumptionsSection({
                                 <span className="mt-1 block break-all text-xs text-muted-foreground">
                                     {item.path}
                                 </span>
+                                {item.revisionLabel && <span className="mt-1 block text-xs font-medium">{item.revisionLabel}</span>}
                             </dt>
                             <dd className="min-w-0 space-y-1 text-sm">
                                 <InspectionValue
