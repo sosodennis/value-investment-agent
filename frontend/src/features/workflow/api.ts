@@ -57,9 +57,9 @@ export async function getActivitySnapshot(
     return snapshot;
 }
 
-export async function startWorkflowRun(threadId: string, request: StartRunRequest): Promise<WorkflowRun> {
+export async function startWorkflowRun(threadId: string, request: StartRunRequest, options: { signal?: AbortSignal } = {}): Promise<WorkflowRun> {
     const response = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/runs`, {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(request),
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(request), signal: options.signal,
     });
     if (!response.ok) throw await readError(response, 'Start run');
     const run = parseRunResponse(await response.json());
@@ -67,9 +67,9 @@ export async function startWorkflowRun(threadId: string, request: StartRunReques
     return run;
 }
 
-export async function cancelWorkflowRun(threadId: string, runId: string): Promise<void> {
+export async function cancelWorkflowRun(threadId: string, runId: string, options: { signal?: AbortSignal } = {}): Promise<void> {
     const response = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/cancel`, {
-        method: 'POST', credentials: 'include', headers: csrfHeaders(),
+        method: 'POST', credentials: 'include', headers: csrfHeaders(), signal: options.signal,
     });
     if (!response.ok) throw await readError(response, 'Cancel run');
 }
@@ -78,12 +78,14 @@ export async function resumeWorkflowRun(
     threadId: string,
     runId: string,
     request: ResumeRunRequest,
+    options: { signal?: AbortSignal } = {},
 ): Promise<WorkflowRun> {
     const response = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/resume`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify(request),
+        signal: options.signal,
     });
     if (!response.ok) throw await readError(response, 'Resume run');
     const run = parseRunResponse(await response.json()) as ResumeRunResponse;
@@ -96,6 +98,7 @@ export async function retryWorkflowRun(
     runId: string,
     checkpoint: CheckpointIdentity,
     idempotencyKey: string,
+    options: { signal?: AbortSignal } = {},
 ): Promise<WorkflowRun> {
     const response = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/retry`, {
         method: 'POST',
@@ -106,6 +109,7 @@ export async function retryWorkflowRun(
             ...csrfHeaders(),
         },
         body: JSON.stringify({ contract_version: 'v1', checkpoint }),
+        signal: options.signal,
     });
     if (!response.ok) throw await readError(response, 'Retry run');
     const run = parseRunResponse(await response.json()) as RetryRunResponse;

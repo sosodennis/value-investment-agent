@@ -5,7 +5,7 @@ import { buildArtifactUrl } from '@/features/artifacts/api';
 import { applyWorkflowEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, retryWorkflowRun, startWorkflowRun, type InteractionId, type InteractionResponse, type WorkflowActivitySnapshot, type WorkflowInteraction } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
 
-const makeThreadId = () => `thread_${Date.now()}`;
+const makeThreadId = () => `thread_${crypto.randomUUID()}`;
 const toError = (value: unknown, fallback: string) => value instanceof Error ? value.message : fallback;
 const isAbortError = (value: unknown) => {
     if (typeof value !== 'object' || value === null) return false;
@@ -40,24 +40,39 @@ export function useAgent(assistantId = 'agent') {
     const [isLoading, setIsLoading] = useState(false);
     const [submittingInteractionId, setSubmittingInteractionId] = useState<InteractionId | null>(null);
     const [hasMore] = useState(false);
-    const abortRef = useRef<AbortController | null>(null);
+    const operationRef = useRef<AbortController | null>(null);
     const submittingInteractionRef = useRef<InteractionId | null>(null);
 
-    useEffect(() => () => abortRef.current?.abort(), []);
+    useEffect(() => () => {
+        operationRef.current?.abort();
+        operationRef.current = null;
+    }, []);
 
-    const attachStream = useCallback(async (threadId: string, initialSnapshot: WorkflowActivitySnapshot, expectedRunId: string = initialSnapshot.run_id) => {
+    const beginOperation = useCallback(() => {
+        operationRef.current?.abort();
+        const operation = new AbortController();
+        operationRef.current = operation;
+        submittingInteractionRef.current = null;
+        setSubmittingInteractionId(null);
+        setConnection('disconnected');
+        return operation;
+    }, [setConnection]);
+
+    const isCurrentOperation = useCallback((operation: AbortController) =>
+        operationRef.current === operation && !operation.signal.aborted, []);
+
+    const attachStream = useCallback(async (threadId: string, initialSnapshot: WorkflowActivitySnapshot, operation: AbortController, expectedRunId: string = initialSnapshot.run_id) => {
+        if (!isCurrentOperation(operation)) return;
         if (initialSnapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
-        abortRef.current?.abort();
-        const controller = new AbortController();
-        abortRef.current = controller;
         let attempt = 0;
         let snapshot = initialSnapshot;
         let cursor = snapshot.cursor;
         let projection = createWorkflowActivityState(snapshot);
-        while (!controller.signal.aborted && attempt < 5) {
+        while (isCurrentOperation(operation) && attempt < 5) {
             try {
                 setConnection(attempt === 0 ? 'connecting' : 'reconnecting');
-                await consumeWorkflowEvents(threadId, cursor, controller.signal, (event) => {
+                await consumeWorkflowEvents(threadId, cursor, operation.signal, (event) => {
+                    if (!isCurrentOperation(operation)) return true;
                     if (event.run_id !== expectedRunId || event.thread_id !== threadId) throw new TypeError('workflow event identity mismatch.');
                     const next = applyWorkflowEvent(projection, event);
                     if (next.gapDetected) throw new Error('workflow sequence gap requires snapshot recovery.');
@@ -67,18 +82,23 @@ export function useAgent(assistantId = 'agent') {
                     return event.event_name === 'workflow.activity'
                         && event.payload.activity_id === 'workflow'
                         && ['completed', 'failed', 'cancelled'].includes(event.payload.status);
-                }, expectedRunId, () => setConnection('connected'));
-                if (controller.signal.aborted) return;
-                snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: controller.signal });
+                }, expectedRunId, () => {
+                    if (isCurrentOperation(operation)) setConnection('connected');
+                });
+                if (!isCurrentOperation(operation)) return;
+                snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: operation.signal });
+                if (!isCurrentOperation(operation)) return;
                 if (snapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
                 hydrateWorkflow(snapshot);
                 if (['completed', 'failed', 'cancelled'].includes(snapshot.run_status)) { setConnection('closed'); return; }
                 cursor = snapshot.cursor;
                 projection = createWorkflowActivityState(snapshot);
             } catch (error) {
-                if (controller.signal.aborted || isAbortError(error)) { setConnection('disconnected'); return; }
+                if (!isCurrentOperation(operation)) return;
+                if (isAbortError(error)) { setConnection('disconnected'); return; }
                 clientLogger.error('workflow.stream.error', { threadId, attempt, error: toError(error, 'stream failed') });
-                snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: controller.signal });
+                snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: operation.signal });
+                if (!isCurrentOperation(operation)) return;
                 if (snapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
                 hydrateWorkflow(snapshot);
                 if (['completed', 'failed', 'cancelled'].includes(snapshot.run_status)) { setConnection('closed'); return; }
@@ -88,16 +108,15 @@ export function useAgent(assistantId = 'agent') {
             attempt += 1;
             if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, boundedReconnectDelay(attempt)));
         }
-        setConnection('closed');
-    }, [hydrateWorkflow, processWorkflowEvent, setConnection]);
+        if (isCurrentOperation(operation)) setConnection('closed');
+    }, [hydrateWorkflow, isCurrentOperation, processWorkflowEvent, setConnection]);
 
     const sendMessage = useCallback(async (
         content: string,
         newSession = false,
         valuationRequest?: Record<string, unknown>,
     ) => {
-        submittingInteractionRef.current = null;
-        setSubmittingInteractionId(null);
+        const operation = beginOperation();
         setIsLoading(true);
         const threadId = newSession || !state.threadId ? makeThreadId() : state.threadId;
         if (threadId !== state.threadId) initSession(threadId);
@@ -106,17 +125,19 @@ export function useAgent(assistantId = 'agent') {
             const run = await startWorkflowRun(threadId, {
                 message: content,
                 valuation_request: valuationRequest,
-            });
+            }, { signal: operation.signal });
+            if (!isCurrentOperation(operation)) return;
             setRun(run.run_id);
-            const snapshot = await getActivitySnapshot(threadId, { runId: run.run_id });
+            const snapshot = await getActivitySnapshot(threadId, { runId: run.run_id, signal: operation.signal });
+            if (!isCurrentOperation(operation)) return;
             if (snapshot.run_id !== run.run_id) throw new TypeError('activity snapshot run identity mismatch.');
             hydrateWorkflow(snapshot);
             setIsLoading(false);
-            await attachStream(threadId, snapshot, run.run_id);
+            await attachStream(threadId, snapshot, operation, run.run_id);
         } catch (error) {
-            if (!isAbortError(error)) setError(toError(error, 'Failed to start workflow run.'));
-        } finally { setIsLoading(false); }
-    }, [addUserMessage, attachStream, hydrateWorkflow, initSession, setError, setRun, state.threadId]);
+            if (isCurrentOperation(operation) && !isAbortError(error)) setError(toError(error, 'Failed to start workflow run.'));
+        } finally { if (isCurrentOperation(operation)) setIsLoading(false); }
+    }, [addUserMessage, attachStream, beginOperation, hydrateWorkflow, initSession, isCurrentOperation, setError, setRun, state.threadId]);
 
     const submitCommand = useCallback(async (interaction: WorkflowInteraction, response: InteractionResponse) => {
         const currentInteraction = state.workflow?.interactions.get(interaction.identity.interaction_id);
@@ -133,6 +154,7 @@ export function useAgent(assistantId = 'agent') {
         }
         const interactionId = currentInteraction.identity.interaction_id;
         if (submittingInteractionRef.current === interactionId) return;
+        const operation = beginOperation();
         submittingInteractionRef.current = interactionId;
         setSubmittingInteractionId(interactionId);
         const text = `Selected ${response.selected_symbol}`;
@@ -141,22 +163,24 @@ export function useAgent(assistantId = 'agent') {
             const run = await resumeWorkflowRun(state.threadId, state.runId, {
                 identity: currentInteraction.identity,
                 response,
-            });
+            }, { signal: operation.signal });
+            if (!isCurrentOperation(operation)) return;
             setRun(run.run_id);
-            const snapshot = await getActivitySnapshot(state.threadId, { runId: run.run_id });
+            const snapshot = await getActivitySnapshot(state.threadId, { runId: run.run_id, signal: operation.signal });
+            if (!isCurrentOperation(operation)) return;
             hydrateWorkflow(snapshot);
             setIsLoading(false);
-            await attachStream(state.threadId, snapshot, run.run_id);
+            await attachStream(state.threadId, snapshot, operation, run.run_id);
         } catch (error) {
-            if (!isAbortError(error)) setError(toError(error, 'Failed to resume workflow run.'));
+            if (isCurrentOperation(operation) && !isAbortError(error)) setError(toError(error, 'Failed to resume workflow run.'));
         } finally {
-            if (submittingInteractionRef.current === interactionId) {
+            if (isCurrentOperation(operation) && submittingInteractionRef.current === interactionId) {
                 submittingInteractionRef.current = null;
                 setSubmittingInteractionId(null);
             }
-            setIsLoading(false);
+            if (isCurrentOperation(operation)) setIsLoading(false);
         }
-    }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.runId, state.threadId, state.workflow]);
+    }, [addUserMessage, attachStream, beginOperation, hydrateWorkflow, isCurrentOperation, setError, setRun, state.runId, state.threadId, state.workflow]);
 
     const retryRun = useCallback(async () => {
         const failure = state.workflow?.failure;
@@ -164,6 +188,7 @@ export function useAgent(assistantId = 'agent') {
             setError('This workflow failure cannot be retried.');
             return;
         }
+        const operation = beginOperation();
         setIsLoading(true);
         try {
             const retry = await retryWorkflowRun(
@@ -171,46 +196,50 @@ export function useAgent(assistantId = 'agent') {
                 state.runId,
                 failure.checkpoint,
                 crypto.randomUUID(),
+                { signal: operation.signal },
             );
+            if (!isCurrentOperation(operation)) return;
             setRun(retry.run_id);
-            const snapshot = await getActivitySnapshot(state.threadId, { runId: retry.run_id });
+            const snapshot = await getActivitySnapshot(state.threadId, { runId: retry.run_id, signal: operation.signal });
+            if (!isCurrentOperation(operation)) return;
             hydrateWorkflow(snapshot);
-            await attachStream(state.threadId, snapshot, retry.run_id);
+            await attachStream(state.threadId, snapshot, operation, retry.run_id);
         } catch (error) {
-            if (!isAbortError(error)) setError(toError(error, 'Failed to retry workflow run.'));
+            if (isCurrentOperation(operation) && !isAbortError(error)) setError(toError(error, 'Failed to retry workflow run.'));
         } finally {
-            setIsLoading(false);
+            if (isCurrentOperation(operation)) setIsLoading(false);
         }
-    }, [attachStream, hydrateWorkflow, setError, setRun, state.runId, state.threadId, state.workflow]);
+    }, [attachStream, beginOperation, hydrateWorkflow, isCurrentOperation, setError, setRun, state.runId, state.threadId, state.workflow]);
 
     const loadHistory = useCallback(async (threadId: string, expectedRunId: string) => {
-        abortRef.current?.abort();
-        abortRef.current = null;
-        submittingInteractionRef.current = null;
-        setSubmittingInteractionId(null);
+        const operation = beginOperation();
         reset();
-        setConnection('disconnected');
         setIsLoading(true);
         try {
-            const snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId });
+            const snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: operation.signal });
+            if (!isCurrentOperation(operation)) return;
             hydrateWorkflow(snapshot);
             setIsLoading(false);
-            if (snapshot.run_status === 'running' || snapshot.run_status === 'waiting' || snapshot.run_status === 'queued') await attachStream(threadId, snapshot, snapshot.run_id);
+            if (snapshot.run_status === 'running' || snapshot.run_status === 'waiting' || snapshot.run_status === 'queued') await attachStream(threadId, snapshot, operation, snapshot.run_id);
         } catch (error) {
-            if (!isAbortError(error)) setError(toError(error, 'Failed to load workflow snapshot.'));
-        } finally { setIsLoading(false); }
-    }, [attachStream, hydrateWorkflow, reset, setConnection, setError]);
+            if (isCurrentOperation(operation) && !isAbortError(error)) setError(toError(error, 'Failed to load workflow snapshot.'));
+        } finally { if (isCurrentOperation(operation)) setIsLoading(false); }
+    }, [attachStream, beginOperation, hydrateWorkflow, isCurrentOperation, reset, setError]);
 
     const cancelRun = useCallback(async () => {
         if (!state.threadId || !state.runId) return;
+        const operation = beginOperation();
         try {
-            await cancelWorkflowRun(state.threadId, state.runId);
-            abortRef.current?.abort();
-            const snapshot = await getActivitySnapshot(state.threadId, { runId: state.runId });
+            await cancelWorkflowRun(state.threadId, state.runId, { signal: operation.signal });
+            if (!isCurrentOperation(operation)) return;
+            const snapshot = await getActivitySnapshot(state.threadId, { runId: state.runId, signal: operation.signal });
+            if (!isCurrentOperation(operation)) return;
             hydrateWorkflow(snapshot);
             setConnection('closed');
-        } catch (error) { setError(toError(error, 'Failed to cancel workflow run.')); }
-    }, [hydrateWorkflow, setConnection, setError, state.runId, state.threadId]);
+        } catch (error) {
+            if (isCurrentOperation(operation) && !isAbortError(error)) setError(toError(error, 'Failed to cancel workflow run.'));
+        } finally { if (isCurrentOperation(operation)) setIsLoading(false); }
+    }, [beginOperation, hydrateWorkflow, isCurrentOperation, setConnection, setError, state.runId, state.threadId]);
 
     const activeActivities = state.workflow ? [...state.workflow.active.values()] : [];
     const isSubmittingInteraction = submittingInteractionId !== null

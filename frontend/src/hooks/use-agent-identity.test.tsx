@@ -22,7 +22,7 @@ function startResponse(threadId: string, runId: string) {
 describe('useAgent operation identity', () => {
     const fetchMock = vi.fn<typeof fetch>();
     beforeEach(() => vi.stubGlobal('fetch', fetchMock));
-    afterEach(() => { vi.unstubAllGlobals(); fetchMock.mockReset(); });
+    afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); fetchMock.mockReset(); });
 
     it('ignores an obsolete history snapshot while the selected history is still loading', async () => {
         const previous = Promise.withResolvers<Response>();
@@ -98,6 +98,65 @@ describe('useAgent operation identity', () => {
         unmount();
         await act(async () => { nextStart.resolve(startResponse('thread-1', 'next-run')); });
         expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    it('starts distinct sessions even when two starts are admitted in the same millisecond', async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(12345);
+        const first = Promise.withResolvers<Response>();
+        const second = Promise.withResolvers<Response>();
+        fetchMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+        const { result, unmount } = renderHook(() => useAgent());
+        act(() => {
+            void result.current.sendMessage('First', true);
+            void result.current.sendMessage('Second', true);
+        });
+
+        expect(fetchMock.mock.calls[0]?.[0]).not.toBe(fetchMock.mock.calls[1]?.[0]);
+        expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+        unmount();
+        await act(async () => {
+            first.resolve(startResponse(String(fetchMock.mock.calls[0]?.[0]).split('/')[4], 'first-run'));
+            second.resolve(startResponse(String(fetchMock.mock.calls[1]?.[0]).split('/')[4], 'second-run'));
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('aborts the active stream before awaiting a new start and rejects buffered old events', async () => {
+        const body = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
+        const response = new Response(new ReadableStream<Uint8Array>({ start: body.resolve }), {
+            headers: { 'Content-Type': 'text/event-stream' },
+        });
+        const started = Promise.withResolvers<Response>();
+        fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'previous-run', 'running'))
+            .mockResolvedValueOnce(response).mockReturnValueOnce(started.promise);
+        const { result, unmount } = renderHook(() => useAgent());
+        let previousLoad: Promise<void>;
+        act(() => { previousLoad = result.current.loadHistory('thread-1', 'previous-run'); });
+        await waitFor(() => expect(result.current.connectionState).toBe('connected'));
+        act(() => { void result.current.sendMessage('Next'); });
+        expect(fetchMock.mock.calls[1]?.[1]?.signal?.aborted).toBe(true);
+        expect(result.current.connectionState).toBe('disconnected');
+
+        await act(async () => {
+            const controller = await body.promise;
+            controller.enqueue(new TextEncoder().encode(`event: workflow.activity\ndata: ${JSON.stringify({
+                event_id: 'obsolete-event', seq_id: 2, event_version: 'v2', event_name: 'workflow.activity',
+                thread_id: 'thread-1', run_id: 'previous-run', occurred_at: '2026-11-23T00:00:00Z',
+                payload: {
+                    activity_id: 'workflow', thread_id: 'thread-1', run_id: 'previous-run',
+                    scope_path: [], kind: 'phase', status: 'completed', label: 'Old completion', attempt: 1,
+                },
+            })}\n\n`));
+            await previousLoad;
+        });
+
+        expect(result.current.workflow?.runStatus).toBe('running');
+        expect(result.current.workflow?.cursor).toBe(1);
+        expect(result.current.isLoading).toBe(true);
+        expect(result.current.connectionState).toBe('disconnected');
+        unmount();
+        await act(async () => { started.resolve(startResponse('thread-1', 'next-run')); });
+        expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
     it('keeps a selected history loading when an obsolete history request fails', async () => {

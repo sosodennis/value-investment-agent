@@ -124,6 +124,8 @@ describe('useAgent workflow runtime', () => {
             /\/api\/v1\/threads\/thread_[^/]+\/activities\?run_id=started-run$/,
         );
         expect(result.current.error).toBeNull();
+        const request: RequestInit | undefined = fetchMock.mock.calls[0]?.[1];
+        expect(JSON.parse(String(request?.body))).not.toHaveProperty('valuation_request');
     });
 
     it('sends caller-owned valuation input with a new run', async () => {
