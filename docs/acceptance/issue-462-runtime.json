@@ -3,11 +3,11 @@
   "issue": 462,
   "status": "WIP",
   "branch": "codex/issue-462-fundamental-report",
-  "commit": "ce5d46cbf333e950bb2fd722d89bbf558f8436ae",
+  "commit": "97037435327b9a022dd2bf87796e25a35d180661",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent",
-    "browser_session": "iab:2:issue462-a-report-comparison",
+    "browser_session": "iab:4:issue462-final-report-acceptance",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-462-app",
@@ -68,8 +68,7 @@
     }
   ],
   "blockers": [
-    "https://github.com/sosodennis/value-investment-agent/issues/463: deployment selector is not wired to the configured active release.",
-    "https://github.com/sosodennis/value-investment-agent/issues/465: authentic conditional preparation has scenarios only and refuses single edits; formal service policy design pending."
+    "#463/#465/#466/#467/#468/#469 owner fixes are integrated; final exact-runtime/browser acceptance, independent verdict, CI and merge-SHA smoke remain pending."
   ],
-  "next_step": "Check A report against authentic scenario-only artifact at ce5d46cb; complete B/C and #465 conditional MC/revision owner changes, then exact-commit full acceptance and review."
+  "next_step": "Run exact implementation preflight and browser default MC, controlled refusal, one revision and read-only history on rebuilt source matching 97037435; obtain independent runtime review before marking VERIFIED."
 }
