@@ -136,7 +136,6 @@ class FundamentalCanonicalFactV1(BaseModel):
     rejected_candidate_reasons: tuple[FundamentalCandidateRejectionV1, ...] = ()
     point_in_time_policy: str | None = None
     selection_reason: str | None = None
-    # Validated by Fundamental Service; callers preserve the source evidence.
     accounting_evidence: dict[str, JsonValue] | None = None
 
 

@@ -112,7 +112,6 @@ def test_conditional_mc_never_samples_hypothesis_owned_paths(tmp_path, monkeypat
     assert first.requested_samples == 256
     assert first.valid_samples + first.invalid_samples == 256
     assert set(first.quantiles) == {"p05", "p50", "p95", "lower", "median", "upper"}
-    # Each run: deterministic base, three exact joint stresses, then 256 draws.
     assert len(observed) == 2 * 260
     for offset in (0, 260):
         for actual in observed[offset + 4 : offset + 260]:

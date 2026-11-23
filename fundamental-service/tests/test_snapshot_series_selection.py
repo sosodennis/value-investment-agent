@@ -32,7 +32,6 @@ def _case(tmp_path):
         issuer_name="Canonical Filing Name",
     )
     facts = (_canonical_fact("fact-revenue", "revenue"),)
-    # API fact fixture matches the shared service fixture semantic issuer/security.
     facts = tuple(
         fact.model_copy(
             update={
@@ -135,7 +134,6 @@ def test_series_returns_immutable_canonical_identity_while_exact_mode_stays_exac
     selected = _resolve(case, exact)
     assert selected.status_code == 200, selected.text
     assert selected.json()["result"]["identity_selection_policy"] == "exact-identity-v1"
-    # Two selection policies cannot reuse the same operational cache record.
     assert (
         "fundamental_service_cache_miss_total 3"
         in case.app.state.metrics.render_prometheus()
@@ -195,7 +193,6 @@ def test_series_never_selects_unreleased_snapshot_and_refuses_multiple_classes(
     case = _case(tmp_path)
     other = _snapshot_with(case.snapshot, share_class="Other canonical Class B")
     case.snapshots.publish(other)
-    # Repository membership alone cannot enter series resolution.
     assert _resolve(case).json()["result"]["snapshot_id"] == case.snapshot.snapshot_id
     second_ref = _release_manifest_for(other, case.facts).snapshot_refs[0]
     case.state.manifest = _manifest_with(

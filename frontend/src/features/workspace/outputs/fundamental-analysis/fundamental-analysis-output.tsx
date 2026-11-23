@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, type ReactNode } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useArtifact } from '@/hooks/useArtifact';
@@ -157,6 +157,7 @@ export function FundamentalReport({
     onSelectEvidence?: (item: EvidenceSelection) => void;
     revisionPanel?: ReactNode;
 }) {
+    const sectionId = useId();
     const preparation =
         report.kind === 'valuation' || report.kind === 'preparation-outcome'
             ? report.preparationSummary
@@ -181,6 +182,12 @@ export function FundamentalReport({
                     </Badge>
                 </div>
             </header>
+            <nav aria-label="Report sections" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                {report.kind === 'valuation' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-valuation`}>Valuation &amp; drivers</a>}
+                {preparation && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-assumptions`}>Assumptions</a>}
+                {report.kind !== 'service-error' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-facts`}>Financial data</a>}
+                <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-sources`}>Sources &amp; method</a>
+            </nav>
             {report.issueCodes.length > 0 && (
                 <Alert variant="warning">
                     <AlertTitle>Data and model limitations</AlertTitle>
@@ -222,22 +229,28 @@ export function FundamentalReport({
                 </Alert>
             )}
             {report.kind === 'valuation' && (
-                <>
+                <div id={`${sectionId}-valuation`} tabIndex={-1} className="scroll-mt-4 space-y-5">
                     <ValuationSummary report={report} />
                     <ValuationUncertainty report={report} onSelectEvidence={onSelectEvidence} />
-                </>
-            )}
-            {report.kind !== 'service-error' && (
-                <FinancialFactsTable facts={report.facts} onSelectEvidence={onSelectEvidence} />
+                </div>
             )}
             {preparation && (
-                <ValuationAssumptionsSection
-                    preparation={preparation}
-                    revisionPanel={revisionPanel}
-                    onSelectEvidence={onSelectEvidence}
-                />
+                <div id={`${sectionId}-assumptions`} tabIndex={-1} className="scroll-mt-4">
+                    <ValuationAssumptionsSection
+                        preparation={preparation}
+                        revisionPanel={revisionPanel}
+                        onSelectEvidence={onSelectEvidence}
+                    />
+                </div>
             )}
-            <FundamentalReportSources report={report} onSelectEvidence={onSelectEvidence} />
+            {report.kind !== 'service-error' && (
+                <div id={`${sectionId}-facts`} tabIndex={-1} className="scroll-mt-4">
+                    <FinancialFactsTable facts={report.facts} onSelectEvidence={onSelectEvidence} />
+                </div>
+            )}
+            <div id={`${sectionId}-sources`} tabIndex={-1} className="scroll-mt-4">
+                <FundamentalReportSources report={report} onSelectEvidence={onSelectEvidence} />
+            </div>
         </article>
     );
 }
