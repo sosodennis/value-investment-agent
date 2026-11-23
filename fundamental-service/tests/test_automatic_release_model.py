@@ -1,5 +1,3 @@
-"""Automatic model metadata follows coherent released conditional recipes."""
-
 from types import SimpleNamespace
 
 import pytest
