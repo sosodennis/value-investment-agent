@@ -50,7 +50,7 @@ function SeriesTable({ series, onSelectEvidence, caption }: EvidenceActionProps 
                         const displayValue = point?.value ? formatReportNumber(point.value.raw, { kind: 'money', currency: item.currency }, { moneyScale: 9, includeUnit: false, precision: formatted[column].precision }) : null;
                         return <TableCell key={item.id} className="font-mono tabular-nums">{displayValue !== null && evidence
                             ? onSelectEvidence
-                                ? <button type="button" className="rounded-sm text-left underline decoration-dashed underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Inspect ${evidence.title}`} aria-describedby={`${id}-${column}-${index}`} onClick={() => onSelectEvidence({ ...evidence, displayValue: `${displayValue} ${item.currency} B`, unit: `${item.currency} B` })}><span id={`${id}-${column}-${index}`}>{displayValue}<span className="sr-only"> {item.currency} B</span></span></button>
+                                ? <button type="button" className="rounded-sm text-left underline decoration-dashed underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Inspect ${evidence.title}`} aria-describedby={`${id}-${column}-${index}`} onClick={() => onSelectEvidence({ ...evidence, displayValue: `${displayValue} ${item.currency} B` })}><span id={`${id}-${column}-${index}`}>{displayValue}<span className="sr-only"> {item.currency} B</span></span></button>
                                 : displayValue
                             : <span className="text-muted-foreground">Unavailable</span>}</TableCell>;
                     })}

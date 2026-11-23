@@ -50,6 +50,7 @@ function comparableHistory(report: FundamentalReportModel, field: typeof HISTORY
     const facts = report.facts.filter((fact) => fact.normalizedField === field.id).sort((a, b) => a.context.end.localeCompare(b.context.end));
     const reasons = new Set<string>();
     const first = facts[0];
+    if (facts.some((fact) => fact.context.periodType !== 'duration')) reasons.add('Revenue and income trends require annual duration periods.');
     if (facts.length < 2) reasons.add('At least two comparable annual periods are required.');
     if (first && facts.some((fact) => contextKey(fact) !== contextKey(first))) reasons.add('Issuer, security, consolidation, currency, unit, period type, concept or dimensions differ.');
     if (facts.some((fact) => fact.context.issuerId !== report.issuerId || fact.context.entityScope !== fact.context.issuerId || fact.context.consolidationScope !== 'consolidated')) reasons.add('Consolidated issuer coverage is not established.');

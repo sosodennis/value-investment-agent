@@ -50,7 +50,7 @@ describe('Fundamental series reading', () => {
         const table = within(screen.getByRole('region', { name: 'Forecast annual values' }));
         expect(table.getAllByRole('row')).toHaveLength(6);
         fireEvent.click(table.getByRole('button', { name: 'Inspect Calculation · revenue_3' }));
-        expect(onSelectEvidence).toHaveBeenCalledWith(expect.objectContaining({ value: '30000', inputDigest: report.base.binding.inputDigest, resultHash: report.base.binding.resultHash }));
+        expect(onSelectEvidence).toHaveBeenCalledWith(expect.objectContaining({ value: '30000', unit: 'currency', displayValue: '0.000030 USD B', inputDigest: report.base.binding.inputDigest, resultHash: report.base.binding.resultHash }));
         expect(screen.queryByText('FY2027')).toBeNull();
     });
 
@@ -63,6 +63,14 @@ describe('Fundamental series reading', () => {
         screen.getByText('2024-01-01 → 2024-12-31; 2025-01-01 → 2025-12-31', { exact: false });
     });
 
+    it('rejects consistently instant revenue facts rather than treating snapshots as income periods', () => {
+        const facts = [2024, 2025].map((year) => {
+            const fact = annualFact(year);
+            return { ...fact, instant: `${year}-12-31`, context: { ...fact.context, period_type: 'instant', instant: `${year}-12-31`, start_date: null, end_date: null } } satisfies ReturnType<typeof canonicalFact>;
+        });
+        const history = projectHistoricalSeries(historicalReport(facts))[0];
+        expect(history).toMatchObject({ kind: 'unavailable', reasons: expect.arrayContaining(['Revenue and income trends require annual duration periods.']) });
+    });
     it.each([
         ['currency', annualFact(2025, { currency: 'EUR' })],
         ['unit', annualFact(2025, { unit: 'shares' })],
