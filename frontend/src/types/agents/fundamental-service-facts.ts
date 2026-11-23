@@ -439,9 +439,29 @@ const parseFundamentalCalculationTrace = object<Contracts['FundamentalCalculatio
     valuation_timestamp: timestamp,
 });
 
-const parseFundamentalCalculationResult = object<Contracts['FundamentalCalculationResultV1']>({
+const parseFundamentalForecastPeriod = object<Contracts['FundamentalForecastPeriodV1']>({
+    ordinal: integer, period_start: date, period_end: date, included_start: date, cash_flow_date: date,
+    full_period_days: integer, included_days: integer, discount_days: integer,
+});
+const parseFundamentalForecastTimeline = object<Contracts['FundamentalForecastTimelineV1']>({
+    policy_version: literal('fcff-uniform-accrual-period-end-act365f-v1'),
+    calendar_basis: literal('source-fixed-month-day', 'source-month-end'),
+    label_basis: literal('period-end-year'), valuation_date: date,
+    source_period_start: date, source_period_end: date, source_revenue_fact_id: nonEmpty,
+    calendar_fact_ids: array(nonEmpty), periods: array(parseFundamentalForecastPeriod),
+});
+const parseForecastAssumptions: Parser<Contracts['FundamentalForecastAssumptionsProjectionV1']> = (value, context) => {
+    const fields = dictionary(json)(value, context);
+    return { ...fields, ...(fields.timeline === undefined ? {} : { timeline: union(parseFundamentalForecastTimeline, nullValue)(fields.timeline, `${context}.timeline`) }) };
+};
+const parseCalculationAssumptions: Parser<Contracts['FundamentalCalculationAssumptionsV1']> = (value, context) => {
+    const fields = dictionary(json)(value, context);
+    return { ...fields, ...(fields.forecast === undefined ? {} : { forecast: union(parseForecastAssumptions, nullValue)(fields.forecast, `${context}.forecast`) }) };
+};
+
+const parseFundamentalCalculationResultShape = object<Contracts['FundamentalCalculationResultV1']>({
     artifact_references: array(parseFundamentalServiceEvidenceReference),
-    assumptions: dictionary(json),
+    assumptions: parseCalculationAssumptions,
     calculation_status: literal("completed", "abstained", "rejected", "unavailable", "error"),
     calculation_version: text,
     contract_version: literal("fundamental.v1"),
@@ -463,6 +483,26 @@ const parseFundamentalCalculationResult = object<Contracts['FundamentalCalculati
     trace: optional(union(parseFundamentalCalculationTrace, nullValue)),
     valuation_timestamp: timestamp,
 });
+
+const parseFundamentalCalculationResult: Parser<Contracts['FundamentalCalculationResultV1']> = (value, context) => {
+    const result = parseFundamentalCalculationResultShape(value, context);
+    const timeline = result.assumptions.forecast?.timeline;
+    const dated = result.model_version === 'fcff_dcf-v3' || result.model_version === 'transition_fcff_dcf-v3';
+    if (dated !== (timeline != null)) throw new TypeError(`${context} model and forecast timing policy disagree.`);
+    if (timeline) {
+        if (timeline.valuation_date !== new Date(result.valuation_timestamp).toISOString().slice(0, 10)
+            || timeline.calendar_fact_ids.length !== 3 || new Set(timeline.calendar_fact_ids).size !== 3
+            || timeline.calendar_fact_ids[2] !== timeline.source_revenue_fact_id
+            || timeline.periods.length < 1 || timeline.periods.length > 10) throw new TypeError(`${context} has inconsistent timeline metadata.`);
+        for (const [index, period] of timeline.periods.entries()) {
+            if (period.ordinal !== index + 1 || period.period_start > period.included_start || period.included_start > period.period_end
+                || period.cash_flow_date !== period.period_end || period.full_period_days < 365 || period.full_period_days > 366
+                || period.included_days < 1 || period.included_days > period.full_period_days || period.discount_days < 1)
+                throw new TypeError(`${context} has invalid forecast period metadata.`);
+        }
+    }
+    return result;
+};
 
 const parseFundamentalConvergenceDiagnostics = object<Contracts['FundamentalConvergenceDiagnosticsV1']>({
     converged: optional(union(boolean, nullValue)),

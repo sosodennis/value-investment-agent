@@ -3232,6 +3232,26 @@
         "title": "FundamentalBoundFactsV1",
         "type": "object"
       },
+      "FundamentalCalculationAssumptionsV1": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonValue"
+        },
+        "properties": {
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalForecastAssumptionsProjectionV1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast"
+          }
+        },
+        "title": "FundamentalCalculationAssumptionsV1",
+        "type": "object"
+      },
       "FundamentalCalculationNodeV1": {
         "additionalProperties": false,
         "properties": {
@@ -3292,11 +3312,7 @@
             "type": "array"
           },
           "assumptions": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "title": "Assumptions",
-            "type": "object"
+            "$ref": "#/components/schemas/FundamentalCalculationAssumptionsV1"
           },
           "calculation_status": {
             "enum": [
@@ -4305,6 +4321,160 @@
           "fiscal_year"
         ],
         "title": "FundamentalFiscalPeriodV1",
+        "type": "object"
+      },
+      "FundamentalForecastAssumptionsProjectionV1": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonValue"
+        },
+        "properties": {
+          "timeline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalForecastTimelineV1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline"
+          }
+        },
+        "title": "FundamentalForecastAssumptionsProjectionV1",
+        "type": "object"
+      },
+      "FundamentalForecastPeriodV1": {
+        "additionalProperties": false,
+        "properties": {
+          "cash_flow_date": {
+            "format": "date",
+            "title": "Cash Flow Date",
+            "type": "string"
+          },
+          "discount_days": {
+            "minimum": 1.0,
+            "title": "Discount Days",
+            "type": "integer"
+          },
+          "full_period_days": {
+            "maximum": 366.0,
+            "minimum": 365.0,
+            "title": "Full Period Days",
+            "type": "integer"
+          },
+          "included_days": {
+            "maximum": 366.0,
+            "minimum": 1.0,
+            "title": "Included Days",
+            "type": "integer"
+          },
+          "included_start": {
+            "format": "date",
+            "title": "Included Start",
+            "type": "string"
+          },
+          "ordinal": {
+            "minimum": 1.0,
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date",
+            "title": "Period Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ordinal",
+          "period_start",
+          "period_end",
+          "included_start",
+          "cash_flow_date",
+          "full_period_days",
+          "included_days",
+          "discount_days"
+        ],
+        "title": "FundamentalForecastPeriodV1",
+        "type": "object"
+      },
+      "FundamentalForecastTimelineV1": {
+        "additionalProperties": false,
+        "description": "Lossless display metadata supplied and validated by Fundamental Service.",
+        "properties": {
+          "calendar_basis": {
+            "enum": [
+              "source-fixed-month-day",
+              "source-month-end"
+            ],
+            "title": "Calendar Basis",
+            "type": "string"
+          },
+          "calendar_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Calendar Fact Ids",
+            "type": "array"
+          },
+          "label_basis": {
+            "const": "period-end-year",
+            "title": "Label Basis",
+            "type": "string"
+          },
+          "periods": {
+            "items": {
+              "$ref": "#/components/schemas/FundamentalForecastPeriodV1"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Periods",
+            "type": "array"
+          },
+          "policy_version": {
+            "const": "fcff-uniform-accrual-period-end-act365f-v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "source_period_end": {
+            "format": "date",
+            "title": "Source Period End",
+            "type": "string"
+          },
+          "source_period_start": {
+            "format": "date",
+            "title": "Source Period Start",
+            "type": "string"
+          },
+          "source_revenue_fact_id": {
+            "minLength": 1,
+            "title": "Source Revenue Fact Id",
+            "type": "string"
+          },
+          "valuation_date": {
+            "format": "date",
+            "title": "Valuation Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_version",
+          "calendar_basis",
+          "label_basis",
+          "valuation_date",
+          "source_period_start",
+          "source_period_end",
+          "source_revenue_fact_id",
+          "calendar_fact_ids",
+          "periods"
+        ],
+        "title": "FundamentalForecastTimelineV1",
         "type": "object"
       },
       "FundamentalForwardEvidenceBudgetPolicyV1": {

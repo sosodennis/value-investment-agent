@@ -42,7 +42,7 @@ function SeriesChart({ series, onSelectEvidence }: EvidenceActionProps & { serie
             </ResponsiveContainer>
         </div>
         <p id={readoutId} role="status" aria-label={`${series.label} selected point`} className="min-h-10 text-sm">
-            {active?.value && <><span className="text-muted-foreground">{active.label}</span><span className="ml-2 whitespace-nowrap font-mono tabular-nums">{display(active.value.raw)}</span></>}
+            {active?.value && <><span className="text-muted-foreground">{active.period ?? active.label}</span><span className="ml-2 whitespace-nowrap font-mono tabular-nums">{display(active.value.raw)}</span></>}
         </p>
         <p className="text-xs text-muted-foreground">Hover or focus a point to read its value{onSelectEvidence ? '; activate it to inspect its source' : ''}. Missing points remain gaps.</p>
     </figure>;
@@ -59,7 +59,7 @@ function SeriesTable({ series, onSelectEvidence, caption }: EvidenceActionProps 
                 <TableCaption>{caption}. {formatted.some((item) => item.precision === 6) ? 'Small nonzero values extend series precision to six places or scientific notation.' : 'Values are rounded to two decimal places.'}</TableCaption>
                 <TableHeader><TableRow><TableHead scope="col">Period</TableHead>{series.map((item) => <TableHead key={item.id} scope="col">{item.label}</TableHead>)}</TableRow></TableHeader>
                 <TableBody>{labels.map((label, index) => <TableRow key={label}>
-                    <TableHead scope="row">{label}</TableHead>
+                    <TableHead scope="row" className="whitespace-nowrap">{label}{series[0]?.points[index]?.period && <span className="block text-xs font-normal text-muted-foreground">{series[0].points[index].period}</span>}</TableHead>
                     {series.map((item, column) => {
                         const point = item.points[index];
                         const evidence = point?.evidence;
@@ -79,11 +79,22 @@ function SeriesTable({ series, onSelectEvidence, caption }: EvidenceActionProps 
 export function ValuationForecast({ report, onSelectEvidence }: EvidenceActionProps & { report: FundamentalValuationModel }) {
     const series = projectForecastSeries(report);
     const hasValues = series.some((item) => item.points.some((point) => point.value !== null));
+    const timeline = report.base.forecastTimeline.kind === 'dated' ? report.base.forecastTimeline.timeline : null;
     return <section aria-label="Five-year forecast" className="min-w-0 space-y-3 border-b pb-5">
         <h3 className="font-semibold">Five-year forecast</h3>
-        <p className="text-sm text-muted-foreground">Service calculation nodes from this deterministic base. Year 1–5 are forecast ordinals; calendar years were not supplied.</p>
+        <p className="text-sm text-muted-foreground">{timeline
+            ? 'Forecasts use the annual periods supplied by the service. E means estimated; the year labels identify period-end calendar years.'
+            : 'Service calculation nodes from this deterministic base. Year 1–5 are forecast ordinals; calendar years were not supplied.'}</p>
+        {timeline && <div className="space-y-2 rounded-md border bg-muted/10 p-3 text-xs text-muted-foreground">
+            <p>Revenue and FCFF cover complete annual periods. Future FCFF included covers {timeline.periods[0].included_start} onward, after the valuation date of {timeline.valuation_date} (UTC, end of day).</p>
+            <p>FCFF accrues uniformly through each year and settles at year end. This assumption does not use observed year-to-date cash flows. Discounting uses actual days / 365 (ACT/365F).</p>
+            <p>Terminal value uses the final full-year FCFF and the annual Gordon growth approximation, discounted to the final period end. The model is uncalibrated.</p>
+            <details><summary className="cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Forecast periods and included coverage</summary>
+                <ul className="mt-2 space-y-1">{timeline.periods.map((period) => <li key={period.ordinal} className="font-mono tabular-nums">{period.period_start} → {period.period_end} · included {period.included_start} → {period.period_end} ({period.included_days}/{period.full_period_days} days)</li>)}</ul>
+            </details>
+        </div>}
         {hasValues ? <>
-            <div className="grid min-w-0 gap-3 @min-[44rem]:grid-cols-2">{series.map((item) => <SeriesChart key={item.id} series={item} onSelectEvidence={onSelectEvidence} />)}</div>
+            <div className="grid min-w-0 gap-3 @min-[44rem]:grid-cols-2">{series.filter((item) => item.id !== 'included_fcff').map((item) => <SeriesChart key={item.id} series={item} onSelectEvidence={onSelectEvidence} />)}</div>
             <SeriesTable series={series} caption="Forecast annual values" onSelectEvidence={onSelectEvidence} />
         </> : <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">No supported five-year revenue or FCFF nodes were supplied. No forecast was inferred.</p>}
     </section>;
