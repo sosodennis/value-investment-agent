@@ -60,9 +60,9 @@ describe('Fundamental report', () => {
     it('shows canonical MC values and a distinct deterministic base without a synthetic price curve', () => {
         render(<FundamentalReport report={model(uncertaintyReport())} />);
         screen.getByText('Deterministic base per share');
-        screen.getByText('25.1234567890123456789');
-        screen.getByText('26.1234567890123456789');
-        expect(screen.getAllByText('2500000000.1234567890123456789')).toHaveLength(2);
+        screen.getByText('USD 25.12 / share');
+        screen.getByText('USD 26.12 / share');
+        expect(screen.getAllByText('USD 2.50B')).toHaveLength(2);
         screen.getByText('Samples requested 100 · valid 98 · invalid 2');
         screen.getByText(/minimum valid samples 10/);
         screen.getByText('OUT_OF_BOUNDS · 2');
@@ -76,14 +76,14 @@ describe('Fundamental report', () => {
     });
     it('displays huge canonical values and missing per-share values honestly', () => {
         render(<FundamentalReport report={model(valuationReport({ service_result: calculation({ intrinsic_value: '1e400', per_share_value: null }) }))} />);
-        screen.getByText('1e400');
+        screen.getByText('USD 1.00e+400');
         screen.getAllByText('Unavailable');
         expect(screen.queryByText('Infinity')).toBeNull();
     });
     it('keeps a valid base visible with a partial abstaining uncertainty result and no inferred markers', () => {
         render(<FundamentalReport report={model(uncertaintyReport({ status: 'abstain', quantiles: { p05: '1e400' } }))} />);
-        screen.getByText('25.1234567890123456789');
-        screen.getByText('1e400');
+        screen.getByText('USD 25.12 / share');
+        screen.getByText('USD 1.00e+400 / share');
         screen.getAllByText('abstain');
         expect(screen.queryByRole('figure')).toBeNull();
         expect(screen.queryByText('Model quantile p50')).toBeNull();
@@ -114,7 +114,7 @@ describe('Fundamental report', () => {
         render(<FundamentalReport report={model(factsOnlyReport())} onSelectEvidence={selectEvidence} />);
         screen.getByText('Valuation not requested');
         screen.getByText('USD · source scale 10^6');
-        fireEvent.click(screen.getByRole('button', { name: 'Inspect revenue evidence' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Inspect Service fact · revenue' }));
         expect(selectEvidence).toHaveBeenCalledWith(expect.objectContaining({ value: '1000000.00000000000001', scale: 6, snapshotId: 'snapshot-1', artifactId: 'report-1', artifactUrl: reference.download_url }));
     });
     it('reads the same canonical report from an authenticated persisted artifact without previews', async () => {
@@ -125,7 +125,7 @@ describe('Fundamental report', () => {
         vi.stubGlobal('fetch', fetchMock);
         const inventory = vi.fn();
         await act(async () => render(<SWRConfig value={{ provider: () => new Map() }}><FundamentalAnalysisOutput reference={reference} resolvedTicker="EXAMPLE" status="done" threadId="thread-1" runId="different-run" onEvidenceInventory={inventory} /></SWRConfig>));
-        await screen.findByText('26.1234567890123456789');
+        await screen.findByText('USD 26.12 / share');
         screen.getByText('Previous result');
         expect(fetchMock).toHaveBeenCalledWith(reference.download_url, { credentials: 'include' });
         expect(inventory).toHaveBeenCalledWith(expect.objectContaining({ items: expect.arrayContaining([

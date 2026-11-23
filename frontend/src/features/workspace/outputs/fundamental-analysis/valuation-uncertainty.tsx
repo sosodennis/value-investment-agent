@@ -11,7 +11,7 @@ function QuantileMarkers({
     uncertainty: Uncertainty;
     base: FundamentalValuationModel['base']['perShare'];
 }) {
-    const points = uncertainty.quantiles.flatMap((item) =>
+    const points = uncertainty.quantiles.filter((item) => item.aliasOf === null).flatMap((item) =>
         item.value.coordinate === null
             ? []
             : [{ label: item.label, coordinate: item.value.coordinate, raw: item.value.raw }],
@@ -109,7 +109,7 @@ export function ValuationUncertainty({
                         <>
                             <QuantileMarkers uncertainty={uncertainty} base={report.base.perShare} />
                             <dl className="grid gap-3 @min-[30rem]:grid-cols-3">
-                                {uncertainty.quantiles.map((quantile) => (
+                                {uncertainty.quantiles.filter((item) => item.aliasOf === null).map((quantile) => (
                                     <div
                                         key={quantile.label}
                                         className="min-w-0 border-l-2 border-primary/40 pl-3"
@@ -119,13 +119,9 @@ export function ValuationUncertainty({
                                         </dt>
                                         <dd className="mt-1 text-sm">
                                             <InspectionValue
-                                                value={quantile.value.raw}
                                                 evidence={quantile.evidence}
                                                 onSelectEvidence={onSelectEvidence}
                                             />
-                                            <span className="block text-xs text-muted-foreground">
-                                                {quantile.value.currency} / share
-                                            </span>
                                         </dd>
                                     </div>
                                 ))}
@@ -187,7 +183,7 @@ export function ValuationUncertainty({
                                             Scenario {index + 1} · {scenario.status} · {scenario.quality}
                                         </dt>
                                         <dd className="mt-1 text-sm">
-                                            <ExactValue amount={scenario.perShare} />
+                                            <ExactValue amount={scenario.perShare} onSelectEvidence={onSelectEvidence} />
                                         </dd>
                                     </div>
                                 ))}

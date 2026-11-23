@@ -1,13 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import { parseFundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
 import { buildFundamentalEvidenceInventory, fundamentalReportSourceKey, projectFundamentalReport } from './fundamental-report-model';
-import { baseDigest, baseHash, calculation, conditionalQuantileBasis, factsOnlyReport, preparation, preparationOutcome, reference, rootDigest, rootHash, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
+import { baseDigest, baseHash, calculation, canonicalFact, conditionalQuantileBasis, factsOnlyReport, preparation, preparationOutcome, reference, rootDigest, rootHash, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
 
 function project(artifact: unknown) {
     return projectFundamentalReport({ artifact: parseFundamentalServiceArtifact(artifact), reference, threadId: 'thread-1', ticker: 'EXAMPLE' });
 }
 
 describe('Fundamental report projection', () => {
+    it('retains typed missing values and the metadata needed to assess historical comparability', () => {
+        const source = factsOnlyReport();
+        source.facts.facts = [canonicalFact({ value: { status: 'not_applicable', reason: 'No inventory for this issuer.' }, filing_version: 'original', accession_number: 'accession-1' })];
+        const fact = project(source).facts[0];
+        expect(fact?.normalizedField).toBe('revenue');
+        expect(fact?.value).toEqual({ kind: 'unavailable', status: 'not_applicable', reason: 'No inventory for this issuer.' });
+        expect(fact?.evidence.displayValue).toBe('Not applicable · No inventory for this issuer.');
+        expect(fact?.context).toMatchObject({ issuerId: 'issuer-1', entityScope: 'issuer-1', consolidationScope: 'consolidated', periodType: 'duration', start: '2025-01-01', end: '2025-12-31', unitQname: 'iso4217:USD', accession: 'accession-1', filingVersion: 'original' });
+    });
+
+    it('marks only the service contract aliases while retaining equal canonical quantiles and all evidence', () => {
+        const quantiles = { p05: '20', p50: '20', p95: '20', lower: '20', median: '20', upper: '20' };
+        const report = project(uncertaintyReport({ quantiles, quantile_basis: conditionalQuantileBasis }));
+        if (report.kind !== 'valuation' || report.uncertainty.kind !== 'provided') throw new Error('Expected uncertainty.');
+        expect(report.uncertainty.quantiles.filter((item) => item.aliasOf === null).map((item) => item.label)).toEqual(['p05', 'p50', 'p95']);
+        expect(buildFundamentalEvidenceInventory(report).items.filter((item) => item.title.startsWith('Model quantile'))).toHaveLength(6);
+        const unbound = project(uncertaintyReport({ quantiles }));
+        if (unbound.kind !== 'valuation' || unbound.uncertainty.kind !== 'provided') throw new Error('Expected uncertainty.');
+        expect(unbound.uncertainty.quantiles.every((item) => item.aliasOf === null)).toBe(true);
+    });
+
+    it('binds result actions to their own base or scenario calculation and keeps manual origin', () => {
+        const source = uncertaintyReport({ scenario_results: [calculation({ input_digest: rootDigest, result_hash: rootHash })] });
+        const automatic = preparation();
+        const original = automatic.assumptions_evidence[0];
+        if (!original) throw new Error('Expected assumption.');
+        automatic.assumptions_evidence = [{ ...original, method: 'manual', manual_provenance: { author: 'user-1', automatic_preparation_digest: baseDigest, modified_at: original.as_of, reason: 'Retained origin.' } }];
+        source.automatic_preparation = automatic;
+        const report = project(source);
+        if (report.kind !== 'valuation' || report.uncertainty.kind !== 'provided') throw new Error('Expected valuation.');
+        expect(report.base.perShare?.evidence).toMatchObject({ value: '25.1234567890123456789', displayValue: 'USD 25.12 / share', inputDigest: baseDigest, resultHash: baseHash });
+        expect(report.uncertainty.scenarios[0]?.perShare?.evidence).toMatchObject({ title: 'Service scenario 1 per share', inputDigest: rootDigest, resultHash: rootHash });
+        expect(report.base.perShare?.evidence.id).not.toBe(report.uncertainty.scenarios[0]?.perShare?.evidence.id);
+        expect(report.preparationSummary?.assumptions[0]?.originalPreparationDigest).toBe(baseDigest);
+    });
     it('preserves service conditional quantile provenance and rejects changes to its sampled paths', () => {
         const source = uncertaintyReport({ quantile_basis: conditionalQuantileBasis });
         const report = project(source);
@@ -27,7 +62,8 @@ describe('Fundamental report projection', () => {
         expect(report.uncertainty.evidenceReferences[0]?.artifact_type).toBe('uncertainty_evidence');
         expect(report.base.evidenceReferences[0]?.artifact_type).toBe('calculation_evidence');
         expect(report.uncertainty.seed).toBe('0');
-        expect(report.facts[0]?.value).toBe('1000000.00000000000001');
+        expect(report.facts[0]?.value).toEqual({ kind: 'number', raw: '1000000.00000000000001', semantic: { kind: 'money', currency: 'USD' } });
+        expect(report.facts[0]?.evidence.displayValue).toBe('USD 1.00M');
         expect(report.facts[0]?.scale).toBe(6);
         expect(report.facts[0]?.dimensions).toEqual([{ name: 'SegmentAxis', member: 'CloudMember' }]);
     });

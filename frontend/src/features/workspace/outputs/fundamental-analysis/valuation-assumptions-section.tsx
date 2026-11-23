@@ -35,7 +35,6 @@ export function ValuationAssumptionsSection({
                             </dt>
                             <dd className="min-w-0 space-y-1 text-sm">
                                 <InspectionValue
-                                    value={item.value.raw}
                                     evidence={item.evidence}
                                     onSelectEvidence={onSelectEvidence}
                                 />

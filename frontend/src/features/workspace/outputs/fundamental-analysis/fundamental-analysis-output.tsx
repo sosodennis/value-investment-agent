@@ -230,7 +230,7 @@ export function FundamentalReport({
             )}
             {report.kind === 'valuation' && (
                 <div id={`${sectionId}-valuation`} tabIndex={-1} className="scroll-mt-4 space-y-5">
-                    <ValuationSummary report={report} />
+                    <ValuationSummary report={report} onSelectEvidence={onSelectEvidence} />
                     <ValuationUncertainty report={report} onSelectEvidence={onSelectEvidence} />
                 </div>
             )}

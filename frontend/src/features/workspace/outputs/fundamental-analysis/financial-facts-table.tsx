@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 import type { FundamentalFactModel } from './fundamental-report-model';
+import { InspectionValue } from './report-value';
 
 export function FinancialFactsTable({ facts, onSelectEvidence }: {
     facts: FundamentalFactModel[];
@@ -14,17 +15,15 @@ export function FinancialFactsTable({ facts, onSelectEvidence }: {
             {facts.length === 0 ? <p>No canonical facts were supplied.</p> : (
                 <div className="overflow-x-auto">
                     <Table>
-                        <TableCaption>Canonical values in base units. Scale is source metadata.</TableCaption>
+                        <TableCaption>Readable values; inspect any value for full precision. Scale is source metadata.</TableCaption>
                         <TableHeader><TableRow>
-                            <TableHead scope="col">Fact</TableHead><TableHead scope="col">Exact value</TableHead>
+                            <TableHead scope="col">Fact</TableHead><TableHead scope="col">Value</TableHead>
                             <TableHead scope="col">Period</TableHead><TableHead scope="col">Unit and scale</TableHead>
                             <TableHead scope="col">Dimensions</TableHead><TableHead scope="col">Quality</TableHead>
                         </TableRow></TableHeader>
                         <TableBody>{facts.map((fact) => <TableRow key={fact.id}>
                             <TableCell><span className="block font-medium">{fact.label}</span><span className="text-xs text-muted-foreground">{fact.id}</span></TableCell>
-                            <TableCell className="break-all font-mono tabular-nums">{onSelectEvidence ? (
-                                <button type="button" className="rounded-sm text-left underline decoration-dashed underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onSelectEvidence(fact.evidence)} aria-label={`Inspect ${fact.label} evidence`}>{fact.value}</button>
-                            ) : fact.value}</TableCell>
+                            <TableCell><InspectionValue evidence={fact.evidence} onSelectEvidence={onSelectEvidence} /></TableCell>
                             <TableCell>{fact.period}</TableCell>
                             <TableCell>{fact.currency && fact.currency !== fact.unit ? `${fact.currency} · ` : ''}{fact.unit} · source scale 10^{fact.scale}</TableCell>
                             <TableCell>{fact.dimensions.length ? fact.dimensions.map((dimension) => `${dimension.name}: ${dimension.member}`).join(', ') : 'No dimensions'}</TableCell>

@@ -1,16 +1,16 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import type { FundamentalValuationModel } from './fundamental-report-model';
-import { ExactValue } from './report-value';
+import { ExactValue, type EvidenceActionProps } from './report-value';
 
-export function ValuationSummary({ report }: { report: FundamentalValuationModel }) {
+export function ValuationSummary({ report, onSelectEvidence }: EvidenceActionProps & { report: FundamentalValuationModel }) {
     return (
         <section aria-label="Valuation result" className="space-y-4 border-b pb-5">
             <div className="grid gap-4 @min-[36rem]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <div className="min-w-0 rounded-md border bg-card p-4">
                     <h3 className="text-sm text-muted-foreground">Deterministic base per share</h3>
                     <p className="mt-2 text-xl font-semibold @min-[36rem]:text-2xl">
-                        <ExactValue amount={report.base.perShare} />
+                        <ExactValue amount={report.base.perShare} onSelectEvidence={onSelectEvidence} />
                     </p>
                     <p className="mt-3 text-xs text-muted-foreground">As of {report.base.valuationDate}</p>
                 </div>
@@ -18,7 +18,7 @@ export function ValuationSummary({ report }: { report: FundamentalValuationModel
                     <div>
                         <h3 className="text-sm text-muted-foreground">Total equity value</h3>
                         <p className="mt-1 text-base font-semibold">
-                            <ExactValue amount={report.base.equity} />
+                            <ExactValue amount={report.base.equity} onSelectEvidence={onSelectEvidence} />
                         </p>
                     </div>
                     <dl className="grid gap-2 text-xs">

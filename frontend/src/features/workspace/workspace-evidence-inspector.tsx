@@ -1,7 +1,9 @@
-import { ExternalLink, FileSearch, PanelRight } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
+import { Copy, ExternalLink, FileSearch, PanelRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import type { AgentOutputViewModel } from '@/types/agents/output-adapter';
 import type { AgentInfo } from '@/types/agents';
 import { cn } from '@/lib/cn';
@@ -10,6 +12,10 @@ export interface EvidenceSelection {
     id: string;
     title: string;
     value: string;
+    displayValue?: string;
+    dataQuality?: string;
+    assumptionMethod?: string;
+    sourceUrl?: string;
     source?: string;
     citation?: string;
     licenseReference?: string;
@@ -24,6 +30,7 @@ export interface EvidenceSelection {
     threadId?: string;
     runId?: string;
     preparationDigest?: string;
+    originalPreparationDigest?: string;
     inputDigest?: string;
     resultHash?: string;
     inputs?: string[];
@@ -114,12 +121,15 @@ export function EvidenceInspector({
                 <Badge variant="outline">{items.length} items</Badge>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                {selected ? <EvidenceDetail key={selected.id} item={selected} /> : null}
                 {items.length === 0 ? (
                     <div className="grid min-h-40 place-items-center border border-dashed p-4 text-center text-sm text-muted-foreground">
                         <p>Evidence becomes available when a report artifact is loaded.</p>
                     </div>
                 ) : (
-                    <div className="grid gap-2">
+                    <details open={!selected} className="mt-3 min-w-0">
+                        <summary className="cursor-pointer rounded-sm py-2 text-sm font-medium">Browse all evidence ({items.length})</summary>
+                        <div className="grid gap-2">
                         {items.map((item) => (
                             <Button
                                 key={item.id}
@@ -130,28 +140,53 @@ export function EvidenceInspector({
                             >
                                 <span className="min-w-0">
                                     <span className="block truncate text-xs font-semibold">{item.title}</span>
-                                    <span className="mt-1 block break-words text-xs font-normal text-muted-foreground">{item.value}</span>
+                                    <span className="mt-1 block text-xs font-normal text-muted-foreground [overflow-wrap:anywhere]">{item.displayValue ?? item.value}</span>
                                 </span>
                             </Button>
                         ))}
                     </div>
+                    </details>
                 )}
-                {selected ? <EvidenceDetail item={selected} /> : null}
             </div>
         </aside>
     );
 }
 
 function EvidenceDetail({ item }: { item: EvidenceSelection }) {
+    const rawId = useId();
+    const rawField = useRef<HTMLTextAreaElement>(null);
+    const [copy, setCopy] = useState<{ kind: 'idle' } | { kind: 'pending' | 'copied' | 'failed'; target: 'raw' | 'display' }>({ kind: 'idle' });
+    const sourceUrl = safeSourceUrl(item.sourceUrl);
+    async function copyValue(target: 'raw' | 'display') {
+        setCopy({ kind: 'pending', target });
+        try {
+            await navigator.clipboard.writeText(target === 'raw' ? item.value : item.displayValue ?? item.value);
+            setCopy({ kind: 'copied', target });
+        } catch {
+            setCopy({ kind: 'failed', target });
+            rawField.current?.focus();
+            rawField.current?.select();
+        }
+    }
     return (
-        <Card className="mt-4 border-primary/30">
+        <Card className="min-w-0 border-primary/30">
             <CardHeader className="p-4 pb-3">
                 <CardTitle className="text-sm">{item.title}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 p-4 pt-0 text-sm">
                 <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Value</p>
-                    <p className="mt-1 break-words font-mono tabular-nums">{item.value}</p>
+                    <p className="text-xs font-medium text-muted-foreground">Displayed value</p>
+                    <p className="mt-1 font-mono tabular-nums [overflow-wrap:anywhere]">{item.displayValue ?? item.value}</p>
+                    <label htmlFor={rawId} className="mt-3 block text-xs font-medium text-muted-foreground">Original value · full precision</label>
+                    <Textarea id={rawId} ref={rawField} readOnly value={item.value} rows={3} className="mt-1 min-h-16 resize-y font-mono text-xs [overflow-wrap:anywhere]" />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" disabled={copy.kind === 'pending'} onClick={() => void copyValue('raw')}><Copy aria-hidden="true" />Copy original value</Button>
+                        <Button type="button" variant="outline" size="sm" disabled={copy.kind === 'pending'} onClick={() => void copyValue('display')}><Copy aria-hidden="true" />Copy displayed value</Button>
+                    </div>
+                    <p role="status" className="mt-2 text-xs text-muted-foreground">
+                        {copy.kind === 'copied' ? `${copy.target === 'raw' ? 'Original' : 'Displayed'} value copied.` : copy.kind === 'failed' ? 'Clipboard unavailable. Select the original value above and copy it manually.' : copy.kind === 'pending' ? 'Copying value…' : ''}
+                    </p>
+                    {copy.kind === 'failed' && copy.target === 'display' && <Textarea aria-label="Displayed value for manual copy" readOnly value={item.displayValue ?? item.value} rows={2} className="mt-2 font-mono text-xs" />}
                 </div>
                 <dl className="grid gap-2 text-xs">
                     <EvidenceField label="Source" value={item.source} />
@@ -162,7 +197,9 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Reason" value={item.rationale} />
                     <EvidenceField label="Period" value={item.period} />
                     <EvidenceField label="Formula" value={item.formula} />
-                    <EvidenceField label="Confidence" value={item.confidence} />
+                    <EvidenceField label="Data quality" value={item.dataQuality} />
+                    <EvidenceField label="Assumption method" value={item.assumptionMethod} />
+                    <EvidenceField label="Evidence assessment" value={item.confidence} />
                     <EvidenceField label="Thread" value={item.threadId} />
                     <EvidenceField label="Run" value={item.runId} />
                     <EvidenceField label="Artifact" value={item.artifactId} />
@@ -184,9 +221,11 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Source hash" value={factMetadataValue(item, item.sourceHash)} />
                     <EvidenceField label="Snapshot" value={factMetadataValue(item, item.snapshotId)} />
                     <EvidenceField label="Snapshot manifest" value={factMetadataValue(item, item.snapshotManifestDigest)} />
-                    <EvidenceField label="Unit" value={factMetadataValue(item, formatUnit(item.unit, item.scale))} />
+                    <EvidenceField label="Unit" value={factMetadataValue(item, item.unit)} />
+                    <EvidenceField label="Source scale" value={item.scale === undefined ? undefined : String(item.scale)} />
                     <EvidenceField label="Issue codes" value={formatIssueCodes(item)} />
                 </dl>
+                {sourceUrl && <Button asChild variant="outline" size="sm" className="justify-start"><a href={sourceUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />Open source document</a></Button>}
                 {item.artifactUrl ? (
                     <Button asChild variant="outline" size="sm" className="justify-start">
                         <a href={item.artifactUrl} target="_blank" rel="noreferrer">
@@ -203,14 +242,19 @@ function EvidenceField({ label, value }: { label: string; value?: string }) {
     return value ? (
         <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
             <dt className="text-muted-foreground">{label}</dt>
-            <dd className="break-words">{value}</dd>
+            <dd className="min-w-0 [overflow-wrap:anywhere]">{value}</dd>
         </div>
     ) : null;
 }
 
-function formatUnit(unit: string | undefined, scale: number | undefined): string | undefined {
-    if (unit === undefined) return undefined;
-    return scale === undefined || scale === 0 ? unit : `${unit} · 10^${scale}`;
+function safeSourceUrl(value: string | undefined): string | null {
+    if (!value) return null;
+    try {
+        const url = new URL(value);
+        return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+    } catch {
+        return null;
+    }
 }
 
 function factMetadataValue(item: EvidenceSelection, value: string | undefined): string | undefined {

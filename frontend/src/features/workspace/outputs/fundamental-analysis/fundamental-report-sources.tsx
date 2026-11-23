@@ -56,11 +56,9 @@ export function FundamentalReportSources({
                                             <dd className="min-w-0 space-y-1 text-xs">
                                                 <p>
                                                     <InspectionValue
-                                                        value={node.value?.raw ?? 'Unavailable'}
                                                         evidence={node.evidence}
                                                         onSelectEvidence={onSelectEvidence}
-                                                    />{' '}
-                                                    {node.unit}
+                                                    />
                                                 </p>
                                                 <p className="break-words text-muted-foreground">
                                                     {node.formula}
