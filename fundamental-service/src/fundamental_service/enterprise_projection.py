@@ -128,6 +128,11 @@ def project_enterprise_nodes(
                     (
                         f"fcff_{index}" if period is None else f"included_fcff_{index}",
                         "wacc",
+                        *(
+                            (f"assumptions.forecast.timeline.periods[{index - 1}]",)
+                            if period is not None
+                            else ()
+                        ),
                     ),
                 ),
             )
@@ -149,7 +154,17 @@ def project_enterprise_nodes(
             else "terminal_value / (1 + wacc)^(terminal_discount_days / 365)",
             terminal_pv,
             "currency",
-            ("terminal_value", "wacc"),
+            (
+                "terminal_value",
+                "wacc",
+                *(
+                    (
+                        f"assumptions.forecast.timeline.periods[{len(forecast.revenue_growth) - 1}]",
+                    )
+                    if forecast.timeline is not None
+                    else ()
+                ),
+            ),
         )
     )
     enterprise = present_value + terminal_pv

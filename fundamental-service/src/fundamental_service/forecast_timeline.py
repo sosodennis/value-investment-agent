@@ -1,5 +1,3 @@
-"""Recognize a source-backed annual calendar and validate dated FCFF inputs."""
-
 import calendar
 from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta

@@ -1,5 +1,3 @@
-"""The dated FCFF policy and its immutable annual cash-flow schedule."""
-
 from datetime import date, timedelta
 from typing import Literal
 

@@ -1517,6 +1517,12 @@ class FundamentalApplication:
         assert manifest is not None
         try:
             self._verify_current_release_artifacts(manifest, deadline_at=deadline_at)
+            release_model = automatic_release_model(manifest)
+            if release_model is not None and release_model.model_id != request.model_id:
+                raise DataReleaseError(
+                    "DATA_RELEASE_AUTOMATIC_MODEL_MISMATCH",
+                    "preparation must use the exact model bound by its release",
+                )
         except DataReleaseError as error:
             raise ServiceError(
                 error.code, str(error), status_code=422, retryable=False
@@ -1550,7 +1556,11 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
-        model_version = f"{request.model_id}-v2"
+        model_version = (
+            release_model.model_version
+            if release_model is not None
+            else f"{request.model_id}-v2"
+        )
         policy = None
         if self.policy_registry is not None:
             try:

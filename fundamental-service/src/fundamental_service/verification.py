@@ -310,6 +310,13 @@ def independent_calculate(
                             if timing is None
                             else f"included_fcff_{period}",
                             "wacc",
+                            *(
+                                (
+                                    f"assumptions.forecast.timeline.periods[{period - 1}]",
+                                )
+                                if timing is not None
+                                else ()
+                            ),
                         ),
                     ),
                 )
@@ -336,7 +343,17 @@ def independent_calculate(
                     else "terminal_value / (1 + wacc)^(terminal_discount_days / 365)",
                     terminal_pv,
                     "currency",
-                    ("terminal_value", "wacc"),
+                    (
+                        "terminal_value",
+                        "wacc",
+                        *(
+                            (
+                                f"assumptions.forecast.timeline.periods[{len(forecast.revenue_growth) - 1}]",
+                            )
+                            if timeline is not None
+                            else ()
+                        ),
+                    ),
                 ),
                 _node(
                     "terminal_value",

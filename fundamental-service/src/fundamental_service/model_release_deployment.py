@@ -1,5 +1,3 @@
-"""Admit signed model releases from a trusted deployment bundle."""
-
 from datetime import datetime
 from pathlib import Path
 from typing import Literal

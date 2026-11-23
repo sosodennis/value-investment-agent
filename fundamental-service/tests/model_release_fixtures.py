@@ -1,5 +1,3 @@
-"""Synthetic signed bundles for deployment-boundary tests only."""
-
 from datetime import UTC, datetime
 from hashlib import sha256
 

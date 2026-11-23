@@ -141,3 +141,115 @@ def test_incoherent_or_unbound_conditional_release_refuses_metadata(
     assert response.status_code == 503, response.text
     assert response.json()["error"]["code"] == code
     assert "automatic_model" not in response.json()
+
+
+def _dated_joint_fixture(tmp_path):
+    from dataclasses import replace
+    from fundamental_service.conditional_capital_contracts import (
+        ConditionalCapitalPolicyV1,
+    )
+    from fundamental_service.conditional_reinvestment import (
+        bind_conditional_reinvestment_recipe,
+    )
+    from fundamental_service.conditional_reinvestment_contracts import (
+        ConditionalReinvestmentRecipeV1,
+    )
+    from fundamental_service.conditional_reinvestment_release import (
+        REINVESTMENT_ASSUMPTION_ROLE,
+        reinvestment_assumption_document,
+    )
+    from fundamental_service.data_releases import ArtifactRefV1
+    from fundamental_service.policies import (
+        PolicyRecordV1,
+        PolicyRegistry,
+        executable_model_specs,
+    )
+    from fundamental_service.serialization import sha256_digest
+
+    fixture = _joint_fixture(tmp_path)
+    fixture.capital_policy = ConditionalCapitalPolicyV1.model_validate(
+        fixture.capital_policy.model_dump() | {"model_version": "fcff_dcf-v3"}
+    )
+    recipe = ConditionalReinvestmentRecipeV1.model_validate(
+        fixture.forward_policy.recipe.model_dump() | {"model_version": "fcff_dcf-v3"}
+    )
+    record = fixture.artifacts.put_bytes_with_receipt(
+        "dated-forward-assumptions",
+        reinvestment_assumption_document(recipe),
+        media_type="application/json",
+    ).artifact
+    recipe = ConditionalReinvestmentRecipeV1.model_validate(
+        recipe.model_dump()
+        | {
+            "assumption_document_uri": f"artifact://{record.artifact_id}",
+            "assumption_document_digest": record.content_hash,
+        }
+    )
+    fixture.forward_policy = bind_conditional_reinvestment_recipe(
+        recipe, fixture.stored, snapshot=fixture.snapshot
+    ).policy
+    fixture.manifest = _manifest_with(
+        fixture.manifest,
+        conditional_capital_policies=(fixture.capital_policy,),
+        conditional_reinvestment_policies=(fixture.forward_policy,),
+        artifact_refs=(
+            *[
+                ref
+                for ref in fixture.manifest.artifact_refs
+                if ref.role != REINVESTMENT_ASSUMPTION_ROLE
+            ],
+            ArtifactRefV1(
+                artifact_id=record.artifact_id,
+                content_hash=record.content_hash,
+                media_type=record.media_type,
+                role=REINVESTMENT_ASSUMPTION_ROLE,
+            ),
+        ),
+    )
+    policies = []
+    for policy in fixture.application.policy_registry.policies():
+        payload = policy.model_dump(exclude={"policy_digest"}) | {
+            "model_version": f"{policy.model_id}-v3",
+            "policy_id": policy.policy_id + "-dated",
+            "policy_version": policy.policy_version + "-dated",
+        }
+        policies.append(PolicyRecordV1(**payload, policy_digest=sha256_digest(payload)))
+    fixture.application = replace(
+        fixture.application,
+        policy_registry=PolicyRegistry(executable_model_specs(), policies),
+    )
+    return fixture
+
+
+@pytest.mark.parametrize("dated", [False, True])
+def test_signed_release_selects_its_exact_model_before_public_preparation(
+    tmp_path, dated
+):
+    from fundamental_service.contracts import ValuationInputV1
+    from fundamental_service.serialization import canonical_bytes
+    from test_preparation_runner import _reviewed_candidate
+    from test_valuation_release_inputs import _client, _prepare
+
+    fixture = _dated_joint_fixture(tmp_path) if dated else _joint_fixture(tmp_path)
+    candidate, canary = _reviewed_candidate(fixture)
+    canary.validate(candidate.manifest, candidate.verification)
+    response = _prepare(_client(fixture), fixture, candidate)
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["status"] == "prepared", result["issue_codes"]
+    expected_version = "fcff_dcf-v3" if dated else "fcff_dcf-v2"
+    assert (
+        result["model_version"] == result["input"]["model_version"] == expected_version
+    )
+    request = ValuationInputV1.model_validate_json(canonical_bytes(result["input"]))
+    timeline = request.assumptions.forecast.timeline
+    assert (timeline is not None) == dated
+    if dated:
+        assert timeline.source_period_end.isoformat() == "2025-12-31"
+        assert [period.period_end.year for period in timeline.periods] == [
+            2026,
+            2027,
+            2028,
+            2029,
+            2030,
+        ]
