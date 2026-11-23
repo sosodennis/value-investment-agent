@@ -2,6 +2,16 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAgent } from './useAgent';
 
+function deferred<T>() {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((onResolve, onReject) => {
+        resolve = onResolve;
+        reject = onReject;
+    });
+    return { promise, resolve, reject };
+}
+
 function snapshotResponse(threadId: string, runId: string, runStatus = 'completed') {
     return new Response(JSON.stringify({
         thread_id: threadId,
@@ -25,8 +35,8 @@ describe('useAgent operation identity', () => {
     afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); fetchMock.mockReset(); });
 
     it('ignores an obsolete history snapshot while the selected history is still loading', async () => {
-        const previous = Promise.withResolvers<Response>();
-        const selected = Promise.withResolvers<Response>();
+        const previous = deferred<Response>();
+        const selected = deferred<Response>();
         fetchMock.mockReturnValueOnce(previous.promise).mockReturnValueOnce(selected.promise);
         const { result } = renderHook(() => useAgent());
         let previousLoad: Promise<void>;
@@ -49,7 +59,7 @@ describe('useAgent operation identity', () => {
     });
 
     it('ignores a late start acknowledgement after selecting a historical run', async () => {
-        const started = Promise.withResolvers<Response>();
+        const started = deferred<Response>();
         fetchMock.mockReturnValueOnce(started.promise)
             .mockResolvedValueOnce(snapshotResponse('selected-thread', 'selected-run'));
         const { result } = renderHook(() => useAgent());
@@ -72,8 +82,8 @@ describe('useAgent operation identity', () => {
     });
 
     it('ignores a late start snapshot before the next start acknowledgement arrives', async () => {
-        const previousSnapshot = Promise.withResolvers<Response>();
-        const nextStart = Promise.withResolvers<Response>();
+        const previousSnapshot = deferred<Response>();
+        const nextStart = deferred<Response>();
         fetchMock
             .mockResolvedValueOnce(snapshotResponse('thread-1', 'initial-run'))
             .mockResolvedValueOnce(startResponse('thread-1', 'previous-run'))
@@ -102,8 +112,8 @@ describe('useAgent operation identity', () => {
 
     it('starts distinct sessions even when two starts are admitted in the same millisecond', async () => {
         vi.spyOn(Date, 'now').mockReturnValue(12345);
-        const first = Promise.withResolvers<Response>();
-        const second = Promise.withResolvers<Response>();
+        const first = deferred<Response>();
+        const second = deferred<Response>();
         fetchMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
         const { result, unmount } = renderHook(() => useAgent());
         act(() => {
@@ -122,11 +132,11 @@ describe('useAgent operation identity', () => {
     });
 
     it('aborts the active stream before awaiting a new start and rejects buffered old events', async () => {
-        const body = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
+        const body = deferred<ReadableStreamDefaultController<Uint8Array>>();
         const response = new Response(new ReadableStream<Uint8Array>({ start: body.resolve }), {
             headers: { 'Content-Type': 'text/event-stream' },
         });
-        const started = Promise.withResolvers<Response>();
+        const started = deferred<Response>();
         fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'previous-run', 'running'))
             .mockResolvedValueOnce(response).mockReturnValueOnce(started.promise);
         const { result, unmount } = renderHook(() => useAgent());
@@ -160,8 +170,8 @@ describe('useAgent operation identity', () => {
     });
 
     it('keeps a selected history loading when an obsolete history request fails', async () => {
-        const previous = Promise.withResolvers<Response>();
-        const selected = Promise.withResolvers<Response>();
+        const previous = deferred<Response>();
+        const selected = deferred<Response>();
         fetchMock.mockReturnValueOnce(previous.promise).mockReturnValueOnce(selected.promise);
         const { result } = renderHook(() => useAgent());
         act(() => { void result.current.loadHistory('previous-thread', 'previous-run'); });
@@ -175,8 +185,8 @@ describe('useAgent operation identity', () => {
     });
 
     it('aborts the previous stream as soon as another history request is admitted', async () => {
-        const stream = Promise.withResolvers<Response>();
-        const selected = Promise.withResolvers<Response>();
+        const stream = deferred<Response>();
+        const selected = deferred<Response>();
         fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'previous-run', 'running'))
             .mockReturnValueOnce(stream.promise).mockReturnValueOnce(selected.promise);
         const { result } = renderHook(() => useAgent());
@@ -200,7 +210,7 @@ describe('useAgent operation identity', () => {
     });
 
     it('ignores a stale stream recovery snapshot after changing runs', async () => {
-        const recovery = Promise.withResolvers<Response>();
+        const recovery = deferred<Response>();
         fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'previous-run', 'running'))
             .mockResolvedValueOnce(new Response('', { headers: { 'Content-Type': 'text/event-stream' } }))
             .mockReturnValueOnce(recovery.promise)
@@ -222,7 +232,7 @@ describe('useAgent operation identity', () => {
     });
 
     it('does not hydrate a cancellation response into a newly selected run', async () => {
-        const cancellation = Promise.withResolvers<Response>();
+        const cancellation = deferred<Response>();
         fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'previous-run'))
             .mockReturnValueOnce(cancellation.promise)
             .mockResolvedValueOnce(snapshotResponse('thread-1', 'selected-run'));
@@ -240,7 +250,7 @@ describe('useAgent operation identity', () => {
     });
 
     it.each(['history', 'start'])('aborts an in-flight %s request on unmount without starting follow-up work', async (operation) => {
-        const pending = Promise.withResolvers<Response>();
+        const pending = deferred<Response>();
         fetchMock.mockReturnValueOnce(pending.promise);
         const { result, unmount } = renderHook(() => useAgent());
         act(() => {
