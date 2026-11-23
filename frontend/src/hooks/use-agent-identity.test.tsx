@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAgent } from './useAgent';
+import type { components } from '@/types/generated/api-contract';
+import { useAgent, type WorkflowStartResult } from './useAgent';
 
 function deferred<T>() {
     let resolve!: (value: T | PromiseLike<T>) => void;
@@ -12,7 +13,12 @@ function deferred<T>() {
     return { promise, resolve, reject };
 }
 
-function snapshotResponse(threadId: string, runId: string, runStatus = 'completed') {
+function snapshotResponse(
+    threadId: string,
+    runId: string,
+    runStatus = 'completed',
+    extras: Partial<Pick<components['schemas']['WorkflowSnapshot'], 'pending_interactions' | 'completed_outputs'>> = {},
+) {
     return new Response(JSON.stringify({
         thread_id: threadId,
         run_id: runId,
@@ -22,6 +28,7 @@ function snapshotResponse(threadId: string, runId: string, runStatus = 'complete
         recent_activities: [],
         pending_interactions: [],
         completed_outputs: [],
+        ...extras,
     }), { status: 200 });
 }
 
@@ -29,10 +36,122 @@ function startResponse(threadId: string, runId: string) {
     return new Response(JSON.stringify({ thread_id: threadId, run_id: runId, status: 'started' }), { status: 202 });
 }
 
+function pendingStreamResponse(signal?: AbortSignal | null) {
+    return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+            signal?.addEventListener('abort', () => {
+                controller.error(new DOMException('Aborted', 'AbortError'));
+            }, { once: true });
+        },
+    }), { headers: { 'Content-Type': 'text/event-stream' } });
+}
+
 describe('useAgent operation identity', () => {
     const fetchMock = vi.fn<typeof fetch>();
     beforeEach(() => vi.stubGlobal('fetch', fetchMock));
     afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); fetchMock.mockReset(); });
+
+    it('returns the accepted run identity while its stream remains pending', async () => {
+        fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'initial-run'))
+            .mockResolvedValueOnce(startResponse('thread-1', 'started-run'))
+            .mockResolvedValueOnce(snapshotResponse('thread-1', 'started-run', 'running'))
+            .mockImplementationOnce(async (_input, init) => pendingStreamResponse(init?.signal));
+        const { result, unmount } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread-1', 'initial-run'));
+        let outcome: WorkflowStartResult | undefined;
+        act(() => {
+            void result.current.sendMessage('Valuate AAPL').then((value) => { outcome = value; });
+        });
+
+        await waitFor(() => expect(result.current.connectionState).toBe('connected'));
+        await waitFor(() => expect(outcome).toEqual({ kind: 'started', threadId: 'thread-1', runId: 'started-run' }));
+        expect(result.current.workflow?.runStatus).toBe('running');
+        expect(result.current.isLoading).toBe(false);
+        expect(fetchMock.mock.calls[3]?.[1]?.signal?.aborted).toBe(false);
+        unmount();
+    });
+
+    it('keeps an accepted start successful when its pending interaction resumes the same run', async () => {
+        const interaction = {
+            identity: { thread_id: 'thread-1', run_id: 'started-run', activity_id: 'intent.clarifying', interaction_id: 'interaction-1' },
+            kind: 'ticker_selection', status: 'pending',
+            request: { type: 'ticker_selection', title: 'Choose a company', description: 'Select the intended company.', candidates: [{ symbol: 'AAPL', name: 'Apple Inc.', confidence: 0.99 }] },
+        } satisfies components['schemas']['WorkflowInteraction'];
+        fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'initial-run'))
+            .mockResolvedValueOnce(startResponse('thread-1', 'started-run'))
+            .mockResolvedValueOnce(snapshotResponse('thread-1', 'started-run', 'waiting', { pending_interactions: [interaction] }))
+            .mockImplementationOnce(async (_input, init) => pendingStreamResponse(init?.signal))
+            .mockResolvedValueOnce(startResponse('thread-1', 'started-run'))
+            .mockResolvedValueOnce(snapshotResponse('thread-1', 'started-run', 'completed', { completed_outputs: [{
+                identity: { thread_id: 'thread-1', run_id: 'started-run', activity_id: 'fundamental' },
+                agent_id: 'fundamental_analysis', output_kind: 'fundamental_analysis.output', output_version: 'v1',
+                summary: 'Recalculated AAPL report', preview: {}, artifact_id: 'revised-report', artifact_type: 'financial_reports',
+            }] }))
+            .mockImplementationOnce(async (_input, init) => pendingStreamResponse(init?.signal));
+        const { result, unmount } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread-1', 'initial-run'));
+        let outcome: WorkflowStartResult | undefined;
+        act(() => {
+            void result.current.sendMessage('Recalculate AAPL').then((value) => { outcome = value; });
+        });
+        await waitFor(() => expect(result.current.connectionState).toBe('connected'));
+        const pending = [...(result.current.workflow?.interactions.values() ?? [])][0];
+        if (!pending) throw new Error('Pending ticker interaction did not parse.');
+        act(() => { void result.current.submitCommand(pending, { type: 'ticker_selection', selected_symbol: 'AAPL' }); });
+
+        await waitFor(() => expect(result.current.agentOutputs.fundamental_analysis?.reference?.artifact_id).toBe('revised-report'));
+        await waitFor(() => expect(outcome).toEqual({ kind: 'started', threadId: 'thread-1', runId: 'started-run' }));
+        expect(result.current.runId).toBe('started-run');
+        expect(result.current.workflow?.runStatus).toBe('completed');
+        expect(result.current.error).toBeNull();
+        expect(fetchMock.mock.calls[4]?.[0]).toBe('/api/v1/threads/thread-1/runs/started-run/resume');
+        expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body))).toEqual({
+            identity: interaction.identity,
+            response: { type: 'ticker_selection', selected_symbol: 'AAPL' },
+        });
+        expect(fetchMock.mock.calls[3]?.[1]?.signal?.aborted).toBe(true);
+        unmount();
+    });
+
+    it('reports a stream recovery failure separately from its accepted start', async () => {
+        fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'initial-run'))
+            .mockResolvedValueOnce(startResponse('thread-1', 'started-run'))
+            .mockResolvedValueOnce(snapshotResponse('thread-1', 'started-run', 'running'))
+            .mockRejectedValueOnce(new Error('Stream disconnected.'))
+            .mockRejectedValueOnce(new Error('Snapshot recovery failed.'));
+        const { result } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread-1', 'initial-run'));
+        let outcome: WorkflowStartResult | undefined;
+        await act(async () => { outcome = await result.current.sendMessage('Valuate AAPL'); });
+
+        await waitFor(() => expect(result.current.error).toBe('Snapshot recovery failed.'));
+        expect(outcome).toEqual({ kind: 'started', threadId: 'thread-1', runId: 'started-run' });
+        expect(result.current.workflow?.runId).toBe('started-run');
+        expect(result.current.isLoading).toBe(false);
+    });
+
+    it('ignores a background recovery failure after selecting another run', async () => {
+        const recovery = deferred<Response>();
+        fetchMock.mockResolvedValueOnce(snapshotResponse('thread-1', 'initial-run'))
+            .mockResolvedValueOnce(startResponse('thread-1', 'started-run'))
+            .mockResolvedValueOnce(snapshotResponse('thread-1', 'started-run', 'running'))
+            .mockRejectedValueOnce(new Error('Stream disconnected.'))
+            .mockReturnValueOnce(recovery.promise)
+            .mockResolvedValueOnce(snapshotResponse('thread-1', 'selected-run'));
+        const { result } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread-1', 'initial-run'));
+        let outcome: WorkflowStartResult | undefined;
+        act(() => { void result.current.sendMessage('Valuate AAPL').then((value) => { outcome = value; }); });
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
+        await act(async () => result.current.loadHistory('thread-1', 'selected-run'));
+        await act(async () => { recovery.reject(new Error('Obsolete snapshot recovery failed.')); });
+
+        expect(outcome).toEqual({ kind: 'started', threadId: 'thread-1', runId: 'started-run' });
+        expect(result.current.workflow?.runId).toBe('selected-run');
+        expect(result.current.error).toBeNull();
+        expect(result.current.connectionState).toBe('disconnected');
+        expect(result.current.isLoading).toBe(false);
+    });
 
     it('ignores an obsolete history snapshot while the selected history is still loading', async () => {
         const previous = deferred<Response>();
@@ -92,15 +211,17 @@ describe('useAgent operation identity', () => {
             .mockResolvedValueOnce(snapshotResponse('thread-1', 'next-run'));
         const { result, unmount } = renderHook(() => useAgent());
         await act(async () => result.current.loadHistory('thread-1', 'initial-run'));
-        let previousStart: Promise<unknown>;
+        let previousStart: Promise<WorkflowStartResult>;
+        let previousOutcome: WorkflowStartResult | undefined;
         act(() => { previousStart = result.current.sendMessage('First'); });
         await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
         act(() => { void result.current.sendMessage('Second'); });
         await act(async () => {
             previousSnapshot.resolve(snapshotResponse('thread-1', 'previous-run'));
-            await previousStart;
+            previousOutcome = await previousStart;
         });
 
+        expect(previousOutcome).toEqual({ kind: 'superseded' });
         expect(result.current.workflow?.runId).toBe('initial-run');
         expect(result.current.isLoading).toBe(true);
         expect(fetchMock).toHaveBeenCalledTimes(4);
