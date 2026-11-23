@@ -82,6 +82,16 @@ test.describe('Fundamental report reading regression', () => {
         await closeInspector(page);
 
         const monteCarlo = page.getByRole('figure', { name: 'Service quantile markers', exact: true });
+        const upper = uncertainty.quantiles.p95;
+        if (!upper) throw new Error('Retained report must have P95 for the Base-outside-range regression.');
+        expect(Number(base.per_share_value)).toBeGreaterThan(Number(upper));
+        const baseMark = monteCarlo.getByRole('button', { name: /^Inspect Deterministic base ·/ });
+        const upperMark = monteCarlo.getByRole('button', { name: /^Inspect P95 ·/ });
+        const [baseBox, upperBox, chartBox] = await Promise.all([baseMark.boundingBox(), upperMark.boundingBox(), monteCarlo.boundingBox()]);
+        if (!baseBox || !upperBox || !chartBox) throw new Error('The supplied Base and P95 must be plotted.');
+        expect(baseBox.x + baseBox.width / 2).toBeGreaterThan(upperBox.x + upperBox.width / 2);
+        expect(baseBox.x).toBeGreaterThanOrEqual(chartBox.x);
+        expect(baseBox.x + baseBox.width).toBeLessThanOrEqual(chartBox.x + chartBox.width);
         for (const [label, raw, hash] of [
             ['P50', uncertainty.quantiles.p50, uncertainty.result_hash],
             ['Deterministic base', base.per_share_value, base.result_hash],
