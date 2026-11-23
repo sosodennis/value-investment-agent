@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "issue": 477,
+  "status": "BLOCKED",
+  "branch": "codex/issue-477-fundamental-report-ui",
+  "commit": "c46d9fba191c3b793749198ca444b5ef96f3396d",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent",
+    "browser_session": "Main Playwright live-c46d9fba isolated contexts;native Chrome dedicated477 window;independent read-only session independent-review-d1975fef-8900-49e3-8774-af685cf1e7df (closed)",
+    "allowed_untracked_paths": [],
+    "app": {
+      "compose_project": "value-investment-agent-denniswong-477-app",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/docker-compose.yml",
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/docker-compose.override.yml",
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/compose/verification/docker-compose.issue325-app-fundamental.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/app-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/app.env",
+      "env_file_sha256": "94ffe0684f09a582188d19b8fdb9e29a957c8378fe8ebc822894fedc54ea3939",
+      "service": "backend",
+      "container_port": 8000,
+      "published_port": 22680,
+      "url": "http://127.0.0.1:22680"
+    },
+    "fundamental": {
+      "compose_project": "value-investment-agent-denniswong-477-fundamental",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/fundamental-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/fundamental.env",
+      "env_file_sha256": "5517b98bc2b255d00cd339bce61c2d25ea613bfc3f2cca6d6844d4a148470182",
+      "service": "fundamental-service",
+      "container_port": 8080,
+      "published_port": 22690,
+      "url": "http://127.0.0.1:22690"
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "initial_preflight",
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/runtime-tuple.json scripts/acceptance_preflight.sh",
+      "evidence": "preflight-initial.log; exit 0; baseline commit only; no browser acceptance"
+    },
+    {
+      "name": "runtime_source_equality",
+      "status": "pass",
+      "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/verify-runtime-source.py",
+      "evidence": "runtime-source-equality.json; exit 0; no mismatches"
+    },
+    {
+      "name": "source_preparation",
+      "status": "pass",
+      "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/run-preparation.py",
+      "evidence": "preparation-exit.json; exit 0; retained-preparation-report.json HTTP 200 status=prepared, issue_codes=[], missing_evidence=[]"
+    },
+    {
+      "name": "initial_app_api_report",
+      "status": "pass",
+      "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/start-base-run.py then exact ticker_selection resume and capture-app-report.py",
+      "evidence": "base-final-snapshot.json; completed, failure=null; base-final-artifact.json; valuation, provisional"
+    },
+    {
+      "name": "final_preflight",
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/runtime-tuple.json REQUIRE_SEC_IDENTITY_RESOLUTION=1 scripts/acceptance_preflight.sh",
+      "evidence": "preflight-c46d9fba.log; exit 0; exact_commit=1; sec_identity_required=1"
+    },
+    {
+      "name": "final_runtime_source_equality",
+      "status": "pass",
+      "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/verify-runtime-source.py",
+      "evidence": "runtime-source-equality.json; exit 0; Fundamental183/backend818 files match; frontend tree503fd670d117a044b05f1c9ed0c7183f7669a4c7"
+    },
+    {
+      "name": "frontend_checks",
+      "status": "pass",
+      "command": "npm run lint; npm run typecheck; npm run test -- --run; npm run check:contrast",
+      "evidence": "checks-c46d9fba/verification.json; all exit0; 59 files,517 tests"
+    },
+    {
+      "name": "complete_retained_regression",
+      "status": "pass",
+      "command": "FUNDAMENTAL_RETAINED_DIR=<complete #462 fixture directory> npx playwright test --config e2e/fundamental-report-live.config.ts --grep retained",
+      "evidence": "checks-c46d9fba/retained.log;exit0;5passed"
+    },
+    {
+      "name": "real_service_browser_acceptance",
+      "status": "fail",
+      "command": "FUNDAMENTAL_LIVE=1 npx playwright test --config e2e/fundamental-report-live.config.ts --grep 'real service'",
+      "evidence": "runtime/live-c46d9fba.log;exit1;5passed,1failed;320px light/dark document scrollWidth327 exceeds320; issue480"
+    },
+    {
+      "name": "independent_review",
+      "status": "fail",
+      "command": "Independent source,typed artifact,hook probe and read-only history browser review",
+      "evidence": "issue-477-progress-review.md;code/probes/history passed;overall withheld for480/F20"
+    },
+    {
+      "name": "native_zoom_and_clipboard",
+      "status": "pass",
+      "command": "Native Chrome reload final UI;200percent browser zoom;Copy original value then paste into native TextEdit",
+      "evidence": "zoom200-c46d9fba.png;zoom200-values-c46d9fba.png;clipboard-native-c46d9fba.txt;canonical raw matches"
+    },
+    {
+      "name": "screen_reader",
+      "status": "not_run",
+      "command": "Actual VoiceOver heading/value/status/focus observation",
+      "evidence": "Process running was observed;spoken output/caption could not be verified by CUA;human observation pending"
+    }
+  ],
+  "blockers": [
+    "https://github.com/sosodennis/value-investment-agent/issues/480 — 320px global Header overflow; shell scope decision pending.",
+    "F20 actual screen-reader output remains unverified; user observation requested."
+  ],
+  "next_step": "Keep PR draft. Resolve issue480 scope and F20 spoken-output verification before ready,merge or closure. Evidence-only commit will be rebuilt and source equality checked before final delivery.",
+  "frontend_runtime": {
+    "service": "frontend",
+    "published_port": 22681,
+    "url": "http://127.0.0.1:22681",
+    "running_image_id": "sha256:1fa6bc639843b11fd1176c3bf9bc5d141a93304ec129739f52a095f0d99aa7ec",
+    "build_commit": "c46d9fba191c3b793749198ca444b5ef96f3396d",
+    "state": "running",
+    "health": "healthy"
+  }
+}
