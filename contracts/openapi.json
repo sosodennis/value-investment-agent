@@ -5192,6 +5192,48 @@
         "title": "FundamentalResolvedFiscalPeriodV1",
         "type": "object"
       },
+      "FundamentalRevisionForwardReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "citation": {
+            "maxLength": 8192,
+            "minLength": 20,
+            "title": "Citation",
+            "type": "string"
+          },
+          "claim_id": {
+            "minLength": 1,
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "license_reference": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "License Reference",
+            "type": "string"
+          },
+          "source_content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Content Hash",
+            "type": "string"
+          },
+          "source_url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_id",
+          "source_url",
+          "source_content_hash",
+          "citation",
+          "license_reference"
+        ],
+        "title": "FundamentalRevisionForwardReferenceV1",
+        "type": "object"
+      },
       "FundamentalServiceEvidenceReferenceV1": {
         "additionalProperties": false,
         "properties": {
@@ -5754,6 +5796,122 @@
         "title": "FundamentalValuationEvidenceV1",
         "type": "object"
       },
+      "FundamentalValuationIntentV1": {
+        "additionalProperties": false,
+        "description": "Caller controls without service preparation or provenance authority.",
+        "properties": {
+          "assumptions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assumptions"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "default": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "fiscal_period_selector": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Period Selector"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fcff_dcf",
+                  "transition_fcff_dcf"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "requested_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested As Of"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalValuationRevisionV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uncertainty": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty"
+          }
+        },
+        "title": "FundamentalValuationIntentV1",
+        "type": "object"
+      },
       "FundamentalValuationPreparationResultV1": {
         "additionalProperties": false,
         "description": "Narrow projection of the service-owned automatic preparation result.\n\nAgent Core validates the boundary metadata and carries the opaque service\ninput forward. It does not model formulas, mappings, or policy semantics.",
@@ -6145,6 +6303,85 @@
           "valuation_input"
         ],
         "title": "FundamentalValuationReportV1",
+        "type": "object"
+      },
+      "FundamentalValuationRevisionSourceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "preparation_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Preparation Digest",
+            "type": "string"
+          },
+          "run_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "artifact_id",
+          "preparation_digest"
+        ],
+        "title": "FundamentalValuationRevisionSourceV1",
+        "type": "object"
+      },
+      "FundamentalValuationRevisionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "forward_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalRevisionForwardReferenceV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "const": "assumptions.terminal_growth",
+            "title": "Path",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/FundamentalValuationRevisionSourceV1"
+          },
+          "value": {
+            "maxLength": 128,
+            "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "path",
+          "value",
+          "reason"
+        ],
+        "title": "FundamentalValuationRevisionV1",
         "type": "object"
       },
       "FundamentalXbrlContextV1": {
@@ -8960,14 +9197,12 @@
           "valuation_request": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/FundamentalValuationIntentV1"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Valuation Request"
+            ]
           }
         },
         "required": [

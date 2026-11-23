@@ -2746,6 +2746,19 @@ export interface components {
              */
             period_start: string;
         };
+        /** FundamentalRevisionForwardReferenceV1 */
+        FundamentalRevisionForwardReferenceV1: {
+            /** Citation */
+            citation: string;
+            /** Claim Id */
+            claim_id: string;
+            /** License Reference */
+            license_reference: string;
+            /** Source Content Hash */
+            source_content_hash: string;
+            /** Source Url */
+            source_url: string;
+        };
         /** FundamentalServiceEvidenceReferenceV1 */
         FundamentalServiceEvidenceReferenceV1: {
             /** Artifact Id */
@@ -2987,6 +3000,39 @@ export interface components {
             valuation_timestamp: string;
         };
         /**
+         * FundamentalValuationIntentV1
+         * @description Caller controls without service preparation or provenance authority.
+         */
+        FundamentalValuationIntentV1: {
+            /** Assumptions */
+            assumptions?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Contract Version
+             * @default fundamental.v1
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Fiscal Period Selector */
+            fiscal_period_selector?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Model Id */
+            model_id?: ("fcff_dcf" | "transition_fcff_dcf") | null;
+            /** Model Version */
+            model_version?: string | null;
+            /** Policy Id */
+            policy_id?: string | null;
+            /** Requested As Of */
+            requested_as_of?: string | null;
+            revision?: components["schemas"]["FundamentalValuationRevisionV1"] | null;
+            /** Uncertainty */
+            uncertainty?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+        };
+        /**
          * FundamentalValuationPreparationResultV1
          * @description Narrow projection of the service-owned automatic preparation result.
          *
@@ -3142,6 +3188,31 @@ export interface components {
                 [key: string]: components["schemas"]["JsonValue"];
             };
             valuation_trace: components["schemas"]["FundamentalCalculationTraceV1"];
+        };
+        /** FundamentalValuationRevisionSourceV1 */
+        FundamentalValuationRevisionSourceV1: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Preparation Digest */
+            preparation_digest: string;
+            /** Run Id */
+            run_id: string;
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** FundamentalValuationRevisionV1 */
+        FundamentalValuationRevisionV1: {
+            forward_reference?: components["schemas"]["FundamentalRevisionForwardReferenceV1"] | null;
+            /**
+             * Path
+             * @constant
+             */
+            path: "assumptions.terminal_growth";
+            /** Reason */
+            reason: string;
+            source: components["schemas"]["FundamentalValuationRevisionSourceV1"];
+            /** Value */
+            value: string;
         };
         /** FundamentalXbrlContextV1 */
         FundamentalXbrlContextV1: {
@@ -4138,10 +4209,7 @@ export interface components {
         RunRequest: {
             /** Message */
             message: string;
-            /** Valuation Request */
-            valuation_request?: {
-                [key: string]: unknown;
-            } | null;
+            valuation_request?: components["schemas"]["FundamentalValuationIntentV1"] | null;
         };
         /** RunResponse */
         RunResponse: {
