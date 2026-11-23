@@ -1,0 +1,345 @@
+{
+  "method": "CUA IAB DOM inspection and screenshots, prototype only",
+  "matrix": [
+    {
+      "variant": "a",
+      "theme": "light",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 320,
+      "rangeVisible": false,
+      "reportWidth": 320,
+      "viewport": 320
+    },
+    {
+      "variant": "a",
+      "theme": "light",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 390,
+      "rangeVisible": false,
+      "reportWidth": 390,
+      "viewport": 390
+    },
+    {
+      "variant": "a",
+      "theme": "light",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 768,
+      "rangeVisible": true,
+      "reportWidth": 768,
+      "viewport": 768
+    },
+    {
+      "variant": "a",
+      "theme": "light",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 1440,
+      "rangeVisible": true,
+      "reportWidth": 1100,
+      "viewport": 1440
+    },
+    {
+      "variant": "a",
+      "theme": "dark",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 320,
+      "rangeVisible": false,
+      "reportWidth": 320,
+      "viewport": 320
+    },
+    {
+      "variant": "a",
+      "theme": "dark",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 390,
+      "rangeVisible": false,
+      "reportWidth": 390,
+      "viewport": 390
+    },
+    {
+      "variant": "a",
+      "theme": "dark",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 768,
+      "rangeVisible": true,
+      "reportWidth": 768,
+      "viewport": 768
+    },
+    {
+      "variant": "a",
+      "theme": "dark",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 1440,
+      "rangeVisible": true,
+      "reportWidth": 1100,
+      "viewport": 1440
+    },
+    {
+      "variant": "b",
+      "theme": "light",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 320,
+      "rangeVisible": false,
+      "reportWidth": 320,
+      "viewport": 320
+    },
+    {
+      "variant": "b",
+      "theme": "light",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 390,
+      "rangeVisible": false,
+      "reportWidth": 390,
+      "viewport": 390
+    },
+    {
+      "variant": "b",
+      "theme": "light",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 768,
+      "rangeVisible": true,
+      "reportWidth": 768,
+      "viewport": 768
+    },
+    {
+      "variant": "b",
+      "theme": "light",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 1440,
+      "rangeVisible": true,
+      "reportWidth": 1100,
+      "viewport": 1440
+    },
+    {
+      "variant": "b",
+      "theme": "dark",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 320,
+      "rangeVisible": false,
+      "reportWidth": 320,
+      "viewport": 320
+    },
+    {
+      "variant": "b",
+      "theme": "dark",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 390,
+      "rangeVisible": false,
+      "reportWidth": 390,
+      "viewport": 390
+    },
+    {
+      "variant": "b",
+      "theme": "dark",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 768,
+      "rangeVisible": true,
+      "reportWidth": 768,
+      "viewport": 768
+    },
+    {
+      "variant": "b",
+      "theme": "dark",
+      "base": "USD 229.88 / share",
+      "geistMono": true,
+      "inter": true,
+      "manrope700": true,
+      "pageWidth": 1440,
+      "rangeVisible": true,
+      "reportWidth": 1100,
+      "viewport": 1440
+    }
+  ],
+  "narrow": {
+    "forecastColumns": "488px",
+    "pageWidth": 1440,
+    "rangeVisible": false,
+    "reportWidth": 520,
+    "viewport": 1440
+  },
+  "checks": [
+    {
+      "check": "base canonical inspector",
+      "actual": "229.88242539685962775556419207139754074672901162460",
+      "expected": "229.88242539685962775556419207139754074672901162460"
+    },
+    {
+      "check": "copy canonical",
+      "actual": "",
+      "expected": "229.88242539685962775556419207139754074672901162460"
+    },
+    {
+      "check": "focus return",
+      "actual": "查看deterministic base 每股值的來源",
+      "expected": "查看deterministic base 每股值的來源"
+    },
+    {
+      "check": "tabs ArrowRight",
+      "actual": "true",
+      "expected": "true"
+    },
+    {
+      "check": "research unavailable",
+      "actual": "Research unavailable · configured provider unavailable。這是 opt-in 示意，沒有可 Apply 的研究結果。"
+    },
+    {
+      "check": "pending previous",
+      "actual": "Previous result · USD 229.88 / share。草稿不是已計算結果。\n\n讀取已保留結果 · 示範",
+      "duplicateDisabled": true
+    },
+    {
+      "check": "retained revision",
+      "actual": "已讀取保留的 2.50% revision artifact。新 deterministic base USD 168.92 / share；上一份 USD 229.88。原始 4.92%，已套用 manual 2.50%。已修改報告唯讀。原型上方仍是原 artifact。"
+    },
+    {
+      "check": "retained refusal",
+      "actual": "拒絕 · MANUAL_OVERRIDE_INVALID。服務手動上限 0.04。沒有新估值結果，保留上一份。"
+    },
+    {
+      "check": "history read-only",
+      "formVisible": false,
+      "notice": "歷史報告唯讀。保留原 artifact 與已套用假設，不提供 Recalculate。"
+    }
+  ],
+  "states": [
+    {
+      "state": "facts-only",
+      "notice": "只有財務 facts，尚無估值。缺值不補零。",
+      "baseVisible": false,
+      "formVisible": false
+    },
+    {
+      "state": "partial",
+      "notice": "部分資料可讀。缺失欄位與原因需逐項標示。",
+      "baseVisible": true,
+      "formVisible": false
+    },
+    {
+      "state": "requires-input",
+      "notice": "需要服務指定的輸入；只顯示已解析的實際請求。",
+      "baseVisible": false,
+      "formVisible": false
+    },
+    {
+      "state": "unsupported",
+      "notice": "服務不支援此模型或對象，不顯示估值。",
+      "baseVisible": false,
+      "formVisible": false
+    },
+    {
+      "state": "abstained",
+      "notice": "服務選擇不給結論，顯示服務原因。",
+      "baseVisible": false,
+      "formVisible": false
+    },
+    {
+      "state": "error",
+      "notice": "服務或解析失敗。保留可追溯錯誤與安全的重試入口。",
+      "baseVisible": false,
+      "formVisible": false
+    },
+    {
+      "state": "loading",
+      "notice": "初次載入中，保留布局骨架，尚無結果。",
+      "baseVisible": false,
+      "formVisible": false
+    },
+    {
+      "state": "stale",
+      "notice": "資料過時。保留上一份結果及來源日期。",
+      "baseVisible": true,
+      "formVisible": false
+    },
+    {
+      "state": "reconnecting",
+      "notice": "連線重建中。保留上一份，等待 snapshot 確認。",
+      "baseVisible": true,
+      "formVisible": false
+    },
+    {
+      "state": "completed",
+      "notice": "",
+      "baseVisible": true,
+      "formVisible": true
+    }
+  ],
+  "zoom": "Requested three super+plus. innerWidth1440 ratio1 remained unchanged. Actual 200% browser zoom unverified.",
+  "clipboard": "navigator.clipboard returned success and UI displayed success, but session clipboard readback empty. End-to-end copy unverified.",
+  "rawChecks": [
+    {
+      "name": "查看P50的來源",
+      "actual": "173.10058984916732564133256488227973785421478949288",
+      "expected": "173.10058984916732564133256488227973785421478949288"
+    },
+    {
+      "name": "查看WACC的來源",
+      "actual": "0.10280811227513954443826299464966391254835787654367",
+      "expected": "0.10280811227513954443826299464966391254835787654367"
+    },
+    {
+      "name": "查看revenue Year 1的來源",
+      "actual": "385365521184.78496276930908068761896437263851610171",
+      "expected": "385365521184.78496276930908068761896437263851610171"
+    },
+    {
+      "name": "查看財報營收 2026-06-30的來源",
+      "actual": "331839000000",
+      "expected": "331839000000"
+    }
+  ],
+  "focusContainment": {
+    "active": "",
+    "dialogContainsFocus": false
+  },
+  "longReason": {
+    "containerWidth": 520,
+    "pageWidth": 1440,
+    "textareaWidth": 462,
+    "viewport": 1440
+  },
+  "clipboardUi": "success observed, readback unresolved"
+}
