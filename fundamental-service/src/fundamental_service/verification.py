@@ -240,11 +240,12 @@ def independent_calculate(
                 * (Decimal(1) - wacc.tax_rate)
                 * (Decimal(1) - reinvestment)
             )
-            timing = timeline.periods[period - 1] if timeline is not None else None
-            if timing is None:
+            timing = None
+            if timeline is None:
                 included = fcff
                 exponent = Decimal(period)
             else:
+                timing = timeline.periods[period - 1]
                 annual_days = Decimal(
                     (timing.period_end - timing.period_start).days + 1
                 )

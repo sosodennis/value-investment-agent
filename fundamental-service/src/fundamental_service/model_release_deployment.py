@@ -29,7 +29,7 @@ def load_model_release_deployment(
     at: datetime | None = None,
 ) -> tuple[ModelSpecV1, ...]:
     bundle = ModelReleaseDeploymentV1.model_validate_json(path.read_bytes())
-    candidates = {
+    candidates: dict[tuple[str, str], ModelSpecV1] = {
         (model.model_id, model.model_version): model for model in dated_model_specs()
     }
     base = path.resolve().parent

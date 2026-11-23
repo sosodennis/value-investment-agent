@@ -1,9 +1,9 @@
 from datetime import date, timedelta
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-DATED_FCFF_POLICY = "fcff-uniform-accrual-period-end-act365f-v1"
+DATED_FCFF_POLICY: Final = "fcff-uniform-accrual-period-end-act365f-v1"
 
 
 class ForecastPeriodV1(BaseModel):
