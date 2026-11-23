@@ -27,6 +27,9 @@ from src.agents.fundamental.application.workflow_orchestrator.services.service_r
 from src.agents.fundamental.application.workflow_orchestrator.services.snapshot_identity_binding import (
     canonical_snapshot_identity,
 )
+from src.agents.fundamental.application.workflow_orchestrator.services.valuation_revision import (
+    retained_request_timing,
+)
 from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
     read_intent_state,
 )
@@ -1685,9 +1688,8 @@ async def run_service_valuation_flow(
                 and isinstance(raw_request, Mapping)
                 and raw_request.get("revision") is not None
             ):
-                source_timing = FundamentalRequestTimingV1.accept(
-                    {"valuation_context": input_payload["valuation_context"]},
-                    clock=clock,
+                source_timing = retained_request_timing(
+                    input_payload["valuation_context"]
                 )
                 fundamental["request_timing"] = source_timing.model_dump(mode="json")
             if compact_request and prepared.preparation is not None:

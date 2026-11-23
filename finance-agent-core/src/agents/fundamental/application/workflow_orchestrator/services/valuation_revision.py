@@ -16,9 +16,11 @@ from src.agents.fundamental.application.workflow_orchestrator.services.snapshot_
     identity_matches_resolver,
 )
 from src.agents.fundamental.interface.request_contracts import (
+    FundamentalRequestTimingV1,
     FundamentalValuationRevisionV1,
 )
 from src.shared.artifacts.fundamental_contracts import (
+    FundamentalFiscalPeriodSelectorV1,
     FundamentalValuationPreparationResultV1,
 )
 from src.shared.internal_services import InternalPrincipal
@@ -27,6 +29,25 @@ from src.shared.kernel.types import JSONObject
 
 def _failure(code: str, message: str) -> FundamentalServiceFailure:
     return FundamentalServiceFailure(code, message, retryable=False, status_code=422)
+
+
+def retained_request_timing(valuation_context: object) -> FundamentalRequestTimingV1:
+    if not isinstance(valuation_context, Mapping):
+        raise ValueError("Source valuation context is missing")
+    context = dict(valuation_context)
+    raw_selector = context.get("fiscal_period_selector")
+    if raw_selector is not None:
+        selector = FundamentalFiscalPeriodSelectorV1.model_validate(raw_selector)
+        if selector.mode == "explicit_periods":
+            if selector.count is not None:
+                raise ValueError("Explicit service selector cannot have a count")
+            normalized = selector.model_dump(mode="json", exclude={"count"})
+        else:
+            if selector.periods:
+                raise ValueError("Latest-complete service selector cannot have periods")
+            normalized = selector.model_dump(mode="json", exclude={"periods"})
+        context["fiscal_period_selector"] = normalized
+    return FundamentalRequestTimingV1.accept({"valuation_context": context})
 
 
 async def prepare_retained_valuation_revision(

@@ -19,6 +19,9 @@ from src.agents.fundamental.application.workflow_orchestrator.service_valuation_
 from src.agents.fundamental.application.workflow_orchestrator.services.service_request_producer import (
     prepare_service_valuation_request,
 )
+from src.agents.fundamental.application.workflow_orchestrator.services.valuation_revision import (
+    retained_request_timing,
+)
 from src.agents.fundamental.infrastructure.valuation_revision_source_reader import (
     ArtifactFundamentalRevisionSourceReader,
 )
@@ -26,6 +29,7 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalServiceResponseV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
+    FundamentalRequestTimingV1,
     FundamentalValuationIntentV1,
     FundamentalValuationRevisionSourceV1,
 )
@@ -74,10 +78,15 @@ class _RevisionClient(_FactsOnlyClient):
         self.stale = False
         self.bad_response = False
         self.ignored_revision = False
+        self.service_selector = None
 
     async def prepare_valuation(self, input_payload, **kwargs):
         original = await super().prepare_valuation(input_payload, **kwargs)
         payload = original.model_dump(mode="json", exclude_unset=True)
+        if self.service_selector is not None:
+            payload["input"]["valuation_context"]["fiscal_period_selector"] = (
+                self.service_selector
+            )
         payload["input"]["assumptions"]["terminal_growth"] = "0.025"
         payload["assumptions_evidence"] = [
             {
@@ -119,6 +128,16 @@ class _RevisionClient(_FactsOnlyClient):
 @pytest.fixture
 async def published_source(request):
     client = _RevisionClient()
+    selector_mode = getattr(request, "param", None)
+    if selector_mode in ("explicit_periods", "latest_complete"):
+        client.service_selector = {
+            "version": "fundamental.fiscal-period-selector.v1",
+            "mode": selector_mode,
+            "count": 3 if selector_mode == "latest_complete" else None,
+            "periods": []
+            if selector_mode == "latest_complete"
+            else [{"fiscal_year": 2024}, {"fiscal_year": 2025}],
+        }
     if getattr(request, "param", None) == "canonical":
         client.identity = {
             **client.identity,
@@ -515,6 +534,9 @@ class _ArtifactRepository:
         )
 
 
+@pytest.mark.parametrize(
+    "published_source", [None, "explicit_periods", "latest_complete"], indirect=True
+)
 async def test_authenticated_revision_publishes_in_same_run_context(published_source):
     client, raw, report = published_source
     repository = _ArtifactRepository(raw)
@@ -565,6 +587,19 @@ async def test_authenticated_revision_publishes_in_same_run_context(published_so
         == "0.02"
     )
     assert "MANUAL_OVERRIDE_APPLIED" in published.automatic_preparation.issue_codes
+    source_context = report.automatic_preparation.input["valuation_context"]
+    assert published.automatic_preparation.input["valuation_context"] == source_context
+    if client.service_selector is not None:
+        timing_selector = result.update["fundamental_analysis"]["request_timing"][
+            "fiscal_period_selector"
+        ]
+        assert timing_selector["mode"] == client.service_selector["mode"]
+        if timing_selector["mode"] == "explicit_periods":
+            assert "count" not in timing_selector
+            assert timing_selector["periods"] == client.service_selector["periods"]
+        else:
+            assert "periods" not in timing_selector
+            assert timing_selector["count"] == 3
     assert [op for op, _ in client.calls] == [
         "resolve_identity",
         "prepare_valuation",
@@ -573,6 +608,45 @@ async def test_authenticated_revision_publishes_in_same_run_context(published_so
         "calculate",
         "read_valuation_evidence",
     ]
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        {"mode": "explicit_periods", "count": 3, "periods": [{"fiscal_year": 2025}]},
+        {"mode": "latest_complete", "count": 3, "periods": [{"fiscal_year": 2025}]},
+        {"mode": "explicit_periods", "count": None, "periods": []},
+        {"mode": "latest_complete", "count": None, "periods": []},
+        {
+            "mode": "explicit_periods",
+            "count": None,
+            "periods": [{"fiscal_year": 2025}],
+            "unknown": True,
+        },
+    ],
+)
+def test_retained_timing_refuses_contradictory_or_unknown_service_selectors(selector):
+    with pytest.raises(ValueError):
+        retained_request_timing(
+            {
+                "valuation_timestamp": "2026-11-01T00:00:00Z",
+                "fiscal_period_selector": selector,
+            }
+        )
+
+
+def test_caller_explicit_selector_still_refuses_null_count():
+    with pytest.raises(ValueError, match="count"):
+        FundamentalRequestTimingV1.accept(
+            {
+                "valuation_timestamp": "2026-11-01T00:00:00Z",
+                "fiscal_period_selector": {
+                    "mode": "explicit_periods",
+                    "count": None,
+                    "periods": [{"fiscal_year": 2025}],
+                },
+            }
+        )
 
 
 @pytest.mark.parametrize(
