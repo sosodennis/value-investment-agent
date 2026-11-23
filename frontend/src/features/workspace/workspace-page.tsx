@@ -18,6 +18,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { WorkspaceRouteIntent } from './workspace-route-intent';
+import { buildAutomaticValuationRequest } from './valuation-request';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { EvidenceInspector, EvidenceInspectorTrigger, buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { adaptAgentOutput } from '@/types/agents/output-adapter';
@@ -43,11 +44,6 @@ const isReportTab = (value: string): value is ReportTab =>
 const statusLabel: Record<AgentStatus, string> = { idle: 'Idle', running: 'Running', done: 'Complete', attention: 'Waiting', error: 'Failed', degraded: 'Degraded' };
 const statusVariant: Record<AgentStatus, 'outline' | 'default' | 'success' | 'warning' | 'destructive'> = { idle: 'outline', running: 'default', done: 'success', attention: 'warning', error: 'destructive', degraded: 'warning' };
 const connectionLabels: Record<ConnectionState, string> = { disconnected: 'Disconnected', connecting: 'Connecting', connected: 'Live', reconnecting: 'Reconnecting', closed: 'Connection closed' };
-const AUTOMATIC_VALUATION_REQUEST = {
-    contract_version: 'fundamental.v1',
-    assumptions: {},
-    uncertainty: { mode: 'monte_carlo' },
-} satisfies Record<string, unknown>;
 
 export function WorkspacePage({ assistantId = 'agent', initialTicker = null, initialPrompt = null, autoStart = false, routeIntent = NEW_ANALYSIS_INTENT }: WorkspacePageProps) {
     const agent = useAgent(assistantId);
@@ -121,7 +117,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     useEffect(() => {
         if (routeIntent.kind !== 'new-analysis' || autoStarted.current || !autoStart || !autoStartMessage || isLoading) return;
         autoStarted.current = true;
-        void sendMessage(autoStartMessage, true);
+        void sendMessage(autoStartMessage, true, buildAutomaticValuationRequest());
     }, [autoStart, autoStartMessage, isLoading, routeIntent.kind, sendMessage]);
 
     function startRun(event: FormEvent<HTMLFormElement>) {
@@ -131,7 +127,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         setTicker(symbol);
         setForwardEvidenceState({ runId: null, value: null });
         setResearchErrorState({ runId: null, value: null });
-        void agent.sendMessage(`Valuate ${symbol}`, true, AUTOMATIC_VALUATION_REQUEST);
+        void agent.sendMessage(`Valuate ${symbol}`, true, buildAutomaticValuationRequest());
     }
 
     function recalculateFromFundamental(manualOverride: Record<string, unknown>) {
@@ -139,10 +135,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         if (routeIntent.kind !== 'new-analysis' || !symbol || agent.isLoading) return;
         setForwardEvidenceState({ runId: currentRunId, value: null });
         setResearchErrorState({ runId: currentRunId, value: null });
-        void agent.sendMessage(`Valuate ${symbol}`, true, {
-            ...AUTOMATIC_VALUATION_REQUEST,
-            manual_override: manualOverride,
-        });
+        void agent.sendMessage(`Valuate ${symbol}`, true, buildAutomaticValuationRequest(manualOverride));
     }
 
     async function researchForwardEvidence(request: ForwardEvidenceResearchRequest) {
