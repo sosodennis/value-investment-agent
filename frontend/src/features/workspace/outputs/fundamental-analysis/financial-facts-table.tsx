@@ -13,7 +13,10 @@ export function FinancialFactsTable({ facts, onSelectEvidence }: {
             <h3 className="font-semibold">Financial data</h3>
             <p className="text-sm text-muted-foreground">Selected canonical facts retain their source period, unit, dimensions and scale. This selection does not represent complete historical statements.</p>
             {facts.length === 0 ? <p>No canonical facts were supplied.</p> : (
-                <div className="overflow-x-auto">
+                <details className="min-w-0 rounded-md border px-3 py-2">
+                    <summary className="cursor-pointer text-sm font-medium">All financial facts ({facts.length})</summary>
+                    <p className="my-2 text-xs text-muted-foreground">Scroll horizontally for source periods, units, dimensions and quality.</p>
+                    <div className="overflow-x-auto" role="region" aria-label="Financial facts table" tabIndex={0}>
                     <Table>
                         <TableCaption>Readable values; inspect any value for full precision. Scale is source metadata.</TableCaption>
                         <TableHeader><TableRow>
@@ -30,7 +33,8 @@ export function FinancialFactsTable({ facts, onSelectEvidence }: {
                             <TableCell><Badge variant={fact.quality === 'verified' ? 'outline' : 'warning'}>{fact.quality}</Badge>{fact.issueCodes.length > 0 && <p className="mt-1 text-xs">{fact.issueCodes.join(', ')}</p>}</TableCell>
                         </TableRow>)}</TableBody>
                     </Table>
-                </div>
+                    </div>
+                </details>
             )}
         </section>
     );

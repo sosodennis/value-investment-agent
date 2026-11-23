@@ -16,6 +16,10 @@ export function FundamentalReportSources({
                     <Metadata label="Artifact" value={report.identity.artifactId} />
                     <Metadata label="Preparation digest" value={report.identity.preparationDigest} />
                 </dl>
+                {preparation?.capitalCompleteness.kind === 'provided' && preparation.capitalCompleteness.limitations.length > 0 && <div className="space-y-2">
+                    <h3 className="text-sm font-semibold">Retained capital policy limitations</h3>
+                    {preparation.capitalCompleteness.limitations.map((limitation) => <p key={limitation} className="text-xs text-muted-foreground">{limitation}</p>)}
+                </div>}
                 {preparation && (
                     <dl className="grid gap-3 border-t pt-3 @min-[36rem]:grid-cols-2">
                         <Metadata label="Prepared model" value={`${preparation.modelId} · ${preparation.modelVersion}`} />
@@ -86,7 +90,7 @@ export function FundamentalReportSources({
                             ].map((item) => (
                                 <p
                                     key={`${item.artifact_id}:${item.content_hash}`}
-                                    className="break-all font-mono text-xs text-muted-foreground"
+                                    className="[overflow-wrap:anywhere] font-mono text-xs text-muted-foreground"
                                 >
                                     {item.artifact_type} · {item.artifact_id} · {item.content_hash}
                                 </p>
@@ -103,7 +107,7 @@ function Metadata({ label, value }: { label: string; value: string | null }) {
     return (
         <div className="min-w-0">
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-1 break-all font-mono text-xs">{value ?? 'Unavailable'}</dd>
+            <dd className="mt-1 [overflow-wrap:anywhere] font-mono text-xs">{value ?? 'Unavailable'}</dd>
         </div>
     );
 }

@@ -1,3 +1,4 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import type { FundamentalValuationModel } from './fundamental-report-model';
 import { ExactValue, InspectionValue, type EvidenceActionProps } from './report-value';
@@ -65,7 +66,7 @@ function QuantileMarkers({
                         Deterministic base
                     </span>
                 )}
-                <span>Exact values below</span>
+                <span>Values and evidence below</span>
             </figcaption>
         </figure>
     );
@@ -115,7 +116,7 @@ export function ValuationUncertainty({
                                         className="min-w-0 border-l-2 border-primary/40 pl-3"
                                     >
                                         <dt className="text-xs text-muted-foreground">
-                                            Model quantile {quantile.label}
+                                            {quantile.label === 'p50' && uncertainty.mode === 'sampled' ? 'Monte Carlo median · P50' : `Model quantile ${quantile.label.toUpperCase()}`}
                                         </dt>
                                         <dd className="mt-1 text-sm">
                                             <InspectionValue
@@ -136,6 +137,16 @@ export function ValuationUncertainty({
                             No quantiles were supplied. The base calculation is shown independently.
                         </p>
                     )}
+                    {(uncertainty.convergence.converged === false || uncertainty.invalidReasons.length > 0) && <Alert variant="warning">
+                        <AlertTitle>Sampling limitations</AlertTitle>
+                        <AlertDescription>
+                            {uncertainty.convergence.converged === false && <p>Sampling did not converge.</p>}
+                            {uncertainty.invalidReasons.map((reason) => <p key={reason.code}>{reason.code} · {reason.count}</p>)}
+                        </AlertDescription>
+                    </Alert>}
+                    <details className="rounded-md border px-3 py-2">
+                    <summary className="cursor-pointer text-sm font-medium">Service scenarios and diagnostics</summary>
+                    <div className="mt-3 space-y-4">
                     {uncertainty.dominantDrivers.length > 0 && (
                         <div>
                             <h4 className="text-sm font-medium">Dominant drivers</h4>
@@ -161,7 +172,7 @@ export function ValuationUncertainty({
                                         <dt className="break-words text-xs text-muted-foreground">
                                             {row.path}
                                         </dt>
-                                        <dd className="mt-1 break-all font-mono text-sm tabular-nums">
+                                        <dd className="mt-1 [overflow-wrap:anywhere] font-mono text-sm tabular-nums">
                                             {row.values.map((value) => value.raw).join(', ')}{' '}
                                             {report.currency} / share
                                         </dd>
@@ -206,28 +217,21 @@ export function ValuationUncertainty({
                                 {uncertainty.convergence.minimumValidSamples ?? 'Unavailable'} · invalid ratio{' '}
                                 {uncertainty.convergence.invalidRatio?.raw ?? 'Unavailable'}
                             </p>
-                            <p className="break-all">
+                            <p className="[overflow-wrap:anywhere]">
                                 Seed {uncertainty.seed ?? 'Unavailable'} · sampler{' '}
                                 {uncertainty.samplerVersion ?? 'Unavailable'} · invalid draw policy{' '}
                                 {uncertainty.invalidDrawPolicy ?? 'Unavailable'}
                             </p>
                             {uncertainty.quantileBasis !== null && (
-                                <div className="space-y-1 break-all">
+                                <div className="space-y-1 [overflow-wrap:anywhere]">
                                     <p>Conditional policy {uncertainty.quantileBasis.policy_version}</p>
                                     <p>Joint scenarios digest {uncertainty.quantileBasis.joint_scenarios_digest}</p>
                                     <p>Conditioning assumptions digest {uncertainty.quantileBasis.conditioning_assumptions_digest}</p>
                                 </div>
                             )}
-                            {uncertainty.invalidReasons.length > 0 && (
-                                <ul className="space-y-1">
-                                    {uncertainty.invalidReasons.map((reason) => (
-                                        <li key={reason.code}>
-                                            {reason.code} · {reason.count}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
                         </div>
+                    </details>
+                    </div>
                     </details>
                 </>
             )}

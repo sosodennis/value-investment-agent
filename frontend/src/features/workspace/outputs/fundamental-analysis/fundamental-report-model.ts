@@ -56,9 +56,14 @@ type CalculationModel = {
     nodes: { id: string; value: ExactNumber | null; semantic: NumberSemantic; unit: string; formula: string; inputs: string[]; evidence: EvidenceSelection }[];
     evidenceReferences: Contracts['FundamentalServiceEvidenceReferenceV1'][];
 };
+export type CapitalCompleteness =
+    | { kind: 'not-supplied' }
+    | { kind: 'provided'; completeClaims: boolean | null; completeAwards: boolean | null; unknowns: string[]; limitations: string[] };
+
 export type PreparationSummary = {
     digest: string;
     canApplyResearch: boolean;
+    capitalCompleteness: CapitalCompleteness;
     status: Contracts['FundamentalValuationPreparationResultV1']['status'];
     modelId: Contracts['FundamentalValuationPreparationResultV1']['model_id'];
     modelVersion: string;
@@ -263,6 +268,18 @@ function calculationModel(result: Calculation, currency: string, identity: Funda
     };
 }
 
+function capitalCompleteness(preparation: Contracts['FundamentalValuationPreparationResultV1']): CapitalCompleteness {
+    const policy = preparation.conditional_capital?.policy;
+    if (typeof policy !== 'object' || policy === null || Array.isArray(policy)) return { kind: 'not-supplied' };
+    return {
+        kind: 'provided',
+        completeClaims: 'complete_capital_claims' in policy && typeof policy.complete_capital_claims === 'boolean' ? policy.complete_capital_claims : null,
+        completeAwards: 'complete_award_inventory' in policy && typeof policy.complete_award_inventory === 'boolean' ? policy.complete_award_inventory : null,
+        unknowns: 'unknowns' in policy && Array.isArray(policy.unknowns) ? policy.unknowns.filter((item): item is string => typeof item === 'string') : [],
+        limitations: 'limitations' in policy && Array.isArray(policy.limitations) ? policy.limitations.filter((item): item is string => typeof item === 'string') : [],
+    };
+}
+
 function preparationSummary(preparation: Contracts['FundamentalValuationPreparationResultV1'], identity: FundamentalReportIdentity, currency: string): PreparationSummary {
     const hasManualTerminalGrowth = preparation.assumptions_evidence.some((item) => item.path === 'assumptions.terminal_growth' && (item.method === 'manual' || item.manual_provenance != null));
     const assumptions = preparation.input?.assumptions;
@@ -271,6 +288,7 @@ function preparationSummary(preparation: Contracts['FundamentalValuationPreparat
         : undefined;
     return {
         digest: preparation.preparation_digest, status: preparation.status,
+        capitalCompleteness: capitalCompleteness(preparation),
         canApplyResearch: preparation.conditional_capital != null || preparation.conditional_operating != null,
         modelId: preparation.model_id, modelVersion: preparation.model_version,
         policyId: preparation.policy_id, policyVersion: preparation.policy_version,

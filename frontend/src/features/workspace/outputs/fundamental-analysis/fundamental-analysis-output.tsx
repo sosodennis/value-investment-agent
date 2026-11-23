@@ -15,7 +15,7 @@ import {
     type FundamentalEvidenceInventory,
     type FundamentalReportModel,
 } from './fundamental-report-model';
-import { ValuationAssumptionsSection } from './valuation-assumptions-section';
+import { ValuationAssumptionsSection, ValuationKeyAssumptions } from './valuation-assumptions-section';
 import { ValuationSummary } from './valuation-summary';
 import { ValuationUncertainty } from './valuation-uncertainty';
 import { valuationRevisionAvailability, type FundamentalRevisionControl } from './valuation-revision';
@@ -168,12 +168,8 @@ export function FundamentalReport({
                 <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Fundamental analysis</p>
                     <h2 className="mt-1 break-words text-lg font-semibold">{report.company}</h2>
-                    {report.shareClass && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            {report.shareClass}
-                            {report.currency ? ` · ${report.currency}` : ''}
-                        </p>
-                    )}
+                    <p className="mt-1 text-sm text-muted-foreground">{report.ticker} · {report.shareClass ?? 'Share class unavailable'} · {report.currency ?? 'Currency unavailable'}</p>
+                    {report.kind === 'valuation' && <p className="mt-1 text-xs text-muted-foreground">Valuation date · {report.base.valuationDate}</p>}
                 </div>
                 <div className="space-y-1 text-right">
                     <p className="text-xs text-muted-foreground">Report quality</p>
@@ -183,19 +179,11 @@ export function FundamentalReport({
                 </div>
             </header>
             <nav aria-label="Report sections" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                {report.kind === 'valuation' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-valuation`}>Valuation &amp; drivers</a>}
+                {report.kind === 'valuation' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-valuation`}>Valuation</a>}
                 {preparation && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-assumptions`}>Assumptions</a>}
                 {report.kind !== 'service-error' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-facts`}>Financial data</a>}
                 <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-sources`}>Sources &amp; method</a>
             </nav>
-            {report.issueCodes.length > 0 && (
-                <Alert variant="warning">
-                    <AlertTitle>Data and model limitations</AlertTitle>
-                    <AlertDescription className="break-words">
-                        {report.issueCodes.join(', ')}
-                    </AlertDescription>
-                </Alert>
-            )}
             {report.kind === 'service-error' && (
                 <Alert variant="destructive">
                     <AlertTitle>Automatic valuation degraded</AlertTitle>
@@ -232,8 +220,11 @@ export function FundamentalReport({
                 <div id={`${sectionId}-valuation`} tabIndex={-1} className="scroll-mt-4 space-y-5">
                     <ValuationSummary report={report} onSelectEvidence={onSelectEvidence} />
                     <ValuationUncertainty report={report} onSelectEvidence={onSelectEvidence} />
+                    <ValuationKeyAssumptions report={report} onSelectEvidence={onSelectEvidence} />
+                    <ReportLimitations report={report} />
                 </div>
             )}
+            {report.kind !== 'valuation' && <ReportLimitations report={report} />}
             {preparation && (
                 <div id={`${sectionId}-assumptions`} tabIndex={-1} className="scroll-mt-4">
                     <ValuationAssumptionsSection
@@ -253,4 +244,22 @@ export function FundamentalReport({
             </div>
         </article>
     );
+}
+
+function ReportLimitations({ report }: { report: FundamentalReportModel }) {
+    const preparation = report.kind === 'valuation' || report.kind === 'preparation-outcome' ? report.preparationSummary : null;
+    const codes = [...new Set([...report.issueCodes, ...(preparation?.issueCodes ?? [])])];
+    const missing = preparation?.missingEvidence ?? [];
+    const capital = preparation?.capitalCompleteness;
+    const incompleteCapital = capital?.kind === 'provided' && (capital.completeClaims !== true || capital.completeAwards !== true);
+    if (codes.length === 0 && missing.length === 0 && !incompleteCapital) return null;
+    return <Alert variant="warning">
+        <AlertTitle>Data and model limitations</AlertTitle>
+        <AlertDescription className="space-y-2 [overflow-wrap:anywhere]">
+            {incompleteCapital && <p>Capital claims or award inventory are incomplete. Capital inputs are conditional hypotheses; a complete capital bridge is unavailable.</p>}
+            {codes.length > 0 && <p>{codes.join(', ')}</p>}
+            {missing.length > 0 && <p>Missing evidence · {missing.join(', ')}</p>}
+            {incompleteCapital && capital.unknowns.length > 0 && <p>Unknown capital data · {capital.unknowns.join(', ')}</p>}
+        </AlertDescription>
+    </Alert>;
 }

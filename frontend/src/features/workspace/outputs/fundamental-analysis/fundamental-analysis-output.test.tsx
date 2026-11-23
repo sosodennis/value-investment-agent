@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
 import { FundamentalAnalysisOutput, FundamentalReport } from './fundamental-analysis-output';
@@ -30,14 +30,32 @@ describe('Fundamental report', () => {
         const manualLabel = confirmed ? 'Applied manual assumption' : 'Manual assumption · application unconfirmed';
         screen.getByText('Original retained assumption');
         screen.getByText(manualLabel);
-        fireEvent.click(screen.getByRole('button', { name: 'Inspect Original retained assumption · assumptions.terminal_growth' }));
-        fireEvent.click(screen.getByRole('button', { name: `Inspect ${manualLabel} · assumptions.terminal_growth` }));
+        const allAssumptions = within(screen.getByRole('region', { name: 'Assumptions' }));
+        fireEvent.click(allAssumptions.getByRole('button', { name: 'Inspect Original retained assumption · assumptions.terminal_growth' }));
+        fireEvent.click(allAssumptions.getByRole('button', { name: `Inspect ${manualLabel} · assumptions.terminal_growth` }));
         if (report.kind !== 'valuation') throw new Error('Expected valuation.');
         const rows = report.preparationSummary?.assumptions;
         expect(selectEvidence.mock.calls.map(([item]) => item)).toEqual(rows?.map((item) => item.evidence));
         expect(selectEvidence.mock.calls[0]?.[0]).toMatchObject({ value: '0.0492', title: 'Original retained assumption · assumptions.terminal_growth' });
         expect(selectEvidence.mock.calls[1]?.[0]).toMatchObject({ value: '0.025', title: `${manualLabel} · assumptions.terminal_growth`, author: 'user-1' });
         expect(selectEvidence.mock.calls[0]?.[0].id).not.toBe(selectEvidence.mock.calls[1]?.[0].id);
+    });
+    it('keeps identity, key assumptions and preparation limitations visible while folding complete inventories', () => {
+        const source = editableReport();
+        if (!source.automatic_preparation) throw new Error('Expected preparation.');
+        source.automatic_preparation.issue_codes = ['CONDITIONAL_CAPITAL_HYPOTHESES', 'HISTORY_WINDOW_PARTIALLY_UNAVAILABLE'];
+        source.automatic_preparation.missing_evidence = ['preferred_claims'];
+        source.automatic_preparation.conditional_capital = { policy: { complete_capital_claims: false, complete_award_inventory: false, unknowns: ['complete_award_inventory'] } };
+        render(<FundamentalReport report={model(source)} />);
+        screen.getByText('EXAMPLE · Class A · USD');
+        screen.getByText('Valuation date · 2026-11-23T00:00:00Z');
+        screen.getByRole('region', { name: 'Key assumptions' });
+        const limitation = screen.getByText(/Capital claims or award inventory are incomplete/);
+        expect(limitation.closest('details')).toBeNull();
+        expect(screen.getByText(/HISTORY_WINDOW_PARTIALLY_UNAVAILABLE/).closest('details')).toBeNull();
+        expect(screen.getByText('Missing evidence · preferred_claims').closest('details')).toBeNull();
+        expect(screen.getByText('All assumptions (1)').closest('details')?.open).toBe(false);
+        expect(screen.getByText('All financial facts (1)').closest('details')?.open).toBe(false);
     });
     it.each(['history', 'revised'] as const)('keeps the %s report read-only even when the service field is editable', async (mode) => {
         const source = editableReport();
