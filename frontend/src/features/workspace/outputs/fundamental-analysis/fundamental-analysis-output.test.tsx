@@ -75,6 +75,12 @@ describe('Fundamental report', () => {
         screen.getByText(/Capital and reinvestment hypotheses remain fixed/);
         screen.getByText(`Joint scenarios digest ${conditionalQuantileBasis.joint_scenarios_digest}`);
     });
+    it('announces the readable financial value with each source action', () => {
+        render(<FundamentalReport report={model(uncertaintyReport())} onSelectEvidence={() => undefined} />);
+        const source = screen.getByRole('button', { name: 'Inspect Deterministic base per share' });
+        const descriptionId = source.getAttribute('aria-describedby');
+        expect(descriptionId && document.getElementById(descriptionId)?.textContent).toBe('USD 25.12 / share');
+    });
     it('shows canonical MC values and a distinct deterministic base without a synthetic price curve', () => {
         render(<FundamentalReport report={model(uncertaintyReport())} />);
         screen.getByText('Deterministic base per share');
@@ -91,6 +97,27 @@ describe('Fundamental report', () => {
         expect(markers.querySelectorAll('circle')).toHaveLength(3);
         expect(markers.querySelectorAll('path')).toHaveLength(1);
         expect(markers.querySelectorAll('circle title')[1]?.textContent).toBe('p50: 26.1234567890123456789');
+    });
+    it('keeps the base marker outside P95 and retains equal canonical quantiles while removing contract aliases', () => {
+        const source = uncertaintyReport({
+            base: calculation({ per_share_value: '229.8824253968596' }),
+            quantiles: { p05: '144.665049', p50: '173.100589', p95: '197.999837', lower: '144.665049', median: '173.100589', upper: '197.999837' },
+            quantile_basis: conditionalQuantileBasis,
+        });
+        const { rerender } = render(<FundamentalReport report={model(source)} />);
+        screen.getByText('USD 229.88 / share');
+        screen.getByText('USD 173.10 / share');
+        const markers = screen.getByRole('figure', { name: 'Service quantile markers' });
+        const quantilePositions = [...markers.querySelectorAll('circle')].map((circle) => Number(circle.getAttribute('cx')));
+        const basePosition = Number(markers.querySelector('path')?.getAttribute('d')?.split(' ')[1]);
+        expect(basePosition).toBeGreaterThan(Math.max(...quantilePositions));
+        expect(basePosition).toBeLessThanOrEqual(92);
+        expect(screen.queryByText('Model quantile LOWER')).toBeNull();
+        rerender(<FundamentalReport report={model(uncertaintyReport({ quantiles: { p05: '20', p50: '20', p95: '20' } }))} />);
+        screen.getByText('Model quantile P05');
+        screen.getByText('Monte Carlo median · P50');
+        screen.getByText('Model quantile P95');
+        expect(screen.getAllByText('USD 20.00 / share')).toHaveLength(3);
     });
     it('displays huge canonical values and missing per-share values honestly', () => {
         render(<FundamentalReport report={model(valuationReport({ service_result: calculation({ intrinsic_value: '1e400', per_share_value: null }) }))} />);

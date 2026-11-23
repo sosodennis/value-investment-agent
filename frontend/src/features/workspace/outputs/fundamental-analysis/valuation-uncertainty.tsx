@@ -1,7 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import type { FundamentalValuationModel } from './fundamental-report-model';
-import { ExactValue, InspectionValue, type EvidenceActionProps } from './report-value';
+import { ExactValue, type EvidenceActionProps } from './report-value';
 
 type Uncertainty = Extract<FundamentalValuationModel['uncertainty'], { kind: 'provided' }>;
 
@@ -109,24 +109,6 @@ export function ValuationUncertainty({
                     {uncertainty.quantiles.length > 0 ? (
                         <>
                             <QuantileMarkers uncertainty={uncertainty} base={report.base.perShare} />
-                            <dl className="grid gap-3 @min-[30rem]:grid-cols-3">
-                                {uncertainty.quantiles.filter((item) => item.aliasOf === null).map((quantile) => (
-                                    <div
-                                        key={quantile.label}
-                                        className="min-w-0 border-l-2 border-primary/40 pl-3"
-                                    >
-                                        <dt className="text-xs text-muted-foreground">
-                                            {quantile.label === 'p50' && uncertainty.mode === 'sampled' ? 'Monte Carlo median · P50' : `Model quantile ${quantile.label.toUpperCase()}`}
-                                        </dt>
-                                        <dd className="mt-1 text-sm">
-                                            <InspectionValue
-                                                evidence={quantile.evidence}
-                                                onSelectEvidence={onSelectEvidence}
-                                            />
-                                        </dd>
-                                    </div>
-                                ))}
-                            </dl>
                             <p className="text-xs text-muted-foreground">
                                 Quantiles describe the valuation model under sampled assumptions. They do not
                                 estimate future stock prices or investment confidence.
@@ -184,6 +166,7 @@ export function ValuationUncertainty({
                     {uncertainty.scenarios.length > 0 && (
                         <div className="space-y-2">
                             <h4 className="text-sm font-medium">Service scenarios</h4>
+                            <p className="text-xs text-muted-foreground">Scenario numbers preserve service order and calculation identity. No probabilities or value-based rankings are assigned.</p>
                             <dl className="grid gap-3 @min-[36rem]:grid-cols-2">
                                 {uncertainty.scenarios.map((scenario, index) => (
                                     <div
@@ -195,6 +178,13 @@ export function ValuationUncertainty({
                                         </dt>
                                         <dd className="mt-1 text-sm">
                                             <ExactValue amount={scenario.perShare} onSelectEvidence={onSelectEvidence} />
+                                            <p className="mt-1 text-xs text-muted-foreground">As of {scenario.valuationDate}</p>
+                                            <details className="mt-3 rounded-md border p-2 text-xs">
+                                                <summary className="cursor-pointer font-medium">Scenario {index + 1} assumptions and identity</summary>
+                                                <p className="mt-2 [overflow-wrap:anywhere]">Result hash · {scenario.binding.resultHash}</p>
+                                                <p className="mt-1 [overflow-wrap:anywhere]">Input digest · {scenario.binding.inputDigest}</p>
+                                                <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap font-mono [overflow-wrap:anywhere]">{scenario.assumptionsJson}</pre>
+                                            </details>
                                         </dd>
                                     </div>
                                 ))}

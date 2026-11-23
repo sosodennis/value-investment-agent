@@ -16,6 +16,7 @@ import {
     type FundamentalReportModel,
 } from './fundamental-report-model';
 import { ValuationAssumptionsSection, ValuationKeyAssumptions } from './valuation-assumptions-section';
+import { ValuationForecast, ValuationHistory } from './valuation-series';
 import { ValuationSummary } from './valuation-summary';
 import { ValuationUncertainty } from './valuation-uncertainty';
 import { valuationRevisionAvailability, type FundamentalRevisionControl } from './valuation-revision';
@@ -180,6 +181,8 @@ export function FundamentalReport({
             </header>
             <nav aria-label="Report sections" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 {report.kind === 'valuation' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-valuation`}>Valuation</a>}
+                {report.kind === 'valuation' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-forecast`}>Forecast</a>}
+                {report.kind !== 'service-error' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-history`}>History</a>}
                 {preparation && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-assumptions`}>Assumptions</a>}
                 {report.kind !== 'service-error' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-facts`}>Financial data</a>}
                 <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-sources`}>Sources &amp; method</a>
@@ -219,11 +222,13 @@ export function FundamentalReport({
             {report.kind === 'valuation' && (
                 <div id={`${sectionId}-valuation`} tabIndex={-1} className="scroll-mt-4 space-y-5">
                     <ValuationSummary report={report} onSelectEvidence={onSelectEvidence} />
-                    <ValuationUncertainty report={report} onSelectEvidence={onSelectEvidence} />
                     <ValuationKeyAssumptions report={report} onSelectEvidence={onSelectEvidence} />
-                    <ReportLimitations report={report} />
+                    <ReportLimitations report={report} compact />
+                    <ValuationUncertainty report={report} onSelectEvidence={onSelectEvidence} />
                 </div>
             )}
+            {report.kind === 'valuation' && <div id={`${sectionId}-forecast`} tabIndex={-1} className="scroll-mt-4"><ValuationForecast report={report} onSelectEvidence={onSelectEvidence} /></div>}
+            {report.kind !== 'service-error' && <div id={`${sectionId}-history`} tabIndex={-1} className="scroll-mt-4"><ValuationHistory report={report} onSelectEvidence={onSelectEvidence} /></div>}
             {report.kind !== 'valuation' && <ReportLimitations report={report} />}
             {preparation && (
                 <div id={`${sectionId}-assumptions`} tabIndex={-1} className="scroll-mt-4">
@@ -234,6 +239,7 @@ export function FundamentalReport({
                     />
                 </div>
             )}
+            {report.kind === 'valuation' && <ReportLimitations report={report} />}
             {report.kind !== 'service-error' && (
                 <div id={`${sectionId}-facts`} tabIndex={-1} className="scroll-mt-4">
                     <FinancialFactsTable facts={report.facts} onSelectEvidence={onSelectEvidence} />
@@ -246,13 +252,22 @@ export function FundamentalReport({
     );
 }
 
-function ReportLimitations({ report }: { report: FundamentalReportModel }) {
+function ReportLimitations({ report, compact = false }: { report: FundamentalReportModel; compact?: boolean }) {
     const preparation = report.kind === 'valuation' || report.kind === 'preparation-outcome' ? report.preparationSummary : null;
     const codes = [...new Set([...report.issueCodes, ...(preparation?.issueCodes ?? [])])];
     const missing = preparation?.missingEvidence ?? [];
     const capital = preparation?.capitalCompleteness;
     const incompleteCapital = capital?.kind === 'provided' && (capital.completeClaims !== true || capital.completeAwards !== true);
     if (codes.length === 0 && missing.length === 0 && !incompleteCapital) return null;
+    if (compact) return <Alert variant="warning">
+        <AlertTitle>Interpretation limits</AlertTitle>
+        <AlertDescription className="space-y-1">
+            {incompleteCapital && <p>Incomplete capital claims and award inventory. Capital values are conditional hypotheses.</p>}
+            {codes.includes('CONDITIONAL_FORWARD_REINVESTMENT_HYPOTHESES') && <p>Forward reinvestment uses conditional hypotheses.</p>}
+            {codes.some((code) => code.startsWith('HISTORY_')) && <p>Historical coverage is partial or not validated.</p>}
+            <p>{codes.length} recorded limitations · {missing.length} missing inputs. Full details remain visible below.</p>
+        </AlertDescription>
+    </Alert>;
     return <Alert variant="warning">
         <AlertTitle>Data and model limitations</AlertTitle>
         <AlertDescription className="space-y-2 [overflow-wrap:anywhere]">

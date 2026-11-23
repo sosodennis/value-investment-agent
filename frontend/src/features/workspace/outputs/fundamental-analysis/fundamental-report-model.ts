@@ -28,7 +28,7 @@ export type FundamentalFactModel = {
     value: ReportDatum;
     period: string;
     context: {
-        issuerId: string; entityScope: string; consolidationScope: string;
+        issuerId: string; securityId: string | null; securityScope: string | null; entityScope: string; consolidationScope: string;
         periodType: 'instant' | 'duration'; start: string | null; end: string;
         unitQname: string; measure: string; conceptQname: string;
         accession: string | null; filingVersion: string | null; isAmendment: boolean;
@@ -44,6 +44,7 @@ export type FundamentalFactModel = {
     evidence: EvidenceSelection;
 };
 type CalculationModel = {
+    assumptionsJson: string;
     binding: Binding;
     status: Calculation['calculation_status'];
     quality: Quality;
@@ -216,7 +217,7 @@ function factModel(fact: Fact, snapshotId: string, snapshotDigest: string, ident
     return {
         id: fact.fact_id, normalizedField: fact.normalized_field, label, value, period,
         context: {
-            issuerId: fact.issuer_id, entityScope: fact.context.entity_scope, consolidationScope: fact.context.consolidation_scope,
+            issuerId: fact.issuer_id, securityId: fact.security_id ?? null, securityScope: fact.security_scope ?? null, entityScope: fact.context.entity_scope, consolidationScope: fact.context.consolidation_scope,
             periodType: fact.context.period_type, start: fact.period_start ?? fact.context.start_date ?? null,
             end: fact.instant ?? fact.context.instant ?? fact.period_end,
             unitQname: fact.context.unit_qname, measure: fact.context.measure, conceptQname: fact.context.concept_qname,
@@ -244,6 +245,7 @@ function factModel(fact: Fact, snapshotId: string, snapshotDigest: string, ident
 
 function calculationModel(result: Calculation, currency: string, identity: FundamentalReportIdentity, scope: string): CalculationModel {
     return {
+        assumptionsJson: JSON.stringify(result.assumptions, null, 2),
         binding: binding(result), status: result.calculation_status, quality: result.quality_status,
         equity: amount(result.intrinsic_value, currency, 'equity-total', result, identity, scope),
         perShare: amount(result.per_share_value, currency, 'per-share', result, identity, scope),

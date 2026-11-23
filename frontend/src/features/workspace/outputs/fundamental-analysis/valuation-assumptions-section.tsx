@@ -82,11 +82,13 @@ export function ValuationKeyAssumptions({ report, onSelectEvidence }: EvidenceAc
     const terminalGrowth = assumptions.filter((item) => item.path === 'assumptions.terminal_growth');
     const waccNode = report.base.nodes.find((item) => item.id === 'wacc');
     const waccAssumption = assumptions.find((item) => item.path === 'assumptions.wacc');
+    const revenueGrowth = assumptions.find((item) => item.path === 'assumptions.forecast.revenue_growth[0]');
     const beta = assumptions.find((item) => item.path === 'assumptions.wacc.beta');
     const reinvestment = assumptions.find((item) => item.path === 'assumptions.forecast.reinvestment_rate[0]');
     const rows = [
         ...(waccNode ? [{ label: 'WACC', evidence: waccNode.evidence }] : waccAssumption ? [{ label: 'WACC', evidence: waccAssumption.evidence }] : []),
         ...terminalGrowth.map((item) => ({ label: `Terminal growth · ${item.isManual ? 'manual' : 'automatic'}`, evidence: item.evidence })),
+        ...(revenueGrowth ? [{ label: 'Revenue growth · Year 1', evidence: revenueGrowth.evidence }] : []),
         ...(beta ? [{ label: 'Beta', evidence: beta.evidence }] : []),
         ...(reinvestment ? [{ label: 'Reinvestment · Year 1', evidence: reinvestment.evidence }] : []),
     ];
