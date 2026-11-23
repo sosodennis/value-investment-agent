@@ -1314,7 +1314,7 @@ async def test_cutover_routes_explicit_monte_carlo_controls_to_calculation_repor
     summary = result.update["fundamental_analysis"]["fundamental_service"][
         "service_result"
     ]
-    assert summary["seed"] == 7
+    assert summary["seed"] == "7"
     assert summary["requested_samples"] == 10
     assert summary["base"]["input_digest"] == "b" * 64
 
@@ -1912,3 +1912,33 @@ async def test_uncertainty_binding_quality_and_exact_values_keep_their_scopes() 
         == "2026-11-04T00:00:00+00:00"
     )
     assert result.update["fundamental_analysis"]["quality_status"] == "abstain"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("seed", [18446744073709551615, -9223372036854775808])
+async def test_public_uncertainty_seed_is_exact_text_without_changing_service_controls(
+    seed: int,
+) -> None:
+    payload = _input(monte_carlo=True)
+    payload["uncertainty"]["seed"] = seed
+    client = _Client()
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        await run_service_valuation_flow(
+            runtime, {"valuation_request": payload}, client=client
+        )
+    finally:
+        reset_request_principal(token)
+    public_report = runtime.saved_calls[0]["data"]["fundamental_service"]
+    assert public_report["service_result"]["seed"] == str(seed)
+    assert public_report["service_result"]["result_hash"] == "8" * 64
+    assert public_report["result_hash"] == "8" * 64
+    assert public_report["service_result"]["input_digest"] == "a" * 64
+    assert public_report["valuation_input"]["uncertainty"]["seed"] == seed
+    assert client.calls[1][1]["uncertainty"]["seed"] == seed
+    assert isinstance(client.calls[1][1]["uncertainty"]["seed"], int)

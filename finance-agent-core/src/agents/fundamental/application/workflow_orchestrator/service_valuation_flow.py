@@ -672,9 +672,13 @@ def _validate_uncertainty_binding(
 
 
 def _parse_service_result(result: Mapping[str, object]) -> JSONObject:
+    public_result = dict(result)
+    seed = public_result.get("seed")
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        public_result["seed"] = str(seed)
     return (
         TypeAdapter(FundamentalServiceResultV1)
-        .validate_python(result)
+        .validate_python(public_result)
         .model_dump(mode="json", exclude_unset=True)
     )
 

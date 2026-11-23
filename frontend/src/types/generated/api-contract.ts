@@ -2898,7 +2898,7 @@ export interface components {
              */
             scenario_results: components["schemas"]["FundamentalCalculationResultV1"][];
             /** Seed */
-            seed?: number | null;
+            seed?: string | null;
             /** Sensitivity */
             sensitivity?: {
                 [key: string]: string[];

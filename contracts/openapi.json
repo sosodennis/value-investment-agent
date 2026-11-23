@@ -5562,7 +5562,8 @@
           "seed": {
             "anyOf": [
               {
-                "type": "integer"
+                "pattern": "^(?:0|-?[1-9][0-9]*)$",
+                "type": "string"
               },
               {
                 "type": "null"

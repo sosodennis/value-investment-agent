@@ -426,7 +426,9 @@ class FundamentalUncertaintyResultV1(BaseModel):
     invalid_samples: int = 0
     invalid_reasons: dict[str, int] = Field(default_factory=dict)
     invalid_draw_policy: str | None = None
-    seed: int | None = None
+    seed: (
+        Annotated[str, Field(strict=True, pattern=r"^(?:0|-?[1-9][0-9]*)$")] | None
+    ) = None
     sampler_version: str | None = None
     quantiles: dict[str, CanonicalDecimal] = Field(default_factory=dict)
     quantile_contract: dict[str, str] = Field(default_factory=dict)
