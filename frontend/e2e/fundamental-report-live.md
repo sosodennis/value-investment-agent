@@ -34,6 +34,8 @@ npx playwright test --config e2e/fundamental-report-live.config.ts --list
 
 自動案例涵蓋 draft 與 previous result、精確 raw `0.025`、新結果唯讀、真實 `MANUAL_OVERRIDE_INVALID`、Research 結束、history 無 mutation、各來源 scope、light/dark、320/390/768/1440px、獨立窄 report pane、reduced motion、正反向 Sheet focus cycle、Escape、focus return 與 touch。
 
+`fundamental-report-reading.live.spec.ts` 專門回歸報告閱讀。它核對 facts 金額及日期保持單行、具名區域可用鍵盤橫捲，以及圖點的 hover、鍵盤、觸控與原值查證。使用相同登入和保留 history 環境變數，加入 `--grep 'Fundamental report reading regression'` 可單獨執行。這組唯讀案例不建立 analysis、不重算，也不取代上面的服務操作驗收。
+
 真正 200% browser zoom、螢幕閱讀器、系統剪貼簿貼上及視覺品質仍需在同一正式 UI 實測。Headless viewport、DOM focus 與 reduced-motion 設定不代替這些項目。`F01–F09` 的固定樣本與 formatter 邊界由對應回歸測試核對。
 
 ## 保留樣本回歸
