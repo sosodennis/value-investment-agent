@@ -3,7 +3,7 @@
   "issue": 477,
   "status": "BLOCKED",
   "branch": "codex/issue-477-fundamental-report-ui",
-  "commit": "c46d9fba191c3b793749198ca444b5ef96f3396d",
+  "commit": "541c8a9ca550e179173ddb7341cdeee3cea0dff4",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent",
@@ -74,31 +74,31 @@
       "name": "final_preflight",
       "status": "pass",
       "command": "ACCEPTANCE_MANIFEST=/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/runtime-tuple.json REQUIRE_SEC_IDENTITY_RESOLUTION=1 scripts/acceptance_preflight.sh",
-      "evidence": "preflight-c46d9fba.log; exit 0; exact_commit=1; sec_identity_required=1"
+      "evidence": "preflight-541c8a9c.log;exit0;exact_commit=1;sec_identity_required=1"
     },
     {
       "name": "final_runtime_source_equality",
       "status": "pass",
       "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/verify-runtime-source.py",
-      "evidence": "runtime-source-equality.json; exit 0; Fundamental183/backend818 files match; frontend tree503fd670d117a044b05f1c9ed0c7183f7669a4c7"
+      "evidence": "runtime-source-equality.json;exit0;verified_commit=541c8a9ca550e179173ddb7341cdeee3cea0dff4;Fundamental183/backend818files;no mismatches;frontend tree503fd670d117a044b05f1c9ed0c7183f7669a4c7"
     },
     {
       "name": "frontend_checks",
       "status": "pass",
       "command": "npm run lint; npm run typecheck; npm run test -- --run; npm run check:contrast",
-      "evidence": "checks-c46d9fba/verification.json; all exit0; 59 files,517 tests"
+      "evidence": "checks-541c8a9c/verification.json; all exit0; 59 files,517 tests"
     },
     {
       "name": "complete_retained_regression",
       "status": "pass",
       "command": "FUNDAMENTAL_RETAINED_DIR=<complete #462 fixture directory> npx playwright test --config e2e/fundamental-report-live.config.ts --grep retained",
-      "evidence": "checks-c46d9fba/retained.log;exit0;5passed"
+      "evidence": "checks-541c8a9c/retained.log;exit0;5passed"
     },
     {
       "name": "real_service_browser_acceptance",
       "status": "fail",
       "command": "FUNDAMENTAL_LIVE=1 npx playwright test --config e2e/fundamental-report-live.config.ts --grep 'real service'",
-      "evidence": "runtime/live-c46d9fba.log;exit1;5passed,1failed;320px light/dark document scrollWidth327 exceeds320; issue480"
+      "evidence": "runtime/live-541c8a9c.log;exit1;5passed,1failed (4.2m);only320px light/dark document scrollWidth327 exceeds320;issue480"
     },
     {
       "name": "independent_review",
@@ -123,14 +123,22 @@
     "https://github.com/sosodennis/value-investment-agent/issues/480 — 320px global Header overflow; shell scope decision pending.",
     "F20 actual screen-reader output remains unverified; user observation requested."
   ],
-  "next_step": "Keep PR draft. Resolve issue480 scope and F20 spoken-output verification before ready,merge or closure. Evidence-only commit will be rebuilt and source equality checked before final delivery.",
+  "next_step": "PR481 remains draft. Issue480 shell scope decision and F20 actual spoken-output observation are required before ready,merge or closure. Keep477 runtime and named data. Only acceptance Markdown/JSON may follow tested541c8a9c.",
   "frontend_runtime": {
     "service": "frontend",
     "published_port": 22681,
     "url": "http://127.0.0.1:22681",
-    "running_image_id": "sha256:1fa6bc639843b11fd1176c3bf9bc5d141a93304ec129739f52a095f0d99aa7ec",
-    "build_commit": "c46d9fba191c3b793749198ca444b5ef96f3396d",
+    "running_image_id": "sha256:98de139b6effa715776d6312b3fe153be70a4f839c2ef14881c56cc0ad1e11ea",
+    "build_commit": "541c8a9ca550e179173ddb7341cdeee3cea0dff4",
     "state": "running",
     "health": "healthy"
+  },
+  "delivery_gates": {
+    "pr": "https://github.com/sosodennis/value-investment-agent/pull/481",
+    "pr_status": "draft",
+    "remote_head_ci": "pending",
+    "main_merge": "not_run",
+    "issue_closure": "not_run",
+    "scoped_cleanup": "not_run"
   }
 }

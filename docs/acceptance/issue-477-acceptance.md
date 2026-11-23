@@ -1,6 +1,6 @@
 # #477 正式 Fundamental 報告驗收
 
-本次 implementation commit 為 `c46d9fba191c3b793749198ca444b5ef96f3396d`。目前保持 BLOCKED，未宣稱 VERIFIED、未合併 main，也未結案 #477。
+本次已驗交付 commit 為 `541c8a9ca550e179173ddb7341cdeee3cea0dff4`。產品審閱及原生截圖 commit 為 `c46d9fba191c3b793749198ca444b5ef96f3396d`，兩者 frontend Git tree 相同。後續提交只包含本 issue 的驗收 Markdown 與 JSON。目前保持 BLOCKED，未宣稱 VERIFIED、未合併 main，也未結案 #477。
 
 ## 已交付行為
 
@@ -19,17 +19,19 @@
 | F12–F13 | 通過 live | 2.5% draft 不改舊值，唯一提交 raw `0.025`；Activity 完成 MSFT/NASDAQ 後新報告 base `168.923169629739...`，applied manual 與 original automatic provenance 分開。 |
 | F14 | 通過 live | 5% 產生 completed、failure=null 的 degraded artifact，`MANUAL_OVERRIDE_INVALID`；previous result 與 draft 保留，沒有成功估值。 |
 | F15 | 通過 unit／hook／live | 同 run typed resume 不再被誤判 superseded；stale operation、source identity、recovery error 有 current/abort guard。 |
-| F16 | 通過 live | Research unavailable/error/no acceptable claim 結束，不改 draft，不顯示 Apply 保證。 |
+| F16 | 通過 live 與元件測試 | Live Research 回傳 unavailable，無 accepted claims、不改 draft；error、無可套用 claim 與 accepted claim Apply 路徑由元件測試核對。 |
 | F17 | 通過 live | history URL 唯讀、無 mutation；原 artifact、assumptions、raw values 與 inspector 保留。 |
 | F18 | 未通過，#480 | 真實 320px 頁面 document scrollWidth `327`（viewport `320`）；原因是全站 Header organization selector。報告表格仍使用局部 scroll。目標原本排除 shell，尚未獲授權修改。 |
 | F19 | 部分通過 | light/dark、reduced motion、320/390/768/1440、窄 report pane、contrast、200% native Chrome zoom 與放大後 reflow 已核對；F18 shell overflow 仍使整體項目未通過。 |
 | F20 | 未完整驗證 | Playwright／CUA 已核對 labels、Tab、Sheet/Dialog focus cycle、Escape、focus return、touch 與 dynamic status；VoiceOver 朗讀與字幕目前無法由工具觀測，等待使用者提供實際朗讀結果。 |
 
+完整命令、exit code、同 source 證明與最終重跑結果見 [交付檢查](issue-477-progress-checks.md)。
+
 ## Runtime 與命令
 
 Canonical tuple 為 [issue-477-runtime.json](issue-477-runtime.json)。工作樹、branch、Compose ordered files、env-file SHA-256、ports、SEC identity capability、browser identity 與 runtime-only overlays 均記錄於其中；secrets 未寫入。
 
-隔離 projects：`value-investment-agent-denniswong-477-app`（backend `22680`、frontend `22681`、PostgreSQL `22682`、Redis `22683`、provider `22684`、search `22685`）及 `value-investment-agent-denniswong-477-fundamental`（service `22690`、PostgreSQL `22691`）。Frontend image 為 `sha256:1fa6bc639843b11fd1176c3bf9bc5d141a93304ec129739f52a095f0d99aa7ec`，健康且由 c46d9fba 建置；backend／Fundamental source equality 分別為 818／183 files，無 mismatch。
+隔離 projects：`value-investment-agent-denniswong-477-app`（backend `22680`、frontend `22681`、PostgreSQL `22682`、Redis `22683`、provider `22684`、search `22685`）及 `value-investment-agent-denniswong-477-fundamental`（service `22690`、PostgreSQL `22691`）。Frontend image 為 `sha256:98de139b6effa715776d6312b3fe153be70a4f839c2ef14881c56cc0ad1e11ea`，健康且由 541c8a9c 建置；backend／Fundamental source equality 分別為 818／183 files，無 mismatch。
 
 已通過：
 
@@ -42,13 +44,13 @@ Canonical tuple 為 [issue-477-runtime.json](issue-477-runtime.json)。工作樹
 真實 Playwright 使用正常登入與隔離服務，無 mock：
 
 ```text
-5 passed, 1 failed (3.3m)
+5 passed, 1 failed (4.2m)
 passed: 2.5% revision, 5% refusal, Research termination, immutable history, touch evidence
 failed: light/dark reflow test at 320px because document scrollWidth=327 (#480)
 ```
 
 主要 live identities 與 evidence files 保存在 repo 外 diagnostics：
-`/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/live-c46d9fba/`。重算 run 的新 base、拒絕 artifact、history identity、screenshots 與 layout JSON 均由測試明確產生；不把舊 retained 數字套到新 live artifact。
+`/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/live-541c8a9c/`。重算 run 的新 base、拒絕 artifact、history identity、screenshots 與 layout JSON 均由測試明確產生；不把舊 retained 數字套到新 live artifact。
 
 ## 獨立審閱與未完成項目
 
