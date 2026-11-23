@@ -1,8 +1,8 @@
-# #477 獨立實質審閱
+# #477 獨立實質審閱：PASS＋NOTES
 
-最新產品 SHA：`75c75c29745a6f802eb2000ac31bb0a52931107e`。審閱基準：`04fb2e0922c10bde806bdafcb2c71c5872e1e64d`。本 reviewer 未撰寫產品、測試或服務變更，也未 push、開 PR 或 merge。獨立 checkout `/Users/denniswong/.codex/worktrees/issue-477-independent-review/value-investment-agent` 保持乾淨 detached HEAD；所有重現程式、logs 與本報告均在 repo 外。
+交付候選 SHA：`849df68e7f03da8489ae285dafe0cdcf39cdfa74`。最新產品 SHA：`75c75c29745a6f802eb2000ac31bb0a52931107e`；75c75c29→849df68e 僅驗收文件與四張圖，frontend tree 相同。審閱基準：`04fb2e0922c10bde806bdafcb2c71c5872e1e64d`。本 reviewer 未撰寫產品、測試或服務變更，也未 push、開 PR 或 merge。獨立 checkout `/Users/denniswong/.codex/worktrees/issue-477-independent-review/value-investment-agent` 保持乾淨 detached HEAD；所有重現程式、logs 與本報告均在 repo 外。
 
-程式與獨立資料／history 審閱完成；已接受的 parser、unit、revision operation 與 Header findings 均修復並重驗，沒有新的未解產品 finding。目前等待主線最新產品 SHA 的完整六案 real-service 結果，才更新最後整體 verdict。實際 screen-reader 朗讀未驗證，依使用者最新優先序保留為限制，不作合併門檻，也不宣稱通過。
+程式與獨立資料／history 審閱完成；已接受的 parser、unit、revision operation 與 Header findings 均修復並重驗，沒有新的未解產品 finding。候選849df68e完整六案real-service已全數通過，獨立審閱結論為PASS＋NOTES；沒有未解的本次產品阻擋finding。實際 screen-reader 朗讀未驗證，依使用者最新優先序保留為限制，不作合併門檻，也不宣稱通過。
 
 ## 使用者最新範圍與驗證決定
 
@@ -73,4 +73,32 @@ Retained 三檔 SHA-256：base `192c54598fc4cd88fc79c8dfc3a6ac8870aa9ccdd28eb357
 - Research unavailable/SEARCH_PROVIDER_FAILURE、acceptedClaimCount0、draft2.5保持；history mutations0；touch390px通過；正反向 focus/Escape/return通過；獨立窄report pane width645.67→358.64。
 - 主線另回報 native Chrome 真200% browser zoom/reflow 截圖、Copy original→TextEdit逐字 raw貼回並 undo scratch；本 reviewer 未操作 native Chrome，僅記主線手動證據。
 
-最新75c75c29完整六案結果待主線完成後追加；在追加前不作最後整體通過判定。實際 screen-reader 未驗證只保留限制，不標pass。
+後續含圖候選849df68e已重新build並完整六案通過，詳見下段；實際screen-reader未驗證只保留限制，不標pass。
+
+## 候選內容與 patch identity
+
+獨立 checkout 已切至乾淨 `849df68e7f03da8489ae285dafe0cdcf39cdfa74`。75c75c29→候選僅修改四份驗收 Markdown/JSON 並新增四張WebP；沒有產品或測試變更，frontend tree 均為 `d94bad25652d1e6f2d1b06e37fe33f2dba78d26d`。四張圖已目視檢查，SHA-256 與 evidence 表格一致；320px light/dark 為修正後畫面，200%兩圖保留原生Chrome與可讀公司／估值數字。
+
+base `04fb2e0922c10bde806bdafcb2c71c5872e1e64d` → candidate `849df68e7f03da8489ae285dafe0cdcf39cdfa74`：
+
+- `git diff <base> <candidate> | git patch-id --stable`：`9da628efc141440468d5c901fbba6e4f75ae4a1b`。
+- `git diff --binary <base> <candidate> | git patch-id --stable`：`398fb9e9794cd8abebd99baa3701a112760a20c4`（包含可重建的 binary patches）。
+- `git diff <base> <candidate> -- frontend | git patch-id --stable`：`f772ca0aba7f3001c5d19c5f3e951f61420aea93`。
+
+額外組織設定頁內容 grid/member table overflow 另列 #482；該頁 Header 控制項幾何通過不等於整頁 document 通過。本次 Fundamental assertions 沒有因此放寬，#482 不冒充已解。
+
+## 最終候選驗證與結論
+
+PASS＋NOTES，適用base `04fb2e0922c10bde806bdafcb2c71c5872e1e64d` → candidate `849df68e7f03da8489ae285dafe0cdcf39cdfa74`。本reviewer沒有修改產品，也沒有主工作樹寫入任務／ownership；主工作樹只讀，checkout／npm checks在獨立worktree，報告與probes只寫repo外。
+
+已交叉讀取 `runtime/live-849df68e.log`（6 passed，4.8m）、`live-849df68e/.last-run.json`（status passed、failedTests=[]）、各正式JSON及 `checks-849df68e/verification.json`（lint/typecheck/vitest/contrast/retained全exit0）。所有本輪JSON的implementationCommit皆為849df68e；完整run/artifact provenance依實際值記錄。
+
+- Success：run `da7d3ffe-cf99-4637-9cd9-0a1f123da58f`、artifact `a2fb591d-65be-4e56-bf33-ffb5ee267bd1`；submitted/applied raw0.025，new base168.92316962973986376214271505310878928165576150584，runStarts1；與原run/artifact不同。
+- Refusal：run `838e04ca-27a7-4d70-bbbb-6d888252c2dd`、artifact `36b386ee-2b9d-420f-9762-f2a2577c0b09`；MANUAL_OVERRIDE_INVALID、retainedDraft5、previousDisplay USD229.88/share、run completed。
+- Research：unavailable/SEARCH_PROVIDER_FAILURE、acceptedClaimCount0、draft2.5；沒有許諾可Apply。
+- History：exact原artifact、mutations0、raw/sourceScale/node/scenario scope皆有記錄。
+- Layout：light/dark×320/390/768/1440、reduced motion、獨立窄pane通過；完整正反向Sheet focus/Escape/return為true。Touch390通過。
+
+已接受的#478／#479／#480均在owning layer修正，程式與受影響checks、獨立probes／實頁及正式服務驗收相符；無需新的產品修正。可依專案CI與merge流程繼續交付。
+
+NOTES：actual screen-reader spoken output未驗證，依使用者最新優先序不是本次merge gate且不標pass；組織設定頁內容grid/member table overflow另列#482，沒有將該頁document稱為pass。主線只允許後續驗收Markdown/JSON metadata；若frontend、圖片、測試或服務再改動，此結論需重新核對delta。

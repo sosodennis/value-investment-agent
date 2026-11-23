@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "issue": 477,
-  "status": "WIP",
+  "status": "VERIFIED",
   "branch": "codex/issue-477-fundamental-report-ui",
-  "commit": "75c75c29745a6f802eb2000ac31bb0a52931107e",
+  "commit": "849df68e7f03da8489ae285dafe0cdcf39cdfa74",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent",
-    "browser_session": "Final Playwright live-541c8a9c /runner pid27190 /six isolated per-test contexts (closed);native Chrome dedicated477 window retained;earlier live-c46d9fba and independent-review-d1975fef-8900-49e3-8774-af685cf1e7df contexts closed",
+    "browser_session": "Final Playwright live-849df68e /runner pid53463 /six isolated contexts closed;independent-header-review-87c4ff9c-8ee2-4cd1-8f73-b7dd368570e3 closed;native Chrome dedicated477 history window,75 source-identical to849,zoom restored100percent.",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-477-app",
@@ -47,101 +47,94 @@
   },
   "checks": [
     {
-      "name": "initial_preflight",
+      "name": "final_preflight",
       "status": "pass",
-      "command": "ACCEPTANCE_MANIFEST=/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/runtime-tuple.json scripts/acceptance_preflight.sh",
-      "evidence": "preflight-initial.log; exit 0; baseline commit only; no browser acceptance"
+      "command": "ACCEPTANCE_MANIFEST=<canonical runtime tuple> REQUIRE_SEC_IDENTITY_RESOLUTION=1 scripts/acceptance_preflight.sh",
+      "evidence": "runtime/preflight-849df68e.log;exit0;exact_commit=1;SEC capability=true"
     },
     {
       "name": "runtime_source_equality",
       "status": "pass",
-      "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/verify-runtime-source.py",
-      "evidence": "runtime-source-equality.json; exit 0; no mismatches"
-    },
-    {
-      "name": "source_preparation",
-      "status": "pass",
-      "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/run-preparation.py",
-      "evidence": "preparation-exit.json; exit 0; retained-preparation-report.json HTTP 200 status=prepared, issue_codes=[], missing_evidence=[]"
-    },
-    {
-      "name": "initial_app_api_report",
-      "status": "pass",
-      "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/start-base-run.py then exact ticker_selection resume and capture-app-report.py",
-      "evidence": "base-final-snapshot.json; completed, failure=null; base-final-artifact.json; valuation, provisional"
-    },
-    {
-      "name": "final_preflight",
-      "status": "pass",
-      "command": "ACCEPTANCE_MANIFEST=/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/runtime-tuple.json REQUIRE_SEC_IDENTITY_RESOLUTION=1 scripts/acceptance_preflight.sh",
-      "evidence": "preflight-541c8a9c.log;exit0;exact_commit=1;sec_identity_required=1"
-    },
-    {
-      "name": "final_runtime_source_equality",
-      "status": "pass",
-      "command": "python3 /Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/verify-runtime-source.py",
-      "evidence": "runtime-source-equality.json;exit0;verified_commit=541c8a9ca550e179173ddb7341cdeee3cea0dff4;Fundamental183/backend818files;no mismatches;frontend tree503fd670d117a044b05f1c9ed0c7183f7669a4c7"
+      "command": "python3 <runtime>/verify-runtime-source.py",
+      "evidence": "runtime/source-849df68e.log;exit0;Fundamental183/backend818files;no mismatch;frontend tree d94bad25652d1e6f2d1b06e37fe33f2dba78d26d"
     },
     {
       "name": "frontend_checks",
       "status": "pass",
       "command": "npm run lint; npm run typecheck; npm run test -- --run; npm run check:contrast",
-      "evidence": "checks-541c8a9c/verification.json; all exit0; 59 files,517 tests"
+      "evidence": "checks-849df68e/verification.json;all exit0;59files517tests"
     },
     {
       "name": "complete_retained_regression",
       "status": "pass",
-      "command": "FUNDAMENTAL_RETAINED_DIR=<complete #462 fixture directory> npx playwright test --config e2e/fundamental-report-live.config.ts --grep retained",
-      "evidence": "checks-541c8a9c/retained.log;exit0;5passed"
+      "command": "FUNDAMENTAL_RETAINED_DIR=<complete462> npx playwright test --config e2e/fundamental-report-live.config.ts --grep retained",
+      "evidence": "checks-849df68e/retained.log;exit0;5passed;complete envelopes with SHA256 guards"
     },
     {
       "name": "real_service_browser_acceptance",
-      "status": "fail",
-      "command": "FUNDAMENTAL_LIVE=1 npx playwright test --config e2e/fundamental-report-live.config.ts --grep 'real service'",
-      "evidence": "runtime/live-541c8a9c.log;exit1;5passed,1failed (4.2m);only320px light/dark document scrollWidth327 exceeds320;issue480"
+      "status": "pass",
+      "command": "FUNDAMENTAL_LIVE=1 npx playwright test --config e2e/fundamental-report-live.config.ts --grep \"real service\"",
+      "evidence": "runtime/live-849df68e.log;6passed;.last-run.json status=passed/failedTests=[];result verifier exit0"
     },
     {
-      "name": "independent_review",
-      "status": "fail",
-      "command": "Independent source,typed artifact,hook probe and read-only history browser review",
-      "evidence": "issue-477-progress-review.md;code/probes/history passed;overall withheld for480/F20"
+      "name": "header_route_controls",
+      "status": "pass",
+      "command": "node <runtime>/verify-header-scoped.cjs",
+      "evidence": "runtime/header-scoped-75c75c29.log;exit0;10route/width control cases;settings document overflow separately tracked482;canonical workspace no-overflow assertion unchanged"
     },
     {
       "name": "native_zoom_and_clipboard",
       "status": "pass",
-      "command": "Native Chrome reload final UI;200percent browser zoom;Copy original value then paste into native TextEdit",
-      "evidence": "zoom200-c46d9fba.png;zoom200-values-c46d9fba.png;clipboard-native-c46d9fba.txt;canonical raw matches"
+      "command": "Native Chrome200percent zoom;Copy original value then paste into native TextEdit",
+      "evidence": "zoom200-75c75c29.webp/zoom200-values-75c75c29.webp;zoom restored100percent;clipboard c46 raw exact,inspector source unchanged at849"
     },
     {
-      "name": "screen_reader",
-      "status": "not_run",
-      "command": "Actual VoiceOver heading/value/status/focus observation",
-      "evidence": "Process running was observed;spoken output/caption could not be verified by CUA;human observation pending"
-    },
-    {
-      "name": "metadata_head_preflight",
+      "name": "independent_review",
       "status": "pass",
-      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-477-runtime.json REQUIRE_SEC_IDENTITY_RESOLUTION=1 scripts/acceptance_preflight.sh",
-      "evidence": "preflight-metadata-9cbeb164.log;exit0;metadata descendant of541c8a9c;onlyissue477 acceptance md/json changed"
+      "command": "Independent source/parser/VM/hook and real read-only browser review",
+      "evidence": "issue-477-progress-review.md;PASS+NOTES;accepted478/479/480findings fixed;actualSR limitation retained"
+    },
+    {
+      "name": "no_comments",
+      "status": "pass",
+      "command": "Independent comment-sicko source review and Header delta review",
+      "evidence": "0comments/suppressions/MUST KILL;review/no-comments.md;does not replace full review"
     }
   ],
   "blockers": [],
-  "next_step": "Build the screenshot-bearing delivery candidate and run complete final acceptance.",
+  "next_step": "Wait for final PR-head CI and independent verdict;then guarded merge to main,verify main and perform scoped cleanup.",
   "frontend_runtime": {
     "service": "frontend",
     "published_port": 22681,
     "url": "http://127.0.0.1:22681",
     "running_image_id": "sha256:43077280f5381252d85131bc6761cfd42a56d7289baa7b13ffbc3fb94caec08c",
-    "build_commit": "75c75c29745a6f802eb2000ac31bb0a52931107e",
+    "build_commit": "849df68e7f03da8489ae285dafe0cdcf39cdfa74",
     "state": "running",
     "health": "healthy"
   },
   "delivery_gates": {
     "pr": "https://github.com/sosodennis/value-investment-agent/pull/481",
     "pr_status": "draft",
-    "remote_head_ci": "pending",
+    "remote_head_ci": "pending final metadata push",
     "main_merge": "not_run",
     "issue_closure": "not_run",
     "scoped_cleanup": "not_run"
-  }
+  },
+  "limitations": [
+    {
+      "name": "actual_screen_reader_output",
+      "status": "not_run",
+      "required_for_this_delivery": false,
+      "reason": "VoiceOver utterance/caption could not be observed. User2026-11-23: Ok，a11y不是我們的重心。 Retained as unverified;not marked pass."
+    },
+    {
+      "name": "organization_settings_content_overflow",
+      "issue": 482,
+      "reason": "Independent settings content grid/table defect;Header geometry/controls pass. No claim that whole settings document passes."
+    }
+  ],
+  "scope_amendments": [
+    "2026-11-23 user authorized global Header fix: 可以，你認為有需要就全站fix",
+    "2026-11-23 user deprioritized actual screen-reader acceptance;unverified output retained as limitation and excluded from required delivery checks."
+  ]
 }

@@ -2,6 +2,18 @@
 
 本檔保留 c46d9fba191c3b793749198ca444b5ef96f3396d 的原始實頁證據，並追加75c75c29745a6f802eb2000ac31bb0a52931107e的Header修正後畫面。截圖來自正式 workspace 與本 issue 隔離服務，沒有 mock API。超過 repository 單檔限制的 PNG 轉為無損 WebP，逐像素核對相等，尺寸不變。原始 PNG 保存在隔離 diagnostics，未刪除。原始320px截圖寬327px是#480的歷史失敗證據；下列fixed圖為修正後320px。
 
+## 最終完整服務驗收
+
+已驗提交`849df68e7f03da8489ae285dafe0cdcf39cdfa74`，6案全過，無mock、retries=0。原始檔目錄：`/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/live-849df68e/`。下表摘錄當次身分與操作；refusal的previous artifact與refused artifact均保留於observations。
+
+| 操作 | Run | Artifact | 觀察 |
+| --- | --- | --- | --- |
+| revision-completed | `da7d3ffe-cf99-4637-9cd9-0a1f123da58f` | `a2fb591d-65be-4e56-bf33-ffb5ee267bd1` | `{"originalRunId":"a0ced066-8c05-478c-a485-c3ce44257769","originalArtifactId":"38361e05-5c8e-46e0-a05b-8bb7c8a1c444","originalCreatedAt":"2026-11-23T13:25:48+00:00","submittedRaw":"0.025","appliedRaw":"0.025","runStarts":1}` |
+| revision-refused | `a5d994fb-60f1-4a53-a47f-8c7d8185f346` | `13e17d66-295a-4a05-9051-0f497f54f07d` | `{"refusedRunId":"838e04ca-27a7-4d70-bbbb-6d888252c2dd","refusedArtifactId":"36b386ee-2b9d-420f-9762-f2a2577c0b09","refusedArtifactUrl":"/api/v1/artifacts/36b386ee-2b9d-420f-9762-f2a2577c0b09?run_id=838e04ca-27a7-4d70-bbbb-6d888252c2dd","refusal":{"code":"MANUAL_OVERRIDE_INVALID","message":"1 validation error for ConditionalRevisionProofV1\nterminal_growth\n  Input should be less than or equal to 0.04 [type=less_than_equal, input_value=Decimal('0.05'), input_type=Decimal]\n    For further information visit https://errors.pydantic.dev/2.14/v/less_than_equal","retryable":false},"retainedDraft":"5","previousDisplay":"USD 229.88 / share","refusedRunStatus":"completed"}` |
+| research-terminated | `02686445-b580-4611-a793-e68d573e92a4` | `72d29faf-dc1e-421f-b424-62a98df74f0b` | `{"status":"unavailable","issueCodes":["SEARCH_PROVIDER_FAILURE"],"acceptedClaimCount":0,"retainedDraft":"2.5"}` |
+| history-read-only | `cb0bd42e-4580-4671-8513-d7cdfa4c2aaf` | `bb6147b4-341c-4cae-a904-c69b18b5207f` | `{"mutations":0,"rawBase":"229.88242539685962775556419207139754074672901162460","p50":"175.49634320896867803130860152244165462013013409138","factId":"sec-fact-588452b5f978ee89c49ce7b8","sourceScale":6,"nodeId":"revenue_1","scenarioResultHash":"7e8e8a22c6fa794495fee4299fa045b651130a50acc53d694435ce65affa38fd"}` |
+| touch-evidence | `cb0bd42e-4580-4671-8513-d7cdfa4c2aaf` | `bb6147b4-341c-4cae-a904-c69b18b5207f` | `{"hasTouch":true,"viewportWidth":390}` |
+
 ## Header 修正後正式畫面
 
 Capture commit：`75c75c29745a6f802eb2000ac31bb0a52931107e`。Canonical layout test exit0，light/dark×320/390/768/1440、窄pane、reduced motion與完整正反向focus cycle通過。原生Chrome重新載入同一runtime後觀察Zoom:200%，公司與估值數字可讀；最後已還原100%。

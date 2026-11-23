@@ -1,6 +1,6 @@
 # #477 正式 Fundamental 報告驗收
 
-Header修正已整合於`75c75c29745a6f802eb2000ac31bb0a52931107e`，layout與獨立實頁重驗通過。含新截圖的交付候選將再建置並執行整組真實服務驗收；目前保持WIP、PR draft，尚未合併或結案。
+已驗交付提交為`849df68e7f03da8489ae285dafe0cdcf39cdfa74`。Frontend tree為`d94bad25652d1e6f2d1b06e37fe33f2dba78d26d`；含正式截圖、Header修正及範圍調整。必要本機驗收與獨立審閱已通過，manifest為VERIFIED。PR #481仍待最後head CI與合併，#477及#478／#479／#480在main驗證後才結案。
 
 ## 使用者核准的範圍調整
 
@@ -37,7 +37,7 @@ Header修正已整合於`75c75c29745a6f802eb2000ac31bb0a52931107e`，layout與�
 
 Canonical tuple 為 [issue-477-runtime.json](issue-477-runtime.json)。工作樹、branch、Compose ordered files、env-file SHA-256、ports、SEC identity capability、browser identity 與 runtime-only overlays 均記錄於其中；secrets 未寫入。
 
-隔離 projects：`value-investment-agent-denniswong-477-app`（backend `22680`、frontend `22681`、PostgreSQL `22682`、Redis `22683`、provider `22684`、search `22685`）及 `value-investment-agent-denniswong-477-fundamental`（service `22690`、PostgreSQL `22691`）。Frontend image 為 `sha256:98de139b6effa715776d6312b3fe153be70a4f839c2ef14881c56cc0ad1e11ea`，健康且由 541c8a9c 建置；backend／Fundamental source equality 分別為 818／183 files，無 mismatch。
+隔離 projects：`value-investment-agent-denniswong-477-app`（backend `22680`、frontend `22681`、PostgreSQL `22682`、Redis `22683`、provider `22684`、search `22685`）及 `value-investment-agent-denniswong-477-fundamental`（service `22690`、PostgreSQL `22691`）。Frontend image 為 `sha256:43077280f5381252d85131bc6761cfd42a56d7289baa7b13ffbc3fb94caec08c`，健康且已在849df68e建置；backend／Fundamental source equality 分別為 818／183 files，無 mismatch。
 
 已通過：
 
@@ -47,26 +47,19 @@ Canonical tuple 為 [issue-477-runtime.json](issue-477-runtime.json)。工作樹
 - `verify-runtime-source.py`（exit 0）；
 - 獨立 reviewer 的 hook／workspace 3 files、68 tests、lint、typecheck（exit 0；未撰寫產品變更）。
 
-真實 Playwright 使用正常登入與隔離服務，無 mock：
+真實Playwright使用正常登入與隔離服務，無mock。最終6案全部通過：2.5% revision、5% refusal、Research termination、immutable history、light/dark四寬及窄pane/reduced-motion/focus cycle、touch evidence。`live-849df68e/.last-run.json`為`status=passed`、`failedTests=[]`，result verifier exit0。早期541c8a9c的5pass/1fail僅作#480歷史重現，不再代表目前結果。
 
-```text
-5 passed, 1 failed (4.2m)
-passed: 2.5% revision, 5% refusal, Research termination, immutable history, touch evidence
-failed: light/dark reflow test at 320px because document scrollWidth=327 (#480)
-```
-
-主要 live identities 與 evidence files 保存在 repo 外 diagnostics：
-`/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/live-541c8a9c/`。重算 run 的新 base、拒絕 artifact、history identity、screenshots 與 layout JSON 均由測試明確產生；不把舊 retained 數字套到新 live artifact。
+最終run/artifact identities與原始JSON保存在repo外`/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/live-849df68e/`；公開摘錄見[實頁證據](issue-477-progress-evidence.md)。Retained固定數字與新live quantiles分開記錄。
 
 ## 獨立審閱與限制
 
-[完整獨立review](issue-477-progress-review.md)已核對金融語義、來源、狀態、閱讀層級與Header實頁，接受的#478／#479／#480問題均已有owning-layer修正。Overall verdict等待含圖交付候選的整組6案結果。
+[完整獨立review](issue-477-progress-review.md)已核對金融語義、來源、狀態、閱讀層級與Header實頁，接受的#478／#479／#480問題均已有owning-layer修正。Overall verdict為PASS+NOTES，已交叉核對含圖提交的完整6案結果。
 
 實際螢幕閱讀器朗讀未驗證，依上述使用者優先序保留限制。額外發現的組織設定頁內容grid／member table溢出另列[#482](https://github.com/sosodennis/value-investment-agent/issues/482)：Header本身幾何與選單通過，不將settings整頁稱為pass，也不改Fundamental canonical assertions。
 
 ## 正式畫面與來源記錄
 
-[實頁截圖與 artifact identities](issue-477-progress-evidence.md) 保存成功重算、拒絕、history、明暗、窄屏、touch、focus 與 native 200% 的正式畫面。截圖 capture commit 為 c46d9fba，後續交付 metadata 與圖片不改產品 source。
+[實頁截圖與 artifact identities](issue-477-progress-evidence.md) 保存成功重算、拒絕、history、明暗、窄屏、touch、focus 與 native 200% 的正式畫面。早期capture commit為c46d9fba；修正後layout與native zoom為75c75c29，與已驗849df68e frontend tree相同。849之後只允許本issue驗收Markdown／JSON。
 
 ## 保留與清理
 
