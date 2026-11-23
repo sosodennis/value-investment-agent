@@ -562,9 +562,17 @@ class ActiveDataReleaseV1(ReleaseModel):
     activated_at: datetime
 
 
+class AutomaticValuationModelV1(ReleaseModel):
+    model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
+    model_version: str = Field(min_length=1)
+
+
 class ActiveDataReleaseWithManifestV1(ReleaseModel):
     active: ActiveDataReleaseV1
     manifest: DataReleaseManifestV1
+    automatic_model: AutomaticValuationModelV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def pointer_matches_manifest(self) -> ActiveDataReleaseWithManifestV1:
@@ -623,6 +631,7 @@ __all__ = [
     "REQUIRED_DATA_RELEASE_GATES",
     "ActiveDataReleaseV1",
     "ActiveDataReleaseWithManifestV1",
+    "AutomaticValuationModelV1",
     "ArtifactRefV1",
     "DataReleaseActivationCommandV1",
     "DataReleaseActivationRequestV1",

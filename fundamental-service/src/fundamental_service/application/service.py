@@ -163,6 +163,7 @@ from ..valuation_requirements import (
     select_released_facts,
 )
 from ..valuation_release_inputs import (
+    automatic_release_model,
     valuation_release_conditional_capital,
     valuation_release_requirements,
     valuation_release_working_capital_inputs,
@@ -759,7 +760,18 @@ class FundamentalApplication:
                 status_code=404,
                 retryable=False,
             )
-        return active
+        return self._active_release_response(active)
+
+    @staticmethod
+    def _active_release_response(
+        active: ActiveDataReleaseWithManifestV1,
+    ) -> ActiveDataReleaseWithManifestV1:
+        try:
+            return active.model_copy(
+                update={"automatic_model": automatic_release_model(active.manifest)}
+            )
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
 
     def change_active_data_release(
         self,
@@ -810,7 +822,9 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             )
-        return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
+        return self._active_release_response(
+            ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
+        )
 
     @timed_valuation_stage("release.snapshot_facts")
     def _release_snapshot_facts(

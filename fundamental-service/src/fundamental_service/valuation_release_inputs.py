@@ -12,7 +12,11 @@ from .conditional_capital import (
     ConditionalCapitalError,
     assess_conditional_capital,
 )
-from .data_releases import DataReleaseError, DataReleaseManifestV1
+from .data_releases import (
+    AutomaticValuationModelV1,
+    DataReleaseError,
+    DataReleaseManifestV1,
+)
 from .conditional_reinvestment_release import reinvestment_release_requirements
 from .policies import initial_model_specs
 from .serialization import canonical_bytes
@@ -26,6 +30,46 @@ from .working_capital import (
     CompositeWorkingCapitalInputV1,
     ValuationWorkingCapitalPolicyV1,
 )
+
+
+def automatic_release_model(
+    manifest: DataReleaseManifestV1,
+) -> AutomaticValuationModelV1 | None:
+    if not (
+        manifest.conditional_capital_policies
+        or manifest.conditional_reinvestment_policies
+    ):
+        return None
+    bindings = {
+        (policy.model_id, policy.model_version, policy.mapping_version)
+        for policy in manifest.conditional_capital_policies
+    } | {
+        (
+            policy.recipe.model_id,
+            policy.recipe.model_version,
+            policy.recipe.mapping_version,
+        )
+        for policy in manifest.conditional_reinvestment_policies
+    }
+    working = manifest.valuation_working_capital_policy
+    if working is not None:
+        bindings.add((working.model_id, working.model_version, working.mapping_version))
+    if len(bindings) != 1:
+        raise DataReleaseError(
+            "DATA_RELEASE_AUTOMATIC_MODEL_MISMATCH",
+            "conditional release requires one coherent model, version and mapping",
+        )
+    model_id, model_version, _ = next(iter(bindings))
+    if not any(
+        model.model_id == model_id and model.model_version == model_version
+        for model in initial_model_specs()
+    ):
+        raise DataReleaseError(
+            "DATA_RELEASE_AUTOMATIC_MODEL_MISMATCH",
+            "conditional release requires a supported executable model version",
+        )
+    valuation_release_requirements(manifest, model_id)
+    return AutomaticValuationModelV1(model_id=model_id, model_version=model_version)
 
 
 def valuation_release_requirements(
