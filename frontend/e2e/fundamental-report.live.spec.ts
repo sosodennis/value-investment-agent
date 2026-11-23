@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { parseForwardEvidenceReview } from '../src/features/workspace/outputs/fundamental-analysis/forward-evidence-api';
 import {
     baseResult,
+    captureFundamentalArtifact,
     captureReport,
     closeInspector,
     historyIdentity,
@@ -24,6 +25,10 @@ const baseButtonName = /^Inspect Deterministic base per share\b/;
 const reportName = 'Fundamental valuation report';
 
 test.use({ trace: 'off', video: 'off', screenshot: 'off' });
+
+function baseValueButton(page: Page) {
+    return page.getByRole('article', { name: reportName }).getByRole('button', { name: baseButtonName });
+}
 
 async function waitForReport(page: Page, run: RunIdentity): Promise<CapturedReport> {
     await expect.poll(async () => {
@@ -90,7 +95,7 @@ test.describe('Fundamental report against the real service', () => {
 
     test('draft stays separate, exact 2.5% revision creates a new read-only report', async ({ page }, info) => {
         const original = await waitForReport(page, await startAnalysis(page));
-        const baseButton = page.getByRole('button', { name: baseButtonName });
+        const baseButton = baseValueButton(page);
         const previousDisplay = await baseButton.innerText();
         let runStarts = 0;
         page.on('request', (request) => {
@@ -167,7 +172,7 @@ test.describe('Fundamental report against the real service', () => {
 
     test('real 5% refusal retains the previous report and draft', async ({ page }, info) => {
         const original = await waitForReport(page, await startAnalysis(page));
-        const baseButton = page.getByRole('button', { name: baseButtonName });
+        const baseButton = baseValueButton(page);
         const previousDisplay = await baseButton.innerText();
         const reason = 'Live UI acceptance of the service manual-growth refusal.';
         await page.getByLabel('Terminal growth (%)', { exact: true }).fill('5');
@@ -186,11 +191,24 @@ test.describe('Fundamental report against the real service', () => {
         const inspector = await openInspector(page, baseButton, rawBase(original));
         await verifyTechnicalIdentity(inspector, original, [baseResult(original).result_hash]);
         await closeInspector(page);
+        await expect.poll(async () => (await readSnapshot(page, refusedRun)).run_status, {
+            timeout: 180_000, intervals: [500, 1000, 2000],
+        }).toBe('completed');
         const snapshot = await readSnapshot(page, refusedRun);
-        expect(snapshot.completed_outputs.filter((item) => item.agent_id === 'fundamental_analysis' && item.artifact_id)).toHaveLength(0);
+        expect(snapshot.run_status).toBe('completed');
+        expect(snapshot.failure).toBeNull();
+        const refused = await captureFundamentalArtifact(page, refusedRun);
+        expect(refused.artifactId).not.toBe(original.artifactId);
+        if (refused.report.projection_type !== 'degraded') throw new Error('The refused run must persist a degraded Fundamental artifact.');
+        expect(refused.report.service_failure.code).toBe('MANUAL_OVERRIDE_INVALID');
+        expect(refused.report.service_failure.message).toContain('0.04');
+        expect(refused.report.service_failure.message).toContain('0.05');
+        expect('service_result' in refused.report, 'A refusal contains no successful calculation').toBe(false);
         await recordEvidence(page, info, 'revision-refused', original, {
             refusedRunId: refusedRun.runId,
-            refusal: 'MANUAL_OVERRIDE_INVALID',
+            refusedArtifactId: refused.artifactId,
+            refusedArtifactUrl: refused.artifactUrl,
+            refusal: refused.report.service_failure,
             retainedDraft: '5',
             previousDisplay,
             refusedRunStatus: snapshot.run_status,
@@ -233,7 +251,7 @@ test.describe('Fundamental report against the real service', () => {
         const captured = await openHistory(page);
         await expect(page.getByLabel('Terminal growth (%)', { exact: true })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Recalculate', exact: true })).toHaveCount(0);
-        const inspector = await openInspector(page, page.getByRole('button', { name: baseButtonName }), rawBase(captured));
+        const inspector = await openInspector(page, baseValueButton(page), rawBase(captured));
         await verifyTechnicalIdentity(inspector, captured, [baseResult(captured).result_hash, baseResult(captured).input_digest]);
         await closeInspector(page);
         const service = captured.report.service_result;
@@ -254,7 +272,7 @@ test.describe('Fundamental report against the real service', () => {
         await verifyTechnicalIdentity(revenueInspector, captured, [revenue.fact_id, revenue.source.content_hash]);
         await closeInspector(page);
 
-        await page.getByText('Sources & method', { exact: true }).click();
+        await page.locator('summary').filter({ hasText: /^Sources & method$/ }).click();
         const node = baseResult(captured).nodes.find((item) => item.node_id === 'revenue_1');
         if (!node?.value) throw new Error('The live history fixture requires the first revenue projection node.');
         const nodeInspector = await openInspector(page, page.getByRole('button', {
@@ -297,7 +315,7 @@ test.describe('Fundamental report against the real service', () => {
             await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${theme}\\b`));
             for (const width of [320, 390, 768, 1440]) {
                 await page.setViewportSize({ width, height: 1000 });
-                await expect(page.getByRole('button', { name: baseButtonName })).toBeVisible();
+                await expect(baseValueButton(page)).toBeVisible();
                 await expectNoPageOverflow(page);
                 await recordEvidence(page, info, `layout-${theme}-${width}`, captured, { theme, viewportWidth: width, reducedMotion: true });
             }
@@ -314,7 +332,7 @@ test.describe('Fundamental report against the real service', () => {
         await expectNoPageOverflow(page);
         await recordEvidence(page, info, 'layout-independent-narrow-pane', captured, { before, after });
         await page.setViewportSize({ width: 390, height: 1000 });
-        await verifySheetFocusCycle(page, page.getByRole('button', { name: baseButtonName }));
+        await verifySheetFocusCycle(page, baseValueButton(page));
         await recordEvidence(page, info, 'sheet-keyboard-focus-cycle', captured, { forwardCycle: true, reverseCycle: true, escape: true, focusReturn: true });
     });
 
@@ -329,13 +347,13 @@ test.describe('Fundamental report against the real service', () => {
             const page = await context.newPage();
             await login(page);
             const captured = await openHistory(page);
-            const trigger = page.getByRole('button', { name: baseButtonName });
+            const trigger = baseValueButton(page);
             await trigger.tap();
             const dialog = page.getByRole('dialog');
             await expect(dialog).toBeVisible();
             await expect(dialog.getByLabel('Original value · full precision', { exact: true })).toHaveValue(rawBase(captured));
             await recordEvidence(page, info, 'touch-evidence', captured, { hasTouch: true, viewportWidth: 390 });
-            await dialog.getByRole('button', { name: 'Close navigation', exact: true }).tap();
+            await dialog.getByRole('button', { name: 'Close evidence inspector', exact: true }).tap();
             await expect(dialog).not.toBeVisible();
         } finally {
             await context.close();

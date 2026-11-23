@@ -7,12 +7,13 @@ import { parseWorkflowActivitySnapshot } from '../src/features/workflow/workflow
 
 export type RunIdentity = { threadId: string; runId: string };
 type ValuationReport = Extract<FundamentalServiceArtifact, { projection_type: 'valuation' }>;
-export type CapturedReport = RunIdentity & {
+export type CapturedArtifact = RunIdentity & {
     artifactId: string;
     artifactUrl: string;
     createdAt: string;
-    report: ValuationReport;
+    report: FundamentalServiceArtifact;
 };
+export type CapturedReport = CapturedArtifact & { report: ValuationReport };
 
 export function requiredEnv(name: string): string {
     const value = process.env[name];
@@ -97,7 +98,7 @@ export async function readSnapshot(page: Page, run: RunIdentity) {
     return snapshot;
 }
 
-export async function captureReport(page: Page, run: RunIdentity): Promise<CapturedReport> {
+export async function captureFundamentalArtifact(page: Page, run: RunIdentity): Promise<CapturedArtifact> {
     const snapshot = await readSnapshot(page, run);
     const output = snapshot.completed_outputs.find((item) => item.agent_id === 'fundamental_analysis');
     if (!output?.artifact_id) throw new Error('The run has no persisted Fundamental artifact yet.');
@@ -107,13 +108,19 @@ export async function captureReport(page: Page, run: RunIdentity): Promise<Captu
     const response = await page.request.get(artifactUrl);
     expect(response.ok(), 'The exact-run artifact is readable').toBe(true);
     const envelopePayload: unknown = await response.json();
-    const envelope = parseArtifactEnvelope(envelopePayload, 'live artifact');
+    const envelope = parseArtifactEnvelope(envelopePayload, 'live artifact', 'financial_reports');
     const parsed = parseFundamentalArtifact(envelope.data);
-    if (parsed.fundamental_service?.projection_type !== 'valuation') {
-        throw new Error('The live fixture must produce a typed valuation report.');
-    }
+    if (!parsed.fundamental_service) throw new Error('The persisted artifact has no typed Fundamental service projection.');
     expect(parsed.ticker).toBe('MSFT');
     return { ...run, artifactId: output.artifact_id, artifactUrl, createdAt: envelope.created_at, report: parsed.fundamental_service };
+}
+
+export async function captureReport(page: Page, run: RunIdentity): Promise<CapturedReport> {
+    const captured = await captureFundamentalArtifact(page, run);
+    if (captured.report.projection_type !== 'valuation') {
+        throw new Error('The live fixture must produce a typed valuation report.');
+    }
+    return { ...captured, report: captured.report };
 }
 
 export function baseResult(captured: CapturedReport) {
