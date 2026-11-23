@@ -138,6 +138,9 @@ runtime tuple.
 | `FUNDAMENTAL_POSTGRES_HOST_PORT`, `FUNDAMENTAL_SERVICE_HOST_PORT` | Fundamental verification stack host ports. |
 | `FRONTEND_ALLOWED_ORIGINS`, `STAGING_BASE_URL` | URLs derived from the selected frontend or backend ports. |
 | `FUNDAMENTAL_SERVICE_URL` | Backend-to-Fundamental service location for the app overlay. |
+| `FUNDAMENTAL_DATA_RELEASE_PROFILE_ID` | Active immutable release profile selected by the backend deployment. Required for automatic valuation. |
+| `FUNDAMENTAL_COVERAGE_PROFILE` | Coverage profile for the configured released evidence. Required for automatic valuation. |
+| `FUNDAMENTAL_SOURCE_SELECTION_POLICY` | Source selection policy for the configured released evidence. Required for automatic valuation. |
 | `LLM_PROVIDER_SERVICE_URL`, `SEARCH_SERVICE_URL`, `MODEL_INFERENCE_FLS_URL`, `MODEL_INFERENCE_NEWS_URL`, `NEXT_PUBLIC_LANGGRAPH_URL` | Internal service locations. Change them only when the Compose topology changes. |
 
 ## Keep defaults unless the task requires a change
@@ -185,6 +188,8 @@ consumer. A key that exists only in an example is not a supported setting.
 - `FRED_API_KEY`
 - `FRONTEND_ALLOWED_ORIGINS`
 - `FRONTEND_HOST_PORT`
+- `FUNDAMENTAL_COVERAGE_PROFILE`
+- `FUNDAMENTAL_DATA_RELEASE_PROFILE_ID`
 - `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_HOST_FILE`
 - `FUNDAMENTAL_MODEL_TRUST_ROOTS_HOST_FILE`
 - `FUNDAMENTAL_POSTGRES_HOST_PORT`
@@ -220,6 +225,7 @@ consumer. A key that exists only in an example is not a supported setting.
 - `FUNDAMENTAL_SERVICE_RELEASE_PUBLISH_ORGANIZATIONS`
 - `FUNDAMENTAL_SERVICE_TOKEN`
 - `FUNDAMENTAL_SERVICE_URL`
+- `FUNDAMENTAL_SOURCE_SELECTION_POLICY`
 - `INFERENCE_ALLOW_INSECURE`
 - `INFERENCE_CPUS`
 - `INFERENCE_MEMORY_LIMIT`

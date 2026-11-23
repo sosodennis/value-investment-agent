@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from src.agents.fundamental.application.fundamental_service_port import (
+    FundamentalReleaseSelector,
     FundamentalServiceFailure,
 )
 from src.agents.fundamental.application.workflow_orchestrator.orchestrator import (
@@ -18,13 +19,16 @@ from src.agents.fundamental.application.workflow_orchestrator.service_valuation_
     run_service_valuation_flow,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalFactsReadResultV1,
+    FundamentalActiveReleaseV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
+)
+from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalValuationEvidenceReadResultV1,
     FundamentalValuationPreparationResultV1,
 )
-from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.internal_services import (
     InternalPrincipal,
@@ -66,6 +70,13 @@ _FCFF_REQUIRED_FIELDS = [
     "common_shares_outstanding",
     "other_share_classes",
 ]
+
+
+_RELEASE_SELECTOR = FundamentalReleaseSelector(
+    profile_id="configured-release-v1",
+    coverage_profile="us-gaap-public-v1",
+    source_selection_policy="pit-v1",
+)
 
 
 class _Runtime:
@@ -224,6 +235,7 @@ class _Client:
                 "policy_id": validated_input["policy_id"],
                 "policy_version": provenance["policy_version"],
                 "policy_digest": "1" * 64,
+                "selection_mode": "pinned",
                 "resolved_fields": {},
                 "precedence": {},
                 "input_digest": "a" * 64,
@@ -272,6 +284,7 @@ class _Client:
                 "policy_id": input_payload["policy_id"],
                 "policy_version": provenance["policy_version"],
                 "policy_digest": "1" * 64,
+                "selection_mode": "pinned",
                 "resolved_fields": {},
                 "precedence": {},
                 "input_digest": calculation_digest,
@@ -284,6 +297,8 @@ class _Client:
                 }
             ],
             "trace": {
+                "valuation_timestamp": valuation_context["valuation_timestamp"],
+                "fiscal_period_selector": {"mode": "latest_complete", "count": 3},
                 "source_selection_policy": valuation_context["source_selection_policy"],
                 "source_selection_policy_version": "pit-v1",
                 "snapshot_id": valuation_context["data_snapshot_id"],
@@ -301,6 +316,7 @@ class _Client:
             "issue_codes": [],
             "missing_evidence": [],
             "snapshot_id": valuation_context["data_snapshot_id"],
+            "valuation_timestamp": valuation_context["valuation_timestamp"],
             "evaluated_at": "2026-11-04T00:00:00Z",
             "correlation_id": "trace-281",
         }
@@ -329,6 +345,7 @@ class _Client:
             ]
             result = {
                 "status": "verified",
+                "result_hash": "8" * 64,
                 "input_digest": self.uncertainty_report_digest,
                 "base": base,
                 "requested_samples": monte_carlo["samples"],
@@ -370,7 +387,7 @@ class _Client:
                 "security_id": self.facts_identity.get("security_id"),
                 "concept": f"us-gaap:{fact_id}",
                 "normalized_field": fact_id,
-                "value": 100,
+                "value": "100",
                 "unit": "USD",
                 "scale": 0,
                 "currency": "USD",
@@ -563,6 +580,7 @@ class _FactsOnlyClient(_Client):
         resolved_fact_ids: list[str] | None = None,
         snapshot_timestamp: str = "2026-11-01T00:00:00Z",
         preparation_padding: str = "",
+        automatic_model: dict[str, str] | None = None,
     ) -> None:
         identity = _resolved_identity().identity.model_dump(mode="json")
         self.resolved_fact_ids = list(resolved_fact_ids or self._fact_ids)
@@ -575,31 +593,13 @@ class _FactsOnlyClient(_Client):
         self.identity = identity
         self.snapshot_timestamp = snapshot_timestamp
         self.preparation_padding = preparation_padding
+        self.automatic_model = automatic_model
 
     async def resolve_identity(self, request, **_kwargs):
         self.calls.append(("resolve_identity", request.model_dump(mode="json")))
         return _resolved_identity()
 
     async def execute(self, operation, input_payload, **kwargs):
-        if operation == "ingest_sec_data":
-            self.calls.append((operation, dict(input_payload)))
-            self.facts_valuation_timestamp = str(input_payload["valuation_timestamp"])
-            result = {
-                "contract_version": "fundamental.v1",
-                "status": "created",
-                "identity": dict(input_payload["identity"]),
-                "valuation_timestamp": input_payload["valuation_timestamp"],
-                "snapshot_id": "snapshot-aapl-ingested",
-                "manifest_digest": "b" * 64,
-                "canonical_fact_ids": list(self._fact_ids),
-                "quality_status": "verified",
-            }
-            return FundamentalServiceResponseV1(
-                correlation_id="trace-facts-only",
-                contract_version="internal.v1",
-                schema_version="fundamental.v1",
-                result=result,
-            )
         if operation == "resolve_snapshot":
             self.facts_valuation_timestamp = self.snapshot_timestamp
             self.resolved_snapshot = {
@@ -607,6 +607,9 @@ class _FactsOnlyClient(_Client):
                 "snapshot_id": "snapshot-aapl-resolved",
                 "historical_facts": self.resolved_fact_ids,
                 "identity": self.identity,
+                "identity_selection_policy": input_payload.get(
+                    "identity_selection_policy", "exact-identity-v1"
+                ),
                 "valuation_timestamp": input_payload["valuation_timestamp"],
                 "snapshot_timestamp": self.snapshot_timestamp,
                 "source_selection_policy": "pit-v1",
@@ -623,6 +626,29 @@ class _FactsOnlyClient(_Client):
                 },
             }
         return await super().execute(operation, input_payload, **kwargs)
+
+    async def read_active_release(self, profile_id, **kwargs):
+        self.calls.append(("read_active_release", {"profile_id": profile_id}))
+        return FundamentalActiveReleaseV1.model_validate(
+            {
+                "active": {
+                    "profile_id": profile_id,
+                    "manifest_digest": "c" * 64,
+                    "revision": 1,
+                    "activated_at": "2026-11-01T00:00:00Z",
+                },
+                "manifest": {
+                    "profile_id": profile_id,
+                    "manifest_digest": "c" * 64,
+                    "required_fields": _FCFF_REQUIRED_FIELDS,
+                },
+                **(
+                    {"automatic_model": self.automatic_model}
+                    if self.automatic_model is not None
+                    else {}
+                ),
+            }
+        )
 
     async def prepare_valuation(self, input_payload, **kwargs):
         self.calls.append(("prepare_valuation", dict(input_payload)))
@@ -661,7 +687,11 @@ class _FactsOnlyClient(_Client):
                 "quality_status": "provisional",
                 "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
                 "missing_evidence": [],
-                "historical_metrics": {},
+                "historical_metrics": {
+                    "profile_id": "fcff-valuation-requirements-v3",
+                    "profile_digest": "d" * 64,
+                    "quality_status": "provisional",
+                },
                 "assumptions_evidence": [],
                 "input": prepared,
                 "preparation_digest": "e" * 64,
@@ -679,6 +709,7 @@ class _FactsOnlyClient(_Client):
                     "data_release_manifest_digest"
                 ],
                 "snapshot_manifest_digest": facts.snapshot_manifest_digest,
+                "mapping_version": "mapping-v1",
                 "identity": facts.identity.model_dump(mode="json"),
                 "valuation_timestamp": facts.valuation_timestamp,
                 "model_id": input_payload["model_id"],
@@ -716,6 +747,7 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
             runtime,
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -835,6 +867,7 @@ async def test_cutover_binds_release_digest_to_context_without_provenance_leak()
             _Runtime(),
             {"valuation_request": payload},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -855,10 +888,19 @@ async def test_cutover_binds_release_digest_to_context_without_provenance_leak()
 
 
 @pytest.mark.asyncio
-async def test_cutover_enriches_compact_caller_request_before_snapshot_resolution() -> (
-    None
-):
-    client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
+@pytest.mark.parametrize("configured_model", [False, True])
+async def test_cutover_enriches_compact_caller_request_before_snapshot_resolution(
+    configured_model,
+) -> None:
+    client = _FactsOnlyClient(
+        snapshot_timestamp="2026-11-01T00:00:00Z",
+        preparation_padding="evidence" * 20000,
+        automatic_model=(
+            {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2"}
+            if configured_model
+            else None
+        ),
+    )
     runtime = _Runtime()
     compact = {
         "assumptions": {"terminal_growth": "0.02"},
@@ -876,24 +918,27 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
             {
                 "valuation_request": compact,
                 "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
-                "fundamental_analysis": {"model_type": "dcf_standard"},
+                "fundamental_analysis": {
+                    "model_type": "dcf_growth" if configured_model else "dcf_standard"
+                },
             },
             client=client,
             clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
 
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
-        "ingest_sec_data",
+        "read_active_release",
         "resolve_snapshot",
         "prepare_valuation",
         "validate_with_policy",
         "calculate",
         "read_valuation_evidence",
     ]
-    assert client.calls[1][1]["identity"]["issuer_id"] == "0000320193"
+    assert client.calls[2][1]["identity"]["issuer_id"] == "0000320193"
     assert client.calls[2][1]["required_fields"] == _FCFF_REQUIRED_FIELDS
     assert client.calls[3][1]["snapshot_id"] == "snapshot-aapl-resolved"
     assert client.calls[4][1]["historical_facts"] == _FactsOnlyClient._fact_ids
@@ -913,11 +958,106 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
     automatic_preparation = service_artifact["automatic_preparation"]
     assert isinstance(automatic_preparation, dict)
     assert automatic_preparation["profile_digest"] == "d" * 64
+    assert (
+        automatic_preparation["input"]["provenance"]["source_evidence"]
+        == "evidence" * 20000
+    )
     facts = service_artifact["facts"]
     assert isinstance(facts, dict)
     assert facts["data_release_manifest_digest"] == "c" * 64
+    assert facts["mapping_version"] == "mapping-v1"
     assert facts["provenance"]["fact_ids"] == _FactsOnlyClient._fact_ids
     assert facts["hashes"]["source_content_hashes"] == ["f" * 64]
+    final_state = result.update["fundamental_analysis"]
+    assert final_state["model_type"] == artifact["model_type"] == "fcff_dcf"
+    assert final_state["model_version"] == "fcff_dcf-v2"
+    if configured_model:
+        assert "configured release" in final_state["model_selection_reasoning"]
+        assert artifact["reasoning"] == final_state["model_selection_reasoning"]
+        assert "fcff_dcf-v2" in artifact["reasoning"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [("model_id", "transition_fcff_dcf"), ("model_version", "fcff_dcf-v99")],
+)
+async def test_validation_cannot_change_configured_model_before_calculation(
+    field, value
+):
+    class ChangedModel(_FactsOnlyClient):
+        async def execute(self, operation, input_payload, **kwargs):
+            response = await super().execute(operation, input_payload, **kwargs)
+            if operation == "validate_with_policy":
+                result = dict(response.result)
+                result["input"] = {**result["input"], field: value}
+                return response.model_copy(update={"result": result})
+            return response
+
+    client = ChangedModel(
+        automatic_model={"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2"}
+    )
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {
+                "valuation_request": {},
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_growth"},
+            },
+            client=client,
+            release_selector=_RELEASE_SELECTOR,
+        )
+    finally:
+        reset_request_principal(token)
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "INPUT_MODEL_CHANGED"
+    )
+    assert result.update["fundamental_analysis"]["model_type"] == "fcff_dcf"
+    assert result.update["fundamental_analysis"]["model_version"] == "fcff_dcf-v2"
+    assert "calculate" not in [operation for operation, _ in client.calls]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mapping_version", [None, "different-mapping"])
+async def test_cutover_refuses_evidence_from_a_different_mapping(mapping_version):
+    class ChangedEvidenceMapping(_FactsOnlyClient):
+        async def read_valuation_evidence(self, input_payload, **kwargs):
+            response = await super().read_valuation_evidence(input_payload, **kwargs)
+            return response.model_copy(update={"mapping_version": mapping_version})
+
+    client = ChangedEvidenceMapping()
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "valuation_request": {},
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            release_selector=_RELEASE_SELECTOR,
+        )
+    finally:
+        reset_request_principal(token)
+    context = result.update["fundamental_analysis"]
+    assert context["service_failure"]["code"] == "UPSTREAM_MALFORMED"
+    assert context["input_digest"] is None
+    assert context["result_hash"] is None
+    assert runtime.saved_calls[0]["data"]["fundamental_service"]["projection_type"] == (
+        "degraded"
+    )
 
 
 @pytest.mark.asyncio
@@ -937,12 +1077,14 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
                 "fundamental_analysis": {"model_type": "dcf_standard"},
             },
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
 
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
+        "read_active_release",
         "resolve_snapshot",
     ]
     assert client.facts_calls == [
@@ -982,6 +1124,48 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
     assert artifact["financial_reports"] == []
 
 
+async def test_facts_only_adopts_the_service_canonical_filing_identity():
+    client = _FactsOnlyClient()
+    client.identity = {
+        **client.identity,
+        "issuer_name": "APPLE INC",
+        "share_class": "CommonStock",
+    }
+    client.facts_identity = dict(client.identity)
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "company_profile": CompanyProfile(
+                    ticker="AAPL",
+                    name="Apple Inc.",
+                    sector="Technology",
+                    industry="Consumer Electronics",
+                ),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            release_selector=_RELEASE_SELECTOR,
+        )
+    finally:
+        reset_request_principal(token)
+    assert result.update["fundamental_analysis"]["valuation_status"] == "not_requested"
+    persisted = runtime.saved_calls[0]["data"]["fundamental_service"]
+    assert persisted["facts"]["identity"] == client.identity
+    assert (
+        next(payload for op, payload in client.calls if op == "resolve_snapshot")[
+            "identity_selection_policy"
+        ]
+        == "sec-ticker-series-v1"
+    )
+
+
 @pytest.mark.asyncio
 async def test_production_orchestrator_persists_facts_artifact() -> None:
     client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
@@ -999,6 +1183,7 @@ async def test_production_orchestrator_persists_facts_artifact() -> None:
                 "fundamental_analysis": {"model_type": "dcf_standard"},
             },
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1043,12 +1228,14 @@ async def test_cutover_rejects_facts_outside_the_resolved_snapshot(
             },
             client=client,
             clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
 
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
+        "read_active_release",
         "resolve_snapshot",
     ]
     assert len(client.facts_calls) == 1
@@ -1106,6 +1293,7 @@ async def test_cutover_rejects_unbound_policy_evidence(
             _Runtime(),
             {"valuation_request": _input()},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1143,6 +1331,7 @@ async def test_cutover_binds_resolved_source_policy_version_to_calculation_trace
             _Runtime(),
             {"valuation_request": payload},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1234,6 +1423,7 @@ async def test_cutover_accepts_canonical_defaults_without_changing_caller_values
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1260,6 +1450,7 @@ async def test_cutover_routes_explicit_monte_carlo_controls_to_calculation_repor
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input(monte_carlo=True)}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1273,9 +1464,9 @@ async def test_cutover_routes_explicit_monte_carlo_controls_to_calculation_repor
     assert projection["input_digest"] == "a" * 64
     assert projection["service_result"]["input_digest"] == "a" * 64
     summary = result.update["fundamental_analysis"]["fundamental_service"][
-        "uncertainty_summary"
+        "service_result"
     ]
-    assert summary["seed"] == 7
+    assert summary["seed"] == "7"
     assert summary["requested_samples"] == 10
     assert summary["base"]["input_digest"] == "b" * 64
 
@@ -1295,6 +1486,7 @@ async def test_cutover_rejects_uncertainty_report_for_different_caller_input() -
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1328,6 +1520,7 @@ async def test_cutover_rejects_uncertainty_evidence_reference_mismatch() -> None
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1358,6 +1551,7 @@ async def test_cutover_rejects_unapproved_assumption_defaults() -> None:
             _Runtime(),
             {"valuation_request": payload},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1383,6 +1577,7 @@ async def test_cutover_accepts_service_defined_optional_assumption_defaults() ->
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1407,6 +1602,7 @@ async def test_cutover_rejects_service_assumption_rewrite() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1438,6 +1634,7 @@ async def test_cutover_rejects_service_uncertainty_rewrite() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1461,6 +1658,7 @@ async def test_cutover_rejects_calculation_digest_mismatch() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1484,6 +1682,7 @@ async def test_cutover_rejects_uncertainty_base_digest_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1507,6 +1706,7 @@ async def test_cutover_rejects_uncertainty_base_artifact_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1532,6 +1732,7 @@ async def test_cutover_rejects_uncertainty_base_policy_trace_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1564,6 +1765,7 @@ async def test_cutover_rejects_wrong_model_version_or_missing_artifact_reference
                 _Runtime(),
                 {"valuation_request": _input()},
                 client=client,
+                release_selector=_RELEASE_SELECTOR,
             )
         finally:
             reset_request_principal(token)
@@ -1594,6 +1796,7 @@ async def test_service_failure_is_degraded_without_a_local_calculation() -> None
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1638,3 +1841,256 @@ def test_service_input_rejects_extensions_outside_the_frozen_contract(
         read_service_valuation_input(
             {"valuation_request": {**_input(monte_carlo=True), field: {}}}
         )
+
+
+class _PreparationOutcomeClient(_FactsOnlyClient):
+    def __init__(self, status: str) -> None:
+        super().__init__()
+        self.status = status
+
+    async def prepare_valuation(self, input_payload, **kwargs):
+        prepared = await super().prepare_valuation(input_payload, **kwargs)
+        return FundamentalValuationPreparationResultV1.model_validate(
+            {
+                **prepared.model_dump(mode="json", exclude_unset=True),
+                "status": self.status,
+                "quality_status": "abstain",
+                "issue_codes": ["MISSING_EVIDENCE"],
+                "missing_evidence": ["assumptions.wacc.risk_free_rate"],
+                "input": None,
+            }
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["requires_input", "abstained", "unsupported"])
+async def test_preparation_outcome_publishes_a_report_without_execution(
+    status: str,
+) -> None:
+    runtime = _Runtime()
+    client = _PreparationOutcomeClient(status)
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "valuation_request": {
+                    "assumptions": {},
+                    "uncertainty": {"mode": "none"},
+                },
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {
+                    "model_type": "dcf_standard",
+                    "artifact": {"reference": {"artifact_id": "previous-success"}},
+                    "input_digest": "previous-input",
+                    "result_hash": "previous-result",
+                    "assumption_breakdown": {"source": "previous-execution"},
+                },
+            },
+            client=client,
+            clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+            release_selector=_RELEASE_SELECTOR,
+        )
+    finally:
+        reset_request_principal(token)
+    assert all(
+        operation not in {"validate", "validate_with_policy", "calculate"}
+        for operation, _ in client.calls
+    )
+    assert len(runtime.saved_calls) == 1
+    saved = runtime.saved_calls[0]
+    assert saved["produced_by"] == "fundamental_analysis.service_preparation_outcome"
+    report = FinancialReportsArtifactData.model_validate(
+        saved["data"]
+    ).fundamental_service
+    assert report.projection_type == "preparation_outcome"
+    assert report.valuation_status == status
+    assert report.missing_evidence == ("assumptions.wacc.risk_free_rate",)
+    assert report.automatic_preparation.input is None
+    context = result.update["fundamental_analysis"]
+    assert (
+        context["artifact"]["reference"]["artifact_id"] == "service-valuation-artifact"
+    )
+    assert context["input_digest"] is None
+    assert context["result_hash"] is None
+    assert context["assumption_breakdown"] is None
+    assert result.update["workflow_activity_updates"]["calculation"] == "skipped"
+    assert (
+        result.update["artifact_references"]["financial_reports"]["artifact_id"]
+        == "service-valuation-artifact"
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_publication_clears_previous_execution_and_artifact() -> None:
+    class UnavailableStorage(_Runtime):
+        async def save_financial_reports(self, **kwargs):
+            raise OSError("storage unavailable")
+
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            UnavailableStorage(),
+            {
+                "valuation_request": _input(),
+                "fundamental_analysis": {
+                    "model_type": "dcf_standard",
+                    "artifact": {"reference": {"artifact_id": "previous-success"}},
+                    "input_digest": "previous-input",
+                    "result_hash": "previous-result",
+                    "automatic_preparation": {
+                        "preparation_digest": "previous-preparation"
+                    },
+                },
+            },
+            client=_Client(),
+        )
+    finally:
+        reset_request_principal(token)
+    context = result.update["fundamental_analysis"]
+    assert context["artifact"] is None
+    assert context["input_digest"] is None
+    assert context["result_hash"] is None
+    assert context["automatic_preparation"] is None
+    assert context["service_failure"]["code"] == "ARTIFACT_SAVE_FAILED"
+    assert context["artifact_publication_failure"]["code"] == "ARTIFACT_SAVE_FAILED"
+    assert result.update["artifact_references"] == {}
+    assert result.update["workflow_activity_updates"]["calculation"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_uncertainty_binding_quality_and_exact_values_keep_their_scopes() -> None:
+    class AbstainingUncertainty(_Client):
+        async def execute(self, operation, input_payload, **kwargs):
+            response = await super().execute(operation, input_payload, **kwargs)
+            if operation != "calculate":
+                return response
+            result = dict(response.result)
+            result.update(
+                {
+                    "status": "abstain",
+                    "valid_samples": 1,
+                    "invalid_samples": 9,
+                    "invalid_reasons": {"CALCULATION_REFUSAL": 9},
+                    "quantiles": {
+                        "p05": "-0.00000000000000000001",
+                        "p50": "0",
+                        "p95": "1E+9999",
+                    },
+                    "convergence_diagnostics": {
+                        "minimum_valid_samples": 10,
+                        "invalid_ratio": "0.9",
+                        "converged": False,
+                    },
+                    "sensitivity": {
+                        "assumptions.terminal_growth": ["-1.23", "0", "1E+9999"]
+                    },
+                }
+            )
+            base = dict(result["base"])
+            base["intrinsic_value"] = "123456789012345678901234567890.123456789"
+            base["per_share_value"] = "0"
+            base["nodes"] = [
+                {
+                    "node_id": "equity",
+                    "formula": "actual service formula",
+                    "inputs": ["fcff"],
+                    "value": "-1E+9999",
+                    "unit": "USD",
+                    "trace": {
+                        "expression": "actual service expression",
+                        "inputs": ["fact-revenue"],
+                    },
+                }
+            ]
+            result["base"] = base
+            return response.model_copy(update={"result": result})
+
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {"valuation_request": _input(monte_carlo=True)},
+            client=AbstainingUncertainty(),
+        )
+    finally:
+        reset_request_principal(token)
+    report = FinancialReportsArtifactData.model_validate(
+        runtime.saved_calls[0]["data"]
+    ).fundamental_service
+    assert report.projection_type == "valuation"
+    assert report.input_digest == "a" * 64
+    assert report.result_hash == "8" * 64
+    assert report.quality_status == "abstain"
+    assert report.quality.calculation_status == "verified"
+    assert report.service_result.base.input_digest == "b" * 64
+    assert report.service_result.base.result_hash == "b" * 64
+    assert (
+        report.service_result.base.intrinsic_value
+        == "123456789012345678901234567890.123456789"
+    )
+    assert report.service_result.base.per_share_value == "0"
+    assert report.service_result.base.nodes[0].value == "-1E+9999"
+    assert report.service_result.quantiles["p95"] == "1E+9999"
+    assert report.service_result.invalid_reasons == {"CALCULATION_REFUSAL": 9}
+    assert report.service_result.convergence_diagnostics.converged is False
+    assert report.service_result.sensitivity["assumptions.terminal_growth"] == (
+        "-1.23",
+        "0",
+        "1E+9999",
+    )
+    assert report.service_result.base.policy_resolution.input_digest == "b" * 64
+    assert (
+        report.service_result.base.valuation_timestamp.isoformat()
+        == "2026-11-04T00:00:00+00:00"
+    )
+    assert result.update["fundamental_analysis"]["quality_status"] == "abstain"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("seed", [18446744073709551615, -9223372036854775808])
+async def test_public_uncertainty_seed_is_exact_text_without_changing_service_controls(
+    seed: int,
+) -> None:
+    payload = _input(monte_carlo=True)
+    payload["uncertainty"]["seed"] = seed
+    client = _Client()
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        await run_service_valuation_flow(
+            runtime, {"valuation_request": payload}, client=client
+        )
+    finally:
+        reset_request_principal(token)
+    public_report = runtime.saved_calls[0]["data"]["fundamental_service"]
+    assert public_report["service_result"]["seed"] == str(seed)
+    assert public_report["service_result"]["result_hash"] == "8" * 64
+    assert public_report["result_hash"] == "8" * 64
+    assert public_report["service_result"]["input_digest"] == "a" * 64
+    assert public_report["valuation_input"]["uncertainty"]["seed"] == seed
+    assert client.calls[1][1]["uncertainty"]["seed"] == seed
+    assert isinstance(client.calls[1][1]["uncertainty"]["seed"], int)

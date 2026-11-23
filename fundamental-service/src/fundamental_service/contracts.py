@@ -890,11 +890,15 @@ class SourceSnapshotV1(StrictModel):
         return self
 
 
+SnapshotIdentitySelectionPolicy = Literal["exact-identity-v1", "sec-ticker-series-v1"]
+
+
 class SnapshotResolutionRequestV1(StrictModel):
     """Caller-owned point-in-time selector for an immutable data snapshot."""
 
     contract_version: Literal["fundamental.v1"]
     release_profile_id: str | None = Field(default=None, min_length=1)
+    identity_selection_policy: SnapshotIdentitySelectionPolicy = "exact-identity-v1"
     identity: IdentityV1
     valuation_timestamp: datetime
     fiscal_period_selector: FiscalPeriodSelectorV1 | None = None
@@ -931,6 +935,7 @@ class FactsReadRequestV1(StrictModel):
 class SnapshotResolutionV1(StrictModel):
     """Immutable references needed to construct a complete valuation input."""
 
+    identity_selection_policy: SnapshotIdentitySelectionPolicy = "exact-identity-v1"
     contract_version: Literal["fundamental.v1"]
     snapshot_id: str = Field(min_length=1)
     data_release_manifest_digest: str | None = Field(
@@ -1531,8 +1536,34 @@ class SensitivityInputV1(StrictModel):
     values: tuple[object, ...] = Field(min_length=2)
 
 
+class ConditionalQuantileBasisV1(StrictModel):
+    conditioning: Literal["retained_base_joint_hypotheses"] = (
+        "retained_base_joint_hypotheses"
+    )
+    joint_scenarios_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    conditioning_assumptions_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    policy_version: Literal["conditional-fcff-monte-carlo-policy-v1"] = (
+        "conditional-fcff-monte-carlo-policy-v1"
+    )
+    sampled_paths: tuple[
+        Literal["assumptions.forecast.revenue_growth[0]"],
+        Literal["assumptions.forecast.operating_margin[0]"],
+        Literal["assumptions.terminal_growth"],
+    ]
+    hypothesis_probabilities: Literal["not_assigned"] = "not_assigned"
+
+
+class ConditionalRevisionRefV1(StrictModel):
+    artifact_id: str = Field(pattern=r"^conditional-revision-v1-[0-9a-f]{64}$")
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    media_type: Literal["application/json"] = "application/json"
+
+
 class UncertaintyV1(StrictModel):
     mode: Literal["none", "scenarios", "monte_carlo"]
+    quantile_basis: ConditionalQuantileBasisV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     parameters: tuple[DistributionParameterV1, ...] = ()
     samples: int | None = Field(default=None, ge=1, le=1_000_000)
     seed: int | None = None
@@ -1570,6 +1601,8 @@ class UncertaintyV1(StrictModel):
                 raise ValueError("correlations must reference distinct parameter paths")
             if not Decimal("-1") <= correlation <= Decimal("1"):
                 raise ValueError("correlations must be between -1 and 1")
+        if self.quantile_basis is not None and self.mode != "monte_carlo":
+            raise ValueError("conditional quantile basis requires Monte Carlo")
         if self.mode == "none" and (
             self.parameters
             or self.samples is not None
@@ -1621,6 +1654,9 @@ class ValuationContextV1(StrictModel):
 
 
 class ProvenanceInputV1(StrictModel):
+    conditional_revision_ref: ConditionalRevisionRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     snapshot_id: str = Field(min_length=1)
     fact_ids: tuple[str, ...] = ()
     fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(

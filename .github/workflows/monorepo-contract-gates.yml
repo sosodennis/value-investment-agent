@@ -713,6 +713,16 @@ jobs:
           POSTGRES_DB: langgraph
         run: uv run pytest tests/notifications -q
 
+      - name: Run retained valuation source PostgreSQL regression
+        env:
+          FUNDAMENTAL_REVISION_POSTGRES_TEST: "1"
+          POSTGRES_HOST: 127.0.0.1
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: langgraph
+        run: uv run pytest tests/agents/fundamental/test_valuation_revisions.py::test_real_repository_reads_direct_output_and_refuses_child_source -q
+
   frontend-lint-type-test:
     runs-on: ubuntu-latest
     defaults:

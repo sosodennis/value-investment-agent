@@ -1,7 +1,7 @@
 import type { components } from '@/types/generated/api-contract';
 import { csrfHeaders } from '@/lib/auth-api';
 import { isRecord } from '@/types/preview';
-import type { FundamentalAutomaticPreparation } from '@/types/agents/fundamental-service-facts';
+import { parseApiErrorMessage } from '@/types/protocol';
 
 export type ForwardEvidenceResearchRequest =
     components['schemas']['ForwardEvidenceResearchRequest'];
@@ -9,26 +9,6 @@ export type ForwardEvidenceReview =
     components['schemas']['FundamentalForwardEvidenceReviewResultV1'];
 export type ForwardEvidenceClaim =
     components['schemas']['FundamentalForwardEvidenceClaimV1'];
-
-export type ForwardEvidenceManualOverride = {
-    contract_version: 'fundamental.v1';
-    preparation: FundamentalAutomaticPreparation;
-    path: string;
-    value: string;
-    provenance: {
-        author: string;
-        modified_at: string;
-        reason: string;
-        automatic_preparation_digest: string;
-        forward_reference: {
-            claim_id: string;
-            source_url: string;
-            source_content_hash: string;
-            citation: string;
-            license_reference: string;
-        };
-    };
-};
 
 const parseRecord = (value: unknown, context: string): Record<string, unknown> => {
     if (!isRecord(value) || Array.isArray(value)) {
@@ -114,6 +94,7 @@ const parseClaim = (value: unknown, context: string): ForwardEvidenceClaim => {
         metric !== 'revenue_growth' &&
         metric !== 'operating_margin' &&
         metric !== 'reinvestment_rate' &&
+        metric !== 'terminal_growth' &&
         metric !== 'debt_term'
     ) {
         throw new TypeError(`${context}.metric is unsupported.`);
@@ -199,6 +180,10 @@ export function parseForwardEvidenceReview(value: unknown): ForwardEvidenceRevie
     if (result.contract_version !== 'fundamental.v1' || result.label !== 'forward-looking external evidence') {
         throw new TypeError('forward evidence response has an invalid contract identity.');
     }
+    const reviewRef = result.review_ref == null ? null : parseRecord(result.review_ref, 'forward evidence review reference');
+    if (reviewRef && (typeof reviewRef.artifact_id !== 'string' || !/^forward-review-v1-[0-9a-f]{64}$/.test(reviewRef.artifact_id) || reviewRef.media_type !== 'application/json')) {
+        throw new TypeError('forward evidence review reference is invalid.');
+    }
     return {
         contract_version: 'fundamental.v1',
         status: parseStatus(result.status, 'forward evidence response.result.status'),
@@ -217,20 +202,29 @@ export function parseForwardEvidenceReview(value: unknown): ForwardEvidenceRevie
         budget: parseBudget(result.budget, 'forward evidence response.result.budget'),
         usage: parseUsage(result.usage, 'forward evidence response.result.usage'),
         reference_digest: parseDigest(result.reference_digest, 'forward evidence response.result.reference_digest'),
+        review_ref: reviewRef ? {
+            artifact_id: parseString(reviewRef.artifact_id, 'forward evidence review artifact id'),
+            content_hash: parseDigest(reviewRef.content_hash, 'forward evidence review content hash'),
+            media_type: 'application/json',
+        } : null,
     };
 }
 
 export async function researchForwardEvidence(
     request: ForwardEvidenceResearchRequest,
+    options: { signal?: AbortSignal } = {},
 ): Promise<ForwardEvidenceReview> {
     const response = await fetch('/api/v1/fundamental/forward-evidence/research', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify(request),
+        signal: options.signal,
     });
     if (!response.ok) {
-        throw new Error(`Forward evidence research failed (${response.status}).`);
+        const payload: unknown = await response.json().catch(() => null);
+        throw new Error(parseApiErrorMessage(payload) ?? `Forward evidence research failed (${response.status}).`);
     }
-    return parseForwardEvidenceReview(await response.json());
+    const payload: unknown = await response.json();
+    return parseForwardEvidenceReview(payload);
 }

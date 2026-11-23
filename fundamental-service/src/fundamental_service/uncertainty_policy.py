@@ -5,9 +5,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from decimal import Decimal
 from statistics import mean
-from typing import Final
+from typing import Final, Literal
 
 from .contracts import (
+    ConditionalQuantileBasisV1,
+    ScenarioInputV1,
     DistributionParameterV1,
     DistributionProvenanceV1,
     UncertaintyV1,
@@ -206,10 +208,99 @@ def build_default_uncertainty(
     )
 
 
+CONDITIONAL_UNCERTAINTY_POLICY_VERSION = "conditional-fcff-monte-carlo-policy-v1"
+CONDITIONAL_SAMPLED_PATHS: tuple[
+    Literal["assumptions.forecast.revenue_growth[0]"],
+    Literal["assumptions.forecast.operating_margin[0]"],
+    Literal["assumptions.terminal_growth"],
+] = (
+    "assumptions.forecast.revenue_growth[0]",
+    "assumptions.forecast.operating_margin[0]",
+    "assumptions.terminal_growth",
+)
+
+
+@using_valuation_context
+def build_conditional_uncertainty(
+    request: ValuationInputV1,
+    *,
+    historical_metrics: Iterable[object],
+    joint_scenarios: tuple[ScenarioInputV1, ...],
+) -> UncertaintyV1:
+    """Sample the base while retaining immutable joint stress hypotheses."""
+    forecast = request.assumptions.forecast
+    if forecast is None or request.assumptions.terminal_growth is None:
+        raise ValueError("conditional uncertainty requires FCFF assumptions")
+    metrics = tuple(historical_metrics)
+    parameters = (
+        _metric_parameter(
+            "revenue_growth",
+            _records(metrics, "revenue_growth"),
+            path=CONDITIONAL_SAMPLED_PATHS[0],
+            base_value=forecast.revenue_growth[0],
+            policy_version=CONDITIONAL_UNCERTAINTY_POLICY_VERSION,
+        ),
+        _metric_parameter(
+            "operating_margin",
+            _records(metrics, "operating_margin"),
+            path=CONDITIONAL_SAMPLED_PATHS[1],
+            base_value=forecast.operating_margin[0],
+            policy_version=CONDITIONAL_UNCERTAINTY_POLICY_VERSION,
+        ),
+        _policy_prior(
+            "terminal_growth",
+            path=CONDITIONAL_SAMPLED_PATHS[2],
+            mode=request.assumptions.terminal_growth,
+            policy_version=CONDITIONAL_UNCERTAINTY_POLICY_VERSION,
+        ),
+    )
+    joint_digest = sha256_digest(joint_scenarios)
+    basis = ConditionalQuantileBasisV1(
+        joint_scenarios_digest=joint_digest,
+        conditioning_assumptions_digest=sha256_digest(
+            {
+                "capital_bridge": request.assumptions.capital_bridge,
+                "reinvestment_rate": forecast.reinvestment_rate,
+            }
+        ),
+        sampled_paths=CONDITIONAL_SAMPLED_PATHS,
+    )
+    financial_base = request.model_copy(
+        update={
+            "uncertainty": UncertaintyV1(mode="none"),
+            "provenance": request.provenance.model_copy(
+                update={"conditional_revision_ref": None}
+            ),
+            "input_digest": None,
+        }
+    ).with_digest()
+    seed = sha256_digest(
+        {
+            "base_input_digest": financial_base.input_digest,
+            "joint_scenarios_digest": joint_digest,
+            "policy_version": CONDITIONAL_UNCERTAINTY_POLICY_VERSION,
+            "sampler_version": DEFAULT_SAMPLER_VERSION,
+        }
+    )
+    return UncertaintyV1(
+        mode="monte_carlo",
+        parameters=parameters,
+        samples=DEFAULT_SAMPLE_COUNT,
+        seed=int(seed[:16], 16),
+        policy_version=CONDITIONAL_UNCERTAINTY_POLICY_VERSION,
+        invalid_draw_policy=DEFAULT_INVALID_DRAW_POLICY,
+        scenarios=joint_scenarios,
+        quantile_basis=basis,
+    )
+
+
 __all__ = [
     "DEFAULT_INVALID_DRAW_POLICY",
     "DEFAULT_SAMPLE_COUNT",
     "DEFAULT_SAMPLER_VERSION",
     "DEFAULT_UNCERTAINTY_POLICY_VERSION",
     "build_default_uncertainty",
+    "CONDITIONAL_SAMPLED_PATHS",
+    "CONDITIONAL_UNCERTAINTY_POLICY_VERSION",
+    "build_conditional_uncertainty",
 ]

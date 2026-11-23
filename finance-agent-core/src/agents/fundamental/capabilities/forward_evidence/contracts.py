@@ -47,7 +47,11 @@ class ForwardEvidenceClaimDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     metric: Literal[
-        "revenue_growth", "operating_margin", "reinvestment_rate", "debt_term"
+        "revenue_growth",
+        "operating_margin",
+        "reinvestment_rate",
+        "terminal_growth",
+        "debt_term",
     ]
     assumption_path: str | None = Field(default=None, max_length=256)
     value: Decimal
@@ -57,11 +61,6 @@ class ForwardEvidenceClaimDraft(BaseModel):
     period_end: str = Field(min_length=10, max_length=32)
     source_url: str = Field(min_length=1, max_length=2048)
     source_passage: str = Field(min_length=20, max_length=8192)
-    source_type: Literal[
-        "issuer_guidance", "analyst_estimate", "debt_terms", "search_discovery"
-    ]
-    license_status: Literal["approved", "unknown", "rejected"] = "unknown"
-    license_reference: str | None = Field(default=None, max_length=2048)
 
 
 class ForwardEvidenceExtraction(BaseModel):

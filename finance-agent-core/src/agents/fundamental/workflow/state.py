@@ -21,6 +21,13 @@ def merge_dict(
     return {**left, **right}
 
 
+def replace_artifact_references(
+    left: dict[str, ArtifactReferencePayload] | None,
+    right: dict[str, ArtifactReferencePayload] | None,
+) -> dict[str, ArtifactReferencePayload]:
+    return dict(right or {})
+
+
 def last_value(left: object | None, right: object | None) -> object | None:
     return right if right is not None else left
 
@@ -62,7 +69,9 @@ class FundamentalAnalysisOutput(BaseModel):
 class FundamentalAnalysisState(TypedDict):
     valuation_request: Annotated[dict[str, object] | None, last_value]
     company_profile: Annotated[CompanyProfile | None, last_value]
-    artifact_references: Annotated[dict[str, ArtifactReferencePayload], merge_dict]
+    artifact_references: Annotated[
+        dict[str, ArtifactReferencePayload], replace_artifact_references
+    ]
     fundamental_analysis: Annotated[FundamentalAnalysisContext, merge_dict]
     messages: Annotated[list[object], add_messages]
     error_logs: Annotated[list[dict[str, object]], append_logs]

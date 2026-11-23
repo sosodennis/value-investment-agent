@@ -5,7 +5,8 @@ import {
 } from './outputs/debate/DebateOutput';
 import {
     FundamentalAnalysisOutput,
-} from './outputs/fundamental-analysis/FundamentalAnalysisOutput';
+} from './outputs/fundamental-analysis/fundamental-analysis-output';
+import type { FundamentalEvidenceInventory } from './outputs/fundamental-analysis/fundamental-report-model';
 import {
     GenericAgentOutput,
 } from './outputs/shared/GenericAgentOutput';
@@ -20,26 +21,19 @@ import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents
 import { buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
-import type {
-    ForwardEvidenceManualOverride,
-    ForwardEvidenceResearchRequest,
-    ForwardEvidenceReview,
-} from './outputs/fundamental-analysis/forward-evidence-api';
+import type { FundamentalRevisionControl } from './outputs/fundamental-analysis/valuation-revision';
 
 type WorkspaceOutputPanelProps = {
     agent: AgentInfo;
+    threadId?: string | null;
+    runId?: string | null;
     output: StandardAgentOutput | null;
     resolvedTicker?: string | null;
     status: AgentStatus;
     onSelectEvidence?: (item: EvidenceSelection) => void;
+    onEvidenceInventory?: (inventory: FundamentalEvidenceInventory) => void;
     selectedEvidenceId?: string | null;
-    isSubmitting?: boolean;
-    onRecalculate?: (manualOverride: Record<string, unknown>) => void;
-    forwardEvidence?: ForwardEvidenceReview | null;
-    isResearchingForwardEvidence?: boolean;
-    researchError?: string | null;
-    onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>;
-    onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void;
+    revisionControl?: FundamentalRevisionControl;
 };
 
 export function WorkspaceOutputPanel({
@@ -48,14 +42,11 @@ export function WorkspaceOutputPanel({
     resolvedTicker,
     status,
     onSelectEvidence,
+    onEvidenceInventory,
     selectedEvidenceId,
-    isSubmitting = false,
-    onRecalculate,
-    forwardEvidence = null,
-    isResearchingForwardEvidence = false,
-    researchError = null,
-    onResearchForwardEvidence,
-    onApplyForwardEvidence,
+    threadId,
+    runId,
+    revisionControl,
 }: WorkspaceOutputPanelProps) {
     const viewModel = adaptAgentOutput(
         agent.id,
@@ -69,17 +60,13 @@ export function WorkspaceOutputPanel({
             report = (
                 <FundamentalAnalysisOutput
                     reference={viewModel.reference}
-                    previewData={viewModel.preview}
                     resolvedTicker={resolvedTicker}
                     status={status}
-                onSelectEvidence={onSelectEvidence}
-                isSubmitting={isSubmitting}
-                onRecalculate={onRecalculate}
-                    forwardEvidence={forwardEvidence}
-                    isResearchingForwardEvidence={isResearchingForwardEvidence}
-                    researchError={researchError}
-                    onResearchForwardEvidence={onResearchForwardEvidence}
-                    onApplyForwardEvidence={onApplyForwardEvidence}
+                    onSelectEvidence={onSelectEvidence}
+                    onEvidenceInventory={onEvidenceInventory}
+                    threadId={threadId}
+                    runId={runId}
+                    revisionControl={revisionControl}
                 />
             );
             break;
@@ -131,14 +118,14 @@ export function WorkspaceOutputPanel({
 
     return (
         <div className="grid min-w-0 grid-cols-1 gap-4">
-            {viewModel.summary ? (
+            {viewModel.kind !== 'fundamental_analysis' && viewModel.summary ? (
                 <Card className="border">
                     <CardContent className="pt-4 text-sm leading-6 text-muted-foreground">
                         {viewModel.summary}
                     </CardContent>
                 </Card>
             ) : null}
-            {onSelectEvidence && evidenceItems.length > 0 ? (
+            {viewModel.kind !== 'fundamental_analysis' && onSelectEvidence && evidenceItems.length > 0 ? (
                 <section aria-label="Report evidence" className="border-y py-3">
                     <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
                         <h3 className="text-sm font-semibold">Report evidence</h3>

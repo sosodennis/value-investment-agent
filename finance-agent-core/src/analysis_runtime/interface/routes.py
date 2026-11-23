@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.background import BackgroundTask
 
+from src.agents.fundamental.entrypoint import FundamentalValuationIntentV1
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
 from src.analysis_runtime.domain.contracts import (
     CheckpointIdentity,
@@ -71,7 +72,7 @@ class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message: str = Field(min_length=1)
-    valuation_request: dict[str, object] | None = None
+    valuation_request: FundamentalValuationIntentV1 | None = None
 
 
 class ResumeRequest(BaseModel):
@@ -146,6 +147,12 @@ async def start_run(
     principal: Principal = Depends(require_current_user_mutation),
 ) -> RunResponse:
     _require_bound_organization(request, principal)
+    if (
+        body.valuation_request is not None
+        and body.valuation_request.revision is not None
+        and body.valuation_request.revision.source.thread_id != thread_id
+    ):
+        raise HTTPException(status_code=422, detail="revision_thread_mismatch")
     try:
         run_id = await _runtime(request).start(
             principal_id=principal.user_id,
@@ -154,7 +161,11 @@ async def start_run(
             thread_id=thread_id,
             input_data={
                 "message": body.message,
-                "valuation_request": body.valuation_request,
+                "valuation_request": (
+                    body.valuation_request.model_dump(mode="json", exclude_unset=True)
+                    if body.valuation_request is not None
+                    else None
+                ),
             },
         )
     except Exception as exc:

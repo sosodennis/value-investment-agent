@@ -1725,9 +1725,7 @@ export interface components {
                 [key: string]: unknown;
             }[] | null;
             /** Fundamental Service */
-            fundamental_service?: {
-                [key: string]: unknown;
-            } | null;
+            fundamental_service?: (components["schemas"]["FundamentalValuationReportV1"] | components["schemas"]["FundamentalFactsOnlyReportV1"] | components["schemas"]["FundamentalPreparationOutcomeV1"] | components["schemas"]["FundamentalDegradedReportV1"]) | null;
             /** Industry */
             industry?: string | null;
             /** Model Type */
@@ -1834,6 +1832,43 @@ export interface components {
         ForwardEvidenceResearchResponse: {
             result: components["schemas"]["FundamentalForwardEvidenceReviewResultV1"];
         };
+        /** FundamentalAssumptionEvidenceV1 */
+        FundamentalAssumptionEvidenceV1: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Editable
+             * @default true
+             */
+            editable: boolean;
+            /**
+             * Fact Ids
+             * @default []
+             */
+            fact_ids: string[];
+            /** Formula */
+            formula: string;
+            manual_provenance?: components["schemas"]["FundamentalManualProvenanceV1"] | null;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "derived" | "approved_source" | "approved_policy" | "manual";
+            /** Path */
+            path: string;
+            /** Policy Version */
+            policy_version: string;
+            /**
+             * Source Refs
+             * @default []
+             */
+            source_refs: string[];
+            /** Value */
+            value: string;
+        };
         /** FundamentalBaseModel */
         FundamentalBaseModel: {
             cash_and_equivalents?: components["schemas"]["TraceableFieldModel"] | null;
@@ -1856,6 +1891,454 @@ export interface components {
             weighted_average_shares_diluted?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
+        };
+        /** FundamentalBoundFactsV1 */
+        FundamentalBoundFactsV1: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Data Release Manifest Digest */
+            data_release_manifest_digest?: string | null;
+            /** Fact Ids */
+            fact_ids: string[];
+            /** Facts */
+            facts: components["schemas"]["FundamentalCanonicalFactV1"][];
+            identity: components["schemas"]["FundamentalIdentityV1"];
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Snapshot Manifest Digest */
+            snapshot_manifest_digest: string;
+            /**
+             * Valuation Timestamp
+             * Format: date-time
+             */
+            valuation_timestamp: string;
+        };
+        /** FundamentalCalculationNodeV1 */
+        FundamentalCalculationNodeV1: {
+            /** Formula */
+            formula: string;
+            /**
+             * Inputs
+             * @default []
+             */
+            inputs: string[];
+            /** Node Id */
+            node_id: string;
+            trace: components["schemas"]["FundamentalTraceV1"];
+            /** Unit */
+            unit: string;
+            /** Value */
+            value?: string | null;
+        };
+        /** FundamentalCalculationResultV1 */
+        FundamentalCalculationResultV1: {
+            /**
+             * Artifact References
+             * @default []
+             */
+            artifact_references: components["schemas"]["FundamentalServiceEvidenceReferenceV1"][];
+            /** Assumptions */
+            assumptions: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Calculation Status
+             * @enum {string}
+             */
+            calculation_status: "completed" | "abstained" | "rejected" | "unavailable" | "error";
+            /** Calculation Version */
+            calculation_version: string;
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Correlation Id */
+            correlation_id: string;
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
+            /** Input Digest */
+            input_digest: string;
+            /** Intrinsic Value */
+            intrinsic_value?: string | null;
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * Missing Evidence
+             * @default []
+             */
+            missing_evidence: string[];
+            /** Model Version */
+            model_version: string;
+            /**
+             * Nodes
+             * @default []
+             */
+            nodes: components["schemas"]["FundamentalCalculationNodeV1"][];
+            /** Per Share Value */
+            per_share_value?: string | null;
+            /** Policy Id */
+            policy_id?: string | null;
+            policy_resolution?: components["schemas"]["FundamentalPolicyResolutionV1"] | null;
+            /** Policy Version */
+            policy_version?: string | null;
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /** Result Hash */
+            result_hash: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            trace?: components["schemas"]["FundamentalCalculationTraceV1"] | null;
+            /**
+             * Valuation Timestamp
+             * Format: date-time
+             */
+            valuation_timestamp: string;
+        };
+        /** FundamentalCalculationTraceV1 */
+        FundamentalCalculationTraceV1: {
+            /** Assumptions Digest */
+            assumptions_digest: string;
+            /** Calculation Version */
+            calculation_version: string;
+            /** Data Release Manifest Digest */
+            data_release_manifest_digest?: string | null;
+            /** Fact Ids */
+            fact_ids: string[];
+            fiscal_period_selector: components["schemas"]["FundamentalFiscalPeriodSelectorV1"];
+            /** Model Id */
+            model_id: string;
+            /** Model Version */
+            model_version: string;
+            /** Policy Digest */
+            policy_digest: string;
+            /** Policy Id */
+            policy_id: string;
+            /** Policy Version */
+            policy_version: string;
+            /**
+             * Resolved Fiscal Periods
+             * @default []
+             */
+            resolved_fiscal_periods: components["schemas"]["FundamentalResolvedFiscalPeriodV1"][];
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Snapshot Manifest Digest */
+            snapshot_manifest_digest: string;
+            /** Source Content Hashes */
+            source_content_hashes: string[];
+            /** Source Selection Policy */
+            source_selection_policy: string;
+            /** Source Selection Policy Version */
+            source_selection_policy_version: string;
+            /**
+             * Valuation Timestamp
+             * Format: date-time
+             */
+            valuation_timestamp: string;
+        };
+        /** FundamentalCandidateRejectionV1 */
+        FundamentalCandidateRejectionV1: {
+            /** Candidate Id */
+            candidate_id: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * FundamentalCanonicalFactV1
+         * @description Typed fact projection; no browser or Agent-side SEC fallback is implied.
+         */
+        FundamentalCanonicalFactV1: {
+            /** Accession Number */
+            accession_number?: string | null;
+            /** Accounting Evidence */
+            accounting_evidence?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Amendment Scope */
+            amendment_scope?: ("valuation_relevant" | "unrelated" | "unknown") | null;
+            /** Amends Accession */
+            amends_accession?: string | null;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Concept */
+            concept: string;
+            context: components["schemas"]["FundamentalXbrlContextV1"];
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Currency */
+            currency?: string | null;
+            /** Decimals */
+            decimals?: number | null;
+            /** Fact Id */
+            fact_id: string;
+            /** Filed At */
+            filed_at?: string | null;
+            /** Filing Version */
+            filing_version?: string | null;
+            /** Instant */
+            instant?: string | null;
+            /**
+             * Is Amendment
+             * @default false
+             */
+            is_amendment: boolean;
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /** Issuer Id */
+            issuer_id: string;
+            /** Mapping Confidence */
+            mapping_confidence?: ("high" | "medium" | "low" | "unresolved") | null;
+            /** Mapping Decision Id */
+            mapping_decision_id?: string | null;
+            /** Normalized Field */
+            normalized_field: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /** Period Start */
+            period_start?: string | null;
+            /** Point In Time Policy */
+            point_in_time_policy?: string | null;
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Rejected Candidate Reasons
+             * @default []
+             */
+            rejected_candidate_reasons: components["schemas"]["FundamentalCandidateRejectionV1"][];
+            /**
+             * Rejected Candidates
+             * @default []
+             */
+            rejected_candidates: string[];
+            /** Scale */
+            scale: number;
+            /** Security Id */
+            security_id?: string | null;
+            /** Security Scope */
+            security_scope?: string | null;
+            /** Selection Reason */
+            selection_reason?: string | null;
+            source: components["schemas"]["FundamentalSourceProvenanceV1"];
+            /** Supersedes Accession */
+            supersedes_accession?: string | null;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Unit */
+            unit: string;
+            /** Value */
+            value: string | boolean | components["schemas"]["FundamentalMissingValueV1"];
+        };
+        /** FundamentalConditionalQuantileBasisV1 */
+        FundamentalConditionalQuantileBasisV1: {
+            /**
+             * Conditioning
+             * @constant
+             */
+            conditioning: "retained_base_joint_hypotheses";
+            /** Conditioning Assumptions Digest */
+            conditioning_assumptions_digest: string;
+            /**
+             * Hypothesis Probabilities
+             * @constant
+             */
+            hypothesis_probabilities: "not_assigned";
+            /** Joint Scenarios Digest */
+            joint_scenarios_digest: string;
+            /**
+             * Policy Version
+             * @constant
+             */
+            policy_version: "conditional-fcff-monte-carlo-policy-v1";
+            /** Sampled Paths */
+            sampled_paths: [
+                "assumptions.forecast.revenue_growth[0]",
+                "assumptions.forecast.operating_margin[0]",
+                "assumptions.terminal_growth"
+            ];
+        };
+        /** FundamentalConvergenceDiagnosticsV1 */
+        FundamentalConvergenceDiagnosticsV1: {
+            /** Converged */
+            converged?: boolean | null;
+            /** Invalid Ratio */
+            invalid_ratio?: string | null;
+            /** Minimum Valid Samples */
+            minimum_valid_samples?: number | null;
+        };
+        /** FundamentalDegradedReportV1 */
+        FundamentalDegradedReportV1: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Issue Codes */
+            issue_codes: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            projection_type: "degraded";
+            /**
+             * Quality Status
+             * @constant
+             */
+            quality_status: "degraded";
+            service_failure: components["schemas"]["FundamentalServiceFailureV1"];
+            /**
+             * Valuation Status
+             * @constant
+             */
+            valuation_status: "service_unavailable";
+        };
+        /** FundamentalDimensionV1 */
+        FundamentalDimensionV1: {
+            /** Member */
+            member: string;
+            /** Name */
+            name: string;
+        };
+        /** FundamentalFactsOnlyReportV1 */
+        FundamentalFactsOnlyReportV1: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Fact Ids */
+            fact_ids: string[];
+            facts: components["schemas"]["FundamentalBoundFactsV1"];
+            hashes: components["schemas"]["FundamentalReportHashesV1"];
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            projection_type: "facts_only";
+            /** Provenance */
+            provenance: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            quality: components["schemas"]["FundamentalFactsQualityV1"];
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Snapshot Manifest Digest */
+            snapshot_manifest_digest: string;
+            /** Snapshot Selector */
+            snapshot_selector: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Snapshot Timestamp
+             * Format: date-time
+             */
+            snapshot_timestamp: string;
+            /**
+             * Valuation Status
+             * @constant
+             */
+            valuation_status: "not_requested";
+        };
+        /** FundamentalFactsQualityV1 */
+        FundamentalFactsQualityV1: {
+            /**
+             * Facts Status
+             * @enum {string}
+             */
+            facts_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * Missing Fields
+             * @default []
+             */
+            missing_fields: string[];
+            /**
+             * Rejected Fact Ids
+             * @default []
+             */
+            rejected_fact_ids: string[];
+        };
+        /** FundamentalFiscalPeriodSelectorV1 */
+        FundamentalFiscalPeriodSelectorV1: {
+            /** Count */
+            count?: number | null;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "latest_complete" | "explicit_periods";
+            /**
+             * Periods
+             * @default []
+             */
+            periods: components["schemas"]["FundamentalFiscalPeriodV1"][];
+            /**
+             * Version
+             * @default fundamental.fiscal-period-selector.v1
+             * @constant
+             */
+            version: "fundamental.fiscal-period-selector.v1";
+        };
+        /** FundamentalFiscalPeriodV1 */
+        FundamentalFiscalPeriodV1: {
+            /** Fiscal Year */
+            fiscal_year: number;
         };
         /** FundamentalForwardEvidenceBudgetPolicyV1 */
         FundamentalForwardEvidenceBudgetPolicyV1: {
@@ -1886,7 +2369,7 @@ export interface components {
             max_source_bytes: number;
             /**
              * Policy Version
-             * @default forward-evidence-policy-v1
+             * @default forward-evidence-policy-v2
              */
             policy_version: string;
         };
@@ -1919,7 +2402,7 @@ export interface components {
              * Metric
              * @enum {string}
              */
-            metric: "revenue_growth" | "operating_margin" | "reinvestment_rate" | "debt_term";
+            metric: "revenue_growth" | "operating_margin" | "reinvestment_rate" | "terminal_growth" | "debt_term";
             /**
              * Model Id
              * @enum {string}
@@ -1950,6 +2433,19 @@ export interface components {
             unit: "ratio" | "currency" | "days" | "text";
             /** Value */
             value: string;
+        };
+        /** FundamentalForwardEvidenceReviewRefV1 */
+        FundamentalForwardEvidenceReviewRefV1: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Media Type
+             * @default application/json
+             * @constant
+             */
+            media_type: "application/json";
         };
         /** FundamentalForwardEvidenceReviewResultV1 */
         FundamentalForwardEvidenceReviewResultV1: {
@@ -1990,6 +2486,7 @@ export interface components {
             policy_version: string;
             /** Reference Digest */
             reference_digest: string;
+            review_ref?: components["schemas"]["FundamentalForwardEvidenceReviewRefV1"] | null;
             /**
              * Status
              * @enum {string}
@@ -2066,6 +2563,733 @@ export interface components {
              * @default 0
              */
             source_fetches: number;
+        };
+        /** FundamentalForwardReferenceProvenanceV1 */
+        FundamentalForwardReferenceProvenanceV1: {
+            /** Citation */
+            citation: string;
+            /** Claim Id */
+            claim_id: string;
+            /** License Reference */
+            license_reference: string;
+            /** Source Content Hash */
+            source_content_hash: string;
+            /** Source Url */
+            source_url: string;
+        };
+        /** FundamentalHistoricalMetricV1 */
+        FundamentalHistoricalMetricV1: {
+            /** Fact Ids */
+            fact_ids: string[];
+            /** Fiscal Year */
+            fiscal_year: number;
+            /** Formula */
+            formula: string;
+            /** Metric Id */
+            metric_id: string;
+            /** Period End */
+            period_end: string;
+            /**
+             * Source Refs
+             * @default []
+             */
+            source_refs: string[];
+            /** Unit */
+            unit: string;
+            /** Value */
+            value: string;
+        };
+        /** FundamentalHistoricalMetricsV1 */
+        FundamentalHistoricalMetricsV1: {
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * Metrics
+             * @default []
+             */
+            metrics: components["schemas"]["FundamentalHistoricalMetricV1"][];
+            /**
+             * Missing Evidence
+             * @default []
+             */
+            missing_evidence: string[];
+            /** Profile Digest */
+            profile_digest: string;
+            /** Profile Id */
+            profile_id: string;
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /** Working Capital Assessments */
+            working_capital_assessments?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
+            /** Working Capital Inputs */
+            working_capital_inputs?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
+        };
+        /**
+         * FundamentalIdentityV1
+         * @description Identity pinned by a service-owned snapshot or resolver result.
+         */
+        FundamentalIdentityV1: {
+            /** Currency */
+            currency: string;
+            /** Domicile */
+            domicile: string;
+            /** Issuer Id */
+            issuer_id: string;
+            /** Issuer Name */
+            issuer_name: string;
+            /**
+             * Reporting Basis
+             * @enum {string}
+             */
+            reporting_basis: "us-gaap" | "ifrs";
+            /** Security Id */
+            security_id: string;
+            /** Share Class */
+            share_class: string;
+        };
+        /** FundamentalManualProvenanceV1 */
+        FundamentalManualProvenanceV1: {
+            /** Author */
+            author: string;
+            /** Automatic Preparation Digest */
+            automatic_preparation_digest: string;
+            forward_reference?: components["schemas"]["FundamentalForwardReferenceProvenanceV1"] | null;
+            /**
+             * Modified At
+             * Format: date-time
+             */
+            modified_at: string;
+            /** Reason */
+            reason: string;
+        };
+        /** FundamentalMissingValueV1 */
+        FundamentalMissingValueV1: {
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "missing" | "not_applicable" | "unsupported" | "unresolved";
+        };
+        /** FundamentalPolicyResolutionV1 */
+        FundamentalPolicyResolutionV1: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Input Digest */
+            input_digest: string;
+            /** Policy Digest */
+            policy_digest: string;
+            /** Policy Id */
+            policy_id: string;
+            /** Policy Version */
+            policy_version: string;
+            /** Precedence */
+            precedence: {
+                [key: string]: "caller" | "policy";
+            };
+            /** Resolved Fields */
+            resolved_fields: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Selection Mode
+             * @enum {string}
+             */
+            selection_mode: "pinned" | "exploratory_active";
+        };
+        /** FundamentalPreparationOutcomeV1 */
+        FundamentalPreparationOutcomeV1: {
+            automatic_preparation: components["schemas"]["FundamentalValuationPreparationResultV1"];
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            identity: components["schemas"]["FundamentalIdentityV1"];
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * Missing Evidence
+             * @default []
+             */
+            missing_evidence: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            projection_type: "preparation_outcome";
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /** Reason */
+            reason?: string | null;
+            /** Snapshot Selector */
+            snapshot_selector: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Valuation Status
+             * @enum {string}
+             */
+            valuation_status: "requires_input" | "abstained" | "unsupported";
+        };
+        /** FundamentalReportHashesV1 */
+        FundamentalReportHashesV1: {
+            /** Data Release Manifest Digest */
+            data_release_manifest_digest?: string | null;
+            /** Input Digest */
+            input_digest?: string | null;
+            /** Result Hash */
+            result_hash?: string | null;
+            /** Snapshot Manifest Digest */
+            snapshot_manifest_digest: string;
+            /**
+             * Source Content Hashes
+             * @default []
+             */
+            source_content_hashes: string[];
+        };
+        /** FundamentalResolvedFiscalPeriodV1 */
+        FundamentalResolvedFiscalPeriodV1: {
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /** Fiscal Year */
+            fiscal_year: number;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+        };
+        /** FundamentalRevisionForwardReferenceV1 */
+        FundamentalRevisionForwardReferenceV1: {
+            /** Citation */
+            citation: string;
+            /** Claim Id */
+            claim_id: string;
+            /** License Reference */
+            license_reference: string;
+            /** Source Content Hash */
+            source_content_hash: string;
+            /** Source Url */
+            source_url: string;
+        };
+        /** FundamentalServiceEvidenceReferenceV1 */
+        FundamentalServiceEvidenceReferenceV1: {
+            /** Artifact Id */
+            artifact_id: string;
+            /**
+             * Artifact Type
+             * @enum {string}
+             */
+            artifact_type: "calculation_evidence" | "uncertainty_evidence";
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Media Type
+             * @default application/json
+             * @constant
+             */
+            media_type: "application/json";
+        };
+        /** FundamentalServiceFailureV1 */
+        FundamentalServiceFailureV1: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Retryable */
+            retryable: boolean;
+        };
+        /** FundamentalSourceProvenanceV1 */
+        FundamentalSourceProvenanceV1: {
+            /** Accession Number */
+            accession_number?: string | null;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Filed At */
+            filed_at?: string | null;
+            /** Parser Version */
+            parser_version: string;
+            /**
+             * Source Role
+             * @enum {string}
+             */
+            source_role: "filing" | "company_facts" | "taxonomy" | "acquisition" | "macro" | "market" | "reference";
+            /** Source Url */
+            source_url: string;
+            /** Taxonomy Version */
+            taxonomy_version?: string | null;
+            /** Terms Reference */
+            terms_reference?: string | null;
+        };
+        /** FundamentalTraceV1 */
+        FundamentalTraceV1: {
+            /** As Of */
+            as_of?: string | null;
+            /** Available At */
+            available_at?: string | null;
+            /** Captured At */
+            captured_at?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Expression */
+            expression?: string | null;
+            /**
+             * Inputs
+             * @default []
+             */
+            inputs: string[];
+            /**
+             * Source Ids
+             * @default []
+             */
+            source_ids: string[];
+            /**
+             * Source Refs
+             * @default []
+             */
+            source_refs: string[];
+            /**
+             * Source Uris
+             * @default []
+             */
+            source_uris: string[];
+            /**
+             * Source Versions
+             * @default []
+             */
+            source_versions: string[];
+            /**
+             * Terms References
+             * @default []
+             */
+            terms_references: string[];
+        };
+        /** FundamentalUncertaintyResultV1 */
+        FundamentalUncertaintyResultV1: {
+            /**
+             * Artifact References
+             * @default []
+             */
+            artifact_references: components["schemas"]["FundamentalServiceEvidenceReferenceV1"][];
+            base: components["schemas"]["FundamentalCalculationResultV1"];
+            convergence_diagnostics?: components["schemas"]["FundamentalConvergenceDiagnosticsV1"];
+            /**
+             * Dominant Drivers
+             * @default []
+             */
+            dominant_drivers: string[];
+            /** Input Digest */
+            input_digest: string;
+            /** Invalid Draw Policy */
+            invalid_draw_policy?: string | null;
+            /** Invalid Reasons */
+            invalid_reasons?: {
+                [key: string]: number;
+            };
+            /**
+             * Invalid Samples
+             * @default 0
+             */
+            invalid_samples: number;
+            quantile_basis?: components["schemas"]["FundamentalConditionalQuantileBasisV1"] | null;
+            /** Quantile Contract */
+            quantile_contract?: {
+                [key: string]: string;
+            };
+            /** Quantiles */
+            quantiles?: {
+                [key: string]: string;
+            };
+            /**
+             * Requested Samples
+             * @default 0
+             */
+            requested_samples: number;
+            /** Result Hash */
+            result_hash: string;
+            /** Sampler Version */
+            sampler_version?: string | null;
+            /**
+             * Scenario Results
+             * @default []
+             */
+            scenario_results: components["schemas"]["FundamentalCalculationResultV1"][];
+            /** Seed */
+            seed?: string | null;
+            /** Sensitivity */
+            sensitivity?: {
+                [key: string]: string[];
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Valid Samples
+             * @default 0
+             */
+            valid_samples: number;
+        };
+        /** FundamentalValuationEvidenceV1 */
+        FundamentalValuationEvidenceV1: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Data Release Manifest Digest */
+            data_release_manifest_digest: string;
+            /** Fact Ids */
+            fact_ids: string[];
+            /**
+             * Facts
+             * @default []
+             */
+            facts: components["schemas"]["FundamentalCanonicalFactV1"][];
+            hashes: components["schemas"]["FundamentalReportHashesV1"];
+            identity: components["schemas"]["FundamentalIdentityV1"];
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /** Mapping Version */
+            mapping_version?: string | null;
+            /**
+             * Missing Fields
+             * @default []
+             */
+            missing_fields: string[];
+            /**
+             * Model Id
+             * @enum {string}
+             */
+            model_id: "fcff_dcf" | "transition_fcff_dcf";
+            /** Profile Digest */
+            profile_digest: string;
+            /** Profile Id */
+            profile_id: string;
+            /**
+             * Projection Type
+             * @constant
+             */
+            projection_type: "valuation_evidence";
+            /** Provenance */
+            provenance: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            quality: components["schemas"]["FundamentalFactsQualityV1"];
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Rejected Fact Ids
+             * @default []
+             */
+            rejected_fact_ids: string[];
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Snapshot Manifest Digest */
+            snapshot_manifest_digest: string;
+            /**
+             * Snapshot Timestamp
+             * Format: date-time
+             */
+            snapshot_timestamp: string;
+            /**
+             * Valuation Timestamp
+             * Format: date-time
+             */
+            valuation_timestamp: string;
+        };
+        /**
+         * FundamentalValuationIntentV1
+         * @description Caller controls without service preparation or provenance authority.
+         */
+        FundamentalValuationIntentV1: {
+            /** Assumptions */
+            assumptions?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Contract Version
+             * @default fundamental.v1
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Fiscal Period Selector */
+            fiscal_period_selector?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Model Id */
+            model_id?: ("fcff_dcf" | "transition_fcff_dcf") | null;
+            /** Model Version */
+            model_version?: string | null;
+            /** Policy Id */
+            policy_id?: string | null;
+            /** Requested As Of */
+            requested_as_of?: string | null;
+            revision?: components["schemas"]["FundamentalValuationRevisionV1"] | null;
+            /** Uncertainty */
+            uncertainty?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+        };
+        /**
+         * FundamentalValuationPreparationResultV1
+         * @description Narrow projection of the service-owned automatic preparation result.
+         *
+         *     Agent Core validates the boundary metadata and carries the opaque service
+         *     input forward. It does not model formulas, mappings, or policy semantics.
+         */
+        FundamentalValuationPreparationResultV1: {
+            /**
+             * Assumptions Evidence
+             * @default []
+             */
+            assumptions_evidence: components["schemas"]["FundamentalAssumptionEvidenceV1"][];
+            /** Conditional Capital */
+            conditional_capital?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Conditional Operating */
+            conditional_operating?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Conditional Quote */
+            conditional_quote?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Equity Dilution */
+            equity_dilution?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            historical_metrics: components["schemas"]["FundamentalHistoricalMetricsV1"];
+            /** Input */
+            input?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * Missing Evidence
+             * @default []
+             */
+            missing_evidence: string[];
+            /**
+             * Model Id
+             * @enum {string}
+             */
+            model_id: "fcff_dcf" | "transition_fcff_dcf";
+            /** Model Version */
+            model_version: string;
+            /** Policy Id */
+            policy_id: string;
+            /** Policy Version */
+            policy_version: string;
+            /** Preparation Digest */
+            preparation_digest: string;
+            /** Profile Digest */
+            profile_digest: string;
+            /** Profile Id */
+            profile_id: string;
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "prepared" | "requires_input" | "abstained" | "unsupported";
+        };
+        /** FundamentalValuationQualityV1 */
+        FundamentalValuationQualityV1: {
+            /**
+             * Calculation Status
+             * @enum {string}
+             */
+            calculation_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Facts Status
+             * @enum {string}
+             */
+            facts_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /** Input */
+            input: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * Validation Status
+             * @enum {string}
+             */
+            validation_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+        };
+        /** FundamentalValuationReportV1 */
+        FundamentalValuationReportV1: {
+            automatic_preparation?: components["schemas"]["FundamentalValuationPreparationResultV1"] | null;
+            /**
+             * Calculation Status
+             * @enum {string}
+             */
+            calculation_status: "completed" | "abstained" | "rejected" | "unavailable" | "error";
+            /** Calculation Version */
+            calculation_version: string;
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Correlation Id */
+            correlation_id: string;
+            /** Fact Ids */
+            fact_ids: string[];
+            /** Facts */
+            facts: components["schemas"]["FundamentalBoundFactsV1"] | components["schemas"]["FundamentalValuationEvidenceV1"];
+            hashes: components["schemas"]["FundamentalReportHashesV1"];
+            /** Input Digest */
+            input_digest: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            projection_type: "valuation";
+            /** Provenance */
+            provenance: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            quality: components["schemas"]["FundamentalValuationQualityV1"];
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /** Result Hash */
+            result_hash: string;
+            /** Service Result */
+            service_result: components["schemas"]["FundamentalCalculationResultV1"] | components["schemas"]["FundamentalUncertaintyResultV1"];
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Snapshot Manifest Digest */
+            snapshot_manifest_digest: string;
+            /** Valuation Input */
+            valuation_input: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            valuation_trace: components["schemas"]["FundamentalCalculationTraceV1"];
+        };
+        /** FundamentalValuationRevisionSourceV1 */
+        FundamentalValuationRevisionSourceV1: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Preparation Digest */
+            preparation_digest: string;
+            /** Run Id */
+            run_id: string;
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** FundamentalValuationRevisionV1 */
+        FundamentalValuationRevisionV1: {
+            forward_reference?: components["schemas"]["FundamentalRevisionForwardReferenceV1"] | null;
+            forward_review_ref?: components["schemas"]["FundamentalForwardEvidenceReviewRefV1"] | null;
+            /**
+             * Path
+             * @constant
+             */
+            path: "assumptions.terminal_growth";
+            /** Reason */
+            reason: string;
+            source: components["schemas"]["FundamentalValuationRevisionSourceV1"];
+            /** Value */
+            value: string;
+        };
+        /** FundamentalXbrlContextV1 */
+        FundamentalXbrlContextV1: {
+            /** Concept Qname */
+            concept_qname: string;
+            /** Consolidation Scope */
+            consolidation_scope: string;
+            /** Context Id */
+            context_id: string;
+            /**
+             * Dimensions
+             * @default []
+             */
+            dimensions: components["schemas"]["FundamentalDimensionV1"][];
+            /** End Date */
+            end_date?: string | null;
+            /** Entity Scope */
+            entity_scope: string;
+            /** Instant */
+            instant?: string | null;
+            /** Measure */
+            measure: string;
+            /**
+             * Period Type
+             * @enum {string}
+             */
+            period_type: "instant" | "duration";
+            /** Start Date */
+            start_date?: string | null;
+            /** Unit Qname */
+            unit_qname: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3031,10 +4255,7 @@ export interface components {
         RunRequest: {
             /** Message */
             message: string;
-            /** Valuation Request */
-            valuation_request?: {
-                [key: string]: unknown;
-            } | null;
+            valuation_request?: components["schemas"]["FundamentalValuationIntentV1"] | null;
         };
         /** RunResponse */
         RunResponse: {

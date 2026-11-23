@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "issue": 462,
+  "status": "VERIFIED",
+  "branch": "codex/issue-462-fundamental-report",
+  "commit": "83e5d7dac04189c90e908017f3ab7eab3efba57b",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent",
+    "browser_session": "iab:7,8,9:issue462-final-report",
+    "allowed_untracked_paths": [],
+    "app": {
+      "compose_project": "value-investment-agent-denniswong-462-app",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/docker-compose.yml",
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/docker-compose.override.yml",
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/compose/verification/docker-compose.issue325-app-fundamental.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/app-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/app.env",
+      "env_file_sha256": "91116190815eccb293f656333f3a9b605c9e273f55ee3a6a72aaf7bd3773ed31",
+      "service": "backend",
+      "container_port": 8000,
+      "published_port": 21680,
+      "url": "http://127.0.0.1:21680"
+    },
+    "fundamental": {
+      "compose_project": "value-investment-agent-denniswong-462-fundamental",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/fundamental-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/fundamental.env",
+      "env_file_sha256": "44bb227cafd5bfa3f6850e36d1f631ac173e177a07f4d52f014c23682e4b42c7",
+      "service": "fundamental-service",
+      "container_port": 8080,
+      "published_port": 21690,
+      "url": "http://127.0.0.1:21690"
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "frontend_checks",
+      "status": "pass",
+      "command": "npm run lint; npm run typecheck; npm run test -- --run; npm run check:contrast; npm run build (retry passed)"
+    },
+    {
+      "name": "core_contracts_and_postgres",
+      "status": "pass",
+      "command": "Focused core 214 passed/1 separate PostgreSQL skip; real PostgreSQL regression 1 passed; contract regeneration unchanged; Ruff; architecture guard"
+    },
+    {
+      "name": "runtime_source_equality",
+      "status": "pass",
+      "command": "python3 runtime/verify-runtime-source.py"
+    },
+    {
+      "name": "browser_acceptance",
+      "status": "pass",
+      "command": "Real manual/auto MC, 2.5% revision, 5% refusal, source inspector and exact history; browser-474-* and canonical-final-evidence.json"
+    },
+    {
+      "name": "exact_commit_preflight",
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-462-runtime.json scripts/acceptance_preflight.sh",
+      "evidence": "preflight-final-candidate.log; exit 0; clean metadata head 047000636d7a204bf1a75898de1ba2e8212bca25 descends from tested implementation"
+    },
+    {
+      "name": "independent_source_review",
+      "status": "pass",
+      "command": "Independent final source/runtime review; separate reviewer worktree and authenticated API/artifact verification",
+      "evidence": "Independent reviewer /root/independent_delivery_review: PASS+NOTES at implementation83e5d7da and metadata04700063; independent source/tests/real API/PostgreSQL/artifact checks; author browser evidence cross-checked"
+    }
+  ],
+  "blockers": [],
+  "next_step": "Pre-merge implementation/runtime acceptance complete. Keep draft until final remote-head CI and independent PR verdict, then ordinary merge and actual merge-SHA smoke before issue closure.",
+  "post_merge_checks": [
+    {
+      "name": "merge_sha_service_browser_smoke",
+      "status": "not_run",
+      "command": "After ordinary main merge, verify actual merge SHA installed source, service and browser behavior before issue closure."
+    }
+  ],
+  "delivery_gates": {
+    "final_head_ci": "pending",
+    "ordinary_main_merge": "pending",
+    "post_merge_smoke": "pending",
+    "issue_closure": "pending",
+    "scoped_cleanup": "pending"
+  }
+}

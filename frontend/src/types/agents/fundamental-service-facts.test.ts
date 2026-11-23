@@ -1,338 +1,115 @@
 import { describe, expect, it } from 'vitest';
-import {
-    parseFundamentalFacts,
-    parseFundamentalServiceArtifact,
-    sortFundamentalFacts,
-} from './fundamental-service-facts';
+import { parseFundamentalAutomaticPreparation, parseFundamentalServiceArtifact } from './fundamental-service-facts';
+import { boundFacts, calculation, canonicalFact, factsOnlyReport, preparation, preparationOutcome, rootDigest, rootHash, sourceHash, timestamp, uncertaintyReport, valuationReport } from '@/features/workspace/outputs/fundamental-analysis/fundamental-report.test-fixtures';
 
-const digest = 'a'.repeat(64);
-
-const fact = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
-    contract_version: 'fundamental.v1',
-    fact_id: 'fact-revenue',
-    issuer_id: 'issuer-1',
-    concept: 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-    normalized_field: 'revenue',
-    value: '1000000',
-    unit: 'USD',
-    scale: 0,
-    currency: 'USD',
-    period_start: '2025-01-01',
-    period_end: '2025-09-30',
-    context: {
-        concept_qname: 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-        period_type: 'duration',
-        start_date: '2025-01-01',
-        end_date: '2025-09-30',
-        unit_qname: 'iso4217:USD',
-        measure: 'iso4217:USD',
-        dimensions: [],
-        entity_scope: 'issuer-1',
-        consolidation_scope: 'consolidated',
-        context_id: 'ctx-revenue',
-    },
-    as_of: '2025-09-30T00:00:00Z',
-    available_at: '2025-11-01T00:00:00Z',
-    captured_at: '2025-11-02T00:00:00Z',
-    taxonomy_version: 'us-gaap-2025',
-    source: {
-        source_url: 'https://www.sec.gov/Archives/filing.xml',
-        content_hash: digest,
-        source_role: 'filing',
-        captured_at: '2025-11-02T00:00:00Z',
-        available_at: '2025-11-01T00:00:00Z',
-        filed_at: '2025-11-01T00:00:00Z',
-        accession_number: '0000000000-25-000001',
-        parser_version: 'arelle-1',
-        taxonomy_version: 'us-gaap-2025',
-        taxonomy_manifest_digest: digest,
-        mapping_version: 'mapping-1',
-    },
-    quality: 'verified',
-    issue_codes: [],
-    ...overrides,
-});
-
-const result = (
-    facts: Record<string, unknown>[],
-    family: 'bank' | 'industrial' | 'reit' = 'industrial'
-) => ({
-    contract_version: 'fundamental.v1',
-    snapshot_id: 'snapshot-1',
-    data_release_manifest_digest: digest,
-    snapshot_manifest_digest: digest,
-    identity: {
-        issuer_id: 'issuer-1',
-        issuer_name: 'Example Corp',
-        domicile: 'US',
-        reporting_basis: 'us-gaap',
-        security_id: 'security-1',
-        share_class: 'common',
-        currency: 'USD',
-        family,
-    },
-    valuation_timestamp: '2026-11-07T00:00:00Z',
-    quality_status: 'verified',
-    issue_codes: [],
-    facts,
-});
-
-const serviceArtifact = (family: 'bank' | 'industrial' | 'reit' = 'industrial') => ({
-    projection_type: 'valuation',
-    contract_version: 'fundamental.v1',
-    snapshot_id: 'snapshot-1',
-    snapshot_manifest_digest: digest,
-    fact_ids: ['fact-revenue'],
-    facts: result([fact({ family })], family),
-    valuation_trace: {
-        source_selection_policy: 'pit-v1',
-        source_selection_policy_version: 'pit-v1',
-        snapshot_id: 'snapshot-1',
-        snapshot_manifest_digest: digest,
-        fact_ids: ['fact-revenue'],
-        source_content_hashes: [digest],
-        policy_id: 'fcff-dcf-policy-v1',
-        policy_version: 'policy-v1',
-        policy_digest: digest,
-        model_id: 'fcff_dcf',
-        model_version: 'fcff_dcf-v1',
-        assumptions_digest: digest,
-        calculation_version: 'calculator-v1',
-    },
-    provenance: {
-        snapshot_id: 'snapshot-1',
-        mapping_version: 'mapping-v1',
-        parser_version: 'parser-v1',
-        taxonomy_version: 'taxonomy-v1',
-        policy_version: 'policy-v1',
-    },
-    quality: {
-        input: { status: 'verified' },
-        validation_status: 'verified',
-        facts_status: 'verified',
-        calculation_status: 'verified',
-        issue_codes: [],
-    },
-    hashes: {
-        input_digest: digest,
-        result_hash: digest,
-        snapshot_manifest_digest: digest,
-        source_content_hashes: [digest],
-    },
-    model_id: 'fcff_dcf',
-    model_version: 'fcff_dcf-v1',
-    calculation_version: 'calculator-v1',
-    calculation_status: 'completed',
-    quality_status: 'verified',
-    input_digest: digest,
-    result_hash: digest,
-    evaluated_at: '2026-11-07T00:00:00Z',
-    issue_codes: [],
-    missing_evidence: [],
-});
-
-const factsOnlyArtifact = () => ({
-    projection_type: 'facts_only',
-    valuation_status: 'not_requested',
-    contract_version: 'fundamental.v1',
-    snapshot_id: 'snapshot-1',
-    snapshot_manifest_digest: digest,
-    fact_ids: ['fact-revenue'],
-    facts: result([fact()]),
-    provenance: {
-        snapshot_id: 'snapshot-1',
-        fact_ids: ['fact-revenue'],
-        mapping_version: 'mapping-v1',
-        parser_version: 'parser-v1',
-        taxonomy_version: 'taxonomy-v1',
-        policy_version: 'pit-v1',
-    },
-    quality: {
-        facts_status: 'verified',
-        issue_codes: [],
-    },
-    hashes: {
-        snapshot_manifest_digest: digest,
-        data_release_manifest_digest: digest,
-        source_content_hashes: [digest],
-    },
-    issue_codes: [],
-});
-
-describe('parseFundamentalFacts', () => {
-    it('parses service facts and preserves numeric zero, negative values, and provenance', () => {
-        const parsed = parseFundamentalFacts(
-            result([
-                fact({ fact_id: 'fact-zero', normalized_field: 'cash', value: 0 }),
-                fact({ fact_id: 'fact-negative', normalized_field: 'liabilities', value: '-12.5' }),
-            ])
-        );
-
-        expect(parsed.identity.family).toBe('industrial');
-        expect(parsed.facts.map((item) => item.fact_id)).toEqual([
-            'fact-negative',
-            'fact-zero',
-        ]);
-        expect(parsed.facts[0]?.value).toEqual({
-            kind: 'numeric',
-            raw: '-12.5',
-            numeric: -12.5,
+describe('Fundamental artifact boundary', () => {
+    it('retains the complete MC result, distinct root/base scopes and exact preparation', () => {
+        const source = uncertaintyReport();
+        const parsed = parseFundamentalServiceArtifact(source);
+        expect(parsed).toEqual(source);
+        if (parsed.projection_type !== 'valuation' || !('base' in parsed.service_result)) throw new Error('Expected uncertainty fixture.');
+        expect(parsed.service_result.input_digest).toBe(rootDigest);
+        expect(parsed.service_result.result_hash).toBe(rootHash);
+        expect(parsed.service_result.base.input_digest).not.toBe(rootDigest);
+        expect(parsed.automatic_preparation).toEqual(source.automatic_preparation);
+        expect(parsed.service_result.quantiles?.p50).toBe('26.1234567890123456789');
+    });
+    it.each([9007199254740992, '1.5', '01', '-0', '+1'])('rejects a noncanonical public seed %s', (seed) => {
+        const source = uncertaintyReport();
+        expect(() => parseFundamentalServiceArtifact({ ...source, service_result: { ...source.service_result, seed } })).toThrow();
+    });
+    it('preserves omitted preparation collections', () => {
+        const source = preparation();
+        delete source.historical_metrics.working_capital_assessments;
+        delete source.historical_metrics.working_capital_inputs;
+        expect(parseFundamentalAutomaticPreparation(source)).toEqual(source);
+        expect(parseFundamentalAutomaticPreparation(source).historical_metrics).not.toHaveProperty('working_capital_inputs');
+    });
+    it.each(['0', '-0.25', '1e400', '123456789012345678901234567890.123456789'])('preserves canonical Decimal %s without numeric coercion', (value) => {
+        const source = valuationReport({ service_result: calculation({ intrinsic_value: value, per_share_value: value }) });
+        expect(parseFundamentalServiceArtifact(source)).toEqual(source);
+    });
+    it('retains valuation evidence even when no canonical fact was selectable', () => {
+        const source = valuationReport({
+            fact_ids: [],
+            facts: {
+                ...boundFacts(), facts: [], fact_ids: [], projection_type: 'valuation_evidence', snapshot_timestamp: timestamp,
+                model_id: 'fcff_dcf', mapping_version: 'sec-mapping-v3', profile_id: 'industrial-v1', profile_digest: sourceHash,
+                data_release_manifest_digest: sourceHash, missing_fields: ['revenue'], rejected_fact_ids: ['rejected-1'],
+                provenance: {}, quality: { facts_status: 'degraded', issue_codes: [], missing_fields: ['revenue'], rejected_fact_ids: ['rejected-1'] },
+                hashes: { snapshot_manifest_digest: boundFacts().snapshot_manifest_digest, data_release_manifest_digest: sourceHash, source_content_hashes: [] },
+            },
         });
-        expect(parsed.facts[1]?.value).toEqual({
-            kind: 'numeric',
-            raw: '0',
-            numeric: 0,
-        });
-        expect(parsed.facts[0]?.source.source_hash).toBe(digest);
-        expect(parsed.facts[0]?.source.mapping_version).toBe('mapping-1');
+        source.valuation_trace.fact_ids = [];
+        expect(parseFundamentalServiceArtifact(source)).toEqual(source);
     });
-
-    it('distinguishes instant and duration periods and missing values', () => {
-        const parsed = parseFundamentalFacts(
-            result([
-                fact({
-                    fact_id: 'fact-instant',
-                    normalized_field: 'assets',
-                    value: {
-                        status: 'unresolved',
-                        reason: 'The service could not select a point-in-time fact.',
-                    },
-                    period_start: undefined,
-                    period_end: '2025-09-30',
-                    context: {
-                        concept_qname: 'us-gaap:Assets',
-                        period_type: 'instant',
-                        instant: '2025-09-30',
-                        unit_qname: 'iso4217:USD',
-                        measure: 'iso4217:USD',
-                        dimensions: [],
-                        entity_scope: 'issuer-1',
-                        consolidation_scope: 'consolidated',
-                        context_id: 'ctx-assets',
-                    },
-                }),
-            ])
-        );
-
-        expect(parsed.facts[0]?.period).toEqual({
-            kind: 'instant',
-            end: '2025-09-30',
-            instant: '2025-09-30',
-        });
-        expect(parsed.facts[0]?.value).toEqual({
-            kind: 'missing',
-            status: 'unresolved',
-            reason: 'The service could not select a point-in-time fact.',
-        });
+    it('retains the complete calculation source scope with repeated non-fact sources', () => {
+        const source = uncertaintyReport();
+        const hashes = [sourceHash, '1'.repeat(64), '1'.repeat(64), '2'.repeat(64)];
+        source.valuation_trace.source_content_hashes = hashes;
+        source.hashes.source_content_hashes = [...hashes];
+        expect(parseFundamentalServiceArtifact(source)).toEqual(source);
     });
-
-    it('sorts by period end, start, kind, and fact id without mutating input', () => {
-        const first = parseFundamentalFacts(result([
-            fact({ fact_id: 'b', period_start: '2024-01-01', period_end: '2024-12-31' }),
-            fact({ fact_id: 'a', period_start: '2025-01-01', period_end: '2025-09-30' }),
-        ])).facts;
-        const sorted = sortFundamentalFacts(first);
-        expect(sorted.map((item) => item.fact_id)).toEqual(['a', 'b']);
-        expect(first.map((item) => item.fact_id)).toEqual(['a', 'b']);
+    it.each([
+        { hashes: [sourceHash, '1'.repeat(64)] },
+        { hashes: ['1'.repeat(64), sourceHash, '1'.repeat(64)] },
+    ])('rejects a changed calculation source hash sequence $hashes', ({ hashes }) => {
+        const source = uncertaintyReport();
+        source.valuation_trace.source_content_hashes = [sourceHash, '1'.repeat(64), '1'.repeat(64)];
+        source.hashes.source_content_hashes = hashes;
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/hashes.source_content_hashes identity mismatch/);
     });
-
-    it('rejects a malformed digest and duplicate fact identity', () => {
-        expect(() =>
-            parseFundamentalFacts(
-                result([
-                    fact({
-                        source: {
-                            source_url: 'https://www.sec.gov/Archives/filing.xml',
-                            content_hash: 'bad',
-                            source_role: 'filing',
-                            captured_at: '2025-11-02T00:00:00Z',
-                            available_at: '2025-11-01T00:00:00Z',
-                            parser_version: 'arelle-1',
-                        },
-                    }),
-                ])
-            )
-        ).toThrowError('fundamental_service.facts[0].source.content_hash must be a lowercase SHA-256 digest.');
-
-        expect(() =>
-            parseFundamentalFacts(result([fact(), fact()]))
-        ).toThrowError('fundamental_service.facts contains duplicate fact_id fact-revenue.');
+    it('rejects calculation evidence that omits a selected fact source', () => {
+        const source = valuationReport();
+        source.hashes.source_content_hashes = source.valuation_trace.source_content_hashes = ['1'.repeat(64)];
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/missing a selected fact source hash/);
     });
-});
-
-describe('parseFundamentalServiceArtifact', () => {
-    it.each(['bank', 'industrial', 'reit'] as const)(
-        'keeps typed %s family metadata and service facts as the source of truth',
-        (family) => {
-            const parsed = parseFundamentalServiceArtifact(serviceArtifact(family));
-
-            if (parsed.projection_type !== 'valuation') {
-                throw new Error('Expected a valuation projection.');
-            }
-            expect(parsed.facts.identity.family).toBe(family);
-            expect(parsed.fact_ids).toEqual(['fact-revenue']);
-            expect(parsed.valuation_trace.fact_ids).toEqual(['fact-revenue']);
-            expect(parsed.hashes.snapshot_manifest_digest).toBe(digest);
-            expect(parsed.facts.facts[0]?.value).toEqual({
-                kind: 'numeric',
-                raw: '1000000',
-                numeric: 1000000,
-            });
-        }
-    );
-
-    it('normalizes calculation values nested in the service result', () => {
-        const payload: Record<string, unknown> = serviceArtifact();
-        payload.service_result = {
-            intrinsic_value: '123.45',
-            per_share_value: '1.23',
-        };
-
-        const parsed = parseFundamentalServiceArtifact(payload);
-
-        if (parsed.projection_type !== 'valuation') {
-            throw new Error('Expected a valuation projection.');
-        }
-        expect(parsed.intrinsic_value).toBe(123.45);
-        expect(parsed.per_share_value).toBe(1.23);
+    it('rejects additional source hashes in the facts-only scope', () => {
+        const source = factsOnlyReport();
+        source.hashes.source_content_hashes.push('1'.repeat(64));
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/hashes.source_content_hashes identity mismatch/);
     });
-
-    it('rejects a projection whose snapshot binding changes between sections', () => {
-        const payload = serviceArtifact();
-        payload.valuation_trace.snapshot_id = 'other-snapshot';
-
-        expect(() => parseFundamentalServiceArtifact(payload)).toThrowError(
-            'fundamental_service snapshot_id is not bound to facts and valuation_trace.'
-        );
+    it('preserves missing, boolean and nonnumeric text facts with period, unit and provenance', () => {
+        const source = factsOnlyReport();
+        source.facts.facts = [canonicalFact({ value: { status: 'unresolved', reason: 'No verified period.' } }), canonicalFact({ fact_id: 'boolean', value: false }), canonicalFact({ fact_id: 'text', value: 'Not applicable to this class' })];
+        source.facts.fact_ids = source.fact_ids = source.facts.facts.map((fact) => fact.fact_id);
+        expect(parseFundamentalServiceArtifact(source)).toEqual(source);
     });
-
-    it('rejects a projection whose trace fact IDs do not match selected facts', () => {
-        const payload = serviceArtifact();
-        payload.valuation_trace.fact_ids = ['fact-other'];
-
-        expect(() => parseFundamentalServiceArtifact(payload)).toThrowError(
-            'fundamental_service.fact_ids are not bound to facts and valuation_trace.'
-        );
+    it.each(['requires_input', 'abstained', 'unsupported'] as const)('accepts the typed %s preparation outcome', (status) => {
+        expect(parseFundamentalServiceArtifact(preparationOutcome(status))).toEqual(preparationOutcome(status));
     });
-
-    it('parses facts-only projections without creating valuation trace data', () => {
-        const parsed = parseFundamentalServiceArtifact(factsOnlyArtifact());
-
-        expect(parsed).toHaveProperty('projection_type', 'facts_only');
-        expect(parsed).toHaveProperty('valuation_status', 'not_requested');
-        if (parsed.projection_type === 'facts_only') {
-            expect(parsed.snapshot_id).toBe(parsed.facts.snapshot_id);
-            expect(parsed.fact_ids).toEqual(['fact-revenue']);
-            expect('valuation_trace' in parsed).toBe(false);
-        }
+    it('accepts an explicit service failure', () => {
+        const source = { projection_type: 'degraded', contract_version: 'fundamental.v1', valuation_status: 'service_unavailable', quality_status: 'degraded', issue_codes: ['SERVICE_TIMEOUT'], service_failure: { code: 'SERVICE_TIMEOUT', message: 'Service timed out.', retryable: true } };
+        expect(parseFundamentalServiceArtifact(source)).toEqual(source);
     });
-
-    it('rejects valuation fields on a facts-only projection', () => {
-        const payload: Record<string, unknown> = factsOnlyArtifact();
-        payload.valuation_trace = serviceArtifact().valuation_trace;
-
-        expect(() => parseFundamentalServiceArtifact(payload)).toThrowError(
-            'fundamental_service facts-only projection cannot include valuation data.'
-        );
+    it.each(['input_digest', 'result_hash'] as const)('rejects a mismatched root %s', (key) => {
+        const source = uncertaintyReport();
+        source[key] = '0'.repeat(64);
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/identity mismatch/);
+    });
+    it('rejects a mixed root input digest and base result hash', () => {
+        const source = uncertaintyReport();
+        if (!('base' in source.service_result)) throw new Error('Expected uncertainty fixture.');
+        source.hashes.result_hash = source.service_result.base.result_hash;
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/hashes.result_hash identity mismatch/);
+    });
+    it('rejects a snapshot/fact identity mismatch and duplicate facts', () => {
+        const source = factsOnlyReport();
+        source.snapshot_id = 'wrong-snapshot';
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/snapshot_id identity mismatch/);
+        const duplicate = factsOnlyReport();
+        duplicate.facts.facts.push(canonicalFact());
+        expect(() => parseFundamentalServiceArtifact(duplicate)).toThrow(/duplicate fact_id/);
+    });
+    it('rejects truncated preparation markers and malformed Decimal values', () => {
+        const source = preparation();
+        expect(() => parseFundamentalAutomaticPreparation({ ...source, assumptions_evidence: [{ truncated_count: 1 }] })).toThrow();
+        expect(() => parseFundamentalAutomaticPreparation({ ...source, assumptions_evidence: [{ ...source.assumptions_evidence[0], value: 'NaN' }] })).toThrow();
+        expect(() => parseFundamentalAutomaticPreparation({ ...source, assumptions_evidence: [{ ...source.assumptions_evidence[0], value: 0.08 }] })).toThrow();
+    });
+    it('rejects unknown projections, absent service results and flattened numerical fallbacks', () => {
+        expect(() => parseFundamentalServiceArtifact({ projection_type: 'unexpected' })).toThrow();
+        expect(() => parseFundamentalServiceArtifact({ ...valuationReport(), service_result: undefined })).toThrow();
+        expect(() => parseFundamentalServiceArtifact({ ...valuationReport(), intrinsic_value: 123 })).toThrow();
     });
 });

@@ -8,28 +8,40 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from pydantic import TypeAdapter
+
 from src.agents.fundamental.application.fundamental_service_port import (
     FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
+    FundamentalReleaseSelector,
     FundamentalServiceClient,
     FundamentalServiceFailure,
+)
+from src.agents.fundamental.application.valuation_revision_port import (
+    FundamentalRevisionSourceReaderPort,
 )
 from src.agents.fundamental.application.workflow_orchestrator.services.service_request_producer import (
     PreparedServiceValuation,
     is_compact_valuation_request,
     prepare_service_valuation_request,
 )
+from src.agents.fundamental.application.workflow_orchestrator.services.snapshot_identity_binding import (
+    canonical_snapshot_identity,
+)
+from src.agents.fundamental.application.workflow_orchestrator.services.valuation_revision import (
+    retained_request_timing,
+)
 from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
     read_intent_state,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
-    FundamentalValuationEvidenceReadResultV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
+    FundamentalValuationIntentV1,
     apply_request_timing,
 )
+from src.analysis_runtime import get_workflow_execution_context
 from src.artifacts.public import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
@@ -37,6 +49,12 @@ from src.artifacts.public import (
     ArtifactReference,
     build_artifact_payload,
     to_artifact_reference_payload,
+)
+from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalFactsReadResultV1,
+    FundamentalServiceResultV1,
+    FundamentalValuationEvidenceReadResultV1,
 )
 from src.shared.internal_services import InternalPrincipal, get_request_principal
 from src.shared.kernel.correlation import resolve_correlation_id
@@ -79,42 +97,6 @@ _LEGACY_INPUT_FIELDS = frozenset(
         "intrinsic_value",
         "market_snapshot",
     }
-)
-_PROJECTION_FIELDS = (
-    "status",
-    "calculation_version",
-    "calculation_status",
-    "quality_status",
-    "input_digest",
-    "result_hash",
-    "intrinsic_value",
-    "per_share_value",
-    "nodes",
-    "assumptions",
-    "model_version",
-    "policy_version",
-    "policy_id",
-    "trace",
-    "issue_codes",
-    "missing_evidence",
-    "snapshot_id",
-    "evaluated_at",
-    "correlation_id",
-    "requested_samples",
-    "valid_samples",
-    "invalid_samples",
-    "invalid_reasons",
-    "invalid_draw_policy",
-    "seed",
-    "sampler_version",
-    "quantiles",
-    "quantile_contract",
-    "convergence_diagnostics",
-    "dominant_drivers",
-    "sensitivity",
-    "scenario_results",
-    "artifact_references",
-    "value_drivers",
 )
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _QUALITY_STATUSES = frozenset(
@@ -257,44 +239,13 @@ def _validate_compact_service_input(
 ) -> JSONObject:
     """Validate the caller-owned portion before the service producer enriches it."""
 
-    supported = {
-        "contract_version",
-        "model_id",
-        "model_version",
-        "policy_id",
-        "assumptions",
-        "uncertainty",
-        "requested_as_of",
-        "fiscal_period_selector",
-        "manual_override",
-    }
-    unknown = sorted(set(input_mapping).difference(supported))
-    if unknown:
-        raise ValueError(
-            f"{context} compact input contains unsupported fields: "
-            + ", ".join(unknown)
-        )
-    contract_version = input_mapping.get("contract_version", "fundamental.v1")
-    if contract_version != "fundamental.v1":
-        raise ValueError(f"{context}.contract_version must be fundamental.v1")
-    assumptions = input_mapping.get("assumptions")
-    if assumptions is not None and not isinstance(assumptions, Mapping):
-        raise ValueError(f"{context}.assumptions must be an object")
-    uncertainty = input_mapping.get("uncertainty", {"mode": "none"})
-    if not isinstance(uncertainty, Mapping):
-        raise ValueError(f"{context}.uncertainty must be an object")
+    intent = FundamentalValuationIntentV1.model_validate(input_mapping)
+    uncertainty = intent.uncertainty or {"mode": "none"}
     if uncertainty.get("mode") == "scenarios":
         raise ValueError(
             "scenario payloads are not part of the frozen valuation contract"
         )
-    manual_override = input_mapping.get("manual_override")
-    if manual_override is not None and not isinstance(manual_override, Mapping):
-        raise ValueError(f"{context}.manual_override must be an object")
-    for field in ("model_id", "model_version", "policy_id"):
-        value = input_mapping.get(field)
-        if value is not None and (not isinstance(value, str) or not value.strip()):
-            raise ValueError(f"{context}.{field} must be a non-empty string")
-    return dict(input_mapping)
+    return intent.model_dump(mode="json", exclude_unset=True)
 
 
 def _response_result(response: FundamentalServiceResponseV1) -> Mapping[str, object]:
@@ -589,14 +540,14 @@ def _ticker_from_input(input_payload: Mapping[str, object]) -> str:
     return "UNKNOWN"
 
 
-def _uncertainty_projection(
+def _validate_uncertainty_binding(
     response: FundamentalServiceResponseV1,
     *,
     expected_input_digest: str,
     expected_seed: int,
     expected_samples: int,
     expected_invalid_draw_policy: str,
-) -> JSONObject:
+) -> None:
     result = _response_result(response)
     input_digest = result.get("input_digest")
     if not isinstance(input_digest, str) or not _DIGEST_PATTERN.fullmatch(input_digest):
@@ -698,18 +649,18 @@ def _uncertainty_projection(
             retryable=False,
             status_code=502,
         )
-    return _narrow_result(result)
 
 
-def _narrow_result(result: Mapping[str, object]) -> JSONObject:
-    projection: JSONObject = {}
-    for field in _PROJECTION_FIELDS:
-        if field in result:
-            projection[field] = result[field]
-    base = result.get("base")
-    if isinstance(base, Mapping):
-        projection["base"] = _narrow_result(base)
-    return projection
+def _parse_service_result(result: Mapping[str, object]) -> JSONObject:
+    public_result = dict(result)
+    seed = public_result.get("seed")
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        public_result["seed"] = str(seed)
+    return (
+        TypeAdapter(FundamentalServiceResultV1)
+        .validate_python(public_result)
+        .model_dump(mode="json", exclude_unset=True)
+    )
 
 
 def _required_fact_fields(input_payload: Mapping[str, object]) -> tuple[str, ...]:
@@ -776,6 +727,7 @@ def _valuation_evidence_projection(
     expected_release_digest: str,
     expected_identity: Mapping[str, object],
     expected_model_id: str,
+    expected_mapping_version: str,
     expected_fact_ids: tuple[str, ...],
 ) -> JSONObject:
     """Project release-bound evidence without selecting facts in Agent Core."""
@@ -785,6 +737,7 @@ def _valuation_evidence_projection(
         result.snapshot_id != expected_snapshot_id
         or result.data_release_manifest_digest != expected_release_digest
         or result.model_id != expected_model_id
+        or result.mapping_version != expected_mapping_version
         or not _payload_equal(
             result.identity.model_dump(mode="json"), expected_identity
         )
@@ -879,7 +832,11 @@ async def _facts_only_projection(
     selection = _response_result(selection_response)
     snapshot_id = selection.get("snapshot_id")
     fact_ids = selection.get("historical_facts")
-    identity = selection.get("identity")
+    identity = canonical_snapshot_identity(
+        selection,
+        resolved=prepared.identity,
+        policy=str(selector.get("identity_selection_policy")),
+    )
     selected_at = selection.get("valuation_timestamp")
     snapshot_at = selection.get("snapshot_timestamp")
     provenance_raw = selection.get("provenance")
@@ -892,13 +849,12 @@ async def _facts_only_projection(
         or not fact_ids
         or any(not isinstance(fact_id, str) or not fact_id for fact_id in fact_ids)
         or len(set(fact_ids)) != len(fact_ids)
-        or not isinstance(identity, Mapping)
-        or not _payload_equal(identity, prepared.identity)
         or not isinstance(snapshot_at, str)
         or selection.get("source_selection_policy")
         != selector.get("source_selection_policy")
         or selection.get("coverage_profile") != selector.get("coverage_profile")
         or selection.get("quality") != "verified"
+        or release_digest != prepared.release_manifest_digest
         or not isinstance(provenance_raw, Mapping)
         or not isinstance(provenance_raw.get("policy_version"), str)
         or not provenance_raw["policy_version"]
@@ -983,9 +939,7 @@ async def _facts_only_projection(
         deadline_at=deadline_at,
     )
     if (
-        not _payload_equal(
-            facts_result.identity.model_dump(mode="json"), prepared.identity
-        )
+        not _payload_equal(facts_result.identity.model_dump(mode="json"), identity)
         or _timestamp_utc(
             facts_result.valuation_timestamp,
             context="Fundamental facts valuation_timestamp",
@@ -1040,6 +994,12 @@ async def _facts_only_projection(
     }
 
 
+def _base_calculation_quality(projection: Mapping[str, object]) -> object:
+    result = _as_mapping(projection["service_result"], context="service result")
+    base = _as_mapping(result.get("base", result), context="base calculation")
+    return base["quality_status"]
+
+
 def _service_valuation_artifact_payload(
     *,
     projection: Mapping[str, object],
@@ -1048,6 +1008,7 @@ def _service_valuation_artifact_payload(
     validation_quality_status: str,
     calculation_trace: Mapping[str, object],
     automatic_preparation: Mapping[str, object] | None = None,
+    model_selection_reason: str | None = None,
 ) -> JSONObject:
     facts = _as_mapping(projection.get("facts"), context="fundamental facts projection")
     provenance = _as_mapping(
@@ -1082,7 +1043,7 @@ def _service_valuation_artifact_payload(
                 "input": dict(quality),
                 "validation_status": validation_quality_status,
                 "facts_status": facts.get("quality_status"),
-                "calculation_status": projection.get("quality_status"),
+                "calculation_status": _base_calculation_quality(projection),
                 "issue_codes": facts.get("issue_codes", ()),
             },
             "hashes": {
@@ -1101,13 +1062,18 @@ def _service_valuation_artifact_payload(
     )
     if automatic_preparation is not None:
         artifact_projection["automatic_preparation"] = dict(automatic_preparation)
-    return {
+    payload = {
         "financial_reports": [],
         "fundamental_service": artifact_projection,
         "status": "done",
         "model_type": input_payload.get("model_id"),
         "ticker": _ticker_from_input(input_payload),
     }
+    if model_selection_reason is not None:
+        payload["reasoning"] = model_selection_reason
+    return FinancialReportsArtifactData.model_validate(payload).model_dump(
+        mode="json", exclude_unset=True
+    )
 
 
 def _build_fundamental_output_artifact(
@@ -1332,11 +1298,29 @@ def _calculation_projection(
     return {
         "calculation_version": calculation_version,
         "calculation_status": calculation_status,
-        "quality_status": quality_status,
+        "quality_status": result.get("status", quality_status),
         "input_digest": expected_input_digest,
-        "result_hash": result_hash,
-        "service_result": _narrow_result(result),
+        "result_hash": result.get("result_hash", result_hash),
+        "service_result": _parse_service_result(result),
         "correlation_id": response.correlation_id,
+    }
+
+
+def _clear_execution(fundamental: Mapping[str, object]) -> FundamentalAnalysisContext:
+    return {
+        **fundamental,
+        "artifact": None,
+        "artifact_publication_failure": None,
+        "input_digest": None,
+        "result_hash": None,
+        "assumption_breakdown": None,
+        "automatic_preparation": None,
+        "preparation_status": None,
+        "preparation_issue_codes": None,
+        "missing_evidence": None,
+        "preparation_digest": None,
+        "service_failure": None,
+        "fundamental_service": None,
     }
 
 
@@ -1367,7 +1351,7 @@ async def _service_error_update(
             "retryable": retryable,
         },
     }
-    updated: FundamentalAnalysisContext = dict(fundamental)
+    updated = _clear_execution(fundamental)
     updated.update(
         {
             "valuation_status": "service_unavailable",
@@ -1377,6 +1361,7 @@ async def _service_error_update(
         }
     )
     artifact_id: str | None = None
+    error_logs = [{"node": "calculation", "error": message, "severity": "error"}]
     try:
         artifact_id = await runtime.save_financial_reports(
             data={
@@ -1391,7 +1376,19 @@ async def _service_error_update(
             key_prefix="fundamental_service_degraded",
         )
     except Exception:
-        artifact_id = None
+        publication_message = "Fundamental service report artifact could not be saved"
+        updated["artifact_publication_failure"] = {
+            "code": "ARTIFACT_SAVE_FAILED",
+            "message": publication_message,
+            "retryable": True,
+        }
+        error_logs.append(
+            {
+                "node": "calculation",
+                "error": publication_message,
+                "severity": "error",
+            }
+        )
     if artifact_id is not None:
         updated["artifact"] = _build_fundamental_output_artifact(
             summary=f"Fundamental valuation degraded for {ticker}",
@@ -1413,25 +1410,26 @@ async def _service_error_update(
                     }
                 }
                 if artifact_id is not None
-                else {}
+                else {"artifact_references": {}}
             ),
             "active_activity_id": "calculation",
             "workflow_activity_updates": {"calculation": "error"},
-            "error_logs": [
-                {"node": "calculation", "error": message, "severity": "error"}
-            ],
+            "error_logs": error_logs,
         },
         goto="END",
     )
 
 
-def _preparation_gate_update(
+async def _preparation_gate_update(
     *,
+    runtime: ServiceValuationRuntime,
     fundamental: Mapping[str, object],
-    preparation: Mapping[str, object],
+    prepared: PreparedServiceValuation,
 ) -> FundamentalNodeResult:
     """Publish a service-owned preparation gate as a domain outcome."""
 
+    assert prepared.preparation is not None
+    preparation = prepared.preparation.model_dump(mode="json", exclude_unset=True)
     status = preparation.get("status")
     quality_status = preparation.get("quality_status")
     if status not in {"requires_input", "abstained", "unsupported"}:
@@ -1448,8 +1446,7 @@ def _preparation_gate_update(
             retryable=False,
             status_code=502,
         )
-    updated: FundamentalAnalysisContext = dict(fundamental)
-    updated.pop("service_failure", None)
+    updated = _clear_execution(fundamental)
     updated.update(
         {
             "valuation_status": status,
@@ -1459,14 +1456,64 @@ def _preparation_gate_update(
             "preparation_issue_codes": list(preparation.get("issue_codes", ())),
             "missing_evidence": list(preparation.get("missing_evidence", ())),
             "preparation_digest": preparation.get("preparation_digest"),
+            "model_type": preparation["model_id"],
+            "model_version": preparation["model_version"],
         }
     )
-    activity_status = "waiting" if status == "requires_input" else "done"
+    projection = {
+        "projection_type": "preparation_outcome",
+        "contract_version": "fundamental.v1",
+        "valuation_status": status,
+        "quality_status": quality_status,
+        "automatic_preparation": preparation,
+        "identity": prepared.identity,
+        "snapshot_selector": prepared.snapshot_selector,
+        "issue_codes": list(preparation.get("issue_codes", ())),
+        "missing_evidence": list(preparation.get("missing_evidence", ())),
+        "reason": prepared.reason,
+    }
+    payload = FinancialReportsArtifactData.model_validate(
+        {
+            "financial_reports": [],
+            "fundamental_service": projection,
+            "ticker": prepared.identity.get("security_id"),
+            "company_name": prepared.identity.get("issuer_name"),
+            "model_type": preparation["model_id"],
+            "status": "done",
+        }
+    ).model_dump(mode="json", exclude_unset=True)
+    try:
+        artifact_id = await runtime.save_financial_reports(
+            data=payload,
+            produced_by="fundamental_analysis.service_preparation_outcome",
+            key_prefix="fundamental_service_preparation_outcome",
+        )
+    except Exception as exc:
+        raise FundamentalServiceFailure(
+            "ARTIFACT_SAVE_FAILED",
+            "Fundamental preparation outcome artifact could not be saved",
+            retryable=True,
+            status_code=503,
+        ) from exc
+    updated["fundamental_service"] = projection
+    updated["artifact"] = _build_fundamental_output_artifact(
+        summary=f"Fundamental valuation {status} for {prepared.identity['security_id']}",
+        artifact_id=artifact_id,
+    )
     return FundamentalNodeResult(
         update={
             "fundamental_analysis": updated,
             "active_activity_id": "calculation",
-            "workflow_activity_updates": {"calculation": activity_status},
+            "workflow_activity_updates": {"calculation": "skipped"},
+            "artifact_references": {
+                "financial_reports": to_artifact_reference_payload(
+                    ArtifactReference(
+                        artifact_id=artifact_id,
+                        download_url=f"/api/v1/artifacts/{artifact_id}",
+                        type=ARTIFACT_KIND_FINANCIAL_REPORTS,
+                    )
+                )
+            },
         },
         goto="END",
     )
@@ -1478,10 +1525,14 @@ async def run_service_valuation_flow(
     *,
     client: FundamentalServiceClient,
     timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
+    release_selector: FundamentalReleaseSelector | None = None,
+    revision_source_reader: FundamentalRevisionSourceReaderPort | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> FundamentalNodeResult:
     fundamental_raw = state.get("fundamental_analysis", {})
-    fundamental = _as_mapping(fundamental_raw, context="fundamental_analysis")
+    fundamental = _clear_execution(
+        _as_mapping(fundamental_raw, context="fundamental_analysis")
+    )
     resolved_ticker = read_intent_state(state).resolved_ticker
     try:
         raw_request = state.get("valuation_request")
@@ -1489,6 +1540,7 @@ async def run_service_valuation_flow(
             raw_request = fundamental.get(_SERVICE_INPUT_KEY)
         input_payload: JSONObject | None = None
         automatic_preparation: JSONObject | None = None
+        model_selection_reason: str | None = None
         compact_request = False
         if raw_request is not None:
             input_payload = read_service_valuation_input(state)
@@ -1518,6 +1570,14 @@ async def run_service_valuation_flow(
             )
         correlation_id = resolve_correlation_id()
         deadline_at = datetime.now(UTC) + timedelta(seconds=timeout_seconds)
+        execution_context = get_workflow_execution_context()
+        current_thread_id = None
+        if execution_context is not None and (
+            execution_context.principal_id == principal.subject_id
+            and execution_context.organization_id == principal.organization_id
+            and execution_context.membership_id == principal.membership_id
+        ):
+            current_thread_id = execution_context.thread_id
         if input_payload is None:
             prepared = await prepare_service_valuation_request(
                 state,
@@ -1526,12 +1586,20 @@ async def run_service_valuation_flow(
                 correlation_id=correlation_id,
                 deadline_at=deadline_at,
                 request_timing=request_timing,
+                release_selector=release_selector,
+                revision_source_reader=revision_source_reader,
+                current_thread_id=current_thread_id,
+                clock=clock,
             )
+            model_selection_reason = prepared.model_selection_reason
+            if model_selection_reason is not None:
+                fundamental["model_selection_reasoning"] = model_selection_reason
             if prepared.valuation_request is None:
                 if prepared.preparation is not None:
-                    return _preparation_gate_update(
+                    return await _preparation_gate_update(
+                        runtime=runtime,
                         fundamental=fundamental,
-                        preparation=prepared.preparation.model_dump(mode="json"),
+                        prepared=prepared,
                     )
                 facts_projection = await _facts_only_projection(
                     prepared,
@@ -1540,8 +1608,14 @@ async def run_service_valuation_flow(
                     correlation_id=correlation_id,
                     deadline_at=deadline_at,
                 )
-                ticker = prepared.identity.get("security_id")
-                issuer_name = prepared.identity.get("issuer_name")
+                selected_facts = _as_mapping(
+                    facts_projection["facts"], context="selected Fundamental facts"
+                )
+                selected_identity = _as_mapping(
+                    selected_facts["identity"], context="selected Fundamental identity"
+                )
+                ticker = selected_identity.get("security_id")
+                issuer_name = selected_identity.get("issuer_name")
                 model_type = fundamental.get("model_type")
                 if not all(
                     isinstance(value, str) and value
@@ -1575,7 +1649,6 @@ async def run_service_valuation_flow(
                         status_code=503,
                     ) from exc
                 updated = dict(fundamental)
-                updated.pop("service_failure", None)
                 updated.update(
                     {
                         "valuation_status": "not_requested",
@@ -1608,8 +1681,21 @@ async def run_service_valuation_flow(
                     goto="END",
                 )
             input_payload = prepared.valuation_request
+            fundamental["model_type"] = input_payload["model_id"]
+            fundamental["model_version"] = input_payload["model_version"]
+            if (
+                compact_request
+                and isinstance(raw_request, Mapping)
+                and raw_request.get("revision") is not None
+            ):
+                source_timing = retained_request_timing(
+                    input_payload["valuation_context"]
+                )
+                fundamental["request_timing"] = source_timing.model_dump(mode="json")
             if compact_request and prepared.preparation is not None:
-                automatic_preparation = prepared.preparation.model_dump(mode="json")
+                automatic_preparation = prepared.preparation.model_dump(
+                    mode="json", exclude_unset=True
+                )
         assert input_payload is not None
         # Snapshot resolution replaces the selector with canonical fact IDs;
         # retain the service-owned normalized field selection for the later
@@ -1647,6 +1733,16 @@ async def run_service_valuation_flow(
             quality_status,
             policy_resolution,
         ) = _validated_input(validation_result)
+        if any(
+            validated_input.get(field) != input_payload.get(field)
+            for field in ("model_id", "model_version")
+        ):
+            raise FundamentalServiceFailure(
+                "INPUT_MODEL_CHANGED",
+                "Fundamental validation changed the selected model binding",
+                retryable=False,
+                status_code=502,
+            )
         if not _caller_values_preserved(
             input_payload.get("assumptions"),
             validated_input.get("assumptions"),
@@ -1697,6 +1793,7 @@ async def run_service_valuation_flow(
         )
         model_id = validated_input.get("model_id")
         model_version = validated_input.get("model_version")
+        mapping_version = provenance.get("mapping_version")
         policy_id = validated_input.get("policy_id")
         policy_version = provenance.get("policy_version")
         policy_digest = policy_resolution.get("policy_digest")
@@ -1716,6 +1813,8 @@ async def run_service_valuation_flow(
                     source_selection_policy,
                 )
             )
+            or not isinstance(mapping_version, str)
+            or not mapping_version
             or not isinstance(fact_ids, list | tuple)
             or not fact_ids
             or any(not isinstance(value, str) or not value for value in fact_ids)
@@ -1804,6 +1903,7 @@ async def run_service_valuation_flow(
                     validated_input["identity"], context="validated_input.identity"
                 ),
                 expected_model_id=model_id,
+                expected_mapping_version=mapping_version,
                 expected_fact_ids=tuple(fact_ids),
             )
         else:
@@ -1840,7 +1940,7 @@ async def run_service_valuation_flow(
                     retryable=False,
                     status_code=502,
                 )
-            projection["uncertainty_summary"] = _uncertainty_projection(
+            _validate_uncertainty_binding(
                 calculation_response,
                 expected_input_digest=input_digest,
                 expected_seed=seed,
@@ -1854,6 +1954,7 @@ async def run_service_valuation_flow(
             validation_quality_status=quality_status,
             calculation_trace=calculation_trace,
             automatic_preparation=automatic_preparation,
+            model_selection_reason=model_selection_reason,
         )
         try:
             artifact_id = await runtime.save_financial_reports(
@@ -1883,6 +1984,8 @@ async def run_service_valuation_flow(
             "quality_status": projection["quality_status"],
             "input_digest": projection["input_digest"],
             "result_hash": projection["result_hash"],
+            "model_type": calculation_input["model_id"],
+            "model_version": calculation_input["model_version"],
             "fundamental_service": projection,
             "assumption_breakdown": {
                 "source": "fundamental-service",

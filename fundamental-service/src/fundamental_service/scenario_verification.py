@@ -34,6 +34,13 @@ if TYPE_CHECKING:
     from .uncertainty import UncertaintyReportV1
 
 
+CONDITIONAL_ARITHMETIC_LIMITATIONS = (
+    "Arithmetic agreement only; source completeness and usage rights are not certified.",
+    "Provisional quality and what-if assumptions remain unchanged.",
+    "No forecast calibration, error bounds or historical performance is certified.",
+)
+
+
 class ConditionalArithmeticCheckV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -46,11 +53,7 @@ class ConditionalArithmeticCheckV1(BaseModel):
     checked_scenarios: tuple[str, ...]
     checked_sensitivity_paths: tuple[str, ...]
     findings: tuple[str, ...]
-    limitations: tuple[str, ...] = (
-        "Arithmetic agreement only; source completeness and usage rights are not certified.",
-        "Provisional quality and what-if assumptions remain unchanged.",
-        "No forecast calibration, error bounds or historical performance is certified.",
-    )
+    limitations: tuple[str, ...] = CONDITIONAL_ARITHMETIC_LIMITATIONS
 
     @property
     def digest(self) -> str:
@@ -167,9 +170,16 @@ def verify_conditional_arithmetic(
     """
     request = ValuationInputV1.model_validate(request.model_dump()).with_digest()
     assert request.input_digest is not None
-    if request.uncertainty.mode != "scenarios":
-        raise VerificationRefusal("SCOPE_UNSUPPORTED", "scenario reports required")
     controls = request.uncertainty
+    conditional_mc = (
+        controls.mode == "monte_carlo"
+        and controls.quantile_basis is not None
+        and controls.policy_version == controls.quantile_basis.policy_version
+    )
+    if controls.mode != "scenarios" and not conditional_mc:
+        raise VerificationRefusal(
+            "SCOPE_UNSUPPORTED", "retained scenario reports required"
+        )
     if not (controls.scenarios or controls.sensitivity):
         raise VerificationRefusal("SCENARIOS_MISSING", "scenario controls are empty")
     names = tuple(item.name for item in controls.scenarios)
@@ -187,7 +197,10 @@ def verify_conditional_arithmetic(
     findings = ["base:" + item for item in _artifact_findings(base, report.base)]
     if report.input_digest != request.input_digest:
         findings.append("input_digest")
-    if report.status != request.quality.status:
+    if report.status != request.quality.status and not (
+        conditional_mc
+        and report.status in {QualityStatus.DEGRADED, QualityStatus.ABSTAIN}
+    ):
         findings.append("quality")
     if len(report.scenario_results) != len(controls.scenarios):
         findings.append("scenarios:count")
@@ -232,7 +245,47 @@ def verify_conditional_arithmetic(
     )
     if report.dominant_drivers != dominant:
         findings.append("dominant_drivers")
-    if (
+    if conditional_mc:
+        assert controls.quantile_basis is not None
+        if (
+            report.requested_samples != controls.samples
+            or report.seed != controls.seed
+            or report.sampler_version != "python-random-v1"
+            or report.invalid_draw_policy != controls.invalid_draw_policy
+            or report.quantile_basis != controls.quantile_basis
+            or tuple(item.path for item in controls.parameters)
+            != controls.quantile_basis.sampled_paths
+            or min(
+                report.valid_samples,
+                report.invalid_samples,
+                *report.invalid_reasons.values(),
+            )
+            < 0
+            or report.valid_samples + report.invalid_samples != report.requested_samples
+            or sum(report.invalid_reasons.values()) != report.invalid_samples
+        ):
+            findings.append("sampling:metadata")
+        if report.valid_samples:
+            try:
+                quantiles = {
+                    key: _number(value) for key, value in report.quantiles.items()
+                }
+                ordered = (
+                    set(quantiles) == {"p05", "p50", "p95", "lower", "median", "upper"}
+                    and quantiles["lower"]
+                    == quantiles["p05"]
+                    <= quantiles["p50"]
+                    == quantiles["median"]
+                    <= quantiles["p95"]
+                    == quantiles["upper"]
+                )
+            except VerificationRefusal:
+                ordered = False
+            if not ordered:
+                findings.append("sampling:quantile_order")
+        elif report.quantiles:
+            findings.append("sampling:quantile_order")
+    elif (
         report.requested_samples
         or report.valid_samples
         or report.invalid_samples
@@ -270,6 +323,16 @@ def verify_conditional_arithmetic(
         checked_scenarios=names,
         checked_sensitivity_paths=paths,
         findings=tuple(findings),
+        limitations=(
+            *CONDITIONAL_ARITHMETIC_LIMITATIONS,
+            *(
+                (
+                    "Monte Carlo checks cover controls, counts, finite quantile order and bindings only; sampled numerical quantiles and calibration are not independently verified.",
+                )
+                if conditional_mc
+                else ()
+            ),
+        ),
     )
 
 

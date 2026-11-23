@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { AgentOutputViewModel } from '@/types/agents/output-adapter';
 import type { AgentInfo } from '@/types/agents';
-import { isRecord, type UnknownRecord } from '@/types/preview';
 import { cn } from '@/lib/cn';
 
 export interface EvidenceSelection {
@@ -12,11 +11,23 @@ export interface EvidenceSelection {
     title: string;
     value: string;
     source?: string;
+    citation?: string;
+    licenseReference?: string;
+    author?: string;
+    modifiedAt?: string;
+    rationale?: string;
     period?: string;
     formula?: string;
     confidence?: string;
     artifactId?: string;
     artifactUrl?: string;
+    threadId?: string;
+    runId?: string;
+    preparationDigest?: string;
+    inputDigest?: string;
+    resultHash?: string;
+    inputs?: string[];
+    dimensions?: string[];
     factId?: string;
     concept?: string;
     accessionNumber?: string;
@@ -75,49 +86,8 @@ export function buildEvidenceItems(agent: AgentInfo, viewModel: AgentOutputViewM
             });
             if (items.length >= 8) break;
         }
-
-        if (viewModel.kind === 'fundamental_analysis') {
-            appendFinancialReportEvidence(items, agent, preview as UnknownRecord);
-        }
     }
     return items;
-}
-
-function appendFinancialReportEvidence(
-    items: EvidenceSelection[],
-    agent: AgentInfo,
-    preview: UnknownRecord,
-) {
-    if (!Array.isArray(preview.financial_reports)) return;
-    const report = preview.financial_reports[0];
-    if (!isRecord(report) || !isRecord(report.base)) return;
-
-    const period = getFinancialReportPeriod(report.base);
-    const fields = Object.entries(report.base).filter(([key]) => key !== 'period_end_date');
-    for (const [key, value] of fields) {
-        if (items.length >= 12 || !isTraceableField(value) || value.value === null) continue;
-        const provenance = isRecord(value.provenance) ? value.provenance : undefined;
-        const concept = typeof provenance?.concept === 'string' ? provenance.concept : undefined;
-        const expression = typeof provenance?.expression === 'string' ? provenance.expression : undefined;
-        items.push({
-            id: `${agent.id}:financial-report:${key}`,
-            title: `Financial report · ${formatEvidenceLabel(key)}`,
-            value: String(value.value),
-            source: concept ? `SEC XBRL concept ${concept}` : 'Typed financial report artifact',
-            period,
-            formula: expression,
-        });
-    }
-}
-
-function getFinancialReportPeriod(base: UnknownRecord): string | undefined {
-    const periodEndDate = isTraceableField(base.period_end_date) ? base.period_end_date.value : undefined;
-    if (periodEndDate !== undefined && periodEndDate !== null) return String(periodEndDate);
-
-    const fiscalYear = isTraceableField(base.fiscal_year) ? base.fiscal_year.value : undefined;
-    if (fiscalYear === undefined || fiscalYear === null) return undefined;
-    const fiscalPeriod = isTraceableField(base.fiscal_period) ? base.fiscal_period.value : undefined;
-    return `${String(fiscalYear)}${fiscalPeriod !== undefined && fiscalPeriod !== null ? ` (${String(fiscalPeriod)})` : ''}`;
 }
 
 export function EvidenceInspector({
@@ -185,9 +155,22 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                 </div>
                 <dl className="grid gap-2 text-xs">
                     <EvidenceField label="Source" value={item.source} />
+                    <EvidenceField label="Citation" value={item.citation} />
+                    <EvidenceField label="License" value={item.licenseReference} />
+                    <EvidenceField label="Author" value={item.author} />
+                    <EvidenceField label="Modified" value={item.modifiedAt} />
+                    <EvidenceField label="Reason" value={item.rationale} />
                     <EvidenceField label="Period" value={item.period} />
                     <EvidenceField label="Formula" value={item.formula} />
                     <EvidenceField label="Confidence" value={item.confidence} />
+                    <EvidenceField label="Thread" value={item.threadId} />
+                    <EvidenceField label="Run" value={item.runId} />
+                    <EvidenceField label="Artifact" value={item.artifactId} />
+                    <EvidenceField label="Preparation" value={item.preparationDigest} />
+                    <EvidenceField label="Input digest" value={item.inputDigest} />
+                    <EvidenceField label="Result hash" value={item.resultHash} />
+                    <EvidenceField label="Inputs" value={item.inputs?.join(', ') || undefined} />
+                    <EvidenceField label="Dimensions" value={item.dimensions?.join(', ') || undefined} />
                     <EvidenceField label="Fact ID" value={item.factId} />
                     <EvidenceField label="Concept" value={factMetadataValue(item, item.concept)} />
                     <EvidenceField label="Accession" value={factMetadataValue(item, item.accessionNumber)} />
@@ -243,10 +226,6 @@ function formatIssueCodes(item: EvidenceSelection): string | undefined {
 
 function isInspectableValue(value: unknown): value is string | number | boolean {
     return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
-}
-
-function isTraceableField(value: unknown): value is { value: string | number | null; provenance?: UnknownRecord | null } {
-    return isRecord(value) && ('value' in value) && (value.value === null || typeof value.value === 'string' || typeof value.value === 'number');
 }
 
 function formatEvidenceLabel(value: string) {

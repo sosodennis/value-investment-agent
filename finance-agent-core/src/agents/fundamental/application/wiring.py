@@ -8,16 +8,35 @@ from src.agents.fundamental.application.workflow_orchestrator.factory import (
 from src.agents.fundamental.capabilities.forward_evidence import (
     ForwardEvidenceResearchService,
 )
-from src.agents.fundamental.infrastructure import HttpFundamentalServiceClient
+from src.agents.fundamental.infrastructure import (
+    HttpFundamentalServiceClient,
+    load_fundamental_release_selector,
+)
+from src.agents.fundamental.infrastructure.valuation_revision_source_reader import (
+    ArtifactFundamentalRevisionSourceReader,
+)
+from src.artifacts.public import build_default_artifact_service
+from src.auth.entrypoint import get_ownership_service
 from src.llm_provider.entrypoint import get_default_model_route, get_llm_provider
 from src.search import get_search_client
 
 
 def build_default_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
-    orchestrator = build_fundamental_orchestrator()
+    artifacts = build_default_artifact_service()
+    orchestrator = build_fundamental_orchestrator(artifact_storage=artifacts)
     return build_fundamental_workflow_runner(
         orchestrator=orchestrator,
         fundamental_service_client=HttpFundamentalServiceClient(),
+        release_selector=load_fundamental_release_selector(),
+        revision_source_reader=ArtifactFundamentalRevisionSourceReader(
+            artifacts=artifacts, owns_thread=_owns_thread
+        ),
+    )
+
+
+async def _owns_thread(subject_id: str, thread_id: str) -> bool:
+    return await get_ownership_service().owns(
+        user_id=subject_id, resource_type="thread", resource_id=thread_id
     )
 
 

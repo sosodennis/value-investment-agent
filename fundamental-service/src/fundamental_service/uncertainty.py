@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .calculator import CalculationRefusal, calculate
 from .contracts import (
     ArtifactReferenceV1,
+    ConditionalQuantileBasisV1,
     CalculationArtifactV1,
     DistributionParameterV1,
     QualityStatus,
@@ -62,6 +63,9 @@ class UncertaintyReportV1(BaseModel):
     seed: int | None = None
     sampler_version: str | None = None
     quantiles: dict[str, object] = Field(default_factory=dict)
+    quantile_basis: ConditionalQuantileBasisV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     quantile_contract: dict[str, str] = Field(
         default_factory=lambda: {"bear": "p05", "base": "p50", "bull": "p95"}
     )
@@ -220,6 +224,11 @@ def _report_result_hash(report: UncertaintyReportV1) -> str:
             "sampler_version": report.sampler_version,
             "quantiles": report.quantiles,
             "quantile_contract": report.quantile_contract,
+            **(
+                {"quantile_basis": report.quantile_basis}
+                if report.quantile_basis is not None
+                else {}
+            ),
             "convergence_diagnostics": report.convergence_diagnostics,
             "dominant_drivers": report.dominant_drivers,
         }
@@ -420,6 +429,7 @@ def run_uncertainty(
             seed=spec.seed,
             sampler_version=monte_carlo.sampler_version,
             quantiles=quantiles,
+            quantile_basis=spec.quantile_basis,
             convergence_diagnostics=diagnostics,
             dominant_drivers=dominant,
         )

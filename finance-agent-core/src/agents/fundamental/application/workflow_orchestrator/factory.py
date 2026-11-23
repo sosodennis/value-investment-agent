@@ -5,7 +5,11 @@ from dataclasses import dataclass
 
 from src.agents.fundamental.application.fundamental_service_port import (
     FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
+    FundamentalReleaseSelector,
     FundamentalServiceClient,
+)
+from src.agents.fundamental.application.valuation_revision_port import (
+    FundamentalRevisionSourceReaderPort,
 )
 from src.agents.fundamental.application.workflow_orchestrator.orchestrator import (
     FundamentalNodeResult,
@@ -34,6 +38,8 @@ class FundamentalWorkflowRunner:
     orchestrator: FundamentalOrchestrator
     fundamental_service_client: FundamentalServiceClient
     service_timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS
+    release_selector: FundamentalReleaseSelector | None = None
+    revision_source_reader: FundamentalRevisionSourceReaderPort | None = None
 
     async def run_financial_health(
         self, state: Mapping[str, object]
@@ -56,6 +62,8 @@ class FundamentalWorkflowRunner:
             state,
             client=self.fundamental_service_client,
             timeout_seconds=self.service_timeout_seconds,
+            release_selector=self.release_selector,
+            revision_source_reader=self.revision_source_reader,
         )
 
 
@@ -64,9 +72,13 @@ def build_fundamental_workflow_runner(
     orchestrator: FundamentalOrchestrator,
     fundamental_service_client: FundamentalServiceClient,
     service_timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
+    release_selector: FundamentalReleaseSelector | None = None,
+    revision_source_reader: FundamentalRevisionSourceReaderPort | None = None,
 ) -> FundamentalWorkflowRunner:
     return FundamentalWorkflowRunner(
         orchestrator=orchestrator,
         fundamental_service_client=fundamental_service_client,
         service_timeout_seconds=service_timeout_seconds,
+        release_selector=release_selector,
+        revision_source_reader=revision_source_reader,
     )

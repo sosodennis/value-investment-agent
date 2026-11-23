@@ -5,7 +5,11 @@ from dataclasses import dataclass
 
 from src.agents.fundamental.application.fundamental_service_port import (
     FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
+    FundamentalReleaseSelector,
     FundamentalServiceClient,
+)
+from src.agents.fundamental.application.valuation_revision_port import (
+    FundamentalRevisionSourceReaderPort,
 )
 from src.agents.fundamental.application.workflow_orchestrator.financial_health_flow import (
     run_financial_health_flow,
@@ -73,6 +77,8 @@ class FundamentalOrchestrator:
         *,
         client: FundamentalServiceClient,
         timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
+        release_selector: FundamentalReleaseSelector | None = None,
+        revision_source_reader: FundamentalRevisionSourceReaderPort | None = None,
     ) -> FundamentalNodeResult:
         """Run validated exact input through the stateless Fundamental service."""
 
@@ -81,4 +87,6 @@ class FundamentalOrchestrator:
             state,
             client=client,
             timeout_seconds=timeout_seconds,
+            release_selector=release_selector,
+            revision_source_reader=revision_source_reader,
         )

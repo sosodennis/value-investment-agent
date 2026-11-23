@@ -6,6 +6,9 @@ from src.agents.fundamental.interface.forward_evidence_routes import (
     ForwardEvidenceResearchResponse,
     build_forward_evidence_router,
 )
+from src.agents.fundamental.interface.request_contracts import (
+    FundamentalValuationIntentV1,
+)
 from src.agents.fundamental.workflow.graph import build_fundamental_workflow
 from src.agents.fundamental.workflow.nodes import FundamentalWorkflowRunner
 from src.agents.fundamental.workflow.state import (
@@ -45,6 +48,7 @@ fundamental_forward_evidence_router = (
 
 
 __all__ = [
+    "FundamentalValuationIntentV1",
     "FundamentalAnalysisContext",
     "FundamentalAnalysisInput",
     "FundamentalAnalysisOutput",

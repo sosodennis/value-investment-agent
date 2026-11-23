@@ -15,8 +15,10 @@ from src.agents.fundamental.infrastructure.fundamental_service_client import (
     HttpFundamentalServiceClient,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalCanonicalFactV1,
     FundamentalIdentityResolutionRequestV1,
+)
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalCanonicalFactV1,
 )
 from src.shared.internal_services import InternalPrincipal
 
@@ -28,6 +30,103 @@ def _settings(*, max_attempts: int = 2) -> FundamentalServiceClientSettings:
         timeout_seconds=1.0,
         max_attempts=max_attempts,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("matching_context", [True, False])
+async def test_forward_review_transport_preserves_witness_and_preparation_binding(
+    matching_context,
+):
+    witness = {
+        "artifact_id": "forward-review-v1-" + "c" * 64,
+        "content_hash": "c" * 64,
+        "media_type": "application/json",
+    }
+
+    async def respond(request):
+        envelope = json.loads(request.content)
+        assert envelope["context"]["principal"]["subject_id"] == "subject-1"
+        assert envelope["input"]["automatic_preparation_digest"] == "a" * 64
+        return httpx.Response(
+            200,
+            json={
+                "contract_version": "internal.v1",
+                "schema_version": "fundamental.v1",
+                "correlation_id": "corr-forward",
+                "result": {
+                    "contract_version": "fundamental.v1",
+                    "status": "prepared",
+                    "label": "forward-looking external evidence",
+                    "policy_version": "forward-evidence-policy-v2",
+                    "automatic_preparation_digest": ("a" if matching_context else "d")
+                    * 64,
+                    "claims": [
+                        {
+                            "claim_id": "claim-terminal",
+                            "issuer_id": "0000320193",
+                            "ticker": "AAPL",
+                            "model_id": "fcff_dcf",
+                            "metric": "terminal_growth",
+                            "assumption_path": "assumptions.terminal_growth",
+                            "value": "0.025",
+                            "unit": "ratio",
+                            "fiscal_period": "FY2027",
+                            "period_type": "annual",
+                            "period_end": "2027-09-30",
+                            "extraction_method": "llm_from_source_passage",
+                            "source": {
+                                "source_id": "source-1",
+                                "source_url": "https://issuer.test/guidance",
+                                "publisher": "Issuer",
+                                "source_type": "issuer_guidance",
+                                "retained_passage": "Retained source passage for the terminal assumption",
+                                "content_hash": "d" * 64,
+                                "published_at": "2026-10-01T00:00:00Z",
+                                "retrieved_at": "2026-11-01T00:00:00Z",
+                                "license_status": "approved",
+                                "license_reference": "issuer-terms",
+                            },
+                            "status": "accepted",
+                            "issue_codes": [],
+                            "exclusion_reasons": [],
+                        }
+                    ],
+                    "accepted_claim_ids": ["claim-terminal"],
+                    "excluded_claim_ids": [],
+                    "issue_codes": [],
+                    "budget": {},
+                    "usage": {},
+                    "reference_digest": "b" * 64,
+                    "review_ref": witness,
+                },
+            },
+        )
+
+    client = HttpFundamentalServiceClient(
+        _settings(), client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    )
+    try:
+        if matching_context:
+            result = await client.review_forward_evidence(
+                {"automatic_preparation_digest": "a" * 64},
+                principal=_principal(),
+                correlation_id="corr-forward",
+                deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+            )
+            assert result.review_ref.model_dump(mode="json") == witness
+            assert str(result.claims[0].value) == "0.025"
+            assert result.claims[0].metric == "terminal_growth"
+        else:
+            with pytest.raises(FundamentalServiceFailure) as error:
+                await client.review_forward_evidence(
+                    {"automatic_preparation_digest": "a" * 64},
+                    principal=_principal(),
+                    correlation_id="corr-forward",
+                    deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+                )
+            assert error.value.code == "UPSTREAM_MALFORMED"
+    finally:
+        await client.aclose()
 
 
 def _principal() -> InternalPrincipal:
@@ -74,7 +173,7 @@ def _facts_success(correlation_id: str) -> dict[str, object]:
                     "issuer_id": "320193",
                     "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
                     "normalized_field": "total_revenue",
-                    "value": 100,
+                    "value": "100",
                     "unit": "USD",
                     "scale": 0,
                     "currency": "USD",
@@ -492,3 +591,177 @@ async def test_client_rejects_malformed_response_and_expired_deadline() -> None:
         )
     assert deadline_error.value.code == "DEADLINE_EXCEEDED"
     await expired.aclose()
+
+
+def _active_release_response(correlation_id: str) -> dict[str, object]:
+    return {
+        **_success(correlation_id),
+        "result": {
+            "active": {
+                "profile_id": "configured-release-v1",
+                "manifest_digest": "b" * 64,
+                "revision": 2,
+                "activated_at": "2026-11-07T00:00:00Z",
+            },
+            "manifest": {
+                "profile_id": "configured-release-v1",
+                "manifest_digest": "b" * 64,
+                "required_fields": ["revenue", "operating_income"],
+                "service_owned_policy": {"conditional_capital": True},
+            },
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_active_release_read_uses_signed_get_and_empty_operation_input() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=_active_release_response("correlation-release"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
+        client = HttpFundamentalServiceClient(_settings(), client=transport)
+        release = await client.read_active_release(
+            "configured-release-v1",
+            principal=_principal(),
+            correlation_id="correlation-release",
+            deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+        )
+    request = requests[0]
+    assert request.method == "GET"
+    assert request.url.path == "/v1/data/releases/configured-release-v1"
+    payload = json.loads(request.content)
+    assert payload["input"] == {}
+    assert payload["context"]["principal"]["organization_id"] == "org-1"
+    assert payload["context"]["correlation_id"] == "correlation-release"
+    assert payload["context"]["signature"]
+    assert request.headers["authorization"] == "Bearer fundamental-token"
+    assert release.manifest.required_fields == ("revenue", "operating_income")
+    assert release.automatic_model is None
+    assert "automatic_model" not in release.model_dump(mode="json")
+
+
+@pytest.mark.asyncio
+async def test_active_release_read_retains_typed_automatic_model_binding() -> None:
+    payload = _active_release_response("correlation-release")
+    payload["result"]["automatic_model"] = {
+        "model_id": "fcff_dcf",
+        "model_version": "fcff_dcf-v2",
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    ) as transport:
+        client = HttpFundamentalServiceClient(_settings(), client=transport)
+        release = await client.read_active_release(
+            "configured-release-v1",
+            principal=_principal(),
+            correlation_id="correlation-release",
+            deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+        )
+    assert release.automatic_model.model_id == "fcff_dcf"
+    assert release.automatic_model.model_version == "fcff_dcf-v2"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "binding",
+    [
+        {},
+        {"model_id": "ddm", "model_version": "ddm-v1"},
+        {"model_id": "fcff_dcf", "model_version": ""},
+        {"model_id": "fcff_dcf", "model_version": "   "},
+        {"model_id": "fcff_dcf", "model_version": 2},
+        {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2", "fallback": True},
+    ],
+)
+async def test_active_release_read_rejects_malformed_automatic_model_binding(binding):
+    payload = _active_release_response("correlation-release")
+    payload["result"]["automatic_model"] = binding
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    ) as transport:
+        client = HttpFundamentalServiceClient(_settings(), client=transport)
+        with pytest.raises(FundamentalServiceFailure) as error:
+            await client.read_active_release(
+                "configured-release-v1",
+                principal=_principal(),
+                correlation_id="correlation-release",
+                deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+            )
+    assert error.value.code == "UPSTREAM_MALFORMED"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "pointer_profile",
+        "pointer_digest",
+        "requested_profile",
+        "missing_fields",
+        "duplicate_fields",
+    ],
+)
+async def test_active_release_read_rejects_malformed_or_differently_bound_metadata(
+    changed: str,
+) -> None:
+    payload = _active_release_response("correlation-release")
+    result = payload["result"]
+    if changed == "pointer_profile":
+        result["active"]["profile_id"] = "wrong-profile"
+    elif changed == "pointer_digest":
+        result["active"]["manifest_digest"] = "c" * 64
+    elif changed == "requested_profile":
+        result["active"]["profile_id"] = result["manifest"]["profile_id"] = (
+            "wrong-profile"
+        )
+    elif changed == "missing_fields":
+        result["manifest"]["required_fields"] = []
+    else:
+        result["manifest"]["required_fields"] = ["revenue", "revenue"]
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    ) as transport:
+        client = HttpFundamentalServiceClient(_settings(), client=transport)
+        with pytest.raises(FundamentalServiceFailure) as error:
+            await client.read_active_release(
+                "configured-release-v1",
+                principal=_principal(),
+                correlation_id="correlation-release",
+                deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+            )
+    assert error.value.code == (
+        "RELEASE_PROFILE_MISMATCH"
+        if changed == "requested_profile"
+        else "UPSTREAM_MALFORMED"
+    )
+
+
+def test_release_selector_environment_requires_a_complete_valid_tuple(
+    monkeypatch,
+) -> None:
+    from pydantic import ValidationError
+
+    from src.agents.fundamental.infrastructure.fundamental_service_client import (
+        load_fundamental_release_selector,
+    )
+
+    for name in (
+        "FUNDAMENTAL_DATA_RELEASE_PROFILE_ID",
+        "FUNDAMENTAL_COVERAGE_PROFILE",
+        "FUNDAMENTAL_SOURCE_SELECTION_POLICY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    assert load_fundamental_release_selector() is None
+    monkeypatch.setenv("FUNDAMENTAL_DATA_RELEASE_PROFILE_ID", "configured-release-v1")
+    with pytest.raises(ValidationError):
+        load_fundamental_release_selector()
+    monkeypatch.setenv("FUNDAMENTAL_COVERAGE_PROFILE", "automatic-fcff-v1")
+    monkeypatch.setenv("FUNDAMENTAL_SOURCE_SELECTION_POLICY", "pit-v1")
+    selector = load_fundamental_release_selector()
+    assert selector.profile_id == "configured-release-v1"
+    monkeypatch.setenv("FUNDAMENTAL_DATA_RELEASE_PROFILE_ID", "../another-profile")
+    with pytest.raises(ValidationError):
+        load_fundamental_release_selector()

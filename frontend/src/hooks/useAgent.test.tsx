@@ -124,6 +124,8 @@ describe('useAgent workflow runtime', () => {
             /\/api\/v1\/threads\/thread_[^/]+\/activities\?run_id=started-run$/,
         );
         expect(result.current.error).toBeNull();
+        const request: RequestInit | undefined = fetchMock.mock.calls[0]?.[1];
+        expect(JSON.parse(String(request?.body))).not.toHaveProperty('valuation_request');
     });
 
     it('sends caller-owned valuation input with a new run', async () => {
@@ -140,7 +142,7 @@ describe('useAgent workflow runtime', () => {
                 run_id: 'valuation-run', cursor: 1, run_status: 'completed', active_activities: [],
             })), { status: 200 }));
         const { result } = renderHook(() => useAgent());
-        const valuationRequest = {
+        const valuationRequest: NonNullable<Parameters<ReturnType<typeof useAgent>['sendMessage']>[2]> = {
             contract_version: 'fundamental.v1',
             model_id: 'fcff_dcf',
             assumptions: { terminal_growth: '0.02' },
@@ -154,6 +156,19 @@ describe('useAgent workflow runtime', () => {
             message: 'Valuate AAPL',
             valuation_request: valuationRequest,
         });
+    });
+    it('returns a source-bound same-thread start failure without claiming a new run', async () => {
+        fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ run_status: 'completed', active_activities: [] })), { status: 200 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Source preparation changed.' }), { status: 409 }));
+        const { result } = renderHook(() => useAgent());
+        await act(async () => result.current.loadHistory('thread_1', 'run_1'));
+        const revision = { source: { thread_id: 'thread_1', run_id: 'run_1', artifact_id: 'report-1', preparation_digest: 'a'.repeat(64) }, path: 'assumptions.terminal_growth', value: '0.025', reason: 'Updated outlook.' } satisfies NonNullable<NonNullable<Parameters<typeof result.current.sendMessage>[2]>['revision']>;
+        let response: Awaited<ReturnType<typeof result.current.sendMessage>> | undefined;
+        await act(async () => { response = await result.current.sendMessage('Recalculate AAPL valuation from its saved report', false, { contract_version: 'fundamental.v1', revision }); });
+        expect(response).toEqual({ kind: 'error', message: 'Start run failed (Source preparation changed.).' });
+        expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/v1/threads/thread_1/runs');
+        expect(result.current.runId).toBe('run_1');
+        expect(result.current.error).toBe('Start run failed (Source preparation changed.).');
     });
 
     it('tracks a pending interaction submission independently from the run stream', async () => {

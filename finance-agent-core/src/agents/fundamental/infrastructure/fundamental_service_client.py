@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final
+from urllib.parse import quote
 
 import httpx
 from pydantic import ValidationError
@@ -22,15 +23,19 @@ from pydantic import ValidationError
 from src.agents.fundamental.application.fundamental_service_port import (
     FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     FundamentalOperation,
+    FundamentalReleaseSelector,
     FundamentalServiceFailure,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalFactsReadResultV1,
+    FundamentalActiveReleaseV1,
     FundamentalForwardEvidenceReviewResultV1,
     FundamentalIdentityResolutionRequestV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceErrorV1,
     FundamentalServiceResponseV1,
+)
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalValuationEvidenceReadResultV1,
     FundamentalValuationPreparationResultV1,
 )
@@ -50,6 +55,7 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "resolve_identity": "/v1/identity/resolve",
     "resolve_snapshot": "/v1/data/snapshots/resolve",
     "read_facts": "/v1/data/facts",
+    "read_active_release": "/v1/data/releases/{profile_id}",
     "read_valuation_evidence": "/v1/valuation/evidence/facts",
     "prepare_valuation": "/v1/valuation/prepare",
     "override_prepared_valuation": "/v1/valuation/prepare/override",
@@ -62,7 +68,21 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
 }
 _OPERATION_METHODS: dict[FundamentalOperation, str] = {
     "read_facts": "GET",
+    "read_active_release": "GET",
 }
+
+
+def load_fundamental_release_selector() -> FundamentalReleaseSelector | None:
+    fields = {
+        "profile_id": os.getenv("FUNDAMENTAL_DATA_RELEASE_PROFILE_ID", "").strip(),
+        "coverage_profile": os.getenv("FUNDAMENTAL_COVERAGE_PROFILE", "").strip(),
+        "source_selection_policy": os.getenv(
+            "FUNDAMENTAL_SOURCE_SELECTION_POLICY", ""
+        ).strip(),
+    }
+    if not any(fields.values()):
+        return None
+    return FundamentalReleaseSelector.model_validate(fields)
 
 
 @dataclass(frozen=True)
@@ -168,6 +188,19 @@ class HttpFundamentalServiceClient:
                 retryable=False,
             )
 
+        operation_input = dict(input_payload)
+        if operation == "read_active_release":
+            profile_id = operation_input.get("profile_id")
+            if not isinstance(profile_id, str) or not profile_id:
+                raise FundamentalServiceFailure(
+                    "VALUATION_INPUT_INVALID",
+                    "release profile id is required",
+                    retryable=False,
+                    status_code=422,
+                )
+            path = path.format(profile_id=quote(profile_id, safe=""))
+            operation_input = {}
+
         context = build_internal_context(
             principal=principal,
             correlation_id=correlation_id,
@@ -177,7 +210,7 @@ class HttpFundamentalServiceClient:
         )
         payload = {
             "context": context.model_dump(mode="json"),
-            "input": dict(input_payload),
+            "input": operation_input,
         }
         headers = {
             "Authorization": f"Bearer {self._settings.service_token}",
@@ -299,6 +332,39 @@ class HttpFundamentalServiceClient:
             status_code=503,
         )
 
+    async def read_active_release(
+        self,
+        profile_id: str,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalActiveReleaseV1:
+        response = await self.execute(
+            "read_active_release",
+            {"profile_id": profile_id},
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            result = FundamentalActiveReleaseV1.model_validate(response.result)
+        except ValidationError as exc:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned an invalid active release",
+                retryable=False,
+                status_code=502,
+            ) from exc
+        if result.active.profile_id != profile_id:
+            raise FundamentalServiceFailure(
+                "RELEASE_PROFILE_MISMATCH",
+                "active release profile does not match the request",
+                retryable=False,
+                status_code=502,
+            )
+        return result
+
     async def read_facts(
         self,
         input_payload: Mapping[str, object],
@@ -402,8 +468,8 @@ class HttpFundamentalServiceClient:
             deadline_at=deadline_at,
         )
         try:
-            return FundamentalForwardEvidenceReviewResultV1.model_validate(
-                response.result
+            result = FundamentalForwardEvidenceReviewResultV1.model_validate_json(
+                json.dumps(response.result, allow_nan=False)
             )
         except ValidationError as exc:
             raise FundamentalServiceFailure(
@@ -412,6 +478,16 @@ class HttpFundamentalServiceClient:
                 retryable=False,
                 status_code=502,
             ) from exc
+        if result.automatic_preparation_digest != input_payload.get(
+            "automatic_preparation_digest"
+        ):
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental forward review changed its preparation binding",
+                retryable=False,
+                status_code=502,
+            )
+        return result
 
     async def resolve_identity(
         self,

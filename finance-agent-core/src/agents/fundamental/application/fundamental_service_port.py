@@ -6,12 +6,17 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Literal, Protocol
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalFactsReadResultV1,
+    FundamentalActiveReleaseV1,
     FundamentalForwardEvidenceReviewResultV1,
     FundamentalIdentityResolutionRequestV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
+)
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalValuationEvidenceReadResultV1,
     FundamentalValuationPreparationResultV1,
 )
@@ -22,6 +27,7 @@ FundamentalOperation = Literal[
     "resolve_identity",
     "resolve_snapshot",
     "read_facts",
+    "read_active_release",
     "read_valuation_evidence",
     "prepare_valuation",
     "override_prepared_valuation",
@@ -58,6 +64,14 @@ class FundamentalServiceFailure(RuntimeError):
         self.retry_after_ms = retry_after_ms
 
 
+class FundamentalReleaseSelector(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    profile_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    coverage_profile: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    source_selection_policy: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
 class FundamentalServiceClient(Protocol):
     """Caller-owned transport port; no Fundamental implementation dependency."""
 
@@ -70,6 +84,15 @@ class FundamentalServiceClient(Protocol):
         correlation_id: str,
         deadline_at: datetime,
     ) -> FundamentalServiceResponseV1: ...
+
+    async def read_active_release(
+        self,
+        profile_id: str,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalActiveReleaseV1: ...
 
     async def read_facts(
         self,
