@@ -11,6 +11,10 @@ from src.agents.fundamental.application.fundamental_service_port import (
 from src.agents.fundamental.application.valuation_revision_port import (
     FundamentalRevisionSourceReaderPort,
 )
+from src.agents.fundamental.application.workflow_orchestrator.services.snapshot_identity_binding import (
+    SnapshotIdentitySelectionPolicy,
+    identity_matches_resolver,
+)
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalValuationRevisionV1,
 )
@@ -34,6 +38,7 @@ async def prepare_retained_valuation_revision(
     requested_model_version: str | None,
     requested_policy_id: str | None,
     identity: JSONObject,
+    identity_selection_policy: SnapshotIdentitySelectionPolicy,
     client: FundamentalServiceClient,
     principal: InternalPrincipal,
     correlation_id: str,
@@ -82,13 +87,16 @@ async def prepare_retained_valuation_revision(
             "Source preparation does not match the requested digest",
         )
     original_input = original.input
+    canonical_identity = source.facts.identity.model_dump(mode="json")
     context = original_input.get("valuation_context")
     if not isinstance(context, Mapping):
         raise _failure("REVISION_SOURCE_INVALID", "Source valuation context is missing")
     release_digest = context.get("data_release_manifest_digest")
     if (
-        original_input.get("identity") != identity
-        or source.facts.identity.model_dump(mode="json") != identity
+        original_input.get("identity") != canonical_identity
+        or not identity_matches_resolver(
+            identity, canonical_identity, policy=identity_selection_policy
+        )
         or source.snapshot_id != context.get("data_snapshot_id")
         or source.hashes.data_release_manifest_digest != release_digest
         or original_input.get("model_id") != original.model_id
@@ -170,7 +178,7 @@ async def prepare_retained_valuation_revision(
     if (
         revised.status != "prepared"
         or revised.input is None
-        or revised.input.get("identity") != identity
+        or revised.input.get("identity") != canonical_identity
         or revised_context != context
         or revised.model_id != original.model_id
         or revised.model_version != original.model_version

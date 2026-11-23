@@ -24,6 +24,9 @@ from src.agents.fundamental.application.workflow_orchestrator.services.service_r
     is_compact_valuation_request,
     prepare_service_valuation_request,
 )
+from src.agents.fundamental.application.workflow_orchestrator.services.snapshot_identity_binding import (
+    canonical_snapshot_identity,
+)
 from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
     read_intent_state,
 )
@@ -824,7 +827,11 @@ async def _facts_only_projection(
     selection = _response_result(selection_response)
     snapshot_id = selection.get("snapshot_id")
     fact_ids = selection.get("historical_facts")
-    identity = selection.get("identity")
+    identity = canonical_snapshot_identity(
+        selection,
+        resolved=prepared.identity,
+        policy=str(selector.get("identity_selection_policy")),
+    )
     selected_at = selection.get("valuation_timestamp")
     snapshot_at = selection.get("snapshot_timestamp")
     provenance_raw = selection.get("provenance")
@@ -837,8 +844,6 @@ async def _facts_only_projection(
         or not fact_ids
         or any(not isinstance(fact_id, str) or not fact_id for fact_id in fact_ids)
         or len(set(fact_ids)) != len(fact_ids)
-        or not isinstance(identity, Mapping)
-        or not _payload_equal(identity, prepared.identity)
         or not isinstance(snapshot_at, str)
         or selection.get("source_selection_policy")
         != selector.get("source_selection_policy")
@@ -929,9 +934,7 @@ async def _facts_only_projection(
         deadline_at=deadline_at,
     )
     if (
-        not _payload_equal(
-            facts_result.identity.model_dump(mode="json"), prepared.identity
-        )
+        not _payload_equal(facts_result.identity.model_dump(mode="json"), identity)
         or _timestamp_utc(
             facts_result.valuation_timestamp,
             context="Fundamental facts valuation_timestamp",
@@ -1591,8 +1594,14 @@ async def run_service_valuation_flow(
                     correlation_id=correlation_id,
                     deadline_at=deadline_at,
                 )
-                ticker = prepared.identity.get("security_id")
-                issuer_name = prepared.identity.get("issuer_name")
+                selected_facts = _as_mapping(
+                    facts_projection["facts"], context="selected Fundamental facts"
+                )
+                selected_identity = _as_mapping(
+                    selected_facts["identity"], context="selected Fundamental identity"
+                )
+                ticker = selected_identity.get("security_id")
+                issuer_name = selected_identity.get("issuer_name")
                 model_type = fundamental.get("model_type")
                 if not all(
                     isinstance(value, str) and value

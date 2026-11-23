@@ -605,6 +605,9 @@ class _FactsOnlyClient(_Client):
                 "snapshot_id": "snapshot-aapl-resolved",
                 "historical_facts": self.resolved_fact_ids,
                 "identity": self.identity,
+                "identity_selection_policy": input_payload.get(
+                    "identity_selection_policy", "exact-identity-v1"
+                ),
                 "valuation_timestamp": input_payload["valuation_timestamp"],
                 "snapshot_timestamp": self.snapshot_timestamp,
                 "source_selection_policy": "pit-v1",
@@ -1012,6 +1015,48 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
     assert "valuation_trace" not in service_artifact
     assert "valuation_input" not in service_artifact
     assert artifact["financial_reports"] == []
+
+
+async def test_facts_only_adopts_the_service_canonical_filing_identity():
+    client = _FactsOnlyClient()
+    client.identity = {
+        **client.identity,
+        "issuer_name": "APPLE INC",
+        "share_class": "CommonStock",
+    }
+    client.facts_identity = dict(client.identity)
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "company_profile": CompanyProfile(
+                    ticker="AAPL",
+                    name="Apple Inc.",
+                    sector="Technology",
+                    industry="Consumer Electronics",
+                ),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            release_selector=_RELEASE_SELECTOR,
+        )
+    finally:
+        reset_request_principal(token)
+    assert result.update["fundamental_analysis"]["valuation_status"] == "not_requested"
+    persisted = runtime.saved_calls[0]["data"]["fundamental_service"]
+    assert persisted["facts"]["identity"] == client.identity
+    assert (
+        next(payload for op, payload in client.calls if op == "resolve_snapshot")[
+            "identity_selection_policy"
+        ]
+        == "sec-ticker-series-v1"
+    )
 
 
 @pytest.mark.asyncio

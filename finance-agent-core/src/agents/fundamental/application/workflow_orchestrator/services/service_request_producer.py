@@ -17,6 +17,11 @@ from src.agents.fundamental.application.fundamental_service_port import (
 from src.agents.fundamental.application.valuation_revision_port import (
     FundamentalRevisionSourceReaderPort,
 )
+from src.agents.fundamental.application.workflow_orchestrator.services.snapshot_identity_binding import (
+    SnapshotIdentitySelectionPolicy,
+    canonical_snapshot_identity,
+    snapshot_identity_selection_policy,
+)
 from src.agents.fundamental.application.workflow_orchestrator.services.valuation_revision import (
     prepare_retained_valuation_revision,
 )
@@ -160,21 +165,19 @@ def _preparation_selection(
     *,
     identity: JSONObject,
     valuation_timestamp: datetime,
-) -> tuple[str, str]:
+    identity_selection_policy: SnapshotIdentitySelectionPolicy,
+) -> tuple[str, str, JSONObject]:
     """Extract the immutable snapshot and active release for preparation."""
 
     payload = _mapping(result, context="Fundamental snapshot resolution result")
     snapshot_id = payload.get("snapshot_id")
     release_digest = payload.get("data_release_manifest_digest")
-    resolved_identity = payload.get("identity")
     resolved_timestamp = payload.get("valuation_timestamp")
     if (
         not isinstance(snapshot_id, str)
         or not snapshot_id
         or not isinstance(release_digest, str)
         or not _DIGEST_PATTERN.fullmatch(release_digest)
-        or not isinstance(resolved_identity, Mapping)
-        or dict(resolved_identity) != identity
         or not isinstance(resolved_timestamp, str)
         or _timestamp(resolved_timestamp) != valuation_timestamp
     ):
@@ -184,7 +187,10 @@ def _preparation_selection(
             retryable=False,
             status_code=422,
         )
-    return snapshot_id, release_digest
+    canonical_identity = canonical_snapshot_identity(
+        payload, resolved=identity, policy=identity_selection_policy
+    )
+    return snapshot_id, release_digest, canonical_identity
 
 
 def _prepared_input(
@@ -334,6 +340,7 @@ async def prepare_service_valuation_request(
             status_code=502,
         )
     identity = resolution.identity.model_dump(mode="json")
+    identity_selection_policy = snapshot_identity_selection_policy(resolution.identity)
     if request is not None and request.get("identity") not in (None, identity):
         raise FundamentalServiceFailure(
             "IDENTITY_MISMATCH",
@@ -358,6 +365,7 @@ async def prepare_service_valuation_request(
             requested_model_version=compact.model_version,
             requested_policy_id=compact.policy_id,
             identity=identity,
+            identity_selection_policy=identity_selection_policy,
             client=client,
             principal=principal,
             correlation_id=correlation_id,
@@ -367,6 +375,12 @@ async def prepare_service_valuation_request(
         context = _mapping(
             (preparation.input or {}).get("valuation_context"),
             context="Fundamental revised preparation valuation_context",
+        )
+        identity = _json_object(
+            _mapping(
+                (preparation.input or {}).get("identity"), context="revised identity"
+            ),
+            context="revised identity",
         )
         snapshot_id = context.get("data_snapshot_id")
         release_digest = context.get("data_release_manifest_digest")
@@ -422,6 +436,7 @@ async def prepare_service_valuation_request(
         "contract_version": "fundamental.v1",
         "release_profile_id": release_selector.profile_id,
         "identity": identity,
+        "identity_selection_policy": identity_selection_policy,
         "valuation_timestamp": valuation_timestamp.isoformat().replace("+00:00", "Z"),
         **(
             {"fiscal_period_selector": fiscal_period_selector}
@@ -447,10 +462,11 @@ async def prepare_service_valuation_request(
         correlation_id=correlation_id,
         deadline_at=deadline_at,
     )
-    snapshot_id, release_digest = _preparation_selection(
+    snapshot_id, release_digest, identity = _preparation_selection(
         snapshot_response.result,
         identity=identity,
         valuation_timestamp=valuation_timestamp,
+        identity_selection_policy=identity_selection_policy,
     )
     if release_digest != release.active.manifest_digest:
         raise FundamentalServiceFailure(

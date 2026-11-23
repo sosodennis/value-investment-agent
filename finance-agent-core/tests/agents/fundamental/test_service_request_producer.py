@@ -101,6 +101,9 @@ class _Client:
                     "data_release_manifest_digest": self.snapshot["manifest_digest"],
                     "historical_facts": self.snapshot["canonical_fact_ids"],
                     "identity": input_payload["identity"],
+                    "identity_selection_policy": input_payload.get(
+                        "identity_selection_policy", "exact-identity-v1"
+                    ),
                     "valuation_timestamp": input_payload["valuation_timestamp"],
                     "snapshot_timestamp": input_payload["valuation_timestamp"],
                     "source_selection_policy": input_payload["source_selection_policy"],
@@ -369,6 +372,8 @@ async def test_selection_rejects_changed_release_identity_or_time_before_prepara
     assert error.value.code == (
         "RELEASE_DIGEST_MISMATCH"
         if changed == "digest"
+        else "SNAPSHOT_IDENTITY_MISMATCH"
+        if changed == "identity"
         else "SNAPSHOT_PREPARATION_UNAVAILABLE"
     )
     assert "prepare_valuation" not in [name for name, _ in client.calls]
@@ -407,3 +412,124 @@ async def test_browser_manual_override_is_rejected_before_service_calls() -> Non
     with pytest.raises(ValueError, match="manual_override"):
         await _prepare(client, {"model_id": "fcff_dcf", "manual_override": override})
     assert client.calls == []
+
+
+class _CanonicalSnapshotClient(_Client):
+    def __init__(self):
+        super().__init__(snapshot=_snapshot())
+        self.canonical = None
+        self.tamper = None
+        self.exact_identity = False
+
+    async def resolve_identity(self, request, **kwargs):
+        resolved = await super().resolve_identity(request, **kwargs)
+        if self.exact_identity:
+            return resolved.model_copy(
+                update={
+                    "identity": resolved.identity.model_copy(
+                        update={"share_class": "common"}
+                    )
+                }
+            )
+        return resolved
+
+    async def execute(self, operation, input_payload, **kwargs):
+        if operation == "resolve_snapshot" and self.tamper == "ambiguous":
+            raise FundamentalServiceFailure(
+                "SNAPSHOT_IDENTITY_AMBIGUOUS",
+                "Multiple canonical share classes",
+                retryable=False,
+                status_code=422,
+            )
+        response = await super().execute(operation, input_payload, **kwargs)
+        if operation != "resolve_snapshot":
+            return response
+        payload = dict(response.result)
+        self.canonical = {
+            **payload["identity"],
+            "issuer_name": "APPLE INC",
+            "share_class": "CommonStock",
+        }
+        if self.tamper in {
+            "issuer_id",
+            "security_id",
+            "currency",
+            "domicile",
+            "reporting_basis",
+        }:
+            replacement = {
+                "currency": "EUR",
+                "domicile": "GB",
+                "reporting_basis": "ifrs",
+            }.get(self.tamper, "different")
+            self.canonical[self.tamper] = replacement
+        payload["identity"] = self.canonical
+        if self.tamper == "policy":
+            payload["identity_selection_policy"] = "exact-identity-v1"
+        if self.tamper == "missing_policy":
+            payload.pop("identity_selection_policy")
+        return response.model_copy(update={"result": payload})
+
+    async def prepare_valuation(self, input_payload, **kwargs):
+        preparation = await super().prepare_valuation(input_payload, **kwargs)
+        return preparation.model_copy(
+            update={"input": {**preparation.input, "identity": self.canonical}}
+        )
+
+
+async def test_typed_resolver_opts_into_series_and_adopts_canonical_snapshot_identity():
+    client = _CanonicalSnapshotClient()
+    prepared = await _prepare(client, {"model_id": "fcff_dcf"})
+    selector = next(
+        payload
+        for operation, payload in client.calls
+        if operation == "resolve_snapshot"
+    )
+    assert selector["identity_selection_policy"] == "sec-ticker-series-v1"
+    assert (
+        selector["identity"]["share_class"]
+        == selector["identity"]["security_id"]
+        == "AAPL"
+    )
+    assert prepared.identity == client.canonical
+    assert prepared.valuation_request["identity"]["share_class"] == "CommonStock"
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "issuer_id",
+        "security_id",
+        "currency",
+        "domicile",
+        "reporting_basis",
+        "policy",
+        "missing_policy",
+        "ambiguous",
+    ],
+)
+async def test_canonical_snapshot_identity_rejects_changed_series_or_policy(tamper):
+    client = _CanonicalSnapshotClient()
+    client.tamper = tamper
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await _prepare(client, {"model_id": "fcff_dcf"})
+    assert error.value.code == (
+        "SNAPSHOT_IDENTITY_AMBIGUOUS"
+        if tamper == "ambiguous"
+        else "SNAPSHOT_IDENTITY_MISMATCH"
+    )
+    assert "prepare_valuation" not in [operation for operation, _ in client.calls]
+
+
+async def test_non_series_resolver_preserves_exact_identity_selection():
+    client = _CanonicalSnapshotClient()
+    client.exact_identity = True
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await _prepare(client, {"model_id": "fcff_dcf"})
+    assert error.value.code == "SNAPSHOT_IDENTITY_MISMATCH"
+    selector = next(
+        payload
+        for operation, payload in client.calls
+        if operation == "resolve_snapshot"
+    )
+    assert selector["identity_selection_policy"] == "exact-identity-v1"

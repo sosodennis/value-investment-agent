@@ -105,8 +105,15 @@ class _RevisionClient(_FactsOnlyClient):
 
 
 @pytest.fixture
-async def published_source():
+async def published_source(request):
     client = _RevisionClient()
+    if getattr(request, "param", None) == "canonical":
+        client.identity = {
+            **client.identity,
+            "issuer_name": "APPLE INC",
+            "share_class": "CommonStock",
+        }
+        client.facts_identity = dict(client.identity)
     runtime = _Runtime()
     token = set_request_principal(_PRINCIPAL)
     try:
@@ -205,6 +212,60 @@ async def test_revision_recovers_complete_published_source_and_builds_wire_reque
     assert (
         report.automatic_preparation.input["assumptions"]["terminal_growth"] != "0.02"
     )
+
+
+@pytest.mark.parametrize("published_source", ["canonical"], indirect=True)
+async def test_revision_keeps_canonical_source_class_for_a_matching_resolver_series(
+    published_source,
+):
+    client, _, report = published_source
+    result = await _prepare(client, report)
+    assert result.identity == report.facts.identity.model_dump(mode="json")
+    assert result.identity["share_class"] == "CommonStock"
+    assert result.valuation_request["identity"] == result.identity
+    assert [op for op, _ in client.calls] == [
+        "resolve_identity",
+        "prepare_valuation",
+        "override_prepared_valuation",
+    ]
+
+
+async def test_independently_selected_message_ticker_cannot_replace_source_company(
+    published_source,
+):
+    client, _, report = published_source
+    resolve = client.resolve_identity
+
+    async def wrong_company(request, **kwargs):
+        original = await resolve(request, **kwargs)
+        return original.model_copy(
+            update={
+                "ticker": "MSFT",
+                "identity": original.identity.model_copy(
+                    update={
+                        "issuer_id": "0000789019",
+                        "security_id": "MSFT",
+                        "share_class": "MSFT",
+                    }
+                ),
+            }
+        )
+
+    client.resolve_identity = wrong_company
+    state = _state(_revision(report))
+    state["company_profile"] = CompanyProfile(ticker="MSFT", name="Microsoft")
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await prepare_service_valuation_request(
+            state,
+            client=client,
+            principal=_PRINCIPAL,
+            correlation_id="revision-1",
+            deadline_at=_NOW,
+            revision_source_reader=_SourceReader(report),
+            current_thread_id="thread-1",
+        )
+    assert error.value.code == "REVISION_SOURCE_BINDING_MISMATCH"
+    assert [op for op, _ in client.calls] == ["resolve_identity"]
 
 
 @pytest.mark.parametrize("mutation", ["digest", "share_class", "policy", "partial"])
