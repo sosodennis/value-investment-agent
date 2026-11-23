@@ -457,6 +457,46 @@ The new service owns its calculation engine and model registry. It may reuse rev
 - Store monetary inputs and outputs as typed decimal amounts with an explicit currency and scale. Binary floating point is forbidden in the V1 calculation path.
 - Record all rounding only at presentation boundaries. Never round intermediate values.
 
+### 13.1.1 Dated annual FCFF policy
+
+`fcff_dcf-v3` and `transition_fcff_dcf-v3` use
+`fcff-uniform-accrual-period-end-act365f-v1`. Their formula graph is
+`calculator-v3-dated-fcff`. The integer-period v2 definitions and retained v2
+results keep their original numerical policy.
+
+The service builds `assumptions.forecast.timeline` from three consecutive,
+undimensioned, consolidated annual revenue facts. Each period contains 365 or
+366 days and follows one fixed month/day or month-end calendar. The latest
+period end anchors the forecast. Source availability must precede the valuation
+timestamp. Weekly calendars, fiscal-year transitions, gaps and conflicts refuse
+until a separate supported calendar policy exists.
+
+The valuation date is the UTC date, treated as the end of that day. It must be
+on or after the source period end and before the first forecast period end.
+Each forecast retains its full annual revenue and FCFF. Under the explicit
+uniform-accrual assumption, only the days after the valuation date contribute
+to future FCFF:
+
+```text
+included_fcff_i = annual_fcff_i * included_days_i / full_period_days_i
+present_value_i = included_fcff_i / (1 + WACC)^(discount_days_i / 365)
+```
+
+Cash flows settle at their period end. This policy does not measure actual
+year-to-date cash flow or establish an issuer's seasonal accrual pattern.
+The Gordon terminal value uses the final full-year FCFF and forms at the final
+forecast period end. The service discounts it back to the valuation date with
+the same ACT/365F convention. Gordon continuation remains an annual
+approximation, not a proof of an infinite cash-flow series on irregular dates.
+
+The report labels the period-end year, such as `2027E`, and exposes the complete
+period. This label does not assert the issuer's official fiscal-year name.
+Retained reports without a timeline keep ordinal labels and original values.
+Revision and uncertainty retain the exact model version and saved timeline.
+The authenticated source boundary rebuilds the schedule from retained facts
+and checks the source revenue value. Caller-supplied IDs or day counts alone
+cannot establish a valid timeline.
+
 The alternative intrinsic-value formulations must use consistent cash flows, capital charges, and discount rates:
 
 ```text
