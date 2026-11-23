@@ -17,6 +17,7 @@ from fundamental_service.testsupport import auth_headers
 from fundamental_service.valuation_preparation import AutomaticValuationPreparationV1
 from test_conditional_revision import _calculate, _envelope, _prepared, _request
 from test_forward_evidence import _claim, _source
+from test_valuation_preparation import _facts, _market_policy, _prepare
 
 
 def _review_request(automatic):
@@ -353,3 +354,64 @@ def test_unadmitted_terminal_sources_never_receive_review_witness(tmp_path, faul
     assert reviewed["status"] == "unsupported"
     assert "review_ref" not in reviewed
     assert reviewed["accepted_claim_ids"] == []
+
+
+@pytest.mark.parametrize(
+    "fault", ("none", "fake_ref", "other_owner", "other_org", "prep", "value")
+)
+def test_ordinary_override_refuses_retained_reviews_without_revision_proof(
+    tmp_path, fault
+):
+    _, client, _, _ = _prepared(tmp_path)
+    automatic = _prepare(_facts(), market_policy=_market_policy())
+    assert automatic.conditional_operating is None
+    assert automatic.conditional_capital is None
+    request = _review_request(automatic)
+    if fault == "prep":
+        request = request.model_copy(update={"automatic_preparation_digest": "f" * 64})
+    response = _review(client, request)
+    assert response.status_code == 200, response.text
+    review = response.json()["result"]
+    assert review["status"] == "prepared"
+    apply = _request(automatic)
+    apply["forward_review_ref"] = review["review_ref"]
+    source = request.claims[0].source
+    apply["provenance"]["forward_reference"] = {
+        "claim_id": request.claims[0].claim_id,
+        "source_url": source.source_url,
+        "source_content_hash": source.content_hash,
+        "citation": source.retained_passage,
+        "license_reference": source.license_reference,
+    }
+    if fault == "fake_ref":
+        apply["forward_review_ref"] = {
+            "artifact_id": "forward-review-v1-" + "f" * 64,
+            "content_hash": "f" * 64,
+        }
+    elif fault == "value":
+        apply["value"] = "0.026"
+    response = _apply(
+        client,
+        apply,
+        **(
+            {"subject": "other"}
+            if fault == "other_owner"
+            else {"organization": "other"}
+            if fault == "other_org"
+            else {}
+        ),
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "FORWARD_REVIEW_UNSUPPORTED"
+
+
+def test_ordinary_override_records_signed_principal_as_author(tmp_path):
+    _, client, _, _ = _prepared(tmp_path)
+    automatic = _prepare(_facts(), market_policy=_market_policy())
+    apply = _request(automatic)
+    assert apply["provenance"]["author"] == "untrusted-display-author"
+    response = _apply(client, apply, subject="signed-ordinary-reviewer")
+    assert response.status_code == 200, response.text
+    revised = response.json()["result"]
+    manual = revised["assumptions_evidence"][-1]["manual_provenance"]
+    assert manual["author"] == "signed-ordinary-reviewer"

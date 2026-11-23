@@ -1788,11 +1788,23 @@ class FundamentalApplication:
                     dependency_hashes=self._revision_dependencies(automatic),
                     deadline_at=deadline_at,
                 )
+            if request.forward_review_ref is not None:
+                raise ServiceError(
+                    "FORWARD_REVIEW_UNSUPPORTED",
+                    "retained forward reviews require a conditional preparation",
+                    status_code=422,
+                    retryable=False,
+                )
+            provenance = request.provenance
+            if revision_actor is not None:
+                provenance = provenance.model_copy(
+                    update={"author": revision_actor.subject_id}
+                )
             return apply_manual_override(
                 request.preparation,
                 path=request.path,
                 value=request.value,
-                provenance=request.provenance,
+                provenance=provenance,
             )
         except ConditionalRevisionForbidden as error:
             raise ServiceError(
