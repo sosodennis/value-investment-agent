@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
+from .forward_evidence import ForwardEvidenceReviewRefV1
 from .annual_history import (
     AnnualHistoryError,
     AnnualHistoryPeriodV1,
@@ -354,6 +355,9 @@ class ManualValuationOverrideRequestV1(StrictModel):
 
     contract_version: Literal["fundamental.v1"] = "fundamental.v1"
     preparation: AutomaticValuationPreparationV1
+    forward_review_ref: ForwardEvidenceReviewRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     path: str = Field(min_length=1)
     value: Decimal
     provenance: ManualProvenanceV1
@@ -2234,11 +2238,6 @@ def apply_conditional_terminal_growth_revision(
         raise PreparationError(
             "CONDITIONAL_REVISION_CHAINED", "revision requires an automatic preparation"
         )
-    if provenance.forward_reference is not None:
-        raise PreparationError(
-            "CONDITIONAL_REVISION_CITATION_UNSUPPORTED",
-            "conditional revision does not support forward citations",
-        )
     if provenance.automatic_preparation_digest != automatic.preparation_digest:
         raise PreparationError(
             "MANUAL_OVERRIDE_DIGEST_MISMATCH",
@@ -2286,6 +2285,11 @@ def apply_conditional_terminal_growth_revision(
             "method": "manual",
             "editable": False,
             "formula": f"manual override of {path}",
+            "source_refs": (
+                (provenance.forward_reference.source_content_hash,)
+                if provenance.forward_reference is not None
+                else evidence[0].source_refs
+            ),
             "manual_provenance": provenance,
         }
     )

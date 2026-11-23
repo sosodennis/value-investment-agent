@@ -14,6 +14,7 @@ from pydantic import model_validator
 
 from ..conditional_revision import (
     REVISION_PREFIX,
+    FORWARD_REVIEW_PREFIX,
     ConditionalRevisionError,
     ConditionalRevisionForbidden,
     ConditionalRevisionSelectorV1,
@@ -21,7 +22,15 @@ from ..conditional_revision import (
     bind_revision,
     issue_revision,
     read_revision,
+    read_forward_review,
+    retain_forward_review,
+    validate_revision_forward_review,
     revision_selector,
+)
+from ..forward_evidence import (
+    ForwardEvidenceReviewRefV1,
+    ForwardEvidenceReviewRequestV1,
+    ForwardEvidenceReviewResponseV1,
 )
 from ..calculator import (
     CalculationRefusal,
@@ -1688,7 +1697,25 @@ class FundamentalApplication:
             automatic = self._reproduce_conditional_preparation(
                 proof.selector, deadline_at=deadline_at
             )
-        expected_dependencies = self._revision_dependencies(automatic)
+        validate_revision_forward_review(
+            self.artifact_store,
+            automatic,
+            proof,
+            actor=revision_actor,
+            deadline_at=deadline_at,
+        )
+        expected_dependencies = tuple(
+            sorted(
+                {
+                    *self._revision_dependencies(automatic),
+                    *(
+                        (proof.forward_review_ref.content_hash,)
+                        if proof.forward_review_ref is not None
+                        else ()
+                    ),
+                }
+            )
+        )
         record = self.artifact_store.get(ref.artifact_id)
         if (
             record.dependency_hashes != expected_dependencies
@@ -1697,6 +1724,37 @@ class FundamentalApplication:
             raise ConditionalRevisionError("revision dependencies are not retained")
         guard_execution_deadline(deadline_at)
         return bind_revision(automatic, proof, ref)
+
+    def review_forward_evidence(
+        self,
+        request: ForwardEvidenceReviewRequestV1,
+        *,
+        revision_actor: RevisionActor,
+        deadline_at: datetime | None = None,
+    ) -> ForwardEvidenceReviewResponseV1:
+        if self.artifact_store is None:
+            raise ServiceError(
+                "ARTIFACT_UNAVAILABLE",
+                "review evidence storage is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            return retain_forward_review(
+                self.artifact_store,
+                request,
+                actor=revision_actor,
+                deadline_at=deadline_at,
+            )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
+        except ValueError as error:
+            raise ServiceError(
+                "FORWARD_REVIEW_INVALID",
+                "review evidence could not be retained",
+                status_code=422,
+                retryable=False,
+            ) from error
 
     def apply_manual_override(
         self,
@@ -2134,7 +2192,12 @@ class FundamentalApplication:
         try:
             record = self.artifact_store.get(artifact_id)
             guarded = artifact_id.startswith(
-                (REVISION_PREFIX, "calculation-evidence-", "uncertainty-evidence-")
+                (
+                    REVISION_PREFIX,
+                    FORWARD_REVIEW_PREFIX,
+                    "calculation-evidence-",
+                    "uncertainty-evidence-",
+                )
             )
             if not guarded:
                 return record, None
@@ -2156,6 +2219,16 @@ class FundamentalApplication:
                 or sha256(raw).hexdigest() != record.content_hash
             ):
                 raise ConditionalRevisionError("retained evidence bytes are invalid")
+            if artifact_id.startswith(FORWARD_REVIEW_PREFIX):
+                read_forward_review(
+                    self.artifact_store,
+                    ForwardEvidenceReviewRefV1(
+                        artifact_id=artifact_id, content_hash=record.content_hash
+                    ),
+                    actor=revision_actor,
+                    deadline_at=deadline_at,
+                )
+                return record, raw
             ref: ConditionalRevisionRefV1 | None
             if artifact_id.startswith(REVISION_PREFIX):
                 ref = ConditionalRevisionRefV1(

@@ -126,7 +126,6 @@ from .valuation_preparation import (
 from .forward_evidence import (
     ForwardEvidenceReviewRequestV1,
     ForwardEvidenceReviewResponseV1,
-    review_forward_evidence,
 )
 
 LOGGER = logging.getLogger("fundamental_service")
@@ -750,7 +749,17 @@ def create_app(
     )
     async def review_forward_evidence_route(request: Request) -> JSONResponse:
         value = decode_input(request, ForwardEvidenceReviewRequestV1)
-        return success_response(request, review_forward_evidence(value))
+        result = await run_valuation_operation(
+            request,
+            application.review_forward_evidence,
+            value,
+            revision_actor=RevisionActor(
+                subject_id=request.state.context.principal.subject_id,
+                organization_id=request.state.context.principal.organization_id,
+            ),
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
 
     @app.get(
         "/v1/policies/{policy_id}",

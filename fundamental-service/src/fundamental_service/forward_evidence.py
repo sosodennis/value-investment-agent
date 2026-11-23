@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from enum import Enum
-from typing import Literal
+from typing import Final, Literal
 from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
@@ -20,8 +20,8 @@ from pydantic import Field, field_validator, model_validator
 from .contracts import InitialModelId, StrictModel
 from .serialization import sha256_digest
 
-FORWARD_EVIDENCE_POLICY_VERSION = "forward-evidence-policy-v1"
-FORWARD_EVIDENCE_LABEL = "forward-looking external evidence"
+FORWARD_EVIDENCE_POLICY_VERSION = "forward-evidence-policy-v2"
+FORWARD_EVIDENCE_LABEL: Final = "forward-looking external evidence"
 FORWARD_EVIDENCE_MAX_AGE_DAYS = 365
 
 
@@ -30,6 +30,7 @@ class ForwardEvidenceMetric(str, Enum):
     OPERATING_MARGIN = "operating_margin"
     REINVESTMENT_RATE = "reinvestment_rate"
     DEBT_TERM = "debt_term"
+    TERMINAL_GROWTH = "terminal_growth"
 
 
 class ForwardEvidencePeriodType(str, Enum):
@@ -169,24 +170,24 @@ class ForwardEvidenceReviewRequestV1(StrictModel):
     def normalize_ticker(cls, value: object) -> object:
         return value.strip().upper() if isinstance(value, str) else value
 
-    @model_validator(mode="after")
-    def timestamp_has_timezone(self) -> ForwardEvidenceReviewRequestV1:
-        if (
-            self.valuation_timestamp.tzinfo is None
-            or self.valuation_timestamp.utcoffset() is None
-        ):
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("valuation_timestamp must include a timezone")
-        if self.valuation_timestamp.tzinfo is not UTC:
-            self = self.model_copy(
-                update={"valuation_timestamp": self.valuation_timestamp.astimezone(UTC)}
-            )
-        return self
+        return value.astimezone(UTC)
+
+
+class ForwardEvidenceReviewRefV1(StrictModel):
+    artifact_id: str = Field(pattern=r"^forward-review-v1-[0-9a-f]{64}$")
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    media_type: Literal["application/json"] = "application/json"
 
 
 class ForwardEvidenceReviewResponseV1(StrictModel):
     contract_version: Literal["fundamental.v1"] = "fundamental.v1"
     status: Literal["prepared", "unsupported", "unavailable"]
-    label: Literal[FORWARD_EVIDENCE_LABEL] = FORWARD_EVIDENCE_LABEL
+    label: Literal["forward-looking external evidence"] = FORWARD_EVIDENCE_LABEL
     policy_version: str = FORWARD_EVIDENCE_POLICY_VERSION
     automatic_preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     claims: tuple[ForwardEvidenceClaimV1, ...] = ()
@@ -196,9 +197,13 @@ class ForwardEvidenceReviewResponseV1(StrictModel):
     budget: ForwardEvidenceBudgetPolicyV1
     usage: ForwardEvidenceUsageV1
     reference_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    review_ref: ForwardEvidenceReviewRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 _SUPPORTED_PATHS = {
+    "assumptions.terminal_growth",
     "assumptions.forecast.revenue_growth[0]",
     "assumptions.forecast.revenue_growth[1]",
     "assumptions.forecast.revenue_growth[2]",
@@ -265,6 +270,16 @@ def review_forward_evidence(
             current = _append_issue(current, "SOURCE_STALE")
         if claim.period_end <= request.valuation_timestamp.date():
             current = _append_issue(current, "FORWARD_PERIOD_MISMATCH")
+        terminal_path = request.assumption_path == "assumptions.terminal_growth"
+        terminal_metric = claim.metric is ForwardEvidenceMetric.TERMINAL_GROWTH
+        if terminal_path != terminal_metric:
+            current = _append_issue(current, "TERMINAL_METRIC_PATH_MISMATCH")
+        if terminal_metric and (
+            claim.unit != "ratio"
+            or not claim.value.is_finite()
+            or not Decimal("0") <= claim.value <= Decimal("0.04")
+        ):
+            current = _append_issue(current, "TERMINAL_GROWTH_INVALID")
         if claim.metric is ForwardEvidenceMetric.DEBT_TERM:
             current = _append_issue(current, "REFERENCE_ONLY_METRIC")
         claims.append(current)
@@ -307,9 +322,11 @@ def review_forward_evidence(
         "budget": request.budget,
         "usage": request.usage,
     }
-    return ForwardEvidenceReviewResponseV1(
-        **payload,
-        reference_digest=sha256_digest(payload),
+    return ForwardEvidenceReviewResponseV1.model_validate(
+        {
+            **payload,
+            "reference_digest": sha256_digest(payload),
+        }
     )
 
 
@@ -326,6 +343,7 @@ __all__ = [
     "ForwardEvidencePeriodType",
     "ForwardEvidenceReviewRequestV1",
     "ForwardEvidenceReviewResponseV1",
+    "ForwardEvidenceReviewRefV1",
     "ForwardEvidenceSourceV1",
     "ForwardEvidenceUsageV1",
     "review_forward_evidence",
