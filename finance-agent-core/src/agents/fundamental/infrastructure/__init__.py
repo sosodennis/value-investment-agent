@@ -5,8 +5,10 @@ from .fundamental_service_client import (
     HttpFundamentalServiceClient,
     load_fundamental_release_selector,
 )
+from .valuation_revision_source_reader import ArtifactFundamentalRevisionSourceReader
 
 __all__ = [
+    "ArtifactFundamentalRevisionSourceReader",
     "FundamentalServiceClientSettings",
     "HttpFundamentalServiceClient",
     "load_fundamental_release_selector",

@@ -6,13 +6,72 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+
+from src.shared.artifacts.fundamental_contracts import CanonicalDecimal
 
 FiscalSelectorVersion = Literal["fundamental.fiscal-period-selector.v1"]
 
 
 class _StrictRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+
+class FundamentalValuationRevisionSourceV1(_StrictRequestModel):
+    thread_id: str = Field(min_length=1, max_length=128)
+    run_id: str = Field(min_length=1, max_length=128)
+    artifact_id: str = Field(min_length=1, max_length=128)
+    preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class FundamentalRevisionForwardReferenceV1(_StrictRequestModel):
+    claim_id: str = Field(min_length=1)
+    source_url: str = Field(min_length=1, max_length=2048)
+    source_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    citation: str = Field(min_length=20, max_length=8192)
+    license_reference: str = Field(min_length=1, max_length=2048)
+
+
+class FundamentalValuationRevisionV1(_StrictRequestModel):
+    source: FundamentalValuationRevisionSourceV1
+    path: Literal["assumptions.terminal_growth"]
+    value: CanonicalDecimal = Field(max_length=128)
+    reason: str = Field(min_length=1, max_length=8192)
+    forward_reference: FundamentalRevisionForwardReferenceV1 | None = None
+
+    @model_validator(mode="after")
+    def reason_is_nonblank(self) -> FundamentalValuationRevisionV1:
+        if not self.reason.strip():
+            raise ValueError("revision reason must not be blank")
+        return self
+
+
+class FundamentalValuationIntentV1(_StrictRequestModel):
+    """Caller controls without service preparation or provenance authority."""
+
+    contract_version: Literal["fundamental.v1"] = "fundamental.v1"
+    model_id: Literal["fcff_dcf", "transition_fcff_dcf"] | None = None
+    model_version: str | None = Field(default=None, min_length=1)
+    policy_id: str | None = Field(default=None, min_length=1)
+    assumptions: dict[str, JsonValue] | None = None
+    uncertainty: dict[str, JsonValue] | None = None
+    requested_as_of: str | None = None
+    fiscal_period_selector: dict[str, JsonValue] | None = None
+    revision: FundamentalValuationRevisionV1 | None = None
+
+    @model_validator(mode="after")
+    def revision_retains_source_controls(self) -> FundamentalValuationIntentV1:
+        if self.revision is not None and any(
+            value is not None
+            for value in (
+                self.assumptions,
+                self.uncertainty,
+                self.requested_as_of,
+                self.fiscal_period_selector,
+            )
+        ):
+            raise ValueError("revision controls come from the retained source report")
+        return self
 
 
 class FiscalPeriodV1(_StrictRequestModel):
@@ -209,6 +268,9 @@ def apply_request_timing(
 
 
 __all__ = [
+    "FundamentalValuationIntentV1",
+    "FundamentalValuationRevisionV1",
+    "FundamentalValuationRevisionSourceV1",
     "ExplicitFiscalPeriodSelectorV1",
     "FiscalPeriodSelectorV1",
     "FiscalPeriodV1",

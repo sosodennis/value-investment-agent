@@ -16,6 +16,9 @@ from src.agents.fundamental.application.fundamental_service_port import (
     FundamentalServiceClient,
     FundamentalServiceFailure,
 )
+from src.agents.fundamental.application.valuation_revision_port import (
+    FundamentalRevisionSourceReaderPort,
+)
 from src.agents.fundamental.application.workflow_orchestrator.services.service_request_producer import (
     PreparedServiceValuation,
     is_compact_valuation_request,
@@ -29,8 +32,10 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
+    FundamentalValuationIntentV1,
     apply_request_timing,
 )
+from src.analysis_runtime import get_workflow_execution_context
 from src.artifacts.public import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
     OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
@@ -228,44 +233,13 @@ def _validate_compact_service_input(
 ) -> JSONObject:
     """Validate the caller-owned portion before the service producer enriches it."""
 
-    supported = {
-        "contract_version",
-        "model_id",
-        "model_version",
-        "policy_id",
-        "assumptions",
-        "uncertainty",
-        "requested_as_of",
-        "fiscal_period_selector",
-        "manual_override",
-    }
-    unknown = sorted(set(input_mapping).difference(supported))
-    if unknown:
-        raise ValueError(
-            f"{context} compact input contains unsupported fields: "
-            + ", ".join(unknown)
-        )
-    contract_version = input_mapping.get("contract_version", "fundamental.v1")
-    if contract_version != "fundamental.v1":
-        raise ValueError(f"{context}.contract_version must be fundamental.v1")
-    assumptions = input_mapping.get("assumptions")
-    if assumptions is not None and not isinstance(assumptions, Mapping):
-        raise ValueError(f"{context}.assumptions must be an object")
-    uncertainty = input_mapping.get("uncertainty", {"mode": "none"})
-    if not isinstance(uncertainty, Mapping):
-        raise ValueError(f"{context}.uncertainty must be an object")
+    intent = FundamentalValuationIntentV1.model_validate(input_mapping)
+    uncertainty = intent.uncertainty or {"mode": "none"}
     if uncertainty.get("mode") == "scenarios":
         raise ValueError(
             "scenario payloads are not part of the frozen valuation contract"
         )
-    manual_override = input_mapping.get("manual_override")
-    if manual_override is not None and not isinstance(manual_override, Mapping):
-        raise ValueError(f"{context}.manual_override must be an object")
-    for field in ("model_id", "model_version", "policy_id"):
-        value = input_mapping.get(field)
-        if value is not None and (not isinstance(value, str) or not value.strip()):
-            raise ValueError(f"{context}.{field} must be a non-empty string")
-    return dict(input_mapping)
+    return intent.model_dump(mode="json", exclude_unset=True)
 
 
 def _response_result(response: FundamentalServiceResponseV1) -> Mapping[str, object]:
@@ -1539,6 +1513,7 @@ async def run_service_valuation_flow(
     client: FundamentalServiceClient,
     timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     release_selector: FundamentalReleaseSelector | None = None,
+    revision_source_reader: FundamentalRevisionSourceReaderPort | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> FundamentalNodeResult:
     fundamental_raw = state.get("fundamental_analysis", {})
@@ -1581,6 +1556,14 @@ async def run_service_valuation_flow(
             )
         correlation_id = resolve_correlation_id()
         deadline_at = datetime.now(UTC) + timedelta(seconds=timeout_seconds)
+        execution_context = get_workflow_execution_context()
+        current_thread_id = None
+        if execution_context is not None and (
+            execution_context.principal_id == principal.subject_id
+            and execution_context.organization_id == principal.organization_id
+            and execution_context.membership_id == principal.membership_id
+        ):
+            current_thread_id = execution_context.thread_id
         if input_payload is None:
             prepared = await prepare_service_valuation_request(
                 state,
@@ -1590,6 +1573,9 @@ async def run_service_valuation_flow(
                 deadline_at=deadline_at,
                 request_timing=request_timing,
                 release_selector=release_selector,
+                revision_source_reader=revision_source_reader,
+                current_thread_id=current_thread_id,
+                clock=clock,
             )
             if prepared.valuation_request is None:
                 if prepared.preparation is not None:
@@ -1672,6 +1658,16 @@ async def run_service_valuation_flow(
                     goto="END",
                 )
             input_payload = prepared.valuation_request
+            if (
+                compact_request
+                and isinstance(raw_request, Mapping)
+                and raw_request.get("revision") is not None
+            ):
+                source_timing = FundamentalRequestTimingV1.accept(
+                    {"valuation_context": input_payload["valuation_context"]},
+                    clock=clock,
+                )
+                fundamental["request_timing"] = source_timing.model_dump(mode="json")
             if compact_request and prepared.preparation is not None:
                 automatic_preparation = prepared.preparation.model_dump(
                     mode="json", exclude_unset=True

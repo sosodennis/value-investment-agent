@@ -391,7 +391,7 @@ async def test_explicit_period_selection_is_preserved() -> None:
 
 
 @pytest.mark.asyncio
-async def test_manual_override_keeps_existing_service_operation() -> None:
+async def test_browser_manual_override_is_rejected_before_service_calls() -> None:
     client = _Client(snapshot=_snapshot())
     override = {
         "contract_version": "fundamental.v1",
@@ -404,5 +404,6 @@ async def test_manual_override_keeps_existing_service_operation() -> None:
             "automatic_preparation_digest": "e" * 64,
         },
     }
-    await _prepare(client, {"model_id": "fcff_dcf", "manual_override": override})
-    assert client.calls[-1] == ("override_prepared_valuation", override)
+    with pytest.raises(ValueError, match="manual_override"):
+        await _prepare(client, {"model_id": "fcff_dcf", "manual_override": override})
+    assert client.calls == []

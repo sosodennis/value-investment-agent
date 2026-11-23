@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -14,6 +14,12 @@ from src.agents.fundamental.application.fundamental_service_port import (
     FundamentalServiceClient,
     FundamentalServiceFailure,
 )
+from src.agents.fundamental.application.valuation_revision_port import (
+    FundamentalRevisionSourceReaderPort,
+)
+from src.agents.fundamental.application.workflow_orchestrator.services.valuation_revision import (
+    prepare_retained_valuation_revision,
+)
 from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
     read_intent_state,
 )
@@ -22,6 +28,7 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
+    FundamentalValuationIntentV1,
 )
 from src.shared.artifacts.fundamental_contracts import (
     FundamentalValuationPreparationResultV1,
@@ -249,16 +256,11 @@ async def prepare_service_valuation_request(
     deadline_at: datetime,
     request_timing: FundamentalRequestTimingV1 | None = None,
     release_selector: FundamentalReleaseSelector | None = None,
+    revision_source_reader: FundamentalRevisionSourceReaderPort | None = None,
+    current_thread_id: str | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> PreparedServiceValuation:
     """Prepare automatic valuation or facts from a configured immutable release."""
-
-    if release_selector is None:
-        raise FundamentalServiceFailure(
-            "SERVICE_NOT_CONFIGURED",
-            "Fundamental release selection is not configured",
-            retryable=False,
-            status_code=503,
-        )
 
     intent = read_intent_state(state)
     ticker = intent.resolved_ticker
@@ -279,7 +281,20 @@ async def prepare_service_valuation_request(
         if request_raw is not None
         else None
     )
-    model_id = _model_id(request, fundamental)
+    compact = (
+        FundamentalValuationIntentV1.model_validate(request)
+        if request is not None and is_compact_valuation_request(request)
+        else None
+    )
+    revision = compact.revision if compact is not None else None
+    model_id = _model_id(request, fundamental) if revision is None else None
+    if revision is None and release_selector is None:
+        raise FundamentalServiceFailure(
+            "SERVICE_NOT_CONFIGURED",
+            "Fundamental release selection is not configured",
+            retryable=False,
+            status_code=503,
+        )
     valuation_context = (
         _mapping(
             request.get("valuation_context"),
@@ -326,6 +341,61 @@ async def prepare_service_valuation_request(
             retryable=False,
             status_code=422,
         )
+    if revision is not None:
+        assert compact is not None
+        if revision_source_reader is None or current_thread_id is None:
+            raise FundamentalServiceFailure(
+                "REVISION_SOURCE_UNAVAILABLE",
+                "Authenticated retained valuation source access is unavailable",
+                retryable=False,
+                status_code=503,
+            )
+        preparation = await prepare_retained_valuation_revision(
+            revision,
+            source_reader=revision_source_reader,
+            current_thread_id=current_thread_id,
+            requested_model_id=compact.model_id,
+            requested_model_version=compact.model_version,
+            requested_policy_id=compact.policy_id,
+            identity=identity,
+            client=client,
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+            modified_at=(clock or (lambda: datetime.now(UTC)))(),
+        )
+        context = _mapping(
+            (preparation.input or {}).get("valuation_context"),
+            context="Fundamental revised preparation valuation_context",
+        )
+        snapshot_id = context.get("data_snapshot_id")
+        release_digest = context.get("data_release_manifest_digest")
+        if not isinstance(snapshot_id, str) or not isinstance(release_digest, str):
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental revised preparation omitted its source bindings",
+                retryable=False,
+                status_code=502,
+            )
+        prepared = _prepared_input(
+            preparation,
+            model_id=preparation.model_id,
+            snapshot_id=snapshot_id,
+            release_digest=release_digest,
+            identity=identity,
+        )
+        return PreparedServiceValuation(
+            valuation_request=prepared,
+            identity=identity,
+            release_manifest_digest=release_digest,
+            snapshot_selector={
+                "snapshot_id": snapshot_id,
+                "data_release_manifest_digest": release_digest,
+            },
+            preparation=preparation,
+        )
+    assert release_selector is not None
+    assert model_id is not None
     cik = identity.get("issuer_id")
     if not isinstance(cik, str) or not cik.isdigit():
         raise FundamentalServiceFailure(
@@ -409,38 +479,6 @@ async def prepare_service_valuation_request(
             preparation=preparation,
             reason=preparation.status,
         )
-    manual_override = request.get("manual_override")
-    if manual_override is not None:
-        override_payload = _mapping(
-            manual_override, context="valuation_request.manual_override"
-        )
-        try:
-            override_response = await client.execute(
-                "override_prepared_valuation",
-                override_payload,
-                principal=principal,
-                correlation_id=correlation_id,
-                deadline_at=deadline_at,
-            )
-            preparation = FundamentalValuationPreparationResultV1.model_validate(
-                override_response.result
-            )
-        except (TypeError, ValueError) as error:
-            raise FundamentalServiceFailure(
-                "UPSTREAM_MALFORMED",
-                "Fundamental service returned an invalid manual override preparation",
-                retryable=False,
-                status_code=502,
-            ) from error
-        if preparation.status != "prepared":
-            return PreparedServiceValuation(
-                valuation_request=None,
-                identity=identity,
-                release_manifest_digest=release.active.manifest_digest,
-                snapshot_selector=snapshot_selector,
-                preparation=preparation,
-                reason=preparation.status,
-            )
     prepared = _prepared_input(
         preparation,
         model_id=model_id,

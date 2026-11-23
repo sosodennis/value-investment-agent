@@ -50,7 +50,7 @@ def test_start_request_accepts_caller_owned_valuation_request() -> None:
         }
     )
 
-    assert request.valuation_request == {
+    assert request.valuation_request.model_dump(mode="json", exclude_unset=True) == {
         "contract_version": "fundamental.v1",
         "assumptions": {"terminal_growth": "0.02"},
         "uncertainty": {"mode": "none"},
@@ -355,6 +355,67 @@ async def test_start_run_forwards_caller_valuation_request() -> None:
 
     assert runner.input_data is not None
     assert runner.input_data["valuation_request"] == valuation_request
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_thread", ["thread-1", "other-thread"])
+async def test_source_bound_revision_starts_only_in_its_existing_thread(
+    source_thread,
+) -> None:
+    app = FastAPI()
+    app.include_router(router)
+    principal = Principal(
+        user_id="user-1",
+        subject="user-1",
+        email="user@example.test",
+        organization_id="organization-1",
+        membership_id="membership-1",
+    )
+    app.dependency_overrides[require_current_user_mutation] = lambda: principal
+    runner = CapturingRunner()
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(), owner=Owner(), runner=runner
+    )
+    app.state.analysis_runtime = service
+    intent = {
+        "contract_version": "fundamental.v1",
+        "revision": {
+            "source": {
+                "thread_id": source_thread,
+                "run_id": "source-run",
+                "artifact_id": "retained-artifact",
+                "preparation_digest": "f" * 64,
+            },
+            "path": "assumptions.terminal_growth",
+            "value": "0.02",
+            "reason": "Reviewed source report",
+        },
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/api/v1/threads/thread-1/runs",
+            json={"message": "Revise the valuation", "valuation_request": intent},
+        )
+        if source_thread == "thread-1":
+            assert response.status_code == 202
+            assert response.json()["thread_id"] == "thread-1"
+            assert response.json()["run_id"] != "source-run"
+            await service._tasks["thread-1"]
+            assert runner.input_data["valuation_request"] == intent
+        else:
+            assert response.status_code == 422
+            assert response.json()["detail"] == "revision_thread_mismatch"
+            assert runner.input_data is None
+
+
+@pytest.mark.parametrize("field", ["manual_override", "preparation", "provenance"])
+def test_public_start_rejects_raw_service_revision_authority(field) -> None:
+    with pytest.raises(ValueError):
+        RunRequest.model_validate(
+            {"message": "Revise", "valuation_request": {field: {}}}
+        )
 
 
 @pytest.mark.asyncio

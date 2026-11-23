@@ -1,5 +1,6 @@
 """Application-owned workflow runtime and activity transport."""
 
+from .application.execution_context import get_workflow_execution_context
 from .application.runtime_service import AnalysisRuntimeService
 from .domain.contracts import (
     Activity,
@@ -20,6 +21,7 @@ __all__ = [
     "WorkflowSnapshot",
     "ActivityStatus",
     "AnalysisRuntimeService",
+    "get_workflow_execution_context",
     "ReplayPage",
     "RunStatus",
     "WorkflowEvent",
