@@ -7,7 +7,7 @@
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent",
-    "browser_session": "iab:4:issue462-final-report-acceptance",
+    "browser_session": "iab:5:issue462-final-resource-retry",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-462-app",
@@ -32,7 +32,7 @@
         "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/fundamental-overlay.yml"
       ],
       "env_file": "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/fundamental.env",
-      "env_file_sha256": "510b75f962aa6685227c124d645637a6641510059617a92a6312d749d0752a04",
+      "env_file_sha256": "44bb227cafd5bfa3f6850e36d1f631ac173e177a07f4d52f014c23682e4b42c7",
       "service": "fundamental-service",
       "container_port": 8080,
       "published_port": 21690,
@@ -70,5 +70,5 @@
   "blockers": [
     "#463/#465/#466/#467/#468/#469 owner fixes are integrated; final exact-runtime/browser acceptance, independent verdict, CI and merge-SHA smoke remain pending."
   ],
-  "next_step": "Run exact implementation preflight and browser default MC, controlled refusal, one revision and read-only history on rebuilt source matching 97037435; obtain independent runtime review before marking VERIFIED."
+  "next_step": "Restore only the recorded owned stacks after external container removal; retry preparation with child parser 3 GiB/container 4 GiB/concurrency 1, preserving original resource refusal, then final browser acceptance and review."
 }
