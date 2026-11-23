@@ -12,7 +12,7 @@ from src.agents.fundamental.infrastructure.fundamental_service_client import (
     FundamentalServiceClientSettings,
     HttpFundamentalServiceClient,
 )
-from src.agents.fundamental.interface.fundamental_service_contracts import (
+from src.shared.artifacts.fundamental_contracts import (
     FundamentalValuationPreparationResultV1,
 )
 from src.shared.internal_services import InternalPrincipal
@@ -71,7 +71,7 @@ def test_typed_caller_preserves_actual_conditional_service_response(
     assert projected.input == payload["input"]
     assert projected.preparation_digest == prepared.preparation_digest
     assert projected.quality_status == "provisional"
-    assert projected.missing_evidence == tuple(payload["missing_evidence"])
+    assert list(projected.missing_evidence or ()) == payload["missing_evidence"]
     assert projected.conditional_capital == payload["conditional_capital"]
     assert projected.conditional_quote == payload["conditional_quote"]
     assert projected.conditional_operating == payload.get("conditional_operating")
