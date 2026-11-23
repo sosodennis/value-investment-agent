@@ -1,4 +1,5 @@
 import type { components } from '@/types/generated/api-contract';
+import type { RetainedRevisionAttempt } from './valuation-revision-result';
 import type { FundamentalReportModel } from './fundamental-report-model';
 
 export const TERMINAL_GROWTH_FIELD = {
@@ -18,7 +19,7 @@ export type FundamentalRevisionControl =
     | {
           kind: 'available';
           isPending: boolean;
-          pendingSource: FundamentalRevisionSource | null;
+          attempt: RetainedRevisionAttempt | null;
           onRecalculate: (revision: FundamentalRevision, sourceTicker: string) => Promise<void>;
       };
 

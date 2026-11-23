@@ -24,8 +24,9 @@ export const SheetContent = React.forwardRef<
     React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
         side?: SheetSide;
         showCloseButton?: boolean;
+        closeLabel?: string;
     }
->(({ className, children, side = 'right', showCloseButton = true, ...props }, ref) => (
+>(({ className, children, side = 'right', showCloseButton = true, closeLabel = 'Close navigation', ...props }, ref) => (
     <DialogPortal>
         <DialogOverlay />
         <DialogPrimitive.Content
@@ -37,7 +38,7 @@ export const SheetContent = React.forwardRef<
             {showCloseButton ? (
                 <DialogPrimitive.Close
                     className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Close navigation"
+                    aria-label={closeLabel}
                 >
                     <X aria-hidden="true" className="size-4" />
                 </DialogPrimitive.Close>

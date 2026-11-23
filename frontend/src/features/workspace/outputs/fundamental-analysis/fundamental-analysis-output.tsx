@@ -15,7 +15,9 @@ import {
     type FundamentalEvidenceInventory,
     type FundamentalReportModel,
 } from './fundamental-report-model';
-import { ValuationAssumptionsSection } from './valuation-assumptions-section';
+import { ValuationAssumptionsSection, ValuationKeyAssumptions } from './valuation-assumptions-section';
+import { ValuationForecast, ValuationHistory } from './valuation-series';
+import { ExactValue } from './report-value';
 import { ValuationSummary } from './valuation-summary';
 import { ValuationUncertainty } from './valuation-uncertainty';
 import { valuationRevisionAvailability, type FundamentalRevisionControl } from './valuation-revision';
@@ -28,6 +30,7 @@ export type FundamentalAnalysisOutputProps = {
     threadId?: string | null;
     runId?: string | null;
     onSelectEvidence?: (item: EvidenceSelection) => void;
+    onReportReady?: (report: FundamentalReportModel) => void;
     onEvidenceInventory?: (inventory: FundamentalEvidenceInventory) => void;
     revisionControl?: FundamentalRevisionControl;
 };
@@ -40,6 +43,7 @@ export function FundamentalAnalysisOutput({
     runId,
     onSelectEvidence,
     onEvidenceInventory,
+    onReportReady,
     revisionControl,
 }: FundamentalAnalysisOutputProps) {
     const artifact = useArtifact(
@@ -48,6 +52,7 @@ export function FundamentalAnalysisOutput({
         'fundamental_output.artifact',
         'financial_reports',
     );
+    const attempt = revisionControl?.kind === 'available' ? revisionControl.attempt : null;
     const artifactId = reference?.artifact_id ?? null;
     const artifactUrl = reference?.download_url ?? null;
     const report = useMemo(
@@ -65,9 +70,13 @@ export function FundamentalAnalysisOutput({
                 : null,
         [artifact.data, artifactId, artifactUrl, resolvedTicker, threadId],
     );
+    useEffect(() => { if (report) onReportReady?.(report); }, [onReportReady, report]);
     useEffect(() => {
-        if (report && onEvidenceInventory) onEvidenceInventory(buildFundamentalEvidenceInventory(report));
-    }, [onEvidenceInventory, report]);
+        if (!report || !onEvidenceInventory) return;
+        const inventory = buildFundamentalEvidenceInventory(report);
+        if (attempt?.kind === 'accepted') inventory.items.push(...buildFundamentalEvidenceInventory(attempt.previousReport).items);
+        onEvidenceInventory(inventory);
+    }, [attempt, onEvidenceInventory, report]);
     if (artifact.isLoading) return <FundamentalReportLoading title="Loading Fundamental report" />;
     if (artifact.error && !artifact.data)
         return (
@@ -91,7 +100,7 @@ export function FundamentalAnalysisOutput({
             </Alert>
         );
     }
-    const pendingSource = revisionControl?.kind === 'available' ? revisionControl.pendingSource : null;
+    const pendingSource = attempt && attempt.kind !== 'accepted' ? attempt.revision.source : null;
     const pendingThisSource =
         pendingSource?.thread_id === report.identity.threadId &&
         pendingSource?.run_id === report.identity.runId &&
@@ -104,11 +113,13 @@ export function FundamentalAnalysisOutput({
         revisionControl?.kind === 'read-only' ? (
             <p className="text-xs text-muted-foreground">{revisionControl.reason}</p>
         ) : revisionControl?.kind === 'available' ? (
-            revision.kind === 'available' && currentSource ? (
+            revision.kind === 'available' && (currentSource || pendingThisSource) ? (
                 <ValuationRevisionPanel
                     key={revision.context.sourceKey}
                     context={revision.context}
                     isPending={revisionControl.isPending}
+                    readOnlyReason={!currentSource ? 'This retained source is read-only. The draft is preserved; start from an original current report to submit another revision.' : undefined}
+                    failure={attempt?.kind === 'failed' ? { operationId: attempt.operationId, message: `${attempt.code} · ${attempt.message}` } : null}
                     onRecalculate={revisionControl.onRecalculate}
                 />
             ) : (
@@ -121,12 +132,13 @@ export function FundamentalAnalysisOutput({
         ) : undefined;
     return (
         <div className="min-w-0 space-y-4">
+            {attempt?.kind === 'accepted' && <RevisionComparison previous={attempt.previousReport} current={attempt.currentReport} onSelectEvidence={onSelectEvidence} />}
             {previous && (
                 <Alert variant="warning">
                     <AlertTitle>Previous result</AlertTitle>
                     <AlertDescription>
                         This report belongs to run {report.identity.runId ?? 'unavailable'}. The current run
-                        has not supplied this result.
+                        has not supplied this result. The saved valuation date is {report.kind === 'valuation' ? report.base.valuationDate : 'unavailable'}.
                     </AlertDescription>
                 </Alert>
             )}
@@ -168,12 +180,8 @@ export function FundamentalReport({
                 <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Fundamental analysis</p>
                     <h2 className="mt-1 break-words text-lg font-semibold">{report.company}</h2>
-                    {report.shareClass && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            {report.shareClass}
-                            {report.currency ? ` · ${report.currency}` : ''}
-                        </p>
-                    )}
+                    <p className="mt-1 text-sm text-muted-foreground">{report.ticker} · {report.shareClass ?? 'Share class unavailable'} · {report.currency ?? 'Currency unavailable'}</p>
+                    {report.kind === 'valuation' && <p className="mt-1 text-xs text-muted-foreground">Valuation date · {report.base.valuationDate}</p>}
                 </div>
                 <div className="space-y-1 text-right">
                     <p className="text-xs text-muted-foreground">Report quality</p>
@@ -183,19 +191,13 @@ export function FundamentalReport({
                 </div>
             </header>
             <nav aria-label="Report sections" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                {report.kind === 'valuation' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-valuation`}>Valuation &amp; drivers</a>}
+                {report.kind === 'valuation' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-valuation`}>Valuation</a>}
+                {report.kind === 'valuation' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-forecast`}>Forecast</a>}
+                {report.kind !== 'service-error' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-history`}>History</a>}
                 {preparation && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-assumptions`}>Assumptions</a>}
                 {report.kind !== 'service-error' && <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-facts`}>Financial data</a>}
                 <a className="text-primary underline-offset-4 hover:underline" href={`#${sectionId}-sources`}>Sources &amp; method</a>
             </nav>
-            {report.issueCodes.length > 0 && (
-                <Alert variant="warning">
-                    <AlertTitle>Data and model limitations</AlertTitle>
-                    <AlertDescription className="break-words">
-                        {report.issueCodes.join(', ')}
-                    </AlertDescription>
-                </Alert>
-            )}
             {report.kind === 'service-error' && (
                 <Alert variant="destructive">
                     <AlertTitle>Automatic valuation degraded</AlertTitle>
@@ -230,10 +232,15 @@ export function FundamentalReport({
             )}
             {report.kind === 'valuation' && (
                 <div id={`${sectionId}-valuation`} tabIndex={-1} className="scroll-mt-4 space-y-5">
-                    <ValuationSummary report={report} />
+                    <ValuationSummary report={report} onSelectEvidence={onSelectEvidence} />
+                    <ValuationKeyAssumptions report={report} onSelectEvidence={onSelectEvidence} />
+                    <ReportLimitations report={report} compact />
                     <ValuationUncertainty report={report} onSelectEvidence={onSelectEvidence} />
                 </div>
             )}
+            {report.kind === 'valuation' && <div id={`${sectionId}-forecast`} tabIndex={-1} className="scroll-mt-4"><ValuationForecast report={report} onSelectEvidence={onSelectEvidence} /></div>}
+            {report.kind !== 'service-error' && <div id={`${sectionId}-history`} tabIndex={-1} className="scroll-mt-4"><ValuationHistory report={report} onSelectEvidence={onSelectEvidence} /></div>}
+            {report.kind !== 'valuation' && <ReportLimitations report={report} />}
             {preparation && (
                 <div id={`${sectionId}-assumptions`} tabIndex={-1} className="scroll-mt-4">
                     <ValuationAssumptionsSection
@@ -243,6 +250,7 @@ export function FundamentalReport({
                     />
                 </div>
             )}
+            {report.kind === 'valuation' && <ReportLimitations report={report} />}
             {report.kind !== 'service-error' && (
                 <div id={`${sectionId}-facts`} tabIndex={-1} className="scroll-mt-4">
                     <FinancialFactsTable facts={report.facts} onSelectEvidence={onSelectEvidence} />
@@ -253,4 +261,45 @@ export function FundamentalReport({
             </div>
         </article>
     );
+}
+
+function ReportLimitations({ report, compact = false }: { report: FundamentalReportModel; compact?: boolean }) {
+    const preparation = report.kind === 'valuation' || report.kind === 'preparation-outcome' ? report.preparationSummary : null;
+    const codes = [...new Set([...report.issueCodes, ...(preparation?.issueCodes ?? [])])];
+    const missing = preparation?.missingEvidence ?? [];
+    const capital = preparation?.capitalCompleteness;
+    const incompleteCapital = capital?.kind === 'provided' && (capital.completeClaims !== true || capital.completeAwards !== true);
+    if (codes.length === 0 && missing.length === 0 && !incompleteCapital) return null;
+    if (compact) return <Alert variant="warning">
+        <AlertTitle>Interpretation limits</AlertTitle>
+        <AlertDescription className="space-y-1">
+            {incompleteCapital && <p>Incomplete capital claims and award inventory. Capital values are conditional hypotheses.</p>}
+            {codes.includes('CONDITIONAL_FORWARD_REINVESTMENT_HYPOTHESES') && <p>Forward reinvestment uses conditional hypotheses.</p>}
+            {codes.some((code) => code.startsWith('HISTORY_')) && <p>Historical coverage is partial or not validated.</p>}
+            <p>{codes.length} recorded limitations · {missing.length} missing inputs. Full details remain visible below.</p>
+        </AlertDescription>
+    </Alert>;
+    return <Alert variant="warning">
+        <AlertTitle>Data and model limitations</AlertTitle>
+        <AlertDescription className="space-y-2 [overflow-wrap:anywhere]">
+            {incompleteCapital && <p>Capital claims or award inventory are incomplete. Capital inputs are conditional hypotheses; a complete capital bridge is unavailable.</p>}
+            {codes.length > 0 && <p>{codes.join(', ')}</p>}
+            {missing.length > 0 && <p>Missing evidence · {missing.join(', ')}</p>}
+            {incompleteCapital && capital.unknowns.length > 0 && <p>Unknown capital data · {capital.unknowns.join(', ')}</p>}
+        </AlertDescription>
+    </Alert>;
+}
+
+function RevisionComparison({ previous, current, onSelectEvidence }: { previous: Extract<FundamentalReportModel, { kind: 'valuation' }>; current: Extract<FundamentalReportModel, { kind: 'valuation' }>; onSelectEvidence?: (item: EvidenceSelection) => void }) {
+    const median = (report: typeof current) => report.uncertainty.kind === 'provided' ? report.uncertainty.quantiles.find((item) => item.label === 'p50')?.value ?? null : null;
+    return <section aria-label="Revision comparison" className="space-y-3 rounded-md border bg-muted/10 p-3">
+        <h2 className="text-sm font-semibold">Recalculated result</h2>
+        <p role="status" className="text-xs text-muted-foreground">A new report confirms the applied manual assumption. The previous result remains available for comparison and source inspection.</p>
+        <div className="grid gap-3 @min-[36rem]:grid-cols-2">{[{ label: 'Previous result', report: previous }, { label: 'New result', report: current }].map(({ label, report }) => <div key={label} className="min-w-0">
+            <h3 className="text-sm font-medium">{label}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Evaluated · {report.base.evaluatedAt} · Quality · {report.quality}</p>
+            <dl className="mt-2 space-y-2 text-sm"><div><dt className="text-xs text-muted-foreground">Deterministic base</dt><dd><ExactValue amount={report.base.perShare} onSelectEvidence={onSelectEvidence} /></dd></div>
+            <div><dt className="text-xs text-muted-foreground">Monte Carlo median · P50</dt><dd><ExactValue amount={median(report)} onSelectEvidence={onSelectEvidence} /></dd></div></dl>
+        </div>)}</div>
+    </section>;
 }

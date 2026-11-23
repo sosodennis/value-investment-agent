@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
 import {
     createWorkflowActivityState,
@@ -9,7 +9,7 @@ import {
 import { ReportPanel, WorkspacePage } from './workspace-page';
 import type { StandardAgentOutput } from '@/types/agents';
 import { reference, uncertaintyReport } from './outputs/fundamental-analysis/fundamental-report.test-fixtures';
-import { deferred, editableReport } from './outputs/fundamental-analysis/valuation-revision.test-fixtures';
+import { deferred, editableReport, revisedReport } from './outputs/fundamental-analysis/valuation-revision.test-fixtures';
 
 const hook = vi.hoisted(() => ({
     sendMessage: vi.fn(),
@@ -20,6 +20,14 @@ const hook = vi.hoisted(() => ({
 }));
 
 vi.mock('@/hooks/useAgent', () => ({ useAgent: () => hook.value }));
+
+beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    });
+});
 
 function workflowState(overrides: Record<string, unknown> = {}): WorkflowActivityState {
     return createWorkflowActivityState(parseWorkflowActivitySnapshot({
@@ -81,6 +89,136 @@ const waitingWorkflow = workflowState({
     active_activities: [tickerActivity],
     recent_activities: [tickerActivity],
     pending_interactions: [tickerInteraction],
+});
+
+describe('Workspace Fundamental revision lifecycle', () => {
+    afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
+
+    async function startRevision(candidate: unknown) {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+        const source = editableReport();
+        const candidateReference = { ...reference, artifact_id: 'report-2', download_url: '/api/v1/artifacts/report-2?run_id=run-2' };
+        const output: StandardAgentOutput = { kind: 'fundamental_analysis.output', version: 'v1', summary: 'Saved valuation.', reference };
+        const candidateOutput: StandardAgentOutput = { ...output, reference: candidateReference };
+        vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify({
+            kind: 'financial_reports', version: 'v1', produced_by: 'fundamental_analysis', created_at: '2026-11-23T00:00:00Z',
+            data: { ticker: 'EXAMPLE', model_type: 'fcff_dcf', status: 'done', financial_reports: [], fundamental_service: url === reference.download_url ? source : candidate },
+        }), { status: 200 }))));
+        const pending = deferred<{ kind: 'started'; threadId: string; runId: string }>();
+        hook.sendMessage.mockReturnValueOnce(pending.promise);
+        hook.value = defaultHook({ threadId: 'thread-1', runId: 'run-1', agentOutputs: { fundamental_analysis: output }, agentStatuses: { fundamental_analysis: 'done' } });
+        const cache = new Map();
+        const page = () => <SWRConfig value={{ provider: () => cache }}><WorkspacePage /></SWRConfig>;
+        const { rerender } = render(page());
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'Fundamental' }), { button: 0, ctrlKey: false });
+        await screen.findByLabelText('Terminal growth (%)');
+        fireEvent.change(screen.getByLabelText('Terminal growth (%)'), { target: { value: '2.5' } });
+        fireEvent.change(screen.getByLabelText('Reason for change'), { target: { value: 'Updated outlook.' } });
+        expect(hook.sendMessage).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Recalculate' }));
+        expect(hook.sendMessage.mock.calls[0]?.[2].revision.value).toBe('0.025');
+        return {
+            pending,
+            showRun: (overrides: Record<string, unknown> = {}) => {
+                hook.value = defaultHook({ threadId: 'thread-1', runId: 'run-2', agentOutputs: { fundamental_analysis: candidateOutput }, agentStatuses: { fundamental_analysis: 'done' }, ...overrides });
+                rerender(page());
+            },
+        };
+    }
+
+    it('keeps the draft and previous result through pending, then adopts only the parsed matching manual report', async () => {
+        const { pending, showRun } = await startRevision(revisedReport());
+        showRun({ connectionState: 'reconnecting', isLoading: true });
+        within(screen.getByRole('article', { name: 'Fundamental valuation report' })).getByText('USD 25.12 / share');
+        expect(screen.getByLabelText('Terminal growth (%)')).toHaveProperty('value', '2.5');
+        expect(screen.getByRole('button', { name: 'Recalculating…' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.queryByText('USD 168.92 / share')).toBeNull();
+        showRun();
+        await act(async () => pending.resolve({ kind: 'started', threadId: 'thread-1', runId: 'run-2' }));
+        const comparison = await screen.findByRole('region', { name: 'Revision comparison' });
+        within(comparison).getByText('USD 25.12 / share');
+        within(comparison).getByText('USD 168.92 / share');
+        within(comparison).getByText('USD 150.00 / share');
+        screen.getByText('Revised and manual reports are read-only. Start from an original automatic report for one revision.');
+        expect(screen.queryByLabelText('Terminal growth (%)')).toBeNull();
+        fireEvent.click(within(comparison).getAllByRole('button', { name: 'Inspect Deterministic base per share' })[0]);
+        const inspector = within(screen.getByLabelText('Evidence inspector'));
+        expect(inspector.getByLabelText('Original value · full precision')).toHaveProperty('value', '25.1234567890123456789');
+        inspector.getByText('run-1');
+        fireEvent.click(within(comparison).getAllByRole('button', { name: 'Inspect Deterministic base per share' })[1]);
+        expect(inspector.getByLabelText('Original value · full precision')).toHaveProperty('value', '168.92123456789');
+        inspector.getByText('run-2');
+    });
+
+    it('retains the previous artifact and draft after a service policy refusal without accepting a new valuation', async () => {
+        const { pending, showRun } = await startRevision({ projection_type: 'degraded', contract_version: 'fundamental.v1', valuation_status: 'service_unavailable', quality_status: 'degraded', issue_codes: ['MANUAL_OVERRIDE_INVALID'], service_failure: { code: 'MANUAL_OVERRIDE_INVALID', message: 'Terminal growth must be at most 0.04.', retryable: false } });
+        showRun();
+        await act(async () => pending.resolve({ kind: 'started', threadId: 'thread-1', runId: 'run-2' }));
+        await screen.findByText('MANUAL_OVERRIDE_INVALID · Terminal growth must be at most 0.04.');
+        within(screen.getByRole('article', { name: 'Fundamental valuation report' })).getByText('USD 25.12 / share');
+        expect(screen.getByLabelText('Terminal growth (%)')).toHaveProperty('value', '2.5');
+        expect(screen.getByLabelText('Reason for change')).toHaveProperty('value', 'Updated outlook.');
+        expect(screen.getByRole('button', { name: 'Recalculate' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.queryByRole('region', { name: 'Revision comparison' })).toBeNull();
+    });
+
+    it('opens the existing Activity interaction during revision and preserves the previous report and draft on return', async () => {
+        const { pending, showRun } = await startRevision(revisedReport());
+        const interaction = { ...tickerInteraction, identity: { ...tickerInteraction.identity, run_id: 'run-2' } };
+        const activity = { ...tickerActivity, run_id: 'run-2' };
+        const workflow = workflowState({ run_id: 'run-2', run_status: 'waiting', active_activities: [activity], recent_activities: [activity], pending_interactions: [interaction] });
+        showRun({ workflow, agentOutputs: {} });
+        await act(async () => pending.resolve({ kind: 'started', threadId: 'thread-1', runId: 'run-2' }));
+
+        const alert = screen.getByRole('alert');
+        within(alert).getByText('Input required to continue');
+        within(screen.getByRole('article', { name: 'Fundamental valuation report' })).getByText('USD 25.12 / share');
+        expect(screen.getByRole('button', { name: 'Recalculating…' }).hasAttribute('disabled')).toBe(true);
+        fireEvent.click(within(alert).getByRole('button', { name: 'Open Activity' }));
+        const activityTab = screen.getByRole('tab', { name: 'Activity' });
+        expect(activityTab).toHaveProperty('ariaSelected', 'true');
+        expect(document.activeElement).toBe(activityTab);
+        expect(screen.queryByRole('button', { name: 'Open Activity' })).toBeNull();
+        fireEvent.click(screen.getByRole('radio', { name: /AAPL Apple Inc\./ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue with AAPL' }));
+        expect(hook.submitCommand).toHaveBeenCalledWith([...workflow.interactions.values()][0], { type: 'ticker_selection', selected_symbol: 'AAPL' });
+        expect(hook.sendMessage).toHaveBeenCalledOnce();
+
+        showRun({ workflow: workflowState({ run_id: 'run-2', run_status: 'running', active_activities: [], recent_activities: [] }), agentOutputs: {} });
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'Fundamental' }), { button: 0, ctrlKey: false });
+        expect(screen.queryByRole('button', { name: 'Open Activity' })).toBeNull();
+        expect(screen.getByLabelText('Terminal growth (%)')).toHaveProperty('value', '2.5');
+        expect(screen.getByLabelText('Reason for change')).toHaveProperty('value', 'Updated outlook.');
+        within(screen.getByRole('article', { name: 'Fundamental valuation report' })).getByText('USD 25.12 / share');
+        expect(screen.getByRole('button', { name: 'Recalculating…' }).hasAttribute('disabled')).toBe(true);
+        showRun();
+        await screen.findByRole('region', { name: 'Revision comparison' });
+    });
+
+    it.each(['wrong value', 'wrong origin', 'parser failure'])('keeps the old report when a new artifact has %s', async (failure) => {
+        const candidate = revisedReport(failure === 'wrong value' ? '0.03' : '0.025');
+        if (failure === 'wrong origin' && candidate.automatic_preparation) {
+            for (const assumption of candidate.automatic_preparation.assumptions_evidence) {
+                if (assumption.manual_provenance) assumption.manual_provenance.automatic_preparation_digest = 'f'.repeat(64);
+            }
+        }
+        const { pending, showRun } = await startRevision(failure === 'parser failure' ? {} : candidate);
+        showRun();
+        await act(async () => pending.resolve({ kind: 'started', threadId: 'thread-1', runId: 'run-2' }));
+        await screen.findByText(/REVISION_RESULT_UNCONFIRMED|REVISION_ARTIFACT_ERROR/);
+        within(screen.getByRole('article', { name: 'Fundamental valuation report' })).getByText('USD 25.12 / share');
+        expect(screen.queryByRole('region', { name: 'Revision comparison' })).toBeNull();
+        expect(screen.queryByText('USD 168.92 / share')).toBeNull();
+    });
+
+    it('ignores a late successful request after switching to a different thread', async () => {
+        const { pending, showRun } = await startRevision(revisedReport());
+        showRun({ threadId: 'thread-other', runId: 'run-other', agentOutputs: {}, agentStatuses: {} });
+        await act(async () => pending.resolve({ kind: 'started', threadId: 'thread-1', runId: 'run-2' }));
+        expect(screen.queryByRole('region', { name: 'Revision comparison' })).toBeNull();
+        expect(screen.queryByText('USD 168.92 / share')).toBeNull();
+        expect(screen.queryByText('USD 25.12 / share')).toBeNull();
+    });
 });
 
 const waitingInteraction = [...waitingWorkflow.interactions.values()].find(
@@ -327,11 +465,6 @@ describe('WorkspacePage', () => {
     });
 
     it('renders a typed ticker interaction outside the activity projection and submits its identity', () => {
-        vi.stubGlobal('ResizeObserver', class {
-            observe() {}
-            unobserve() {}
-            disconnect() {}
-        });
         hook.value = defaultHook({ workflow: waitingWorkflow, isLoading: true });
         render(<WorkspacePage />);
 
@@ -347,16 +480,35 @@ describe('WorkspacePage', () => {
     });
 
     it('disables a pending ticker interaction only while its response is submitting', () => {
-        vi.stubGlobal('ResizeObserver', class {
-            observe() {}
-            unobserve() {}
-            disconnect() {}
-        });
         hook.value = defaultHook({ workflow: waitingWorkflow, isLoading: true, isSubmittingInteraction: true });
         render(<WorkspacePage />);
 
         expect(screen.getByRole('radio', { name: /AAPL Apple Inc\./ }).hasAttribute('disabled')).toBe(true);
         expect(screen.getByRole('button', { name: 'Continue with selected company' }).hasAttribute('disabled')).toBe(true);
+    });
+
+    it.each(['Fundamental', 'Technical', 'News', 'Debate'])('exposes the current typed input from the %s report', (tab) => {
+        hook.value = defaultHook({ threadId: 'thread-1', runId: 'run-1', workflow: waitingWorkflow });
+        render(<WorkspacePage />);
+        fireEvent.mouseDown(screen.getByRole('tab', { name: tab }), { button: 0, ctrlKey: false });
+        const alert = screen.getByRole('alert');
+        within(alert).getByText('Input required to continue');
+        fireEvent.click(within(alert).getByRole('button', { name: 'Open Activity' }));
+        screen.getByRole('radio', { name: /AAPL Apple Inc\./ });
+        expect(screen.queryByRole('button', { name: 'Open Activity' })).toBeNull();
+        expect(hook.submitCommand).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { threadId: 'thread-1', runId: 'run-other', workflow: waitingWorkflow },
+        { threadId: 'thread-other', runId: 'run-1', workflow: waitingWorkflow },
+        { threadId: 'thread-1', runId: 'run-1', workflow: workflowState({ run_status: 'waiting' }) },
+    ])('does not offer an input action for a stale or untyped workflow', (state) => {
+        hook.value = defaultHook(state);
+        render(<WorkspacePage />);
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'Fundamental' }), { button: 0, ctrlKey: false });
+        expect(screen.queryByRole('button', { name: 'Open Activity' })).toBeNull();
+        expect(screen.queryByText('Input required to continue')).toBeNull();
     });
 
     it('shows waiting as unavailable when the snapshot has no pending interaction', () => {
@@ -443,7 +595,7 @@ describe('WorkspacePage', () => {
         const dialog = screen.getByRole('dialog');
         expect(within(dialog).getByText('Evidence inspector')).toBeTruthy();
         expect(within(dialog).getByText('Debate Arena summary')).toBeTruthy();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Close navigation' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close evidence inspector' }));
         await waitFor(() => expect(document.activeElement).toBe(evidenceButton));
     });
     it.each([390, 1440])('uses the loaded Fundamental inventory in the inspector at %spx and clears selection for another run', async (width) => {
@@ -459,19 +611,21 @@ describe('WorkspacePage', () => {
         }, agentStatuses: { fundamental_analysis: 'done' } });
         const { rerender } = render(page());
         fireEvent.mouseDown(screen.getByRole('tab', { name: 'Fundamental' }), { button: 0, ctrlKey: false });
-        const fact = await screen.findByRole('button', { name: 'Inspect revenue evidence' });
+        fireEvent.click(await screen.findByText('All financial facts (1)'));
+        const fact = screen.getByRole('button', { name: 'Inspect Service fact · revenue' });
         fact.focus();
         fireEvent.click(fact);
         const inspector = width < 1440
             ? within(screen.getByRole('dialog')).getByLabelText('Evidence inspector')
             : screen.getByLabelText('Evidence inspector');
+        fireEvent.click(within(inspector).getByText(/Browse all evidence/));
         await waitFor(() => expect(within(inspector).getByRole('button', { name: /Assumption · assumptions.wacc/ })).toBeTruthy());
         within(inspector).getByText('Fact ID');
         fireEvent.click(within(inspector).getByRole('button', { name: /Calculation · equity_value/ }));
         within(inspector).getByText('enterprise_value, cash, debt');
         within(inspector).getByText('run-1');
         if (width < 1440) {
-            fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close navigation' }));
+            fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close evidence inspector' }));
             await waitFor(() => expect(document.activeElement).toBe(fact));
         }
         hook.value = defaultHook({ threadId: 'thread-2', runId: 'run-2', agentStatuses: { fundamental_analysis: 'running' } });
@@ -507,7 +661,9 @@ describe('WorkspacePage', () => {
         hook.value = defaultHook({ threadId: 'thread-1', runId: 'run-2', agentOutputs: {}, agentStatuses: { fundamental_analysis: 'running' }, isLoading: true });
         rerender(page());
         screen.getByText('Previous result');
-        screen.getByText('25.1234567890123456789');
+        within(screen.getByRole('article', { name: 'Fundamental valuation report' })).getByText('USD 25.12 / share');
+        expect(screen.getByLabelText('Terminal growth (%)')).toHaveProperty('value', '2.51234567890123456789');
+        expect(screen.getByRole('button', { name: 'Recalculating…' }).hasAttribute('disabled')).toBe(true);
         expect(screen.queryByRole('button', { name: 'Recalculate' })).toBeNull();
         await act(async () => pending.resolve({ kind: 'started', threadId: 'thread-1', runId: 'run-2' }));
     });

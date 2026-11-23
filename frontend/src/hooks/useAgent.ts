@@ -138,15 +138,20 @@ export function useAgent(assistantId = 'agent') {
             if (snapshot.run_id !== run.run_id) throw new TypeError('activity snapshot run identity mismatch.');
             hydrateWorkflow(snapshot);
             setIsLoading(false);
-            await attachStream(threadId, snapshot, operation, run.run_id);
-            return isCurrentOperation(operation) ? { kind: 'started', threadId, runId: run.run_id } : { kind: 'superseded' };
+            void attachStream(threadId, snapshot, operation, run.run_id).catch((error: unknown) => {
+                if (isCurrentOperation(operation) && !isAbortError(error)) {
+                    setConnection('closed');
+                    setError(toError(error, 'Failed to stream workflow run.'));
+                }
+            });
+            return { kind: 'started', threadId, runId: run.run_id };
         } catch (error) {
             if (!isCurrentOperation(operation) || isAbortError(error)) return { kind: 'superseded' };
             const message = toError(error, 'Failed to start workflow run.');
             setError(message);
             return { kind: 'error', message };
         } finally { if (isCurrentOperation(operation)) setIsLoading(false); }
-    }, [addUserMessage, attachStream, beginOperation, hydrateWorkflow, initSession, isCurrentOperation, setError, setRun, state.threadId]);
+    }, [addUserMessage, attachStream, beginOperation, hydrateWorkflow, initSession, isCurrentOperation, setConnection, setError, setRun, state.threadId]);
 
     const submitCommand = useCallback(async (interaction: WorkflowInteraction, response: InteractionResponse) => {
         const currentInteraction = state.workflow?.interactions.get(interaction.identity.interaction_id);

@@ -105,15 +105,24 @@ function matching(pattern: RegExp, description: string): Parser<string> {
         return parsed;
     };
 }
-const decimal = matching(/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/, 'canonical Decimal text');
+const DECIMAL_PATTERN = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
+export const isFundamentalDecimalText = (value: string): boolean => DECIMAL_PATTERN.test(value);
+const decimal = matching(DECIMAL_PATTERN, 'canonical Decimal text');
 const integerText = matching(/^(?:0|-?[1-9][0-9]*)$/, 'canonical integer text');
 const digest = matching(/^[0-9a-f]{64}$/, 'a lowercase SHA-256 digest');
-const date = matching(/^\d{4}-\d{2}-\d{2}$/, 'an ISO date');
+const date: Parser<string> = (value, context) => {
+    const parsed = matching(/^\d{4}-\d{2}-\d{2}$/, 'an ISO date')(value, context);
+    const instant = Date.parse(`${parsed}T00:00:00Z`);
+    if (!Number.isFinite(instant) || new Date(instant).toISOString().slice(0, 10) !== parsed)
+        throw new TypeError(`${context} must be a valid ISO calendar date.`);
+    return parsed;
+};
 const timestamp: Parser<string> = (value, context) => {
     const parsed = text(value, context);
     if (!/^\d{4}-\d{2}-\d{2}T/.test(parsed) || !Number.isFinite(Date.parse(parsed))) {
         throw new TypeError(`${context} must be an ISO timestamp.`);
     }
+    date(parsed.slice(0, 10), context);
     return parsed;
 };
 
@@ -151,7 +160,7 @@ const parseFundamentalHistoricalMetric = object<Contracts['FundamentalHistorical
     fiscal_year: integer,
     formula: text,
     metric_id: text,
-    period_end: text,
+    period_end: date,
     source_refs: array(text),
     unit: text,
     value: decimal,
@@ -200,12 +209,12 @@ const parseFundamentalXbrlContext = object<Contracts['FundamentalXbrlContextV1']
     consolidation_scope: nonEmpty,
     context_id: nonEmpty,
     dimensions: array(parseFundamentalDimension),
-    end_date: optional(union(date, nullValue)),
+    end_date: optional(union(nullValue, date)),
     entity_scope: nonEmpty,
-    instant: optional(union(date, nullValue)),
+    instant: optional(union(nullValue, date)),
     measure: nonEmpty,
     period_type: literal("instant", "duration"),
-    start_date: optional(union(date, nullValue)),
+    start_date: optional(union(nullValue, date)),
     unit_qname: nonEmpty,
 });
 
@@ -232,7 +241,7 @@ const parseFundamentalMissingValue = object<Contracts['FundamentalMissingValueV1
     status: literal("missing", "not_applicable", "unsupported", "unresolved"),
 });
 
-const parseFundamentalCanonicalFact = object<Contracts['FundamentalCanonicalFactV1']>({
+const parseFundamentalCanonicalFactFields = object<Contracts['FundamentalCanonicalFactV1']>({
     accession_number: optional(union(text, nullValue)),
     accounting_evidence: optional(union(dictionary(json), nullValue)),
     amendment_scope: optional(union(literal("valuation_relevant", "unrelated", "unknown"), nullValue)),
@@ -248,7 +257,7 @@ const parseFundamentalCanonicalFact = object<Contracts['FundamentalCanonicalFact
     fact_id: nonEmpty,
     filed_at: optional(union(timestamp, nullValue)),
     filing_version: optional(union(text, nullValue)),
-    instant: optional(union(date, nullValue)),
+    instant: optional(union(nullValue, date)),
     is_amendment: boolean,
     issue_codes: array(text),
     issuer_id: nonEmpty,
@@ -256,7 +265,7 @@ const parseFundamentalCanonicalFact = object<Contracts['FundamentalCanonicalFact
     mapping_decision_id: optional(union(text, nullValue)),
     normalized_field: nonEmpty,
     period_end: date,
-    period_start: optional(union(date, nullValue)),
+    period_start: optional(union(nullValue, date)),
     point_in_time_policy: optional(union(text, nullValue)),
     quality: literal("verified", "provisional", "degraded", "unsupported", "abstain", "error"),
     rejected_candidate_reasons: array(parseFundamentalCandidateRejection),
@@ -271,6 +280,15 @@ const parseFundamentalCanonicalFact = object<Contracts['FundamentalCanonicalFact
     unit: nonEmpty,
     value: union(text, union(boolean, parseFundamentalMissingValue)),
 });
+
+const NUMERIC_UNITS = new Set(['currency', 'currency/share', 'shares', 'xbrli:shares', 'ratio', 'rate', 'pure', 'xbrli:pure', 'count', 'year']);
+const parseFundamentalCanonicalFact: Parser<Contracts['FundamentalCanonicalFactV1']> = (value, context) => {
+    const parsed = parseFundamentalCanonicalFactFields(value, context);
+    const units = [parsed.unit, parsed.context.unit_qname, parsed.context.measure];
+    const numericUnit = units.some((unit) => NUMERIC_UNITS.has(unit) || /^iso4217:[A-Z]{3}$/.test(unit) || (parsed.currency != null && unit === parsed.currency));
+    if (numericUnit && typeof parsed.value === 'string') decimal(parsed.value, `${context}.value`);
+    return parsed;
+};
 
 const parseFundamentalIdentity = object<Contracts['FundamentalIdentityV1']>({
     currency: nonEmpty,

@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "issue": 477,
+  "status": "VERIFIED",
+  "branch": "codex/issue-477-fundamental-report-ui",
+  "commit": "849df68e7f03da8489ae285dafe0cdcf39cdfa74",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent",
+    "browser_session": "Final Playwright live-849df68e /runner pid53463 /six isolated contexts closed;independent-header-review-87c4ff9c-8ee2-4cd1-8f73-b7dd368570e3 closed;native Chrome dedicated477 history window,75 source-identical to849,zoom restored100percent.",
+    "allowed_untracked_paths": [],
+    "app": {
+      "compose_project": "value-investment-agent-denniswong-477-app",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/docker-compose.yml",
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/docker-compose.override.yml",
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/compose/verification/docker-compose.issue325-app-fundamental.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/app-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/app.env",
+      "env_file_sha256": "94ffe0684f09a582188d19b8fdb9e29a957c8378fe8ebc822894fedc54ea3939",
+      "service": "backend",
+      "container_port": 8000,
+      "published_port": 22680,
+      "url": "http://127.0.0.1:22680"
+    },
+    "fundamental": {
+      "compose_project": "value-investment-agent-denniswong-477-fundamental",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/fundamental-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/runtime/fundamental.env",
+      "env_file_sha256": "5517b98bc2b255d00cd339bce61c2d25ea613bfc3f2cca6d6844d4a148470182",
+      "service": "fundamental-service",
+      "container_port": 8080,
+      "published_port": 22690,
+      "url": "http://127.0.0.1:22690"
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "final_preflight",
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=<canonical runtime tuple> REQUIRE_SEC_IDENTITY_RESOLUTION=1 scripts/acceptance_preflight.sh",
+      "evidence": "runtime/preflight-849df68e.log;exit0;exact_commit=1;SEC capability=true"
+    },
+    {
+      "name": "runtime_source_equality",
+      "status": "pass",
+      "command": "python3 <runtime>/verify-runtime-source.py",
+      "evidence": "runtime/source-849df68e.log;exit0;Fundamental183/backend818files;no mismatch;frontend tree d94bad25652d1e6f2d1b06e37fe33f2dba78d26d"
+    },
+    {
+      "name": "frontend_checks",
+      "status": "pass",
+      "command": "npm run lint; npm run typecheck; npm run test -- --run; npm run check:contrast",
+      "evidence": "checks-849df68e/verification.json;all exit0;59files517tests"
+    },
+    {
+      "name": "complete_retained_regression",
+      "status": "pass",
+      "command": "FUNDAMENTAL_RETAINED_DIR=<complete462> npx playwright test --config e2e/fundamental-report-live.config.ts --grep retained",
+      "evidence": "checks-849df68e/retained.log;exit0;5passed;complete envelopes with SHA256 guards"
+    },
+    {
+      "name": "real_service_browser_acceptance",
+      "status": "pass",
+      "command": "FUNDAMENTAL_LIVE=1 npx playwright test --config e2e/fundamental-report-live.config.ts --grep \"real service\"",
+      "evidence": "runtime/live-849df68e.log;6passed;.last-run.json status=passed/failedTests=[];result verifier exit0"
+    },
+    {
+      "name": "header_route_controls",
+      "status": "pass",
+      "command": "node <runtime>/verify-header-scoped.cjs",
+      "evidence": "runtime/header-scoped-75c75c29.log;exit0;10route/width control cases;settings document overflow separately tracked482;canonical workspace no-overflow assertion unchanged"
+    },
+    {
+      "name": "native_zoom_and_clipboard",
+      "status": "pass",
+      "command": "Native Chrome200percent zoom;Copy original value then paste into native TextEdit",
+      "evidence": "zoom200-75c75c29.webp/zoom200-values-75c75c29.webp;zoom restored100percent;clipboard c46 raw exact,inspector source unchanged at849"
+    },
+    {
+      "name": "independent_review",
+      "status": "pass",
+      "command": "Independent source/parser/VM/hook and real read-only browser review",
+      "evidence": "issue-477-progress-review.md;PASS+NOTES;accepted478/479/480findings fixed;actualSR limitation retained"
+    },
+    {
+      "name": "no_comments",
+      "status": "pass",
+      "command": "Independent comment-sicko source review and Header delta review",
+      "evidence": "0comments/suppressions/MUST KILL;review/no-comments.md;does not replace full review"
+    }
+  ],
+  "blockers": [],
+  "next_step": "Wait for final PR-head CI and independent verdict;then guarded merge to main,verify main and perform scoped cleanup.",
+  "frontend_runtime": {
+    "service": "frontend",
+    "published_port": 22681,
+    "url": "http://127.0.0.1:22681",
+    "running_image_id": "sha256:43077280f5381252d85131bc6761cfd42a56d7289baa7b13ffbc3fb94caec08c",
+    "build_commit": "849df68e7f03da8489ae285dafe0cdcf39cdfa74",
+    "state": "running",
+    "health": "healthy"
+  },
+  "delivery_gates": {
+    "pr": "https://github.com/sosodennis/value-investment-agent/pull/481",
+    "pr_status": "draft",
+    "remote_head_ci": "pending final metadata push",
+    "main_merge": "not_run",
+    "issue_closure": "not_run",
+    "scoped_cleanup": "not_run"
+  },
+  "limitations": [
+    {
+      "name": "actual_screen_reader_output",
+      "status": "not_run",
+      "required_for_this_delivery": false,
+      "reason": "VoiceOver utterance/caption could not be observed. User2026-11-23: Ok，a11y不是我們的重心。 Retained as unverified;not marked pass."
+    },
+    {
+      "name": "organization_settings_content_overflow",
+      "issue": 482,
+      "reason": "Independent settings content grid/table defect;Header geometry/controls pass. No claim that whole settings document passes."
+    }
+  ],
+  "scope_amendments": [
+    "2026-11-23 user authorized global Header fix: 可以，你認為有需要就全站fix",
+    "2026-11-23 user deprioritized actual screen-reader acceptance;unverified output retained as limitation and excluded from required delivery checks."
+  ]
+}

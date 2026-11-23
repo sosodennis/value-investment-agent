@@ -23,9 +23,13 @@ export function ValuationRevisionPanel({
     context,
     isPending,
     onRecalculate,
+    failure,
+    readOnlyReason,
 }: {
     context: ValuationRevisionContext;
     isPending: boolean;
+    failure?: { operationId: string; message: string } | null;
+    readOnlyReason?: string;
     onRecalculate: (revision: FundamentalRevision, sourceTicker: string) => Promise<void>;
 }) {
     const [state, dispatch] = useReducer(valuationRevisionReducer, context, createValuationRevisionState);
@@ -37,7 +41,7 @@ export function ValuationRevisionPanel({
     const id = useId();
     const sourceKey = context.sourceKey;
     const recalculating = state.recalculation.kind === 'pending' || state.recalculation.kind === 'submitted';
-    const disabled = isPending || recalculating;
+    const disabled = isPending || recalculating || readOnlyReason !== undefined;
     useEffect(
         () => () => {
             researchOperation.current?.abort();
@@ -46,6 +50,12 @@ export function ValuationRevisionPanel({
         },
         [],
     );
+
+    const failureOperationId = failure?.operationId;
+    const failureMessage = failure?.message;
+    useEffect(() => {
+        if (failureOperationId && failureMessage) dispatch({ type: 'recalculation-result-failed', sourceKey, message: failureMessage });
+    }, [failureOperationId, failureMessage, sourceKey]);
 
     async function research() {
         if (disabled || researchOperation.current) return;
@@ -142,6 +152,7 @@ export function ValuationRevisionPanel({
                     The saved report stays unchanged. Recalculate creates a new run from this exact source.
                 </p>
             </div>
+            {readOnlyReason && <p className="text-xs text-muted-foreground">{readOnlyReason}</p>}
             <form onSubmit={(event) => void recalculate(event)} className="space-y-4">
                 <Field
                     label={`${TERMINAL_GROWTH_FIELD.label} (${TERMINAL_GROWTH_FIELD.unit})`}

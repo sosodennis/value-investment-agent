@@ -1,5 +1,5 @@
 import type { ForwardEvidenceReview } from './forward-evidence-api';
-import { preparation, snapshotDigest, timestamp, valuationReport } from './fundamental-report.test-fixtures';
+import { calculation, preparation, rootDigest, snapshotDigest, timestamp, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
 import type { ValuationRevisionContext } from './valuation-revision';
 
 export function revisionContext(runId = 'run-1'): ValuationRevisionContext {
@@ -13,6 +13,19 @@ export function editableReport() {
     if (!original) throw new Error('Expected assumption fixture.');
     automatic.assumptions_evidence = [{ ...original, path: 'assumptions.terminal_growth', value: '0.02' }];
     return valuationReport({ automatic_preparation: automatic });
+}
+
+export function revisedReport(value = '0.025') {
+    const source = editableReport();
+    const automatic = source.automatic_preparation;
+    const original = automatic?.assumptions_evidence[0];
+    if (!automatic || !original) throw new Error('Expected original preparation.');
+    const result = uncertaintyReport({ base: calculation({ per_share_value: '168.92123456789', evaluated_at: '2026-11-24T01:00:00Z' }), quantiles: { p05: '100', p50: '150', p95: '190' } });
+    result.automatic_preparation = {
+        ...automatic, preparation_digest: rootDigest, input: { assumptions: { terminal_growth: value }, provenance: { conditional_revision_ref: 'retained-source' } },
+        assumptions_evidence: [original, { ...original, value, method: 'manual', manual_provenance: { author: 'user-1', automatic_preparation_digest: automatic.preparation_digest, modified_at: '2026-11-24T01:00:00Z', reason: 'Updated outlook.' } }],
+    };
+    return result;
 }
 
 export function forwardReview(): ForwardEvidenceReview {

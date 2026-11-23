@@ -126,7 +126,7 @@ function OrganizationSwitcher() {
     }
 
     return (
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
             <Building2 aria-hidden="true" className="hidden size-4 shrink-0 text-muted-foreground sm:block" />
             {organizations.length > 0 ? (
                 <Combobox
@@ -144,11 +144,11 @@ function OrganizationSwitcher() {
                     searchPlaceholder="Search organizations"
                     emptyMessage="No organizations found."
                     disabled={isLoading || isSelecting}
-                    className="h-9 w-36 max-w-[42vw] border-border/70 bg-background/70 text-xs sm:w-48 sm:text-sm"
+                    className="h-9 min-w-0 w-36 border-border/70 bg-background/70 px-2 text-xs sm:w-48 sm:px-4 sm:text-sm"
                 />
             ) : null}
             {error ? (
-                <div className="hidden items-center gap-1 sm:flex" role="alert">
+                <div className="hidden min-w-0 items-center gap-1 sm:flex" role="alert">
                     <span className="max-w-40 truncate text-sm text-destructive">Organization unavailable</span>
                     <Button
                         variant="ghost"
@@ -227,7 +227,7 @@ function MobileNavigation() {
             <Tooltip>
                 <TooltipTrigger asChild>
                     <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open navigation">
+                        <Button variant="ghost" size="icon" className="shrink-0 md:hidden" aria-label="Open navigation">
                             <Menu aria-hidden="true" />
                         </Button>
                     </SheetTrigger>
@@ -250,17 +250,17 @@ function AppHeader() {
     const isAuthPage = pathname === '/login' || pathname === '/register';
 
     return (
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between bg-card px-3 sm:px-5">
-            <div className="flex min-w-0 items-center gap-2">
+        <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-2 bg-card px-3 sm:px-5">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
                 {!isAuthPage && !loading ? <MobileNavigation /> : null}
                 <Link
                     href="/"
-                    className="inline-flex items-center gap-2 rounded-sm text-base font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex shrink-0 items-center gap-2 rounded-sm text-base font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                     <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
                         <Sparkles aria-hidden="true" className="size-4" />
                     </span>
-                    <span className="truncate">FinanceAI Lab</span>
+                    <span className={isAuthPage ? 'truncate' : 'sr-only md:not-sr-only'}>FinanceAI Lab</span>
                 </Link>
                 {!isAuthPage && !loading ? <OrganizationSwitcher /> : null}
             </div>
