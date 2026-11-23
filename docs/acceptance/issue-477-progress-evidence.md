@@ -1,8 +1,27 @@
 # #477 正式頁面證據
 
-本檔保存 c46d9fba191c3b793749198ca444b5ef96f3396d 的實頁證據，不宣稱整體驗收通過。截圖來自正式 workspace 與本 issue 隔離服務，沒有 mock API。超過 repository 單檔限制的 PNG 轉為無損 WebP，逐像素核對相等，尺寸不變。原始 PNG 保存在隔離 diagnostics，未刪除。320px 截圖寬327px正是 #480 的失敗證據。
+本檔保留 c46d9fba191c3b793749198ca444b5ef96f3396d 的原始實頁證據，並追加75c75c29745a6f802eb2000ac31bb0a52931107e的Header修正後畫面。截圖來自正式 workspace 與本 issue 隔離服務，沒有 mock API。超過 repository 單檔限制的 PNG 轉為無損 WebP，逐像素核對相等，尺寸不變。原始 PNG 保存在隔離 diagnostics，未刪除。原始320px截圖寬327px是#480的歷史失敗證據；下列fixed圖為修正後320px。
 
-## 正式畫面
+## Header 修正後正式畫面
+
+Capture commit：`75c75c29745a6f802eb2000ac31bb0a52931107e`。Canonical layout test exit0，light/dark×320/390/768/1440、窄pane、reduced motion與完整正反向focus cycle通過。原生Chrome重新載入同一runtime後觀察Zoom:200%，公司與估值數字可讀；最後已還原100%。
+
+![320px light修正後](issue-477/layout-light-320-fixed.webp)
+
+![320px dark修正後](issue-477/layout-dark-320-fixed.webp)
+
+![原生Chrome200%公司與Header](issue-477/zoom200-75c75c29.webp)
+
+![原生Chrome200%估值數字](issue-477/zoom200-values-75c75c29.webp)
+
+| 檔案 | SHA-256 |
+| --- | --- |
+| layout-light-320-fixed.webp | `8170fc74b5b447027d0b6dc875efd84f972533232cf82e9bcc96cbf13bf940ce` |
+| layout-dark-320-fixed.webp | `ade3d41ae5ef953e1454efc7fb32c008af69f9dc6eeb7d6ba3fd879b3481216b` |
+| zoom200-75c75c29.webp | `b7afe97ade021dd96b3e42619c5b9400b9eac5f5fc4b4d375ce1f4406f327845` |
+| zoom200-values-75c75c29.webp | `64981513d1e25e9653957dac29d2a755adf30fa28ef1428eb69e4b9456b291ed` |
+
+## 早期正式畫面
 
 ### 1440px light 連續章節
 

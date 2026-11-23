@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "issue": 477,
-  "status": "BLOCKED",
+  "status": "WIP",
   "branch": "codex/issue-477-fundamental-report-ui",
-  "commit": "541c8a9ca550e179173ddb7341cdeee3cea0dff4",
+  "commit": "75c75c29745a6f802eb2000ac31bb0a52931107e",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent",
@@ -125,17 +125,14 @@
       "evidence": "preflight-metadata-9cbeb164.log;exit0;metadata descendant of541c8a9c;onlyissue477 acceptance md/json changed"
     }
   ],
-  "blockers": [
-    "https://github.com/sosodennis/value-investment-agent/issues/480 — 320px global Header overflow; shell scope decision pending.",
-    "F20 actual screen-reader output remains unverified; user observation requested."
-  ],
-  "next_step": "PR481 remains draft. Issue480 shell scope decision and F20 actual spoken-output observation are required before ready,merge or closure. Keep477 runtime and named data. Only acceptance Markdown/JSON may follow tested541c8a9c.",
+  "blockers": [],
+  "next_step": "Build the screenshot-bearing delivery candidate and run complete final acceptance.",
   "frontend_runtime": {
     "service": "frontend",
     "published_port": 22681,
     "url": "http://127.0.0.1:22681",
-    "running_image_id": "sha256:98de139b6effa715776d6312b3fe153be70a4f839c2ef14881c56cc0ad1e11ea",
-    "build_commit": "541c8a9ca550e179173ddb7341cdeee3cea0dff4",
+    "running_image_id": "sha256:43077280f5381252d85131bc6761cfd42a56d7289baa7b13ffbc3fb94caec08c",
+    "build_commit": "75c75c29745a6f802eb2000ac31bb0a52931107e",
     "state": "running",
     "health": "healthy"
   },

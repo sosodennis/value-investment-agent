@@ -1,6 +1,12 @@
 # #477 正式 Fundamental 報告驗收
 
-本次已驗交付 commit 為 `541c8a9ca550e179173ddb7341cdeee3cea0dff4`。產品審閱及原生截圖 commit 為 `c46d9fba191c3b793749198ca444b5ef96f3396d`，兩者 frontend Git tree 相同。後續提交只包含本 issue 的驗收 Markdown 與 JSON。目前保持 BLOCKED，未宣稱 VERIFIED、未合併 main，也未結案 #477。
+Header修正已整合於`75c75c29745a6f802eb2000ac31bb0a52931107e`，layout與獨立實頁重驗通過。含新截圖的交付候選將再建置並執行整組真實服務驗收；目前保持WIP、PR draft，尚未合併或結案。
+
+## 使用者核准的範圍調整
+
+2026-11-23，使用者明確同意修正全站 Header：「可以，你認為有需要就全站fix」。#480 因而納入本次交付，修正 owning shell 的響應式約束。
+
+對實際 VoiceOver 人工驗收，使用者回覆：「Ok，a11y不是我們的重心。」本次保留 actual screen-reader output 未驗證的限制，依最新優先序不作結案與合併門檻。沒有把未驗證的朗讀標為 pass；既有鍵盤、touch、focus、Escape、labels、200% zoom 與非純色提示仍依正式頁面結果記錄。
 
 ## 已交付行為
 
@@ -21,9 +27,9 @@
 | F15 | 通過 unit／hook／live | 同 run typed resume 不再被誤判 superseded；stale operation、source identity、recovery error 有 current/abort guard。 |
 | F16 | 通過 live 與元件測試 | Live Research 回傳 unavailable，無 accepted claims、不改 draft；error、無可套用 claim 與 accepted claim Apply 路徑由元件測試核對。 |
 | F17 | 通過 live | history URL 唯讀、無 mutation；原 artifact、assumptions、raw values 與 inspector 保留。 |
-| F18 | 未通過，#480 | 真實 320px 頁面 document scrollWidth `327`（viewport `320`）；原因是全站 Header organization selector。報告表格仍使用局部 scroll。目標原本排除 shell，尚未獲授權修改。 |
-| F19 | 部分通過 | light/dark、reduced motion、320/390/768/1440、窄 report pane、contrast、200% native Chrome zoom 與放大後 reflow 已核對；F18 shell overflow 仍使整體項目未通過。 |
-| F20 | 未完整驗證 | Playwright／CUA 已核對 labels、Tab、Sheet/Dialog focus cycle、Escape、focus return、touch 與 dynamic status；VoiceOver 朗讀與字幕目前無法由工具觀測，等待使用者提供實際朗讀結果。 |
+| F18 | 通過修正後layout | #480 owning shell修正後，light/dark×320/390/768/1440 document不溢出，窄report pane與表格局部scroll可讀；獨立reviewer同樣重驗。 |
+| F19 | 通過 | light/dark、reduced motion、四寬、窄pane、contrast與原生Chrome真正200%zoom/reflow均經核對，75c75c29已補拍公司及估值數字。 |
+| F20 | 已驗互動；朗讀未驗證 | labels、Tab、Sheet/Dialog正反向focus cycle、Escape、focus return、touch與dynamic status通過。Actual VoiceOver output不可觀測，依使用者最新優先序列限制，不標朗讀pass，且不作本次merge／closure門檻。 |
 
 完整命令、exit code、同 source 證明與最終重跑結果見 [交付檢查](issue-477-progress-checks.md)。
 
@@ -52,11 +58,11 @@ failed: light/dark reflow test at 320px because document scrollWidth=327 (#480)
 主要 live identities 與 evidence files 保存在 repo 外 diagnostics：
 `/Users/denniswong/.codex/diagnostics/issue-477-fundamental-report-ui/live-541c8a9c/`。重算 run 的新 base、拒絕 artifact、history identity、screenshots 與 layout JSON 均由測試明確產生；不把舊 retained 數字套到新 live artifact。
 
-## 獨立審閱與未完成項目
+## 獨立審閱與限制
 
-獨立 reviewer 已完成金融語義、來源 identity、formatter、series、revision reducer／workspace operation、evidence inspector、reading hierarchy 及 #479 lifecycle 的實質審閱，並在 c46d9fba 重跑 affected checks。[完整獨立 review](issue-477-progress-review.md) 已包含實頁查核，仍明確保留兩個未完成項：#480 shell scope 與 F20 實際 screen-reader output；no-comments 零 findings 不代替實質審閱。
+[完整獨立review](issue-477-progress-review.md)已核對金融語義、來源、狀態、閱讀層級與Header實頁，接受的#478／#479／#480問題均已有owning-layer修正。Overall verdict等待含圖交付候選的整組6案結果。
 
-因此 #480 保持 open，F18 不標通過；F20 在取得實際 VoiceOver 觀察前不標通過。PR 應保持 draft，不能以目前證據 merge 或關閉 #477。
+實際螢幕閱讀器朗讀未驗證，依上述使用者優先序保留限制。額外發現的組織設定頁內容grid／member table溢出另列[#482](https://github.com/sosodennis/value-investment-agent/issues/482)：Header本身幾何與選單通過，不將settings整頁稱為pass，也不改Fundamental canonical assertions。
 
 ## 正式畫面與來源記錄
 
