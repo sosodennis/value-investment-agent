@@ -9,9 +9,11 @@ from src.agents.fundamental.capabilities.forward_evidence import (
     ForwardEvidenceResearchService,
 )
 from src.agents.fundamental.infrastructure import (
-    ArtifactFundamentalRevisionSourceReader,
     HttpFundamentalServiceClient,
     load_fundamental_release_selector,
+)
+from src.agents.fundamental.infrastructure.valuation_revision_source_reader import (
+    ArtifactFundamentalRevisionSourceReader,
 )
 from src.artifacts.public import build_default_artifact_service
 from src.auth.entrypoint import get_ownership_service
