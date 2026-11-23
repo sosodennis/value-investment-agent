@@ -60,12 +60,12 @@ async function expectNoPageOverflow(page: Page): Promise<void> {
         viewport: document.documentElement.clientWidth,
         content: document.documentElement.scrollWidth,
     }));
-    expect(dimensions.content, 'Only local tables may scroll horizontally').toBeLessThanOrEqual(dimensions.viewport + 1);
+    expect.soft(dimensions.content, 'Only local tables may scroll horizontally').toBeLessThanOrEqual(dimensions.viewport + 1);
     const box = await page.getByRole('article', { name: reportName }).boundingBox();
     expect(box).not.toBeNull();
     if (box) {
-        expect(box.x).toBeGreaterThanOrEqual(0);
-        expect(box.x + box.width).toBeLessThanOrEqual(dimensions.viewport + 1);
+        expect.soft(box.x).toBeGreaterThanOrEqual(0);
+        expect.soft(box.x + box.width).toBeLessThanOrEqual(dimensions.viewport + 1);
     }
 }
 
