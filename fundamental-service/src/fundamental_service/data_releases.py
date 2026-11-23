@@ -586,6 +586,7 @@ class ReleaseResolutionCacheKeyV1(ReleaseModel):
     parser_version: str = Field(min_length=1)
     quality_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     identity_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    identity_selection_policy: str = Field(default="exact-identity-v1", min_length=1)
     valuation_timestamp: datetime
     source_selection_policy: str = Field(min_length=1)
     coverage_profile: str = Field(min_length=1)

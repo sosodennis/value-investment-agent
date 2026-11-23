@@ -890,11 +890,15 @@ class SourceSnapshotV1(StrictModel):
         return self
 
 
+SnapshotIdentitySelectionPolicy = Literal["exact-identity-v1", "sec-ticker-series-v1"]
+
+
 class SnapshotResolutionRequestV1(StrictModel):
     """Caller-owned point-in-time selector for an immutable data snapshot."""
 
     contract_version: Literal["fundamental.v1"]
     release_profile_id: str | None = Field(default=None, min_length=1)
+    identity_selection_policy: SnapshotIdentitySelectionPolicy = "exact-identity-v1"
     identity: IdentityV1
     valuation_timestamp: datetime
     fiscal_period_selector: FiscalPeriodSelectorV1 | None = None
@@ -931,6 +935,7 @@ class FactsReadRequestV1(StrictModel):
 class SnapshotResolutionV1(StrictModel):
     """Immutable references needed to construct a complete valuation input."""
 
+    identity_selection_policy: SnapshotIdentitySelectionPolicy = "exact-identity-v1"
     contract_version: Literal["fundamental.v1"]
     snapshot_id: str = Field(min_length=1)
     data_release_manifest_digest: str | None = Field(

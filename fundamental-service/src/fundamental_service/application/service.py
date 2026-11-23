@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import datetime
 from hashlib import sha256
+import re
 from typing import Any, overload
 
 from pydantic import model_validator
@@ -1780,6 +1781,72 @@ class FundamentalApplication:
             )
         return policy
 
+    def _series_snapshot_candidates(
+        self,
+        request: SnapshotResolutionRequestV1,
+        active_release: ActiveDataReleaseWithManifestV1 | None,
+    ) -> tuple[SourceSnapshotV1, ...]:
+        if active_release is None:
+            raise ServiceError(
+                "SERIES_RELEASE_REQUIRED",
+                "series selection requires an active release",
+                status_code=422,
+                retryable=False,
+            )
+        identity = request.identity
+        if (
+            identity.share_class != identity.security_id
+            or re.fullmatch(r"[A-Z0-9.-]{1,32}", identity.security_id) is None
+        ):
+            raise ServiceError(
+                "SERIES_KEY_INVALID",
+                "series selection requires the opaque selected SEC ticker key",
+                status_code=422,
+                retryable=False,
+            )
+        candidates = []
+        for ref in active_release.manifest.snapshot_refs:
+            snapshot = self.snapshot(ref.snapshot_id)
+            if snapshot.manifest_digest != ref.manifest_digest:
+                raise ServiceError(
+                    "DATA_RELEASE_SNAPSHOT_MISMATCH",
+                    "released snapshot identity failed verification",
+                    status_code=409,
+                    retryable=False,
+                )
+            if snapshot.valuation_timestamp > request.valuation_timestamp:
+                continue
+            if any(
+                getattr(snapshot.identity, field) != getattr(identity, field)
+                for field in (
+                    "issuer_id",
+                    "security_id",
+                    "currency",
+                    "domicile",
+                    "reporting_basis",
+                )
+            ):
+                continue
+            self._release_snapshot_facts(active_release.manifest, snapshot)
+            candidates.append(snapshot)
+        if len({snapshot.identity.share_class for snapshot in candidates}) > 1:
+            raise ServiceError(
+                "SERIES_IDENTITY_AMBIGUOUS",
+                "the released series does not select one canonical share class",
+                status_code=422,
+                retryable=False,
+            )
+        return tuple(
+            sorted(
+                candidates,
+                key=lambda snapshot: (
+                    snapshot.valuation_timestamp,
+                    snapshot.snapshot_id,
+                ),
+                reverse=True,
+            )
+        )
+
     def resolve_snapshot(
         self, request: SnapshotResolutionRequestV1
     ) -> SnapshotResolutionV1:
@@ -1860,6 +1927,7 @@ class FundamentalApplication:
                 parser_version=manifest.parser_version,
                 quality_profile_digest=manifest.quality_profile_digest,
                 identity_digest=identity_digest,
+                identity_selection_policy=request.identity_selection_policy,
                 valuation_timestamp=request.valuation_timestamp,
                 source_selection_policy=request.source_selection_policy,
                 coverage_profile=request.coverage_profile,
@@ -1901,9 +1969,13 @@ class FundamentalApplication:
             else:
                 self.metrics.increment("cache_miss_total")
 
-        candidates = self.snapshot_repository.find(
-            identity=request.identity,
-            valuation_timestamp=request.valuation_timestamp,
+        candidates = (
+            self._series_snapshot_candidates(request, active_release)
+            if request.identity_selection_policy == "sec-ticker-series-v1"
+            else self.snapshot_repository.find(
+                identity=request.identity,
+                valuation_timestamp=request.valuation_timestamp,
+            )
         )
         declared_snapshots = (
             {
@@ -1994,6 +2066,7 @@ class FundamentalApplication:
                     required_fields=request.required_fields,
                 )
             result = SnapshotResolutionV1(
+                identity_selection_policy=request.identity_selection_policy,
                 contract_version="fundamental.v1",
                 snapshot_id=snapshot.snapshot_id,
                 data_release_manifest_digest=(
