@@ -8,7 +8,7 @@ export function FinancialFactsTable({ facts, onSelectEvidence }: {
     onSelectEvidence?: (item: EvidenceSelection) => void;
 }) {
     return (
-        <section aria-label="Financial data" className="min-w-0 space-y-3">
+        <section aria-label="Financial data" className="min-w-0 space-y-3 border-b pb-5">
             <h3 className="font-semibold">Financial data</h3>
             <p className="text-sm text-muted-foreground">Selected canonical facts retain their source period, unit, dimensions and scale. This selection does not represent complete historical statements.</p>
             {facts.length === 0 ? <p>No canonical facts were supplied.</p> : (
@@ -22,11 +22,11 @@ export function FinancialFactsTable({ facts, onSelectEvidence }: {
                         </TableRow></TableHeader>
                         <TableBody>{facts.map((fact) => <TableRow key={fact.id}>
                             <TableCell><span className="block font-medium">{fact.label}</span><span className="text-xs text-muted-foreground">{fact.id}</span></TableCell>
-                            <TableCell className="font-mono tabular-nums">{onSelectEvidence ? (
+                            <TableCell className="break-all font-mono tabular-nums">{onSelectEvidence ? (
                                 <button type="button" className="rounded-sm text-left underline decoration-dashed underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onSelectEvidence(fact.evidence)} aria-label={`Inspect ${fact.label} evidence`}>{fact.value}</button>
                             ) : fact.value}</TableCell>
                             <TableCell>{fact.period}</TableCell>
-                            <TableCell>{fact.currency ? `${fact.currency} · ` : ''}{fact.unit} · source scale 10^{fact.scale}</TableCell>
+                            <TableCell>{fact.currency && fact.currency !== fact.unit ? `${fact.currency} · ` : ''}{fact.unit} · source scale 10^{fact.scale}</TableCell>
                             <TableCell>{fact.dimensions.length ? fact.dimensions.map((dimension) => `${dimension.name}: ${dimension.member}`).join(', ') : 'No dimensions'}</TableCell>
                             <TableCell><Badge variant={fact.quality === 'verified' ? 'outline' : 'warning'}>{fact.quality}</Badge>{fact.issueCodes.length > 0 && <p className="mt-1 text-xs">{fact.issueCodes.join(', ')}</p>}</TableCell>
                         </TableRow>)}</TableBody>

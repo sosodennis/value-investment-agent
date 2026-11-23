@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SWRConfig } from 'swr';
 import {
     createWorkflowActivityState,
     parseWorkflowActivitySnapshot,
@@ -7,6 +8,7 @@ import {
 } from '@/features/workflow';
 import { ReportPanel, WorkspacePage } from './workspace-page';
 import type { StandardAgentOutput } from '@/types/agents';
+import { reference, uncertaintyReport } from './outputs/fundamental-analysis/fundamental-report.test-fixtures';
 
 const hook = vi.hoisted(() => ({
     sendMessage: vi.fn(),
@@ -442,5 +444,39 @@ describe('WorkspacePage', () => {
         expect(within(dialog).getByText('Debate Arena summary')).toBeTruthy();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close navigation' }));
         await waitFor(() => expect(document.activeElement).toBe(evidenceButton));
+    });
+    it.each([390, 1440])('uses the loaded Fundamental inventory in the inspector at %spx and clears selection for another run', async (width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            kind: 'financial_reports', version: 'v1', produced_by: 'fundamental_analysis', created_at: '2026-11-23T00:00:00Z',
+            data: { ticker: 'EXAMPLE', model_type: 'fcff_dcf', status: 'done', financial_reports: [], fundamental_service: uncertaintyReport() },
+        }), { status: 200 })));
+        const cache = new Map();
+        const page = () => <SWRConfig value={{ provider: () => cache }}><WorkspacePage /></SWRConfig>;
+        hook.value = defaultHook({ threadId: 'thread-1', runId: 'run-1', agentOutputs: {
+            fundamental_analysis: { kind: 'fundamental_analysis.output', version: 'v1', summary: 'Loaded valuation.', reference },
+        }, agentStatuses: { fundamental_analysis: 'done' } });
+        const { rerender } = render(page());
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'Fundamental' }), { button: 0, ctrlKey: false });
+        const fact = await screen.findByRole('button', { name: 'Inspect revenue evidence' });
+        fact.focus();
+        fireEvent.click(fact);
+        const inspector = width < 1440
+            ? within(screen.getByRole('dialog')).getByLabelText('Evidence inspector')
+            : screen.getByLabelText('Evidence inspector');
+        await waitFor(() => expect(within(inspector).getByRole('button', { name: /Assumption · assumptions.wacc/ })).toBeTruthy());
+        within(inspector).getByText('Fact ID');
+        fireEvent.click(within(inspector).getByRole('button', { name: /Calculation · equity_value/ }));
+        within(inspector).getByText('enterprise_value, cash, debt');
+        within(inspector).getByText('run-1');
+        if (width < 1440) {
+            fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close navigation' }));
+            await waitFor(() => expect(document.activeElement).toBe(fact));
+        }
+        hook.value = defaultHook({ threadId: 'thread-2', runId: 'run-2', agentStatuses: { fundamental_analysis: 'running' } });
+        rerender(page());
+        const currentInspector = screen.getByLabelText('Evidence inspector');
+        expect(within(currentInspector).queryByText('Inputs')).toBeNull();
+        expect(within(currentInspector).queryByRole('button', { name: /Calculation · equity_value/ })).toBeNull();
     });
 });

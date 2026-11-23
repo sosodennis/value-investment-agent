@@ -16,6 +16,13 @@ export interface EvidenceSelection {
     confidence?: string;
     artifactId?: string;
     artifactUrl?: string;
+    threadId?: string;
+    runId?: string;
+    preparationDigest?: string;
+    inputDigest?: string;
+    resultHash?: string;
+    inputs?: string[];
+    dimensions?: string[];
     factId?: string;
     concept?: string;
     accessionNumber?: string;
@@ -146,6 +153,14 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Period" value={item.period} />
                     <EvidenceField label="Formula" value={item.formula} />
                     <EvidenceField label="Confidence" value={item.confidence} />
+                    <EvidenceField label="Thread" value={item.threadId} />
+                    <EvidenceField label="Run" value={item.runId} />
+                    <EvidenceField label="Artifact" value={item.artifactId} />
+                    <EvidenceField label="Preparation" value={item.preparationDigest} />
+                    <EvidenceField label="Input digest" value={item.inputDigest} />
+                    <EvidenceField label="Result hash" value={item.resultHash} />
+                    <EvidenceField label="Inputs" value={item.inputs?.join(', ') || undefined} />
+                    <EvidenceField label="Dimensions" value={item.dimensions?.join(', ') || undefined} />
                     <EvidenceField label="Fact ID" value={item.factId} />
                     <EvidenceField label="Concept" value={factMetadataValue(item, item.concept)} />
                     <EvidenceField label="Accession" value={factMetadataValue(item, item.accessionNumber)} />

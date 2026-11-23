@@ -45,7 +45,7 @@ type CalculationModel = {
     nodes: { id: string; value: ExactNumber | null; unit: string; formula: string; inputs: string[]; evidence: EvidenceSelection }[];
     evidenceReferences: Contracts['FundamentalServiceEvidenceReferenceV1'][];
 };
-type PreparationSummary = {
+export type PreparationSummary = {
     digest: string;
     status: Contracts['FundamentalValuationPreparationResultV1']['status'];
     modelId: string;
@@ -55,7 +55,7 @@ type PreparationSummary = {
     quality: Quality;
     issueCodes: string[];
     missingEvidence: string[];
-    assumptions: { path: string; value: ExactNumber; method: string; formula: string; evidence: EvidenceSelection }[];
+    assumptions: { path: string; value: ExactNumber; method: string; editable: boolean; isManual: boolean; formula: string; evidence: EvidenceSelection }[];
     historicalMetrics: { id: string; year: number; value: ExactNumber; unit: string; periodEnd: string; formula: string; factIds: string[] }[];
 };
 type UncertaintyModel = {
@@ -63,7 +63,7 @@ type UncertaintyModel = {
     mode: 'sampled' | 'scenarios';
     binding: Binding;
     quality: Quality;
-    quantiles: { label: string; value: ExactAmount }[];
+    quantiles: { label: string; value: ExactAmount; evidence: EvidenceSelection }[];
     quantileContract: { label: string; quantile: string }[];
     requestedSamples: number;
     validSamples: number;
@@ -111,6 +111,35 @@ export type FundamentalReportModel =
     })
     | (ReportBase & { kind: 'service-error'; code: string; message: string; retryable: boolean });
 
+export type FundamentalValuationModel = Extract<FundamentalReportModel, { kind: 'valuation' }>;
+export type FundamentalEvidenceInventory = { sourceKey: string; items: EvidenceSelection[] };
+
+export function fundamentalReportSourceKey({ threadId, reference }: { threadId?: string | null; reference: ArtifactReference | null }): string {
+    return JSON.stringify([threadId ?? null, getArtifactRunId(reference), reference?.artifact_id ?? null, reference?.download_url ?? null]);
+}
+
+function evidenceKey(identity: FundamentalReportIdentity, kind: string, id: string): string {
+    return JSON.stringify([identity.threadId, identity.runId, identity.artifactId, identity.preparationDigest, kind, id]);
+}
+
+export function buildFundamentalEvidenceInventory(report: FundamentalReportModel): FundamentalEvidenceInventory {
+    const items = report.facts.map((fact) => fact.evidence);
+    if (report.kind === 'valuation' || report.kind === 'preparation-outcome') {
+        items.push(...(report.preparationSummary?.assumptions.map((item) => item.evidence) ?? []));
+    }
+    if (report.kind === 'valuation') {
+        items.push(...report.base.nodes.map((node) => node.evidence));
+        if (report.uncertainty.kind === 'provided') {
+            items.push(...report.uncertainty.quantiles.map((quantile) => quantile.evidence));
+            items.push(...report.uncertainty.scenarios.flatMap((scenario) => scenario.nodes.map((node) => node.evidence)));
+        }
+    }
+    return {
+        sourceKey: JSON.stringify([report.identity.threadId, report.identity.runId, report.identity.artifactId, report.identity.artifactUrl]),
+        items,
+    };
+}
+
 export function exactNumber(raw: string): ExactNumber {
     const coordinate = Number(raw);
     return { raw, coordinate: Number.isFinite(coordinate) ? coordinate : null };
@@ -126,6 +155,9 @@ function binding(result: Pick<Calculation, 'input_digest' | 'result_hash'>): Bin
 
 function evidenceIdentity(identity: FundamentalReportIdentity) {
     return {
+        threadId: identity.threadId ?? undefined,
+        runId: identity.runId ?? undefined,
+        preparationDigest: identity.preparationDigest ?? undefined,
         artifactId: identity.artifactId ?? undefined,
         artifactUrl: identity.artifactUrl ?? undefined,
     };
@@ -144,7 +176,7 @@ function factModel(fact: Fact, snapshotId: string, snapshotDigest: string, ident
         unit: fact.unit, scale: fact.scale, currency: fact.currency ?? null,
         dimensions: fact.context.dimensions, quality: fact.quality, issueCodes: fact.issue_codes,
         evidence: {
-            id: `${identity.artifactId}:fact:${fact.fact_id}`, title: `Service fact · ${label}`,
+            id: evidenceKey(identity, 'fact', fact.fact_id), title: `Service fact · ${label}`,
             value, period, source: `${fact.source.source_role} · ${fact.source.source_url}`,
             confidence: fact.quality, ...evidenceIdentity(identity),
             factId: fact.fact_id, concept: fact.concept,
@@ -154,11 +186,12 @@ function factModel(fact: Fact, snapshotId: string, snapshotDigest: string, ident
             parserVersion: fact.source.parser_version, taxonomyVersion: fact.taxonomy_version,
             sourceHash: fact.source.content_hash, snapshotId, snapshotManifestDigest: snapshotDigest,
             unit: fact.unit, scale: fact.scale, issueCodes: fact.issue_codes,
+            dimensions: fact.context.dimensions.map((dimension) => `${dimension.name}: ${dimension.member}`),
         },
     };
 }
 
-function calculationModel(result: Calculation, currency: string, identity: FundamentalReportIdentity): CalculationModel {
+function calculationModel(result: Calculation, currency: string, identity: FundamentalReportIdentity, scope: string): CalculationModel {
     return {
         binding: binding(result), status: result.calculation_status, quality: result.quality_status,
         equity: amount(result.intrinsic_value, currency, 'equity-total'),
@@ -169,12 +202,13 @@ function calculationModel(result: Calculation, currency: string, identity: Funda
             id: node.node_id, value: node.value == null ? null : exactNumber(node.value),
             unit: node.unit, formula: node.formula, inputs: node.inputs,
             evidence: {
-                id: `${identity.artifactId}:node:${node.node_id}`, title: `Calculation · ${node.node_id}`,
+                id: evidenceKey(identity, 'node', `${scope}:${result.result_hash}:${node.node_id}`), title: `Calculation · ${node.node_id}`,
                 value: node.value ?? 'Unavailable', unit: node.unit,
                 formula: node.formula, source: [...node.trace.source_refs, ...node.trace.source_uris].join(', '),
                 ...evidenceIdentity(identity),
                 capturedAt: node.trace.captured_at ?? undefined, availableAt: node.trace.available_at ?? undefined,
                 snapshotId: result.snapshot_id, confidence: result.quality_status,
+                inputDigest: result.input_digest, resultHash: result.result_hash, inputs: node.inputs,
             },
         })),
         evidenceReferences: result.artifact_references,
@@ -187,12 +221,13 @@ function preparationSummary(preparation: Contracts['FundamentalValuationPreparat
         modelId: preparation.model_id, modelVersion: preparation.model_version,
         policyId: preparation.policy_id, policyVersion: preparation.policy_version,
         quality: preparation.quality_status, issueCodes: preparation.issue_codes, missingEvidence: preparation.missing_evidence,
-        assumptions: preparation.assumptions_evidence.map((item) => ({
-            path: item.path, value: exactNumber(item.value), method: item.method, formula: item.formula,
+        assumptions: preparation.assumptions_evidence.map((item, index) => ({
+            path: item.path, value: exactNumber(item.value), method: item.method, editable: item.editable,
+            isManual: item.method === 'manual' || item.manual_provenance != null, formula: item.formula,
             evidence: {
-                id: `${identity.artifactId}:assumption:${item.path}`, title: `Assumption · ${item.path}`,
+                id: evidenceKey(identity, 'assumption', `${item.path}:${index}`), title: `Assumption · ${item.path}`,
                 value: item.value, formula: item.formula, source: item.source_refs.join(', '),
-                period: item.as_of, confidence: item.method, ...evidenceIdentity(identity),
+                period: item.as_of, confidence: item.method, inputs: item.fact_ids, ...evidenceIdentity(identity),
             },
         })),
         historicalMetrics: preparation.historical_metrics.metrics.map((metric) => ({
@@ -204,7 +239,7 @@ function preparationSummary(preparation: Contracts['FundamentalValuationPreparat
 
 export function projectFundamentalReport({ artifact, reference, threadId = null, ticker }: {
     artifact: FundamentalServiceArtifact;
-    reference: ArtifactReference | null;
+    reference: Pick<ArtifactReference, 'artifact_id' | 'download_url'> | null;
     threadId?: string | null;
     ticker: string;
 }): FundamentalReportModel {
@@ -238,11 +273,19 @@ export function projectFundamentalReport({ artifact, reference, threadId = null,
                 modelVersion: artifact.valuation_trace.model_version, calculationVersion: artifact.calculation_version,
                 snapshotId: artifact.snapshot_id, snapshotDigest: artifact.snapshot_manifest_digest,
                 releaseDigest: artifact.facts.data_release_manifest_digest ?? null,
-                reportBinding: binding(result), base: calculationModel('base' in result ? result.base : result, currency, identity),
+                reportBinding: binding(result), base: calculationModel('base' in result ? result.base : result, currency, identity, 'base'),
                 preparationSummary: artifact.automatic_preparation == null ? null : preparationSummary(artifact.automatic_preparation, identity),
                 uncertainty: 'base' in result ? {
                     kind: 'provided', mode: result.requested_samples > 0 ? 'sampled' : 'scenarios', binding: binding(result), quality: result.status,
-                    quantiles: Object.entries(result.quantiles ?? {}).map(([label, raw]) => ({ label, value: { ...exactNumber(raw), currency, basis: 'per-share' } })),
+                    quantiles: Object.entries(result.quantiles ?? {}).map(([label, raw]) => ({
+                        label, value: { ...exactNumber(raw), currency, basis: 'per-share' },
+                        evidence: {
+                            id: evidenceKey(identity, 'quantile', label), title: `Model quantile · ${label}`,
+                            value: raw, unit: `${currency} / share`, confidence: result.status,
+                            source: result.artifact_references.map((item) => `${item.artifact_type} · ${item.artifact_id}`).join(', '),
+                            inputDigest: result.input_digest, resultHash: result.result_hash, ...evidenceIdentity(identity),
+                        },
+                    })),
                     quantileContract: Object.entries(result.quantile_contract ?? {}).map(([label, quantile]) => ({ label, quantile })),
                     requestedSamples: result.requested_samples, validSamples: result.valid_samples, invalidSamples: result.invalid_samples,
                     invalidReasons: Object.entries(result.invalid_reasons ?? {}).map(([code, count]) => ({ code, count })),
@@ -254,7 +297,7 @@ export function projectFundamentalReport({ artifact, reference, threadId = null,
                     },
                     sensitivity: Object.entries(result.sensitivity ?? {}).map(([path, values]) => ({ path, values: values.map(exactNumber) })),
                     dominantDrivers: result.dominant_drivers,
-                    scenarios: result.scenario_results.map((scenario) => calculationModel(scenario, currency, identity)),
+                    scenarios: result.scenario_results.map((scenario, index) => calculationModel(scenario, currency, identity, `scenario:${index}`)),
                     evidenceReferences: result.artifact_references,
                 } : { kind: 'not-requested' },
             };

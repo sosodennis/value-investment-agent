@@ -22,6 +22,7 @@ import { buildAutomaticValuationRequest } from './valuation-request';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { EvidenceInspector, EvidenceInspectorTrigger, buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { adaptAgentOutput } from '@/types/agents/output-adapter';
+import { fundamentalReportSourceKey, type FundamentalEvidenceInventory } from './outputs/fundamental-analysis/fundamental-report-model';
 import {
     researchForwardEvidence as requestForwardEvidence,
     type ForwardEvidenceManualOverride,
@@ -51,7 +52,8 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [ticker, setTicker] = useState(initialTicker?.toUpperCase() ?? '');
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
-    const [selectedEvidence, setSelectedEvidence] = useState<EvidenceSelection | null>(null);
+    const [selectedEvidenceState, setSelectedEvidenceState] = useState<{ threadId: string | null; runId: string | null; id: string } | null>(null);
+    const [fundamentalEvidenceInventory, setFundamentalEvidenceInventory] = useState<FundamentalEvidenceInventory | null>(null);
     const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
     const [forwardEvidenceState, setForwardEvidenceState] = useState<{ runId: string | null; value: ForwardEvidenceReview | null }>({ runId: null, value: null });
     const [isResearchingForwardEvidence, setIsResearchingForwardEvidence] = useState(false);
@@ -80,18 +82,22 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         if (!evidenceAgent) return [];
         const output = agent.agentOutputs[evidenceAgent.id] ?? null;
         if (!output) return [];
-        return buildEvidenceItems(
-            evidenceAgent,
-            adaptAgentOutput(evidenceAgent.id, output, `workspace_evidence.${evidenceAgent.id}`),
-        );
-    }, [agent.agentOutputs, evidenceAgent]);
+        const viewModel = adaptAgentOutput(evidenceAgent.id, output, `workspace_evidence.${evidenceAgent.id}`);
+        const items = buildEvidenceItems(evidenceAgent, viewModel);
+        return viewModel.kind === 'fundamental_analysis' && fundamentalEvidenceInventory?.sourceKey === fundamentalReportSourceKey({ threadId: agent.threadId, reference: viewModel.reference })
+            ? [...items, ...fundamentalEvidenceInventory.items]
+            : items;
+    }, [agent.agentOutputs, agent.threadId, evidenceAgent, fundamentalEvidenceInventory]);
     const currentRunId = agent.runId ?? null;
+    const selectedEvidence = selectedEvidenceState?.threadId === agent.threadId && selectedEvidenceState?.runId === currentRunId
+        ? evidenceItems.find((item) => item.id === selectedEvidenceState.id) ?? null
+        : null;
     const forwardEvidence = forwardEvidenceState.runId === currentRunId ? forwardEvidenceState.value : null;
     const researchError = researchErrorState.runId === currentRunId ? researchErrorState.value : null;
 
     function handleSelectEvidence(item: EvidenceSelection) {
-        setSelectedEvidence(item);
-        if (typeof window !== 'undefined' && window.innerWidth < 1440) {
+        setSelectedEvidenceState({ threadId: agent.threadId, runId: currentRunId, id: item.id });
+        if (typeof window !== 'undefined' && window.innerWidth < 1440 && !mobileEvidenceOpen) {
             const activeElement = document.activeElement;
             mobileEvidenceReturnFocus.current = activeElement instanceof HTMLElement
                 ? activeElement
@@ -201,7 +207,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel threadId={agent.threadId} runId={agent.runId} tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} isSubmitting={agent.isSubmittingInteraction} onRecalculate={recalculateFromFundamental} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={researchForwardEvidence} onApplyForwardEvidence={applyForwardEvidence} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel threadId={agent.threadId} runId={agent.runId} tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} onEvidenceInventory={setFundamentalEvidenceInventory} selectedEvidenceId={selectedEvidence?.id} isSubmitting={agent.isSubmittingInteraction} onRecalculate={recalculateFromFundamental} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={researchForwardEvidence} onApplyForwardEvidence={applyForwardEvidence} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>
@@ -336,7 +342,7 @@ function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
     </Card>;
 }
 
-export function ReportPanel({ threadId, runId, tab, outputs, statuses, ticker, onSelectEvidence, selectedEvidenceId, isSubmitting, onRecalculate, forwardEvidence, isResearchingForwardEvidence, researchError, onResearchForwardEvidence, onApplyForwardEvidence }: { threadId?: string | null; runId?: string | null; tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; selectedEvidenceId?: string | null; isSubmitting?: boolean; onRecalculate?: (manualOverride: Record<string, unknown>) => void; forwardEvidence?: ForwardEvidenceReview | null; isResearchingForwardEvidence?: boolean; researchError?: string | null; onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>; onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void }) {
+export function ReportPanel({ threadId, runId, tab, outputs, statuses, ticker, onSelectEvidence, onEvidenceInventory, selectedEvidenceId, isSubmitting, onRecalculate, forwardEvidence, isResearchingForwardEvidence, researchError, onResearchForwardEvidence, onApplyForwardEvidence }: { threadId?: string | null; runId?: string | null; tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; onEvidenceInventory?: (inventory: FundamentalEvidenceInventory) => void; selectedEvidenceId?: string | null; isSubmitting?: boolean; onRecalculate?: (manualOverride: Record<string, unknown>) => void; forwardEvidence?: ForwardEvidenceReview | null; isResearchingForwardEvidence?: boolean; researchError?: string | null; onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>; onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void }) {
     const output = outputs[tab] ?? null;
     const config = AGENT_CONFIGS.find((item) => item.id === tab);
     const status = statuses[tab] ?? 'idle';
@@ -351,5 +357,5 @@ export function ReportPanel({ threadId, runId, tab, outputs, statuses, ticker, o
         role: config.role,
         status,
     };
-    return <WorkspaceOutputPanel threadId={threadId} runId={runId} agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} selectedEvidenceId={selectedEvidenceId} isSubmitting={isSubmitting} onRecalculate={onRecalculate} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={onResearchForwardEvidence} onApplyForwardEvidence={onApplyForwardEvidence} />;
+    return <WorkspaceOutputPanel threadId={threadId} runId={runId} agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} onEvidenceInventory={onEvidenceInventory} selectedEvidenceId={selectedEvidenceId} isSubmitting={isSubmitting} onRecalculate={onRecalculate} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={onResearchForwardEvidence} onApplyForwardEvidence={onApplyForwardEvidence} />;
 }

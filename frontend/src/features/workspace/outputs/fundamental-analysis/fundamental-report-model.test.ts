@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseFundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
-import { projectFundamentalReport } from './fundamental-report-model';
-import { baseDigest, baseHash, calculation, factsOnlyReport, preparationOutcome, reference, rootDigest, rootHash, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
+import { buildFundamentalEvidenceInventory, fundamentalReportSourceKey, projectFundamentalReport } from './fundamental-report-model';
+import { baseDigest, baseHash, calculation, factsOnlyReport, preparation, preparationOutcome, reference, rootDigest, rootHash, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
 
 function project(artifact: unknown) {
     return projectFundamentalReport({ artifact: parseFundamentalServiceArtifact(artifact), reference, threadId: 'thread-1', ticker: 'EXAMPLE' });
@@ -57,5 +57,34 @@ describe('Fundamental report projection', () => {
         const report = project(preparationOutcome());
         expect(report).toMatchObject({ kind: 'preparation-outcome', outcome: 'requires_input', reason: 'Share count evidence is unavailable.', missingEvidence: ['shares_outstanding'] });
         expect(report).not.toHaveProperty('base');
+    });
+    it('builds one inventory with distinct automatic/manual and base/scenario evidence scopes', () => {
+        const automatic = preparation();
+        const assumption = automatic.assumptions_evidence[0];
+        if (!assumption) throw new Error('Expected assumption fixture.');
+        automatic.assumptions_evidence.push({ ...assumption, method: 'manual', value: '0.09', manual_provenance: {
+            author: 'user-1', automatic_preparation_digest: automatic.preparation_digest, modified_at: assumption.as_of, reason: 'Updated expectation.',
+        } });
+        const source = uncertaintyReport({ scenario_results: [calculation(), calculation()] });
+        source.automatic_preparation = automatic;
+        const report = project(source);
+        const inventory = buildFundamentalEvidenceInventory(report);
+        expect(inventory.sourceKey).toBe(fundamentalReportSourceKey({ threadId: 'thread-1', reference }));
+        expect(new Set(inventory.items.map((item) => item.id)).size).toBe(inventory.items.length);
+        expect(inventory.items.filter((item) => item.title.startsWith('Assumption'))).toHaveLength(2);
+        expect(inventory.items.filter((item) => item.title.startsWith('Calculation'))).toHaveLength(3);
+        expect(inventory.items.find((item) => item.title.startsWith('Calculation'))).toMatchObject({
+            inputs: ['enterprise_value', 'cash', 'debt'], source: 'revenue-1', inputDigest: baseDigest, resultHash: baseHash,
+        });
+        expect(inventory.items.find((item) => item.title === 'Model quantile · p50')).toMatchObject({ value: '26.1234567890123456789', inputDigest: rootDigest, resultHash: rootHash });
+        expect(inventory.items.every((item) => item.threadId === 'thread-1' && item.runId === 'run-1' && item.artifactId === 'report-1')).toBe(true);
+        if (report.kind !== 'valuation') throw new Error('Expected valuation.');
+        expect(report.preparationSummary?.assumptions[1]).toMatchObject({ editable: true, method: 'manual', isManual: true });
+    });
+    it('never reuses fact selection keys across thread or run identities', () => {
+        const artifact = parseFundamentalServiceArtifact(factsOnlyReport());
+        const first = project(artifact);
+        const next = projectFundamentalReport({ artifact, reference: { ...reference, download_url: '/api/v1/artifacts/report-1?run_id=run-2' }, threadId: 'thread-2', ticker: 'EXAMPLE' });
+        expect(first.facts[0]?.evidence.id).not.toBe(next.facts[0]?.evidence.id);
     });
 });

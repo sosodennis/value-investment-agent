@@ -6,6 +6,7 @@ import {
 import {
     FundamentalAnalysisOutput,
 } from './outputs/fundamental-analysis/fundamental-analysis-output';
+import type { FundamentalEvidenceInventory } from './outputs/fundamental-analysis/fundamental-report-model';
 import {
     GenericAgentOutput,
 } from './outputs/shared/GenericAgentOutput';
@@ -34,6 +35,7 @@ type WorkspaceOutputPanelProps = {
     resolvedTicker?: string | null;
     status: AgentStatus;
     onSelectEvidence?: (item: EvidenceSelection) => void;
+    onEvidenceInventory?: (inventory: FundamentalEvidenceInventory) => void;
     selectedEvidenceId?: string | null;
     isSubmitting?: boolean;
     onRecalculate?: (manualOverride: Record<string, unknown>) => void;
@@ -50,6 +52,7 @@ export function WorkspaceOutputPanel({
     resolvedTicker,
     status,
     onSelectEvidence,
+    onEvidenceInventory,
     selectedEvidenceId,
     threadId,
     runId,
@@ -69,6 +72,7 @@ export function WorkspaceOutputPanel({
                     resolvedTicker={resolvedTicker}
                     status={status}
                     onSelectEvidence={onSelectEvidence}
+                    onEvidenceInventory={onEvidenceInventory}
                     threadId={threadId}
                     runId={runId}
                 />
@@ -122,14 +126,14 @@ export function WorkspaceOutputPanel({
 
     return (
         <div className="grid min-w-0 grid-cols-1 gap-4">
-            {viewModel.summary ? (
+            {viewModel.kind !== 'fundamental_analysis' && viewModel.summary ? (
                 <Card className="border">
                     <CardContent className="pt-4 text-sm leading-6 text-muted-foreground">
                         {viewModel.summary}
                     </CardContent>
                 </Card>
             ) : null}
-            {onSelectEvidence && evidenceItems.length > 0 ? (
+            {viewModel.kind !== 'fundamental_analysis' && onSelectEvidence && evidenceItems.length > 0 ? (
                 <section aria-label="Report evidence" className="border-y py-3">
                     <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
                         <h3 className="text-sm font-semibold">Report evidence</h3>
