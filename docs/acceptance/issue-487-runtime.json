@@ -1,0 +1,462 @@
+{
+  "schema_version": 1,
+  "issue": 487,
+  "status": "VERIFIED",
+  "branch": "codex/issue-487-forecast-timeline",
+  "commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-487-forecast-timeline/value-investment-agent",
+    "browser_session": "CUA IAB browser2 tab11; http://127.0.0.1:23081/workspace",
+    "allowed_untracked_paths": [],
+    "app": {
+      "compose_project": "value-investment-agent-denniswong-487-app",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-487-forecast-timeline/value-investment-agent/docker-compose.yml",
+        "/Users/denniswong/.codex/worktrees/issue-487-forecast-timeline/value-investment-agent/docker-compose.override.yml",
+        "/Users/denniswong/.codex/worktrees/issue-487-forecast-timeline/value-investment-agent/compose/verification/docker-compose.issue325-app-fundamental.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/app-overlay.json"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/app.env",
+      "env_file_sha256": "096af1c1fb5efe3e4f4a73b7f7c7ae26fbf2560dec26d223fefed4ea8be9a83b",
+      "service": "backend",
+      "container_port": 8000,
+      "published_port": 23080,
+      "url": "http://127.0.0.1:23080"
+    },
+    "fundamental": {
+      "compose_project": "value-investment-agent-denniswong-487-fundamental",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-487-forecast-timeline/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-487-forecast-timeline/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/fundamental-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/fundamental.env",
+      "env_file_sha256": "ebfb9686f4a34b6fec70850d2b654e828761f46c93e3cc60b2f21c63b1c9fc91",
+      "service": "fundamental-service",
+      "container_port": 8080,
+      "published_port": 23090,
+      "url": "http://127.0.0.1:23090"
+    }
+  },
+  "checks": [
+    {
+      "name": "runtime-source-equality",
+      "status": "pass",
+      "command": "python3 runtime/verify-runtime-source.py",
+      "exit_code": 0
+    },
+    {
+      "name": "live-workflow",
+      "status": "pass",
+      "command": "FUNDAMENTAL_LIVE=1 npm run test:e2e -- --config e2e/fundamental-report-live.config.ts e2e/fundamental-report.live.spec.ts",
+      "exit_code": 0,
+      "result": "6 passed; new current analysis 320px no overflow included"
+    },
+    {
+      "name": "final-artifact",
+      "status": "pass",
+      "command": "python3 runtime/verify-final-artifacts.py",
+      "exit_code": 0
+    },
+    {
+      "name": "independent-review-and-strict-loader",
+      "status": "pass",
+      "command": "evaluate_cohort.py; independent reviewer; build_model_bundle.py",
+      "exit_code": 0
+    },
+    {
+      "name": "acceptance-preflight",
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-487-runtime.json REQUIRE_SEC_IDENTITY_RESOLUTION=1 scripts/acceptance_preflight.sh",
+      "exit_code": 0,
+      "result": "Both projects, clean exact implementation commit, SEC capability, env hashes and bindings pass",
+      "tested_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+      "evidence": {
+        "path": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/preflight-452b13ef.log",
+        "sha256": "a3a3a1249a65cf62e8e06aa07dcd6104a92fe2a0cb82020ab3e120c2476adf03"
+      }
+    },
+    {
+      "name": "frontend-lint",
+      "status": "pass",
+      "command": "npm run lint",
+      "exit_code": 0,
+      "result": "pass",
+      "tested_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+      "evidence": {
+        "path": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/frontend-final-lint.log",
+        "sha256": "596cb56788cfc0dfab4886fb07703457a292cd1e556aca9d7ab6a3620fa71873"
+      }
+    },
+    {
+      "name": "frontend-types",
+      "status": "pass",
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "result": "pass",
+      "tested_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+      "evidence": {
+        "path": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/frontend-final-typecheck.log",
+        "sha256": "6395c2028d2efb2e4992400755df02dac270564d1495c7f1c6aa81f48f24e940"
+      }
+    },
+    {
+      "name": "frontend-tests",
+      "status": "pass",
+      "command": "npm run test -- --run",
+      "exit_code": 0,
+      "result": "60 test files; 527 passed",
+      "tested_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+      "evidence": {
+        "path": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/frontend-final-tests.log",
+        "sha256": "c8365231ddca6a9320f8cfda85183e2d98c0dc322789d38eabf96ec5502d4209"
+      }
+    },
+    {
+      "name": "frontend-contrast",
+      "status": "pass",
+      "command": "npm run check:contrast",
+      "exit_code": 0,
+      "result": "light/dark tokens pass",
+      "tested_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+      "evidence": {
+        "path": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/frontend-final-contrast.log",
+        "sha256": "8d79777679e2618ce2f724178a97ca93000a901d253b88f79257152531d5a73e"
+      }
+    },
+    {
+      "name": "service-suite",
+      "status": "pass",
+      "command": ".venv/bin/python -m pytest -q",
+      "exit_code": 0,
+      "result": "5040 passed; 163 skipped; 4 warnings",
+      "tested_commit": "04b8b187f78e93a234f59787b2cb02bf5983b68a",
+      "evidence": {
+        "path": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/final-service-suite-04b8b187.log",
+        "sha256": "979ac5c1d546f8ad17370814c16436b0d6fd3ac193dfa239cebdec63d80fac9d"
+      }
+    },
+    {
+      "name": "contract-generation",
+      "status": "pass",
+      "command": "scripts/generate-contracts.sh",
+      "exit_code": 0,
+      "result": "generated contracts match; no further diff after overrides repair",
+      "tested_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+      "evidence": {
+        "path": "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/contracts-final-timeline.log",
+        "sha256": "d5337111d171798b3ca0242c23fac6c7a707ac6ea3fed7d160ac916e75f25a04"
+      }
+    },
+    {
+      "name": "no-comments",
+      "status": "pass",
+      "command": "Independent comment-sicko review of base...452b13ef; no-comments-review.json",
+      "exit_code": 0,
+      "result": "No proposed removals or MUST KILL findings; no suppression changes; public contract docstrings and generated schema documentation kept."
+    }
+  ],
+  "blockers": [],
+  "next_step": "Required final PR-head CI, guarded merge, main/issue closure verification. Keep isolated acceptance runtime available to user.",
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "runtime_inputs": {
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/source-plan.json": "f5f7186da199ce99e791a4bb42e9d5ad13f632ba417c2d65ff42b1b4fd324277",
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/release-policy.json": "9cca81cdec49f3047a1bd30d1f7510a57abd8be004fe9a012a466b9b2480b361",
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/data-release-trust-roots.json": "7fd70d15e71a31024c57969a65f61e0527b05557f46380058b7d2055786a20c8",
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/v3-forward-assumptions.json": "4ad7af24e4e207ebec1168c6dc2c76ae05b5e670386e2e3dbdeb741923dd523c",
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/model-bundle/model-release-deployment.json": "f43aeff34dbfd4acf1373eaf982ce0ccecaf1fafa308ef02b811cc276435b0ca"
+  },
+  "report": {
+    "thread_id": "thread_a7ae7b38-780e-4ca2-9aa9-07710782be7e",
+    "run_id": "65221f25-554e-4ddf-b825-5a4ba13e437e",
+    "artifact_id": "bf61ebee-dde6-41ce-ae19-7ceb9e176862",
+    "url": "http://127.0.0.1:23081/workspace?thread_id=thread_a7ae7b38-780e-4ca2-9aa9-07710782be7e&run_id=65221f25-554e-4ddf-b825-5a4ba13e437e"
+  },
+  "images": {
+    "backend": {
+      "image_id": "sha256:b08569f4477eabad4f02de7627272f42db1a07984b5d0656e6106d95f110531c",
+      "container_id": "3c8ca9f573d828dd1e5e8fec0d1bfd700f5ea3574bfd083f6071bf73de050d86",
+      "health": "healthy",
+      "started_at": "2026-11-23T18:28:49.316731135Z"
+    },
+    "frontend": {
+      "image_id": "sha256:dfca53ba554b23789cec2e65ff4781366e32e24e2d15c97c6e9ac1b6a6273ebf",
+      "container_id": "2d1b62a30b8c70815c8b830b20c9919659f8ebe021524022919af3fa4961a213",
+      "health": "healthy",
+      "started_at": "2026-11-23T18:49:29.479478292Z"
+    },
+    "postgres": {
+      "image_id": "sha256:c54a696c68013b2f8f42f479e00a2b6ad24c5ef10ee31cdfb8972cec3dad7eb7",
+      "container_id": "700abd3e2c4dcf76e41fb4c8a61cb85b7724760e020651f059ed89465026af7f",
+      "health": "healthy",
+      "started_at": "2026-11-23T16:25:12.140180299Z"
+    },
+    "redis": {
+      "image_id": "sha256:49898aa0365c1577275e77a57b9ffa8a6ebd9d13eb981610a679e64185eaf0f2",
+      "container_id": "5116b56fdec6a7a3c01322f7bb20dfdb1693d109e01f30d4addfb1d6e5a485ed",
+      "health": "healthy",
+      "started_at": "2026-11-23T16:25:12.139680383Z"
+    },
+    "llm-provider-service": {
+      "image_id": "sha256:8cf6feebf919c85e27dabf334d2fbc95239c18bbb4918d0fd845d7b5123ae902",
+      "container_id": "49e28a9ea2f43dadb0c1b11a6068516814e727eecdbe099e7f09f9915d36131e",
+      "health": "healthy",
+      "started_at": "2026-11-23T17:29:07.820243172Z"
+    },
+    "fundamental-service": {
+      "image_id": "sha256:65d20b67610668b61be8fe055118e4a05c2962c74b32de787fcec0ff3c350ebe",
+      "container_id": "ade331e0cc1b58832dd1eb7b14d0e3fb6b32683dc3ae5ec4da47db1c9bf3a18f",
+      "health": "healthy",
+      "started_at": "2026-11-23T18:53:41.025597339Z"
+    },
+    "fundamental-postgres": {
+      "image_id": "sha256:c54a696c68013b2f8f42f479e00a2b6ad24c5ef10ee31cdfb8972cec3dad7eb7",
+      "container_id": "bdb4daea5cb33346ec87b88db2fa6d61e3bf8bc9f379fa012f8ab3c637d7e4ca",
+      "health": "healthy",
+      "started_at": "2026-11-23T16:25:11.848795841Z"
+    }
+  },
+  "runtime_source_equality": {
+    "verified_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+    "checks": [
+      {
+        "project_kind": "fundamental",
+        "service": "fundamental-service",
+        "source_file_count": 186,
+        "canonical_source_map_sha256": "c96ab56beaed9d081b14c892640e22b1dea1f33e89c2269268c1ab1e3139136f",
+        "mismatches": [],
+        "extra_python_files": []
+      },
+      {
+        "project_kind": "app",
+        "service": "backend",
+        "source_file_count": 818,
+        "canonical_source_map_sha256": "8a106d685865ccce8d1a68d7f9a14ca4dc789117d4df14b3cbd3a5ee991b3291",
+        "mismatches": [],
+        "extra_python_files": []
+      }
+    ],
+    "frontend_tree": "f615b69918e646cf66e25b74c7b37b4667a03a87"
+  },
+  "model_release": {
+    "bundle_sha256": "f43aeff34dbfd4acf1373eaf982ce0ccecaf1fafa308ef02b811cc276435b0ca",
+    "expires_at": "2026-11-30T18:52:39.036736+00:00",
+    "independent_review_sha256": "184d6bb7e797be6940cf23f46ca971d3d9602eb7cbdbb0fb20d0afe4028e0db9",
+    "models": [
+      "fcff_dcf-v3",
+      "transition_fcff_dcf-v3"
+    ],
+    "production_approval": false,
+    "scope": "isolated-local-engineering-only",
+    "source_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+    "status": "pass",
+    "suite_sha256": "b01386a6704d18fea9c9b9c0618c41b059c4ecf7808069d7506b86a4c81d634d"
+  },
+  "data_release_manifest_digest": "84b3b2a9e4a2e018f8e6155da0dfc4ecb27455212759556d4c2ff2e4dce08567",
+  "test_reuse_basis": {
+    "from_commit": "04b8b187f78e93a234f59787b2cb02bf5983b68a",
+    "to_commit": "452b13efb28f202ef14e1ffefa0ba0129d1d3083",
+    "python_service_and_core_git_trees_byte_identical": true,
+    "delta": "Two frontend files only; grid track constraint and live current-report 320px assertion. Frontend lint/type/527 tests, image build, 6 live tests and CUA ran against this final delta. Service suite was not repeated because the entire Python source trees are unchanged.",
+    "service_ci_final_head_required_before_merge": true
+  },
+  "evidence_files": {
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/executed-release-review.json": {
+      "sha256": "184d6bb7e797be6940cf23f46ca971d3d9602eb7cbdbb0fb20d0afe4028e0db9",
+      "bytes": 25659
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/financial-review.json": {
+      "sha256": "7ae389168624bf94055956db96ee4e15582d3a09c9013184726fe1b12bae79bb",
+      "bytes": 35411
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/release-security-review.json": {
+      "sha256": "859810b67fe08866ad1d2511d1334be81fc57bffb6bf6aaa039c7669fe3d5f94",
+      "bytes": 9229
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/ui-review.json": {
+      "sha256": "04c110b5b60c999298d951b898c83ce11ff83f8468b5bef54db6e721b57d6191",
+      "bytes": 7647
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/source-dimension-refusal-review.json": {
+      "sha256": "bc3c6faf51ebda97dccf3892a686bdfcf3b577cacd4268c97685e523957f8b97",
+      "bytes": 14831
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/policy-timeline-before.log": {
+      "sha256": "08d1e386f6f11d586509863e7233183a173eef9d3f8993c5bbccffb7d232dd3e",
+      "bytes": 5593
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/policy-timeline-after.log": {
+      "sha256": "9e2facd8e977f7721a6a6e563d960bd24b384f69f86d1decb0346e92759e1860",
+      "bytes": 180
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/evaluate_cohort.py": {
+      "sha256": "6045db4691c94a5adb5b1e050a4eed47b109beb5428f7347d8206dd701159d82",
+      "bytes": 19979
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/dated_challenger.py": {
+      "sha256": "98fe4236c06e2acab859d3792c8b79ae75b605625b36babed987ddc9efb634e7",
+      "bytes": 7495
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/build_model_bundle.py": {
+      "sha256": "aff18b4a277f6f11ae82de8129cc7c72b0e177a2815e96b5ea032121eb499b53",
+      "bytes": 11816
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/cohort-case-plan.json": {
+      "sha256": "762938d1ec090b9c15f78c0b9022657f80b692c1c8c5b860270d54a7721209a6",
+      "bytes": 68248
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/cohort-evaluation/evaluation.json": {
+      "sha256": "485968a586599ce433adb3442d432581f51a0718ea6ebbe3faff5ba2c89b5d93",
+      "bytes": 49278
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/cohort-evaluation/replay.json": {
+      "sha256": "5c4092cd8f2bcac4c742092d0985bbce6e3a91c1080b926ce874893c0f5fb669",
+      "bytes": 2389
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/runtime-source-equality.json": {
+      "sha256": "a61d7f59e39a8cf1304e8cac047ec7626f7d68dd2c8843fff8918c263dfa7b05",
+      "bytes": 692
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/final-artifact-assertions.json": {
+      "sha256": "c6b233f6774a2c836f9791703658b7cd54848fd6a29c4aaa9405c08db6765767",
+      "bytes": 6119
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/preparation.json": {
+      "sha256": "051f6ac356ffb250b1b927372755dea266f839649b26a497e9ebf8c82ecb14ef",
+      "bytes": 100335
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/preparation-evidence.json": {
+      "sha256": "6462fa7390cd283e39bc0eacd24f31e792b48c610bdaf0a97dbf5d7422901e66",
+      "bytes": 619186
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/retained-v2-comparison.json": {
+      "sha256": "47a3743ea958261cd0c6d3ef5acd29cf8a28424aa3d8846b09e18d7a2560190c",
+      "bytes": 209
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/dated-final-artifact.json": {
+      "sha256": "350c13058f6fad463afb0c7a1b6649de3f09a951af452bb62e3fb20f33037207",
+      "bytes": 798253
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/model-release-load-verification.json": {
+      "sha256": "94b186513dafc771dcc382d8144acf8faf772e3b35de1a09e3bec2761013482d",
+      "bytes": 504
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/grid-final-local-v3-metadata-reset.json": {
+      "sha256": "ab1d899cf689fc90016b45fb1a6a3596eaadb60813f190e5cd5cd810998999e2",
+      "bytes": 471
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/e2e-final-grid.log": {
+      "sha256": "e6e50ed3eba733cc5318ca4946b0618ce37f91820603252e8e5043462c1a90d9",
+      "bytes": 1395
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/dated-final-forecast.png": {
+      "sha256": "44959028131a08667242a7f49dabeb7fe3a4055c0f794acb8ce2e06b74b3e708",
+      "bytes": 100941
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/dated-included-final-320.png": {
+      "sha256": "e0c1f489e307adcdf576f3fe6ea7cc0ebdf717e248a78bfff2ff4b08ed8ccdb9",
+      "bytes": 42942
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/verify-final-artifacts.py": {
+      "sha256": "95748e0eaf7f9df00b594b3d349c54500c12ee603fd637608dd9fd0a1117f040",
+      "bytes": 1272
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/final-artifact-check.log": {
+      "sha256": "98765299e563a204e70a928765d357a8f2817c6988b061fb968b6d179e4df4b3",
+      "bytes": 79
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/runtime/model-release-452b13ef-published.txt": {
+      "sha256": "a47e0c34240c77a6d93e0cf6c898c858796503af8844e5d13be5eb518740a2db",
+      "bytes": 194
+    },
+    "/Users/denniswong/.codex/diagnostics/issue-487-forecast-timeline/no-comments-review.json": {
+      "sha256": "929564385d3d096c82ed8bce2b448085de0d341dbaa72efe72107c2bb6b81cec",
+      "bytes": 13042
+    }
+  },
+  "browser_acceptance": {
+    "driver": "unified-computer-use; IAB browser2 tab11",
+    "current_report_geometry": [
+      {
+        "viewport": 320,
+        "document_scroll_width": 320
+      },
+      {
+        "viewport": 390,
+        "document_scroll_width": 390
+      },
+      {
+        "viewport": 768,
+        "document_scroll_width": 768
+      },
+      {
+        "viewport": 1440,
+        "document_scroll_width": 1440
+      }
+    ],
+    "history_report_geometry": [
+      {
+        "viewport": 320,
+        "document_scroll_width": 320
+      },
+      {
+        "viewport": 390,
+        "document_scroll_width": 390
+      },
+      {
+        "viewport": 768,
+        "document_scroll_width": 768
+      },
+      {
+        "viewport": 1440,
+        "document_scroll_width": 1440
+      }
+    ],
+    "narrow_report_pane": "Production split report approx 646px at 1440px; existing E2E additionally narrows report using actual splitter",
+    "close_button_320": {
+      "x": 272,
+      "y": 40,
+      "width": 32,
+      "height": 32,
+      "overlap": false
+    },
+    "observed": [
+      "2027E–2031E; period-end calendar years, E means estimated",
+      "2026-07-01 to 2027-06-30; included 2026-11-24 to 2027-06-30, 219/365 days",
+      "2028 period uses 366/366 days",
+      "Keyboard focus updates Revenue readout to Year ending 2029-06-30",
+      "included_fcff_1 opens 51.61 USD B and fcff * included_days / full_period_days",
+      "discounted_fcff_1 opens 48.67 USD B and ACT/365F formula",
+      "320px Sheet close separate; Escape returns original selected calculation button"
+    ],
+    "unverified": [
+      "actual VoiceOver output",
+      "new native 200% browser zoom",
+      "system clipboard paste; CUA clipboard read returned empty and is not counted as a success"
+    ],
+    "viewport_override_reset": true
+  },
+  "limitations": [
+    "Isolated local engineering release only; production_approval=false; calibration inactive.",
+    "Ten real-source cases verify source timing, conditional arithmetic, replay and refusal behavior. They do not establish forecasting accuracy, complete source ingestion certification or capital-claim completeness.",
+    "Full workflow retains News/Debate provider degradation; this is not complete Agent pipeline certification.",
+    "52/53-week and irregular/transitional financial years are refused in new v3. Legacy retained reports retain ordinal labels and reason.",
+    "Sources use the retained 2026-11-23 historical cutoff. The previous Friday quote was not relabelled as a new capture.",
+    "User deprioritized actual screen reader acceptance; it remains unverified."
+  ],
+  "cleanup": {
+    "deferred": true,
+    "reason": "User can test this running local environment. Compose files and SEC/parser assets depend on retained implementation/frozen worktrees and diagnostics; removing them would break the deliverable.",
+    "protected_projects": [
+      "value-investment-agent-denniswong-483-app",
+      "value-investment-agent-denniswong-485-app"
+    ],
+    "scope": "No global Docker cleanup; no production or retained staging data removed. Only two backed-up disposable issue487 v3 metadata rows reset for independently approved bundle."
+  }
+}
