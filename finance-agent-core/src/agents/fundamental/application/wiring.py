@@ -8,7 +8,10 @@ from src.agents.fundamental.application.workflow_orchestrator.factory import (
 from src.agents.fundamental.capabilities.forward_evidence import (
     ForwardEvidenceResearchService,
 )
-from src.agents.fundamental.infrastructure import HttpFundamentalServiceClient
+from src.agents.fundamental.infrastructure import (
+    HttpFundamentalServiceClient,
+    load_fundamental_release_selector,
+)
 from src.llm_provider.entrypoint import get_default_model_route, get_llm_provider
 from src.search import get_search_client
 
@@ -18,6 +21,7 @@ def build_default_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
     return build_fundamental_workflow_runner(
         orchestrator=orchestrator,
         fundamental_service_client=HttpFundamentalServiceClient(),
+        release_selector=load_fundamental_release_selector(),
     )
 
 

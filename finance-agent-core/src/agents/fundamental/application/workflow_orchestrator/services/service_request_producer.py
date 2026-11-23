@@ -1,4 +1,4 @@
-"""Build service-owned SEC valuation inputs at the Fundamental boundary."""
+"""Prepare Fundamental inputs from authenticated released evidence."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pydantic import ConfigDict, JsonValue, TypeAdapter
 
 from src.agents.fundamental.application.fundamental_service_port import (
+    FundamentalReleaseSelector,
     FundamentalServiceClient,
     FundamentalServiceFailure,
 )
@@ -37,65 +38,6 @@ _MODEL_BY_SELECTION = {
     "dcf_standard": "fcff_dcf",
     "dcf_growth": "transition_fcff_dcf",
 }
-_MODEL_VERSION = {
-    "fcff_dcf": "fcff_dcf-v2",
-    "transition_fcff_dcf": "transition_fcff_dcf-v2",
-}
-_ANNUAL_DURATION_FIELDS = (
-    "revenue",
-    "cost_of_revenue",
-    "operating_income",
-    "income_before_tax",
-    "income_tax_expense",
-    "net_income",
-    "depreciation_and_amortization",
-    "capital_expenditure",
-    "operating_lease_cost",
-    "finance_lease_cost",
-    "stock_based_compensation",
-    "basic_weighted_average_shares",
-    "diluted_weighted_average_shares",
-)
-_ANNUAL_INSTANT_FIELDS = (
-    "operating_current_receivables",
-    "inventory",
-    "contract_assets",
-    "operating_current_payables",
-    "accrued_operating_liabilities",
-    "deferred_revenue",
-)
-_POINT_IN_TIME_FACT_FIELDS = (
-    "cash_and_equivalents",
-    "non_operating_assets",
-    "current_interest_bearing_debt",
-    "long_term_interest_bearing_debt",
-    "current_operating_lease_liabilities",
-    "long_term_operating_lease_liabilities",
-    "current_finance_lease_liabilities",
-    "long_term_finance_lease_liabilities",
-    "preferred_claims",
-    "noncontrolling_interests",
-    "convertible_instruments",
-    "common_shares_outstanding",
-    "other_share_classes",
-)
-_BASE_REQUIRED_FIELDS = (
-    *_ANNUAL_DURATION_FIELDS,
-    *_ANNUAL_INSTANT_FIELDS,
-    *_POINT_IN_TIME_FACT_FIELDS,
-)
-_TRANSITION_REQUIRED_FIELDS = (*_BASE_REQUIRED_FIELDS, "filed_operating_evidence")
-_INGESTION_POLICY = "sec-pit-v1"
-_SNAPSHOT_POLICY = "pit-v1"
-_DATA_RELEASE_PROFILE_ID = "sec-public-pit-v1"
-_COVERAGE_PROFILE = "us-gaap-public-v1"
-_LEGAL_USE_PROFILE = "sec-public-us-v1"
-_PARSER_VERSION = "2.47.4"
-_VALIDATION_PROFILE_ID = "sec-efm-us-dqc-v31.0.3"
-_TAXONOMY_MANIFEST_ID = "sec-us-gaap-2023-2024-public-bundle"
-_TAXONOMY_VERSION = "us-gaap-2023-2024"
-_POLICY_VERSION = "sec-public-pit-v1"
-_MAPPING_VERSION = "sec-us-gaap-v1"
 
 
 @dataclass(frozen=True)
@@ -104,7 +46,7 @@ class PreparedServiceValuation:
 
     valuation_request: JSONObject | None
     identity: JSONObject
-    ingestion: JSONObject
+    release_manifest_digest: str
     snapshot_selector: JSONObject
     preparation: FundamentalValuationPreparationResultV1 | None = None
     reason: str | None = None
@@ -166,9 +108,6 @@ def _model_id(
     request: Mapping[str, object] | None,
     fundamental: Mapping[str, object],
 ) -> str:
-    # Facts-only reports do not carry caller-owned assumptions, so they must
-    # request only the base evidence set. Transition-only evidence belongs to
-    # an explicit valuation request for the transition model.
     if request is None:
         return "fcff_dcf"
     candidate = request.get("model_id") if request is not None else None
@@ -198,14 +137,6 @@ def is_compact_valuation_request(value: Mapping[str, object]) -> bool:
     }.intersection(value)
 
 
-def _required_fields(model_id: str) -> tuple[str, ...]:
-    return (
-        _TRANSITION_REQUIRED_FIELDS
-        if model_id == "transition_fcff_dcf"
-        else _BASE_REQUIRED_FIELDS
-    )
-
-
 def _explicit_fiscal_period_selector(
     request: Mapping[str, object],
 ) -> JSONObject | None:
@@ -215,87 +146,6 @@ def _explicit_fiscal_period_selector(
         if isinstance(context, Mapping):
             selector = context.get("fiscal_period_selector")
     return dict(selector) if isinstance(selector, Mapping) else None
-
-
-def _fact_mappings(required_fields: tuple[str, ...]) -> list[JSONObject]:
-    return [
-        {
-            "decision_id": f"{_MAPPING_VERSION}-{field}",
-            "mapping_version": _MAPPING_VERSION,
-            "normalized_field": field,
-        }
-        for field in required_fields
-    ]
-
-
-def _validate_ingestion_result(
-    result: object,
-    *,
-    identity: JSONObject,
-    valuation_timestamp: datetime,
-) -> JSONObject:
-    payload = _mapping(result, context="Fundamental SEC ingestion result")
-    status = payload.get("status")
-    if status in {"degraded", "abstain"}:
-        raise FundamentalServiceFailure(
-            "SEC_INGESTION_DEGRADED",
-            f"Fundamental SEC ingestion returned {status}",
-            retryable=False,
-            status_code=422,
-        )
-    if status not in {"created", "reused"}:
-        raise FundamentalServiceFailure(
-            "UPSTREAM_MALFORMED",
-            "Fundamental SEC ingestion returned an unknown status",
-            retryable=False,
-            status_code=502,
-        )
-    if payload.get("identity") != identity:
-        raise FundamentalServiceFailure(
-            "IDENTITY_MISMATCH",
-            "Fundamental SEC ingestion changed the resolved identity",
-            retryable=False,
-            status_code=502,
-        )
-    response_timestamp = payload.get("valuation_timestamp")
-    if not isinstance(response_timestamp, str):
-        raise FundamentalServiceFailure(
-            "UPSTREAM_MALFORMED",
-            "Fundamental SEC ingestion omitted valuation_timestamp",
-            retryable=False,
-            status_code=502,
-        )
-    if _timestamp(response_timestamp) != valuation_timestamp:
-        raise FundamentalServiceFailure(
-            "VALUATION_TIMESTAMP_MISMATCH",
-            "Fundamental SEC ingestion changed valuation_timestamp",
-            retryable=False,
-            status_code=502,
-        )
-    snapshot_id = payload.get("snapshot_id")
-    manifest_digest = payload.get("manifest_digest")
-    fact_ids = payload.get("canonical_fact_ids")
-    if (
-        not isinstance(snapshot_id, str)
-        or not snapshot_id
-        or not isinstance(manifest_digest, str)
-        or not _DIGEST_PATTERN.fullmatch(manifest_digest)
-        or not isinstance(fact_ids, list | tuple)
-        or not fact_ids
-        or any(not isinstance(fact_id, str) or not fact_id for fact_id in fact_ids)
-        or len(set(fact_ids)) != len(fact_ids)
-        or payload.get("quality_status") != "verified"
-    ):
-        raise FundamentalServiceFailure(
-            "SEC_INGESTION_UNAVAILABLE",
-            "Fundamental SEC ingestion did not return a verified snapshot",
-            retryable=False,
-            status_code=422,
-        )
-    return _json_object(
-        {**payload, "canonical_fact_ids": list(fact_ids)},
-        context="Fundamental SEC ingestion",
-    )
 
 
 def _preparation_selection(
@@ -398,12 +248,17 @@ async def prepare_service_valuation_request(
     correlation_id: str,
     deadline_at: datetime,
     request_timing: FundamentalRequestTimingV1 | None = None,
+    release_selector: FundamentalReleaseSelector | None = None,
 ) -> PreparedServiceValuation:
-    """Resolve identity and ingest the exact snapshot used by valuation.
+    """Prepare automatic valuation or facts from a configured immutable release."""
 
-    Caller assumptions remain caller-owned. A missing complete request therefore
-    returns service evidence with an explicit reason instead of inventing values.
-    """
+    if release_selector is None:
+        raise FundamentalServiceFailure(
+            "SERVICE_NOT_CONFIGURED",
+            "Fundamental release selection is not configured",
+            retryable=False,
+            status_code=503,
+        )
 
     intent = read_intent_state(state)
     ticker = intent.resolved_ticker
@@ -479,10 +334,23 @@ async def prepare_service_valuation_request(
             retryable=False,
             status_code=502,
         )
-    required_fields = _required_fields(model_id)
+    release = await client.read_active_release(
+        release_selector.profile_id,
+        principal=principal,
+        correlation_id=correlation_id,
+        deadline_at=deadline_at,
+    )
+    if release.active.profile_id != release_selector.profile_id:
+        raise FundamentalServiceFailure(
+            "RELEASE_PROFILE_MISMATCH",
+            "Fundamental release does not match the configured profile",
+            retryable=False,
+            status_code=502,
+        )
+    required_fields = release.manifest.required_fields
     snapshot_selector: JSONObject = {
         "contract_version": "fundamental.v1",
-        "release_profile_id": _DATA_RELEASE_PROFILE_ID,
+        "release_profile_id": release_selector.profile_id,
         "identity": identity,
         "valuation_timestamp": valuation_timestamp.isoformat().replace("+00:00", "Z"),
         **(
@@ -490,164 +358,102 @@ async def prepare_service_valuation_request(
             if fiscal_period_selector is not None
             else {}
         ),
-        "source_selection_policy": _SNAPSHOT_POLICY,
-        "coverage_profile": _COVERAGE_PROFILE,
+        "source_selection_policy": release_selector.source_selection_policy,
+        "coverage_profile": release_selector.coverage_profile,
         "required_fields": list(required_fields),
     }
-    compact_request = request is not None and is_compact_valuation_request(request)
     if request is None:
-        # A report-only request reads the already activated immutable release.
-        # Ingesting here would create a new snapshot outside that release and
-        # make the subsequent release-bound resolution fail closed.
         return PreparedServiceValuation(
             valuation_request=None,
             identity=identity,
-            ingestion={},
+            release_manifest_digest=release.active.manifest_digest,
             snapshot_selector=snapshot_selector,
             reason="caller valuation assumptions are required",
         )
-    ingestion = _validate_ingestion_result(
-        (
-            await client.execute(
-                "ingest_sec_data",
-                {
-                    "contract_version": "fundamental.v1",
-                    "identity": identity,
-                    "cik": cik.zfill(10),
-                    "ticker": ticker,
-                    "valuation_timestamp": valuation_timestamp.isoformat().replace(
-                        "+00:00", "Z"
-                    ),
-                    **(
-                        {"fiscal_period_selector": fiscal_period_selector}
-                        if fiscal_period_selector is not None
-                        else {}
-                    ),
-                    "required_fields": list(required_fields),
-                    "mappings": _fact_mappings(required_fields),
-                    "source_selection_policy": _INGESTION_POLICY,
-                    "coverage_profile": _COVERAGE_PROFILE,
-                    "legal_use_profile": _LEGAL_USE_PROFILE,
-                    "filing": {"forms": ["10-K", "10-Q"], "lookback_days": 3650},
-                    "parser_version": _PARSER_VERSION,
-                    "validation_profile_id": _VALIDATION_PROFILE_ID,
-                    "taxonomy_manifest_id": _TAXONOMY_MANIFEST_ID,
-                    "taxonomy_version": _TAXONOMY_VERSION,
-                    "policy_version": _POLICY_VERSION,
-                },
+    snapshot_response = await client.execute(
+        "resolve_snapshot",
+        snapshot_selector,
+        principal=principal,
+        correlation_id=correlation_id,
+        deadline_at=deadline_at,
+    )
+    snapshot_id, release_digest = _preparation_selection(
+        snapshot_response.result,
+        identity=identity,
+        valuation_timestamp=valuation_timestamp,
+    )
+    if release_digest != release.active.manifest_digest:
+        raise FundamentalServiceFailure(
+            "RELEASE_DIGEST_MISMATCH",
+            "Active Fundamental release changed during snapshot selection",
+            retryable=True,
+            status_code=409,
+        )
+    preparation = await client.prepare_valuation(
+        {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": snapshot_id,
+            "data_release_manifest_digest": release_digest,
+            "model_id": model_id,
+        },
+        principal=principal,
+        correlation_id=correlation_id,
+        deadline_at=deadline_at,
+    )
+    if preparation.status != "prepared":
+        return PreparedServiceValuation(
+            valuation_request=None,
+            identity=identity,
+            release_manifest_digest=release.active.manifest_digest,
+            snapshot_selector=snapshot_selector,
+            preparation=preparation,
+            reason=preparation.status,
+        )
+    manual_override = request.get("manual_override")
+    if manual_override is not None:
+        override_payload = _mapping(
+            manual_override, context="valuation_request.manual_override"
+        )
+        try:
+            override_response = await client.execute(
+                "override_prepared_valuation",
+                override_payload,
                 principal=principal,
                 correlation_id=correlation_id,
                 deadline_at=deadline_at,
             )
-        ).result,
-        identity=identity,
-        valuation_timestamp=valuation_timestamp,
-    )
-    if compact_request:
-        snapshot_response = await client.execute(
-            "resolve_snapshot",
-            snapshot_selector,
-            principal=principal,
-            correlation_id=correlation_id,
-            deadline_at=deadline_at,
-        )
-        snapshot_id, release_digest = _preparation_selection(
-            snapshot_response.result,
-            identity=identity,
-            valuation_timestamp=valuation_timestamp,
-        )
-        preparation = await client.prepare_valuation(
-            {
-                "contract_version": "fundamental.v1",
-                "snapshot_id": snapshot_id,
-                "data_release_manifest_digest": release_digest,
-                "model_id": model_id,
-            },
-            principal=principal,
-            correlation_id=correlation_id,
-            deadline_at=deadline_at,
-        )
+            preparation = FundamentalValuationPreparationResultV1.model_validate(
+                override_response.result
+            )
+        except (TypeError, ValueError) as error:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned an invalid manual override preparation",
+                retryable=False,
+                status_code=502,
+            ) from error
         if preparation.status != "prepared":
             return PreparedServiceValuation(
                 valuation_request=None,
                 identity=identity,
-                ingestion=ingestion,
+                release_manifest_digest=release.active.manifest_digest,
                 snapshot_selector=snapshot_selector,
                 preparation=preparation,
                 reason=preparation.status,
             )
-        manual_override = request.get("manual_override")
-        if manual_override is not None:
-            override_payload = _mapping(
-                manual_override, context="valuation_request.manual_override"
-            )
-            try:
-                override_response = await client.execute(
-                    "override_prepared_valuation",
-                    override_payload,
-                    principal=principal,
-                    correlation_id=correlation_id,
-                    deadline_at=deadline_at,
-                )
-                preparation = FundamentalValuationPreparationResultV1.model_validate(
-                    override_response.result
-                )
-            except (TypeError, ValueError) as error:
-                raise FundamentalServiceFailure(
-                    "UPSTREAM_MALFORMED",
-                    "Fundamental service returned an invalid manual override preparation",
-                    retryable=False,
-                    status_code=502,
-                ) from error
-            if preparation.status != "prepared":
-                return PreparedServiceValuation(
-                    valuation_request=None,
-                    identity=identity,
-                    ingestion=ingestion,
-                    snapshot_selector=snapshot_selector,
-                    preparation=preparation,
-                    reason=preparation.status,
-                )
-        prepared = _prepared_input(
-            preparation,
-            model_id=model_id,
-            snapshot_id=snapshot_id,
-            release_digest=release_digest,
-            identity=identity,
-        )
-        return PreparedServiceValuation(
-            valuation_request=prepared,
-            identity=identity,
-            ingestion=ingestion,
-            snapshot_selector=snapshot_selector,
-            preparation=preparation,
-        )
-
-    prepared = _json_object(request, context="valuation_request")
-    prepared["contract_version"] = "fundamental.v1"
-    prepared["identity"] = identity
-    prepared["model_id"] = model_id
-    prepared["model_version"] = (
-        prepared.get("model_version") or _MODEL_VERSION[model_id]
+    prepared = _prepared_input(
+        preparation,
+        model_id=model_id,
+        snapshot_id=snapshot_id,
+        release_digest=release_digest,
+        identity=identity,
     )
-    prepared["historical_facts"] = ingestion["canonical_fact_ids"]
-    prepared["snapshot_selector"] = snapshot_selector
-    prepared["valuation_context"] = {
-        **_json_object(valuation_context, context="valuation_context"),
-        "valuation_timestamp": snapshot_selector["valuation_timestamp"],
-        **(
-            {"fiscal_period_selector": fiscal_period_selector}
-            if fiscal_period_selector is not None
-            else {}
-        ),
-        "source_selection_policy": _SNAPSHOT_POLICY,
-        "coverage_profile": _COVERAGE_PROFILE,
-    }
     return PreparedServiceValuation(
         valuation_request=prepared,
         identity=identity,
-        ingestion=ingestion,
+        release_manifest_digest=release.active.manifest_digest,
         snapshot_selector=snapshot_selector,
+        preparation=preparation,
     )
 
 

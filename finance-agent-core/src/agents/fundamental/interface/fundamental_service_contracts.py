@@ -100,6 +100,45 @@ class FundamentalIdentityResolutionV1(BaseModel):
         return self
 
 
+class FundamentalActiveReleasePointerV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    profile_id: str = Field(min_length=1)
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    revision: int = Field(ge=1)
+    activated_at: datetime
+
+
+class FundamentalReleaseManifestProjectionV1(BaseModel):
+    """Selection metadata only; the service retains and validates the full manifest."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+    profile_id: str = Field(min_length=1)
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    required_fields: tuple[str, ...] = Field(min_length=1)
+
+    @field_validator("required_fields")
+    @classmethod
+    def fields_are_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not field.strip() for field in value) or len(value) != len(set(value)):
+            raise ValueError("release required fields must be nonempty and unique")
+        return value
+
+
+class FundamentalActiveReleaseV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    active: FundamentalActiveReleasePointerV1
+    manifest: FundamentalReleaseManifestProjectionV1
+
+    @model_validator(mode="after")
+    def pointer_matches_manifest(self) -> FundamentalActiveReleaseV1:
+        if (
+            self.active.profile_id != self.manifest.profile_id
+            or self.active.manifest_digest != self.manifest.manifest_digest
+        ):
+            raise ValueError("active release pointer does not match its manifest")
+        return self
+
+
 class FundamentalServiceResponseV1(BaseModel):
     """Shared response metadata plus an opaque, service-owned result projection."""
 

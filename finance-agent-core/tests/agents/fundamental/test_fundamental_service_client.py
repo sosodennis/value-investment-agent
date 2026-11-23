@@ -494,3 +494,125 @@ async def test_client_rejects_malformed_response_and_expired_deadline() -> None:
         )
     assert deadline_error.value.code == "DEADLINE_EXCEEDED"
     await expired.aclose()
+
+
+def _active_release_response(correlation_id: str) -> dict[str, object]:
+    return {
+        **_success(correlation_id),
+        "result": {
+            "active": {
+                "profile_id": "configured-release-v1",
+                "manifest_digest": "b" * 64,
+                "revision": 2,
+                "activated_at": "2026-11-07T00:00:00Z",
+            },
+            "manifest": {
+                "profile_id": "configured-release-v1",
+                "manifest_digest": "b" * 64,
+                "required_fields": ["revenue", "operating_income"],
+                "service_owned_policy": {"conditional_capital": True},
+            },
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_active_release_read_uses_signed_get_and_empty_operation_input() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=_active_release_response("correlation-release"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
+        client = HttpFundamentalServiceClient(_settings(), client=transport)
+        release = await client.read_active_release(
+            "configured-release-v1",
+            principal=_principal(),
+            correlation_id="correlation-release",
+            deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+        )
+    request = requests[0]
+    assert request.method == "GET"
+    assert request.url.path == "/v1/data/releases/configured-release-v1"
+    payload = json.loads(request.content)
+    assert payload["input"] == {}
+    assert payload["context"]["principal"]["organization_id"] == "org-1"
+    assert payload["context"]["correlation_id"] == "correlation-release"
+    assert payload["context"]["signature"]
+    assert request.headers["authorization"] == "Bearer fundamental-token"
+    assert release.manifest.required_fields == ("revenue", "operating_income")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "pointer_profile",
+        "pointer_digest",
+        "requested_profile",
+        "missing_fields",
+        "duplicate_fields",
+    ],
+)
+async def test_active_release_read_rejects_malformed_or_differently_bound_metadata(
+    changed: str,
+) -> None:
+    payload = _active_release_response("correlation-release")
+    result = payload["result"]
+    if changed == "pointer_profile":
+        result["active"]["profile_id"] = "wrong-profile"
+    elif changed == "pointer_digest":
+        result["active"]["manifest_digest"] = "c" * 64
+    elif changed == "requested_profile":
+        result["active"]["profile_id"] = result["manifest"]["profile_id"] = (
+            "wrong-profile"
+        )
+    elif changed == "missing_fields":
+        result["manifest"]["required_fields"] = []
+    else:
+        result["manifest"]["required_fields"] = ["revenue", "revenue"]
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    ) as transport:
+        client = HttpFundamentalServiceClient(_settings(), client=transport)
+        with pytest.raises(FundamentalServiceFailure) as error:
+            await client.read_active_release(
+                "configured-release-v1",
+                principal=_principal(),
+                correlation_id="correlation-release",
+                deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+            )
+    assert error.value.code == (
+        "RELEASE_PROFILE_MISMATCH"
+        if changed == "requested_profile"
+        else "UPSTREAM_MALFORMED"
+    )
+
+
+def test_release_selector_environment_requires_a_complete_valid_tuple(
+    monkeypatch,
+) -> None:
+    from pydantic import ValidationError
+
+    from src.agents.fundamental.infrastructure.fundamental_service_client import (
+        load_fundamental_release_selector,
+    )
+
+    for name in (
+        "FUNDAMENTAL_DATA_RELEASE_PROFILE_ID",
+        "FUNDAMENTAL_COVERAGE_PROFILE",
+        "FUNDAMENTAL_SOURCE_SELECTION_POLICY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    assert load_fundamental_release_selector() is None
+    monkeypatch.setenv("FUNDAMENTAL_DATA_RELEASE_PROFILE_ID", "configured-release-v1")
+    with pytest.raises(ValidationError):
+        load_fundamental_release_selector()
+    monkeypatch.setenv("FUNDAMENTAL_COVERAGE_PROFILE", "automatic-fcff-v1")
+    monkeypatch.setenv("FUNDAMENTAL_SOURCE_SELECTION_POLICY", "pit-v1")
+    selector = load_fundamental_release_selector()
+    assert selector.profile_id == "configured-release-v1"
+    monkeypatch.setenv("FUNDAMENTAL_DATA_RELEASE_PROFILE_ID", "../another-profile")
+    with pytest.raises(ValidationError):
+        load_fundamental_release_selector()

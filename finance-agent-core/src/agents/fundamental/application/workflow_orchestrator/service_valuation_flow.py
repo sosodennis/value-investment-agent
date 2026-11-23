@@ -12,6 +12,7 @@ from pydantic import TypeAdapter
 
 from src.agents.fundamental.application.fundamental_service_port import (
     FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
+    FundamentalReleaseSelector,
     FundamentalServiceClient,
     FundamentalServiceFailure,
 )
@@ -865,6 +866,7 @@ async def _facts_only_projection(
         != selector.get("source_selection_policy")
         or selection.get("coverage_profile") != selector.get("coverage_profile")
         or selection.get("quality") != "verified"
+        or release_digest != prepared.release_manifest_digest
         or not isinstance(provenance_raw, Mapping)
         or not isinstance(provenance_raw.get("policy_version"), str)
         or not provenance_raw["policy_version"]
@@ -1532,6 +1534,7 @@ async def run_service_valuation_flow(
     *,
     client: FundamentalServiceClient,
     timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
+    release_selector: FundamentalReleaseSelector | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> FundamentalNodeResult:
     fundamental_raw = state.get("fundamental_analysis", {})
@@ -1582,6 +1585,7 @@ async def run_service_valuation_flow(
                 correlation_id=correlation_id,
                 deadline_at=deadline_at,
                 request_timing=request_timing,
+                release_selector=release_selector,
             )
             if prepared.valuation_request is None:
                 if prepared.preparation is not None:

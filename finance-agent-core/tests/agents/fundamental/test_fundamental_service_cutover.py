@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from src.agents.fundamental.application.fundamental_service_port import (
+    FundamentalReleaseSelector,
     FundamentalServiceFailure,
 )
 from src.agents.fundamental.application.workflow_orchestrator.orchestrator import (
@@ -18,6 +19,7 @@ from src.agents.fundamental.application.workflow_orchestrator.service_valuation_
     run_service_valuation_flow,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalActiveReleaseV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
 )
@@ -68,6 +70,13 @@ _FCFF_REQUIRED_FIELDS = [
     "common_shares_outstanding",
     "other_share_classes",
 ]
+
+
+_RELEASE_SELECTOR = FundamentalReleaseSelector(
+    profile_id="configured-release-v1",
+    coverage_profile="us-gaap-public-v1",
+    source_selection_policy="pit-v1",
+)
 
 
 class _Runtime:
@@ -589,25 +598,6 @@ class _FactsOnlyClient(_Client):
         return _resolved_identity()
 
     async def execute(self, operation, input_payload, **kwargs):
-        if operation == "ingest_sec_data":
-            self.calls.append((operation, dict(input_payload)))
-            self.facts_valuation_timestamp = str(input_payload["valuation_timestamp"])
-            result = {
-                "contract_version": "fundamental.v1",
-                "status": "created",
-                "identity": dict(input_payload["identity"]),
-                "valuation_timestamp": input_payload["valuation_timestamp"],
-                "snapshot_id": "snapshot-aapl-ingested",
-                "manifest_digest": "b" * 64,
-                "canonical_fact_ids": list(self._fact_ids),
-                "quality_status": "verified",
-            }
-            return FundamentalServiceResponseV1(
-                correlation_id="trace-facts-only",
-                contract_version="internal.v1",
-                schema_version="fundamental.v1",
-                result=result,
-            )
         if operation == "resolve_snapshot":
             self.facts_valuation_timestamp = self.snapshot_timestamp
             self.resolved_snapshot = {
@@ -631,6 +621,24 @@ class _FactsOnlyClient(_Client):
                 },
             }
         return await super().execute(operation, input_payload, **kwargs)
+
+    async def read_active_release(self, profile_id, **kwargs):
+        self.calls.append(("read_active_release", {"profile_id": profile_id}))
+        return FundamentalActiveReleaseV1.model_validate(
+            {
+                "active": {
+                    "profile_id": profile_id,
+                    "manifest_digest": "c" * 64,
+                    "revision": 1,
+                    "activated_at": "2026-11-01T00:00:00Z",
+                },
+                "manifest": {
+                    "profile_id": profile_id,
+                    "manifest_digest": "c" * 64,
+                    "required_fields": _FCFF_REQUIRED_FIELDS,
+                },
+            }
+        )
 
     async def prepare_valuation(self, input_payload, **kwargs):
         self.calls.append(("prepare_valuation", dict(input_payload)))
@@ -728,6 +736,7 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
             runtime,
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -847,6 +856,7 @@ async def test_cutover_binds_release_digest_to_context_without_provenance_leak()
             _Runtime(),
             {"valuation_request": payload},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -895,20 +905,21 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
             },
             client=client,
             clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
 
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
-        "ingest_sec_data",
+        "read_active_release",
         "resolve_snapshot",
         "prepare_valuation",
         "validate_with_policy",
         "calculate",
         "read_valuation_evidence",
     ]
-    assert client.calls[1][1]["identity"]["issuer_id"] == "0000320193"
+    assert client.calls[2][1]["identity"]["issuer_id"] == "0000320193"
     assert client.calls[2][1]["required_fields"] == _FCFF_REQUIRED_FIELDS
     assert client.calls[3][1]["snapshot_id"] == "snapshot-aapl-resolved"
     assert client.calls[4][1]["historical_facts"] == _FactsOnlyClient._fact_ids
@@ -956,12 +967,14 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
                 "fundamental_analysis": {"model_type": "dcf_standard"},
             },
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
 
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
+        "read_active_release",
         "resolve_snapshot",
     ]
     assert client.facts_calls == [
@@ -1018,6 +1031,7 @@ async def test_production_orchestrator_persists_facts_artifact() -> None:
                 "fundamental_analysis": {"model_type": "dcf_standard"},
             },
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1062,12 +1076,14 @@ async def test_cutover_rejects_facts_outside_the_resolved_snapshot(
             },
             client=client,
             clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
 
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
+        "read_active_release",
         "resolve_snapshot",
     ]
     assert len(client.facts_calls) == 1
@@ -1125,6 +1141,7 @@ async def test_cutover_rejects_unbound_policy_evidence(
             _Runtime(),
             {"valuation_request": _input()},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1162,6 +1179,7 @@ async def test_cutover_binds_resolved_source_policy_version_to_calculation_trace
             _Runtime(),
             {"valuation_request": payload},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1253,6 +1271,7 @@ async def test_cutover_accepts_canonical_defaults_without_changing_caller_values
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1279,6 +1298,7 @@ async def test_cutover_routes_explicit_monte_carlo_controls_to_calculation_repor
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input(monte_carlo=True)}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1314,6 +1334,7 @@ async def test_cutover_rejects_uncertainty_report_for_different_caller_input() -
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1347,6 +1368,7 @@ async def test_cutover_rejects_uncertainty_evidence_reference_mismatch() -> None
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1377,6 +1399,7 @@ async def test_cutover_rejects_unapproved_assumption_defaults() -> None:
             _Runtime(),
             {"valuation_request": payload},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1402,6 +1425,7 @@ async def test_cutover_accepts_service_defined_optional_assumption_defaults() ->
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1426,6 +1450,7 @@ async def test_cutover_rejects_service_assumption_rewrite() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1457,6 +1482,7 @@ async def test_cutover_rejects_service_uncertainty_rewrite() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1480,6 +1506,7 @@ async def test_cutover_rejects_calculation_digest_mismatch() -> None:
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1503,6 +1530,7 @@ async def test_cutover_rejects_uncertainty_base_digest_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1526,6 +1554,7 @@ async def test_cutover_rejects_uncertainty_base_artifact_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1551,6 +1580,7 @@ async def test_cutover_rejects_uncertainty_base_policy_trace_mismatch() -> None:
             _Runtime(),
             {"valuation_request": _input(monte_carlo=True)},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1583,6 +1613,7 @@ async def test_cutover_rejects_wrong_model_version_or_missing_artifact_reference
                 _Runtime(),
                 {"valuation_request": _input()},
                 client=client,
+                release_selector=_RELEASE_SELECTOR,
             )
         finally:
             reset_request_principal(token)
@@ -1613,6 +1644,7 @@ async def test_service_failure_is_degraded_without_a_local_calculation() -> None
             _Runtime(),
             {"fundamental_analysis": {"valuation_request": _input()}},
             client=client,
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)
@@ -1711,6 +1743,7 @@ async def test_preparation_outcome_publishes_a_report_without_execution(
             },
             client=client,
             clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+            release_selector=_RELEASE_SELECTOR,
         )
     finally:
         reset_request_principal(token)

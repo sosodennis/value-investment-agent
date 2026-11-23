@@ -8,12 +8,14 @@ from datetime import UTC, datetime
 import pytest
 
 from src.agents.fundamental.application.fundamental_service_port import (
+    FundamentalReleaseSelector,
     FundamentalServiceFailure,
 )
 from src.agents.fundamental.application.workflow_orchestrator.services.service_request_producer import (
     prepare_service_valuation_request,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalActiveReleaseV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
 )
@@ -28,9 +30,9 @@ from src.shared.internal_services import InternalPrincipal
 
 
 class _Client:
-    def __init__(self, *, ingestion: Mapping[str, object]) -> None:
+    def __init__(self, *, snapshot: Mapping[str, object]) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
-        self.ingestion = dict(ingestion)
+        self.snapshot = dict(snapshot)
         self.last_preparation: FundamentalValuationPreparationResultV1 | None = None
 
     async def resolve_identity(self, request, **_kwargs):
@@ -82,6 +84,10 @@ class _Client:
             )
         )
 
+    async def read_active_release(self, profile_id, **_kwargs):
+        self.calls.append(("read_active_release", {"profile_id": profile_id}))
+        return FundamentalActiveReleaseV1.model_validate(_release(profile_id))
+
     async def execute(self, operation, input_payload, **_kwargs):
         self.calls.append((operation, dict(input_payload)))
         if operation == "resolve_snapshot":
@@ -92,8 +98,8 @@ class _Client:
                 result={
                     "contract_version": "fundamental.v1",
                     "snapshot_id": "snapshot-aapl-1",
-                    "data_release_manifest_digest": self.ingestion["manifest_digest"],
-                    "historical_facts": self.ingestion["canonical_fact_ids"],
+                    "data_release_manifest_digest": self.snapshot["manifest_digest"],
+                    "historical_facts": self.snapshot["canonical_fact_ids"],
                     "identity": input_payload["identity"],
                     "valuation_timestamp": input_payload["valuation_timestamp"],
                     "snapshot_timestamp": input_payload["valuation_timestamp"],
@@ -103,7 +109,7 @@ class _Client:
                     "issue_codes": [],
                     "provenance": {
                         "snapshot_id": "snapshot-aapl-1",
-                        "data_release_manifest_digest": self.ingestion[
+                        "data_release_manifest_digest": self.snapshot[
                             "manifest_digest"
                         ],
                     },
@@ -118,16 +124,7 @@ class _Client:
                 correlation_id="correlation-1",
                 result=self.last_preparation.model_dump(mode="json"),
             )
-        result = {
-            **self.ingestion,
-            "valuation_timestamp": input_payload["valuation_timestamp"],
-        }
-        return FundamentalServiceResponseV1(
-            contract_version="internal.v1",
-            schema_version="fundamental.v1",
-            correlation_id="correlation-1",
-            result=result,
-        )
+        raise AssertionError(f"unexpected operation {operation}")
 
     async def prepare_valuation(self, input_payload, **_kwargs):
         prepared = {
@@ -150,7 +147,7 @@ class _Client:
                 "source_selection_policy": "pit-v1",
                 "coverage_profile": "fcff-valuation-requirements-v3",
             },
-            "historical_facts": list(self.ingestion["canonical_fact_ids"]),
+            "historical_facts": list(self.snapshot["canonical_fact_ids"]),
             "assumptions": {
                 "forecast": {"base_revenue": "100"},
                 "trace": {"description": "service-owned fixture assumptions"},
@@ -159,14 +156,14 @@ class _Client:
             "quality": {"status": "provisional"},
             "provenance": {
                 "snapshot_id": input_payload["snapshot_id"],
-                "fact_ids": list(self.ingestion["canonical_fact_ids"]),
+                "fact_ids": list(self.snapshot["canonical_fact_ids"]),
                 "mapping_version": "sec-us-gaap-v1",
                 "parser_version": "2.47.4",
                 "taxonomy_version": "us-gaap-2023-2024",
                 "policy_version": "sec-public-pit-v1",
             },
             "model_id": input_payload["model_id"],
-            "model_version": "fcff_dcf-v2",
+            "model_version": f"{input_payload['model_id']}-v2",
             "policy_id": "fcff_dcf-us-gaap-public-v2",
             "input_digest": None,
         }
@@ -176,7 +173,7 @@ class _Client:
                 "contract_version": "fundamental.v1",
                 "status": "prepared",
                 "model_id": input_payload["model_id"],
-                "model_version": "fcff_dcf-v2",
+                "model_version": f"{input_payload['model_id']}-v2",
                 "profile_id": "fcff-valuation-requirements-v3",
                 "profile_digest": "d" * 64,
                 "policy_id": "fcff_dcf-us-gaap-public-v2",
@@ -203,462 +200,209 @@ def _principal() -> InternalPrincipal:
     )
 
 
-def _ingestion(*, status: str = "created") -> dict[str, object]:
+def _snapshot() -> dict[str, object]:
     return {
-        "contract_version": "fundamental.v1",
-        "status": status,
-        "identity": {
-            "issuer_id": "0000320193",
-            "issuer_name": "Apple Inc.",
-            "domicile": "US",
-            "reporting_basis": "us-gaap",
-            "security_id": "AAPL",
-            "share_class": "AAPL",
-            "currency": "USD",
-        },
-        "valuation_timestamp": "2026-11-07T00:00:00Z",
-        "snapshot_id": "snapshot-aapl-1",
         "manifest_digest": "b" * 64,
         "canonical_fact_ids": ["fact-revenue", "fact-operating-income"],
-        "quality_status": "verified",
-        "parser_version": "2.47.4",
-        "validation_profile_id": "sec-efm-us-dqc-v31.0.3",
-        "validation_profile_digest": "c" * 64,
-        "taxonomy_manifest_id": "sec-us-gaap-2023-2024-public-bundle",
-        "taxonomy_version": "us-gaap-2023-2024",
-        "reused": status == "reused",
-        "coalesced": False,
-        "correlation_id": "correlation-1",
     }
 
 
-def _state(
-    *,
-    request: Mapping[str, object] | None = None,
-    model_type: str = "dcf_standard",
-) -> dict[str, object]:
-    fundamental: dict[str, object] = {"model_type": model_type}
-    if request is not None:
-        fundamental["valuation_request"] = dict(request)
+def _release(profile_id: str = "configured-release-v1") -> dict[str, object]:
+    return {
+        "active": {
+            "profile_id": profile_id,
+            "manifest_digest": "b" * 64,
+            "revision": 1,
+            "activated_at": "2026-11-07T00:00:00Z",
+        },
+        "manifest": {
+            "profile_id": profile_id,
+            "manifest_digest": "b" * 64,
+            "required_fields": ["revenue", "operating_income"],
+            "service_owned_compound_policy": {"retained_by_service": True},
+        },
+    }
+
+
+_SELECTOR = FundamentalReleaseSelector(
+    profile_id="configured-release-v1",
+    coverage_profile="automatic-fcff-v1",
+    source_selection_policy="pit-v1",
+)
+
+
+def _state(request: Mapping[str, object] | None = None) -> dict[str, object]:
     return {
         "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
-        "fundamental_analysis": fundamental,
+        "fundamental_analysis": {"model_type": "dcf_standard"},
+        **({"valuation_request": dict(request)} if request is not None else {}),
     }
 
 
-def _request() -> dict[str, object]:
-    return {
-        "contract_version": "fundamental.v1",
-        "valuation_context": {
-            "valuation_timestamp": "2026-11-07T00:00:00Z",
-            "source_selection_policy": "pit-v1",
-            "coverage_profile": "us-gaap-public-v1",
-        },
-        "assumptions": {"trace": {"description": "caller-owned"}},
-        "uncertainty": {"mode": "none"},
-        "quality": {"status": "verified"},
-        "provenance": {
-            "snapshot_id": "pending",
-            "fact_ids": [],
-            "mapping_version": "sec-us-gaap-v1",
-            "parser_version": "2.47.4",
-            "taxonomy_version": "us-gaap-2023-2024",
-            "policy_version": "sec-public-pit-v1",
-        },
-        "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v2",
-        "policy_id": "fcff_dcf-us-gaap-public-v2",
-    }
-
-
-def _compact_request() -> dict[str, object]:
-    return {
-        "model_id": "fcff_dcf",
-        "requested_as_of": "2026-11-07T00:00:00Z",
-    }
-
-
-@pytest.mark.asyncio
-async def test_producer_resolves_identity_then_ingests_and_pins_request() -> None:
-    client = _Client(ingestion=_ingestion())
-
-    prepared = await prepare_service_valuation_request(
-        _state(request=_request()),
+async def _prepare(
+    client: _Client, request: Mapping[str, object] | None = None, **kwargs
+):
+    return await prepare_service_valuation_request(
+        _state(request),
         client=client,
         principal=_principal(),
         correlation_id="correlation-1",
         deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+        release_selector=_SELECTOR,
+        request_timing=FundamentalRequestTimingV1.accept(
+            request or {}, clock=lambda: datetime(2026, 11, 7, tzinfo=UTC)
+        ),
+        **kwargs,
     )
 
-    assert [operation for operation, _ in client.calls] == [
-        "resolve_identity",
-        "ingest_sec_data",
-    ]
-    ingestion_payload = client.calls[1][1]
-    assert ingestion_payload["cik"] == "0000320193"
-    assert ingestion_payload["ticker"] == "AAPL"
-    assert ingestion_payload["required_fields"] == [
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "valuation_request",
+    [None, {"model_id": "fcff_dcf"}, {"model_id": "transition_fcff_dcf"}],
+)
+async def test_configured_release_owns_fields_and_reuses_snapshot_without_ingesting(
+    valuation_request,
+) -> None:
+    client = _Client(snapshot=_snapshot())
+    prepared = await _prepare(client, valuation_request)
+    assert prepared.release_manifest_digest == "b" * 64
+    assert prepared.snapshot_selector["release_profile_id"] == _SELECTOR.profile_id
+    assert prepared.snapshot_selector["coverage_profile"] == "automatic-fcff-v1"
+    assert prepared.snapshot_selector["source_selection_policy"] == "pit-v1"
+    assert prepared.snapshot_selector["required_fields"] == [
         "revenue",
-        "cost_of_revenue",
         "operating_income",
-        "income_before_tax",
-        "income_tax_expense",
-        "net_income",
-        "depreciation_and_amortization",
-        "capital_expenditure",
-        "operating_lease_cost",
-        "finance_lease_cost",
-        "stock_based_compensation",
-        "basic_weighted_average_shares",
-        "diluted_weighted_average_shares",
-        "operating_current_receivables",
-        "inventory",
-        "contract_assets",
-        "operating_current_payables",
-        "accrued_operating_liabilities",
-        "deferred_revenue",
-        "cash_and_equivalents",
-        "non_operating_assets",
-        "current_interest_bearing_debt",
-        "long_term_interest_bearing_debt",
-        "current_operating_lease_liabilities",
-        "long_term_operating_lease_liabilities",
-        "current_finance_lease_liabilities",
-        "long_term_finance_lease_liabilities",
-        "preferred_claims",
-        "noncontrolling_interests",
-        "convertible_instruments",
-        "common_shares_outstanding",
-        "other_share_classes",
     ]
-    assert prepared.snapshot_selector["identity"] == prepared.identity
-    assert prepared.snapshot_selector["release_profile_id"] == "sec-public-pit-v1"
-    assert prepared.snapshot_selector["valuation_timestamp"] == "2026-11-07T00:00:00Z"
-    assert prepared.valuation_request is not None
-    assert prepared.valuation_request["historical_facts"] == [
-        "fact-revenue",
-        "fact-operating-income",
-    ]
-    assert prepared.valuation_request["identity"] == prepared.identity
-
-
-@pytest.mark.asyncio
-async def test_producer_enriches_compact_caller_request_without_inventing_inputs() -> (
-    None
-):
-    client = _Client(ingestion=_ingestion())
-
-    prepared = await prepare_service_valuation_request(
-        _state(request=_compact_request()),
-        client=client,
-        principal=_principal(),
-        correlation_id="correlation-1",
-        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-    )
-
-    assert prepared.valuation_request is not None
-    assert prepared.valuation_request["assumptions"]["trace"]["description"] == (
-        "service-owned fixture assumptions"
-    )
-    assert prepared.valuation_request["model_id"] == "fcff_dcf"
-    assert prepared.valuation_request["model_version"] == "fcff_dcf-v2"
-    assert prepared.valuation_request["policy_id"] == "fcff_dcf-us-gaap-public-v2"
-    assert prepared.valuation_request["quality"] == {"status": "provisional"}
-    assert prepared.valuation_request["provenance"] == {
-        "snapshot_id": "snapshot-aapl-1",
-        "fact_ids": ["fact-revenue", "fact-operating-income"],
-        "mapping_version": "sec-us-gaap-v1",
-        "parser_version": "2.47.4",
-        "taxonomy_version": "us-gaap-2023-2024",
-        "policy_version": "sec-public-pit-v1",
-    }
     assert "fiscal_period_selector" not in prepared.snapshot_selector
-    assert prepared.valuation_request["valuation_context"] == {
-        "valuation_timestamp": "2026-11-07T00:00:00Z",
-        "data_snapshot_id": "snapshot-aapl-1",
-        "data_release_manifest_digest": "b" * 64,
-        "source_selection_policy": "pit-v1",
-        "coverage_profile": "fcff-valuation-requirements-v3",
-    }
-    assert [operation for operation, _ in client.calls] == [
-        "resolve_identity",
-        "ingest_sec_data",
-        "resolve_snapshot",
-        "prepare_valuation",
-    ]
+    operations = [name for name, _ in client.calls]
+    assert operations == (
+        ["resolve_identity", "read_active_release"]
+        if valuation_request is None
+        else [
+            "resolve_identity",
+            "read_active_release",
+            "resolve_snapshot",
+            "prepare_valuation",
+        ]
+    )
+    if valuation_request is None:
+        assert prepared.valuation_request is None
+    else:
+        assert prepared.valuation_request["model_id"] == valuation_request["model_id"]
+        assert prepared.valuation_request["historical_facts"] == [
+            "fact-revenue",
+            "fact-operating-income",
+        ]
+        assert (
+            prepared.valuation_request["provenance"]["mapping_version"]
+            == "sec-us-gaap-v1"
+        )
 
 
 @pytest.mark.asyncio
-async def test_producer_routes_manual_override_back_through_fundamental_service() -> (
-    None
-):
-    client = _Client(ingestion=_ingestion())
-    request = _compact_request()
-    request["manual_override"] = {
+async def test_missing_release_configuration_refuses_without_upstream_calls() -> None:
+    client = _Client(snapshot=_snapshot())
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await prepare_service_valuation_request(
+            _state({"model_id": "fcff_dcf"}),
+            client=client,
+            principal=_principal(),
+            correlation_id="correlation-1",
+            deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+        )
+    assert error.value.code == "SERVICE_NOT_CONFIGURED"
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_refuses_a_different_configured_profile() -> None:
+    class WrongProfile(_Client):
+        async def read_active_release(self, profile_id, **kwargs):
+            return FundamentalActiveReleaseV1.model_validate(
+                _release("different-profile")
+            )
+
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await _prepare(WrongProfile(snapshot=_snapshot()), {"model_id": "fcff_dcf"})
+    assert error.value.code == "RELEASE_PROFILE_MISMATCH"
+
+
+@pytest.mark.asyncio
+async def test_release_refusal_propagates_without_ingestion_fallback() -> None:
+    class Unavailable(_Client):
+        async def read_active_release(self, profile_id, **kwargs):
+            raise FundamentalServiceFailure(
+                "DATA_RELEASE_NOT_ACTIVE",
+                "not active",
+                retryable=False,
+                status_code=404,
+            )
+
+    client = Unavailable(snapshot=_snapshot())
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await _prepare(client, {"model_id": "fcff_dcf"})
+    assert error.value.code == "DATA_RELEASE_NOT_ACTIVE"
+    assert [name for name, _ in client.calls] == ["resolve_identity"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changed", ["digest", "identity", "timestamp"])
+async def test_selection_rejects_changed_release_identity_or_time_before_preparation(
+    changed: str,
+) -> None:
+    class ChangedSelection(_Client):
+        async def execute(self, operation, input_payload, **kwargs):
+            response = await super().execute(operation, input_payload, **kwargs)
+            result = dict(response.result)
+            if changed == "digest":
+                result["data_release_manifest_digest"] = "c" * 64
+            elif changed == "identity":
+                result["identity"] = {"security_id": "WRONG"}
+            else:
+                result["valuation_timestamp"] = "2026-11-08T00:00:00Z"
+            return response.model_copy(update={"result": result})
+
+    client = ChangedSelection(snapshot=_snapshot())
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await _prepare(client, {"model_id": "fcff_dcf"})
+    assert error.value.code == (
+        "RELEASE_DIGEST_MISMATCH"
+        if changed == "digest"
+        else "SNAPSHOT_PREPARATION_UNAVAILABLE"
+    )
+    assert "prepare_valuation" not in [name for name, _ in client.calls]
+
+
+@pytest.mark.asyncio
+async def test_explicit_period_selection_is_preserved() -> None:
+    prepared = await _prepare(
+        _Client(snapshot=_snapshot()),
+        {
+            "model_id": "fcff_dcf",
+            "fiscal_period_selector": {"mode": "latest_complete", "count": 1},
+        },
+    )
+    assert prepared.snapshot_selector["fiscal_period_selector"] == {
+        "version": "fundamental.fiscal-period-selector.v1",
+        "mode": "latest_complete",
+        "count": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_manual_override_keeps_existing_service_operation() -> None:
+    client = _Client(snapshot=_snapshot())
+    override = {
         "contract_version": "fundamental.v1",
         "path": "assumptions.forecast.base_revenue",
         "value": "110",
         "provenance": {
             "author": "workspace-user",
             "modified_at": "2026-11-07T00:00:00Z",
-            "reason": "Updated the base year after reviewing the filing.",
+            "reason": "Reviewed filing",
             "automatic_preparation_digest": "e" * 64,
         },
     }
-
-    prepared = await prepare_service_valuation_request(
-        _state(request=request),
-        client=client,
-        principal=_principal(),
-        correlation_id="correlation-1",
-        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-    )
-
-    assert prepared.valuation_request is not None
-    assert [operation for operation, _ in client.calls] == [
-        "resolve_identity",
-        "ingest_sec_data",
-        "resolve_snapshot",
-        "prepare_valuation",
-        "override_prepared_valuation",
-    ]
-    override_payload = client.calls[-1][1]
-    assert override_payload["path"] == "assumptions.forecast.base_revenue"
-    assert override_payload["value"] == "110"
-
-
-@pytest.mark.asyncio
-async def test_transition_request_adds_filed_evidence_to_complete_profile() -> None:
-    client = _Client(ingestion=_ingestion())
-    request = _compact_request()
-    request["model_id"] = "transition_fcff_dcf"
-
-    await prepare_service_valuation_request(
-        _state(request=request, model_type="dcf_growth"),
-        client=client,
-        principal=_principal(),
-        correlation_id="correlation-1",
-        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-    )
-
-    ingestion_payload = client.calls[1][1]
-    assert ingestion_payload["required_fields"][-1] == "filed_operating_evidence"
-    assert len(ingestion_payload["required_fields"]) == 33
-
-
-@pytest.mark.asyncio
-async def test_producer_preserves_explicit_fiscal_period_selector() -> None:
-    client = _Client(ingestion=_ingestion())
-    request = _compact_request()
-    request["valuation_context"] = {
-        "fiscal_period_selector": {
-            "mode": "latest_complete",
-            "count": 1,
-        }
-    }
-
-    prepared = await prepare_service_valuation_request(
-        _state(request=request),
-        client=client,
-        principal=_principal(),
-        correlation_id="correlation-1",
-        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-        request_timing=FundamentalRequestTimingV1.accept(
-            request,
-            clock=lambda: datetime(2026, 11, 7, tzinfo=UTC),
-        ),
-    )
-
-    assert prepared.snapshot_selector["fiscal_period_selector"] == {
-        "version": "fundamental.fiscal-period-selector.v1",
-        "mode": "latest_complete",
-        "count": 1,
-    }
-    assert prepared.valuation_request is not None
-    assert prepared.valuation_request["valuation_context"][
-        "fiscal_period_selector"
-    ] == {
-        "version": "fundamental.fiscal-period-selector.v1",
-        "mode": "latest_complete",
-        "count": 1,
-    }
-
-
-@pytest.mark.asyncio
-async def test_producer_returns_explicit_missing_assumptions_reason() -> None:
-    client = _Client(ingestion=_ingestion())
-
-    prepared = await prepare_service_valuation_request(
-        _state(),
-        client=client,
-        principal=_principal(),
-        correlation_id="correlation-1",
-        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-    )
-
-    assert prepared.valuation_request is None
-    assert prepared.reason == "caller valuation assumptions are required"
-    assert prepared.ingestion == {}
-    assert prepared.snapshot_selector["release_profile_id"] == "sec-public-pit-v1"
-    assert "fiscal_period_selector" not in prepared.snapshot_selector
-    assert [operation for operation, _ in client.calls] == ["resolve_identity"]
-
-
-@pytest.mark.asyncio
-async def test_facts_only_request_uses_accepted_timestamp_without_ingestion_or_fiscal_selector() -> (
-    None
-):
-    client = _Client(ingestion=_ingestion())
-    timing = FundamentalRequestTimingV1.accept(
-        {}, clock=lambda: datetime(2026, 11, 8, 0, 0, tzinfo=UTC)
-    )
-
-    prepared = await prepare_service_valuation_request(
-        _state(),
-        client=client,
-        principal=_principal(),
-        correlation_id="correlation-1",
-        deadline_at=datetime(2026, 11, 8, tzinfo=UTC),
-        request_timing=timing,
-    )
-
-    assert prepared.valuation_request is None
-    assert prepared.ingestion == {}
-    assert prepared.snapshot_selector["valuation_timestamp"] == ("2026-11-08T00:00:00Z")
-    assert "fiscal_period_selector" not in prepared.snapshot_selector
-    assert [operation for operation, _ in client.calls] == ["resolve_identity"]
-
-
-@pytest.mark.asyncio
-async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> None:
-    client = _Client(ingestion=_ingestion())
-
-    prepared = await prepare_service_valuation_request(
-        _state(model_type="dcf_growth"),
-        client=client,
-        principal=_principal(),
-        correlation_id="correlation-1",
-        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-    )
-
-    assert prepared.valuation_request is None
-    assert prepared.snapshot_selector["required_fields"] == [
-        "revenue",
-        "cost_of_revenue",
-        "operating_income",
-        "income_before_tax",
-        "income_tax_expense",
-        "net_income",
-        "depreciation_and_amortization",
-        "capital_expenditure",
-        "operating_lease_cost",
-        "finance_lease_cost",
-        "stock_based_compensation",
-        "basic_weighted_average_shares",
-        "diluted_weighted_average_shares",
-        "operating_current_receivables",
-        "inventory",
-        "contract_assets",
-        "operating_current_payables",
-        "accrued_operating_liabilities",
-        "deferred_revenue",
-        "cash_and_equivalents",
-        "non_operating_assets",
-        "current_interest_bearing_debt",
-        "long_term_interest_bearing_debt",
-        "current_operating_lease_liabilities",
-        "long_term_operating_lease_liabilities",
-        "current_finance_lease_liabilities",
-        "long_term_finance_lease_liabilities",
-        "preferred_claims",
-        "noncontrolling_interests",
-        "convertible_instruments",
-        "common_shares_outstanding",
-        "other_share_classes",
-    ]
-    assert [operation for operation, _ in client.calls] == ["resolve_identity"]
-
-
-@pytest.mark.asyncio
-async def test_producer_rejects_identity_mismatch_before_ingestion() -> None:
-    client = _Client(ingestion=_ingestion())
-    request = _request()
-    request["identity"] = {"issuer_id": "0000000001"}
-
-    with pytest.raises(FundamentalServiceFailure, match="identity") as error:
-        await prepare_service_valuation_request(
-            _state(request=request),
-            client=client,
-            principal=_principal(),
-            correlation_id="correlation-1",
-            deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-        )
-
-    assert error.value.code == "IDENTITY_MISMATCH"
-    assert [operation for operation, _ in client.calls] == ["resolve_identity"]
-
-
-@pytest.mark.asyncio
-async def test_producer_rejects_degraded_ingestion_without_snapshot() -> None:
-    client = _Client(ingestion=_ingestion(status="degraded"))
-
-    with pytest.raises(FundamentalServiceFailure) as error:
-        await prepare_service_valuation_request(
-            _state(request=_request()),
-            client=client,
-            principal=_principal(),
-            correlation_id="correlation-1",
-            deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-        )
-
-    assert error.value.code == "SEC_INGESTION_DEGRADED"
-
-
-@pytest.mark.asyncio
-async def test_producer_rejects_missing_ticker_without_service_calls() -> None:
-    client = _Client(ingestion=_ingestion())
-
-    with pytest.raises(FundamentalServiceFailure) as error:
-        await prepare_service_valuation_request(
-            {"company_profile": None, "fundamental_analysis": {}},
-            client=client,
-            principal=_principal(),
-            correlation_id="correlation-1",
-            deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-        )
-
-    assert error.value.code == "FUNDAMENTAL_TICKER_MISSING"
-    assert client.calls == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("invalid", [float("nan"), {1: "invalid-key"}, object()])
-async def test_producer_refuses_non_json_service_evidence(invalid) -> None:
-    client = _Client(ingestion={**_ingestion(), "unsupported_metadata": invalid})
-    with pytest.raises(FundamentalServiceFailure) as error:
-        await prepare_service_valuation_request(
-            _state(request=_request()),
-            client=client,
-            principal=_principal(),
-            correlation_id="correlation-1",
-            deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-        )
-    assert error.value.code == "UPSTREAM_MALFORMED"
-
-
-@pytest.mark.asyncio
-async def test_producer_normalizes_verified_fact_ids_to_json_without_losing_lineage() -> (
-    None
-):
-    ingestion = _ingestion()
-    ids = tuple(ingestion["canonical_fact_ids"])
-    client = _Client(ingestion={**ingestion, "canonical_fact_ids": ids})
-    result = await prepare_service_valuation_request(
-        _state(request=_request()),
-        client=client,
-        principal=_principal(),
-        correlation_id="correlation-1",
-        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
-    )
-    assert result.ingestion["canonical_fact_ids"] == list(ids)
-    assert result.valuation_request["historical_facts"] == list(ids)
+    await _prepare(client, {"model_id": "fcff_dcf", "manual_override": override})
+    assert client.calls[-1] == ("override_prepared_valuation", override)
