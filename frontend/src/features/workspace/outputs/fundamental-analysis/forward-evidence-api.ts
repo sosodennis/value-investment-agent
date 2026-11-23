@@ -1,7 +1,7 @@
 import type { components } from '@/types/generated/api-contract';
 import { csrfHeaders } from '@/lib/auth-api';
 import { isRecord } from '@/types/preview';
-import type { FundamentalAutomaticPreparation } from '@/types/agents/fundamental-service-facts';
+import { parseApiErrorMessage } from '@/types/protocol';
 
 export type ForwardEvidenceResearchRequest =
     components['schemas']['ForwardEvidenceResearchRequest'];
@@ -9,26 +9,6 @@ export type ForwardEvidenceReview =
     components['schemas']['FundamentalForwardEvidenceReviewResultV1'];
 export type ForwardEvidenceClaim =
     components['schemas']['FundamentalForwardEvidenceClaimV1'];
-
-export type ForwardEvidenceManualOverride = {
-    contract_version: 'fundamental.v1';
-    preparation: FundamentalAutomaticPreparation;
-    path: string;
-    value: string;
-    provenance: {
-        author: string;
-        modified_at: string;
-        reason: string;
-        automatic_preparation_digest: string;
-        forward_reference: {
-            claim_id: string;
-            source_url: string;
-            source_content_hash: string;
-            citation: string;
-            license_reference: string;
-        };
-    };
-};
 
 const parseRecord = (value: unknown, context: string): Record<string, unknown> => {
     if (!isRecord(value) || Array.isArray(value)) {
@@ -222,15 +202,19 @@ export function parseForwardEvidenceReview(value: unknown): ForwardEvidenceRevie
 
 export async function researchForwardEvidence(
     request: ForwardEvidenceResearchRequest,
+    options: { signal?: AbortSignal } = {},
 ): Promise<ForwardEvidenceReview> {
     const response = await fetch('/api/v1/fundamental/forward-evidence/research', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
         body: JSON.stringify(request),
+        signal: options.signal,
     });
     if (!response.ok) {
-        throw new Error(`Forward evidence research failed (${response.status}).`);
+        const payload: unknown = await response.json().catch(() => null);
+        throw new Error(parseApiErrorMessage(payload) ?? `Forward evidence research failed (${response.status}).`);
     }
-    return parseForwardEvidenceReview(await response.json());
+    const payload: unknown = await response.json();
+    return parseForwardEvidenceReview(payload);
 }

@@ -34,7 +34,7 @@ const statusFor = (status: WorkflowActivityState['runStatus']): AgentState['stat
 function reducer(state: AgentState, action: Action): AgentState {
     switch (action.type) {
         case 'INIT_SESSION': return { ...initialState, threadId: action.threadId, status: 'running' };
-        case 'SET_RUN': return { ...state, runId: action.runId };
+        case 'SET_RUN': return { ...state, runId: action.runId, error: null };
         case 'CONNECTION': return { ...state, connection: action.connection };
         case 'HYDRATE': { const snapshot = parseWorkflowActivitySnapshot(action.snapshot); if (state.runId && state.runId !== snapshot.run_id) return state; return { ...state, threadId: snapshot.thread_id, runId: snapshot.run_id, status: statusFor(snapshot.run_status), workflow: createWorkflowActivityState(snapshot) }; }
         case 'EVENT': {

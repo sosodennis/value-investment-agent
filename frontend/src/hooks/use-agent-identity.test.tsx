@@ -63,7 +63,7 @@ describe('useAgent operation identity', () => {
         fetchMock.mockReturnValueOnce(started.promise)
             .mockResolvedValueOnce(snapshotResponse('selected-thread', 'selected-run'));
         const { result } = renderHook(() => useAgent());
-        let previousStart: Promise<void>;
+        let previousStart: Promise<unknown>;
         act(() => { previousStart = result.current.sendMessage('Valuate AAPL', true); });
         const requestUrl = String(fetchMock.mock.calls[0]?.[0]);
         const previousThreadId = requestUrl.split('/')[4];
@@ -92,7 +92,7 @@ describe('useAgent operation identity', () => {
             .mockResolvedValueOnce(snapshotResponse('thread-1', 'next-run'));
         const { result, unmount } = renderHook(() => useAgent());
         await act(async () => result.current.loadHistory('thread-1', 'initial-run'));
-        let previousStart: Promise<void>;
+        let previousStart: Promise<unknown>;
         act(() => { previousStart = result.current.sendMessage('First'); });
         await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
         act(() => { void result.current.sendMessage('Second'); });

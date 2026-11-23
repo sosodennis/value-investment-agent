@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clientLogger } from '@/lib/logger';
 import type { AgentStatus, StandardAgentOutput } from '@/types/agents';
+import type { components } from '@/types/generated/api-contract';
 import { buildArtifactUrl } from '@/features/artifacts/api';
 import { applyWorkflowEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, retryWorkflowRun, startWorkflowRun, type InteractionId, type InteractionResponse, type WorkflowActivitySnapshot, type WorkflowInteraction } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
 
 const makeThreadId = () => `thread_${crypto.randomUUID()}`;
+export type WorkflowStartResult =
+    | { kind: 'started'; threadId: string; runId: string }
+    | { kind: 'error'; message: string }
+    | { kind: 'superseded' };
 const toError = (value: unknown, fallback: string) => value instanceof Error ? value.message : fallback;
 const isAbortError = (value: unknown) => {
     if (typeof value !== 'object' || value === null) return false;
@@ -114,8 +119,8 @@ export function useAgent(assistantId = 'agent') {
     const sendMessage = useCallback(async (
         content: string,
         newSession = false,
-        valuationRequest?: Record<string, unknown>,
-    ) => {
+        valuationRequest?: components['schemas']['FundamentalValuationIntentV1'],
+    ): Promise<WorkflowStartResult> => {
         const operation = beginOperation();
         setIsLoading(true);
         const threadId = newSession || !state.threadId ? makeThreadId() : state.threadId;
@@ -126,16 +131,20 @@ export function useAgent(assistantId = 'agent') {
                 message: content,
                 valuation_request: valuationRequest,
             }, { signal: operation.signal });
-            if (!isCurrentOperation(operation)) return;
+            if (!isCurrentOperation(operation)) return { kind: 'superseded' };
             setRun(run.run_id);
             const snapshot = await getActivitySnapshot(threadId, { runId: run.run_id, signal: operation.signal });
-            if (!isCurrentOperation(operation)) return;
+            if (!isCurrentOperation(operation)) return { kind: 'superseded' };
             if (snapshot.run_id !== run.run_id) throw new TypeError('activity snapshot run identity mismatch.');
             hydrateWorkflow(snapshot);
             setIsLoading(false);
             await attachStream(threadId, snapshot, operation, run.run_id);
+            return isCurrentOperation(operation) ? { kind: 'started', threadId, runId: run.run_id } : { kind: 'superseded' };
         } catch (error) {
-            if (isCurrentOperation(operation) && !isAbortError(error)) setError(toError(error, 'Failed to start workflow run.'));
+            if (!isCurrentOperation(operation) || isAbortError(error)) return { kind: 'superseded' };
+            const message = toError(error, 'Failed to start workflow run.');
+            setError(message);
+            return { kind: 'error', message };
         } finally { if (isCurrentOperation(operation)) setIsLoading(false); }
     }, [addUserMessage, attachStream, beginOperation, hydrateWorkflow, initSession, isCurrentOperation, setError, setRun, state.threadId]);
 

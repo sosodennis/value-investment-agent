@@ -18,6 +18,8 @@ import {
 import { ValuationAssumptionsSection } from './valuation-assumptions-section';
 import { ValuationSummary } from './valuation-summary';
 import { ValuationUncertainty } from './valuation-uncertainty';
+import { valuationRevisionAvailability, type FundamentalRevisionControl } from './valuation-revision';
+import { ValuationRevisionPanel } from './valuation-revision-panel';
 
 export type FundamentalAnalysisOutputProps = {
     reference: ArtifactReference | null;
@@ -27,6 +29,7 @@ export type FundamentalAnalysisOutputProps = {
     runId?: string | null;
     onSelectEvidence?: (item: EvidenceSelection) => void;
     onEvidenceInventory?: (inventory: FundamentalEvidenceInventory) => void;
+    revisionControl?: FundamentalRevisionControl;
 };
 
 export function FundamentalAnalysisOutput({
@@ -37,6 +40,7 @@ export function FundamentalAnalysisOutput({
     runId,
     onSelectEvidence,
     onEvidenceInventory,
+    revisionControl,
 }: FundamentalAnalysisOutputProps) {
     const artifact = useArtifact(
         reference,
@@ -87,7 +91,34 @@ export function FundamentalAnalysisOutput({
             </Alert>
         );
     }
-    const previous = runId != null && report.identity.runId !== runId;
+    const pendingSource = revisionControl?.kind === 'available' ? revisionControl.pendingSource : null;
+    const pendingThisSource =
+        pendingSource?.thread_id === report.identity.threadId &&
+        pendingSource?.run_id === report.identity.runId &&
+        pendingSource?.artifact_id === report.identity.artifactId &&
+        pendingSource?.preparation_digest === report.identity.preparationDigest;
+    const previous = (runId != null && report.identity.runId !== runId) || pendingThisSource;
+    const revision = valuationRevisionAvailability(report);
+    const currentSource = report.identity.threadId === threadId && report.identity.runId === runId;
+    const revisionPanel =
+        revisionControl?.kind === 'read-only' ? (
+            <p className="text-xs text-muted-foreground">{revisionControl.reason}</p>
+        ) : revisionControl?.kind === 'available' ? (
+            revision.kind === 'available' && currentSource ? (
+                <ValuationRevisionPanel
+                    key={revision.context.sourceKey}
+                    context={revision.context}
+                    isPending={revisionControl.isPending}
+                    onRecalculate={revisionControl.onRecalculate}
+                />
+            ) : (
+                <p className="text-xs text-muted-foreground">
+                    {currentSource && revision.kind === 'read-only'
+                        ? revision.reason
+                        : 'Previous reports are read-only.'}
+                </p>
+            )
+        ) : undefined;
     return (
         <div className="min-w-0 space-y-4">
             {previous && (
@@ -108,7 +139,11 @@ export function FundamentalAnalysisOutput({
                     </AlertDescription>
                 </Alert>
             )}
-            <FundamentalReport report={report} onSelectEvidence={onSelectEvidence} />
+            <FundamentalReport
+                report={report}
+                onSelectEvidence={onSelectEvidence}
+                revisionPanel={revisionPanel}
+            />
         </div>
     );
 }

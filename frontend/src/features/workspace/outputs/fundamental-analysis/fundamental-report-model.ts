@@ -1,6 +1,6 @@
 import type { components } from '@/types/generated/api-contract';
 import type { ArtifactReference } from '@/types/agents';
-import type { FundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
+import { isRevisedFundamentalPreparation, type FundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
 import { getArtifactRunId } from '@/features/artifacts/api';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 
@@ -48,11 +48,12 @@ type CalculationModel = {
 export type PreparationSummary = {
     digest: string;
     status: Contracts['FundamentalValuationPreparationResultV1']['status'];
-    modelId: string;
+    modelId: Contracts['FundamentalValuationPreparationResultV1']['model_id'];
     modelVersion: string;
     policyId: string;
     policyVersion: string;
     quality: Quality;
+    isRevised: boolean;
     issueCodes: string[];
     missingEvidence: string[];
     assumptions: { path: string; value: ExactNumber; method: string; editable: boolean; isManual: boolean; formula: string; evidence: EvidenceSelection }[];
@@ -82,6 +83,8 @@ type UncertaintyModel = {
 type ReportBase = {
     identity: FundamentalReportIdentity;
     company: string;
+    ticker: string;
+    issuerId: string | null;
     shareClass: string | null;
     currency: string | null;
     quality: Quality;
@@ -221,7 +224,7 @@ function preparationSummary(preparation: Contracts['FundamentalValuationPreparat
         digest: preparation.preparation_digest, status: preparation.status,
         modelId: preparation.model_id, modelVersion: preparation.model_version,
         policyId: preparation.policy_id, policyVersion: preparation.policy_version,
-        quality: preparation.quality_status, issueCodes: preparation.issue_codes, missingEvidence: preparation.missing_evidence,
+        quality: preparation.quality_status, isRevised: isRevisedFundamentalPreparation(preparation), issueCodes: preparation.issue_codes, missingEvidence: preparation.missing_evidence,
         assumptions: preparation.assumptions_evidence.map((item, index) => ({
             path: item.path, value: exactNumber(item.value), method: item.method, editable: item.editable,
             isManual: item.method === 'manual' || item.manual_provenance != null, formula: item.formula,
@@ -254,7 +257,7 @@ export function projectFundamentalReport({ artifact, reference, threadId = null,
         (fact) => factModel(fact, artifact.snapshot_id, artifact.snapshot_manifest_digest, identity),
     ) : [];
     const common = {
-        identity, company: companyIdentity?.issuer_name ?? ticker, shareClass: companyIdentity?.share_class ?? null,
+        identity, ticker: companyIdentity?.security_id ?? ticker, issuerId: companyIdentity?.issuer_id ?? null, company: companyIdentity?.issuer_name ?? ticker, shareClass: companyIdentity?.share_class ?? null,
         currency: companyIdentity?.currency ?? null, quality: artifact.projection_type === 'facts_only' ? artifact.quality.facts_status : artifact.quality_status,
         issueCodes: artifact.projection_type === 'valuation' ? artifact.quality.issue_codes : artifact.issue_codes, facts,
     };

@@ -13,6 +13,12 @@ export type FundamentalServiceArtifact =
     | Contracts['FundamentalPreparationOutcomeV1']
     | Contracts['FundamentalDegradedReportV1'];
 
+export function isRevisedFundamentalPreparation(preparation: FundamentalAutomaticPreparation): boolean {
+    const provenance = preparation.input?.provenance;
+    const hasConditionalRevision = isRecord(provenance) && !Array.isArray(provenance) && provenance.conditional_revision_ref != null;
+    return hasConditionalRevision || preparation.issue_codes.includes('MANUAL_OVERRIDE_APPLIED') || preparation.assumptions_evidence.some((item) => item.method === 'manual' || item.manual_provenance != null);
+}
+
 function record(value: unknown, context: string): Record<string, unknown> {
     if (!isRecord(value) || Array.isArray(value)) {
         throw new TypeError(`${context} must be an object.`);

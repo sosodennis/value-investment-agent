@@ -19,7 +19,7 @@ export const conditionalQuantileBasis: Contracts['FundamentalConditionalQuantile
 
 export const identity: Contracts['FundamentalIdentityV1'] = {
     issuer_id: 'issuer-1', issuer_name: 'Example Corp', domicile: 'US', reporting_basis: 'us-gaap',
-    security_id: 'security-1', share_class: 'Class A', currency: 'USD',
+    security_id: 'EXAMPLE', share_class: 'Class A', currency: 'USD',
 };
 export function canonicalFact(overrides: Partial<Contracts['FundamentalCanonicalFactV1']> = {}): Contracts['FundamentalCanonicalFactV1'] {
     return {

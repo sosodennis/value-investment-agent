@@ -21,11 +21,7 @@ import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents
 import { buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
-import type {
-    ForwardEvidenceManualOverride,
-    ForwardEvidenceResearchRequest,
-    ForwardEvidenceReview,
-} from './outputs/fundamental-analysis/forward-evidence-api';
+import type { FundamentalRevisionControl } from './outputs/fundamental-analysis/valuation-revision';
 
 type WorkspaceOutputPanelProps = {
     agent: AgentInfo;
@@ -37,13 +33,7 @@ type WorkspaceOutputPanelProps = {
     onSelectEvidence?: (item: EvidenceSelection) => void;
     onEvidenceInventory?: (inventory: FundamentalEvidenceInventory) => void;
     selectedEvidenceId?: string | null;
-    isSubmitting?: boolean;
-    onRecalculate?: (manualOverride: Record<string, unknown>) => void;
-    forwardEvidence?: ForwardEvidenceReview | null;
-    isResearchingForwardEvidence?: boolean;
-    researchError?: string | null;
-    onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>;
-    onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void;
+    revisionControl?: FundamentalRevisionControl;
 };
 
 export function WorkspaceOutputPanel({
@@ -56,6 +46,7 @@ export function WorkspaceOutputPanel({
     selectedEvidenceId,
     threadId,
     runId,
+    revisionControl,
 }: WorkspaceOutputPanelProps) {
     const viewModel = adaptAgentOutput(
         agent.id,
@@ -75,6 +66,7 @@ export function WorkspaceOutputPanel({
                     onEvidenceInventory={onEvidenceInventory}
                     threadId={threadId}
                     runId={runId}
+                    revisionControl={revisionControl}
                 />
             );
             break;

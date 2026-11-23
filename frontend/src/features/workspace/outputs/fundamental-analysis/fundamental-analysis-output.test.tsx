@@ -5,6 +5,7 @@ import { FundamentalAnalysisOutput, FundamentalReport } from './fundamental-anal
 import { parseFundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
 import { projectFundamentalReport } from './fundamental-report-model';
 import { calculation, conditionalQuantileBasis, factsOnlyReport, preparationOutcome, reference, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
+import { editableReport } from './valuation-revision.test-fixtures';
 
 function model(artifact: unknown) {
     return projectFundamentalReport({ artifact: parseFundamentalServiceArtifact(artifact), reference, threadId: 'thread-1', ticker: 'EXAMPLE' });
@@ -12,6 +13,18 @@ function model(artifact: unknown) {
 
 describe('Fundamental report', () => {
     afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+    it.each(['history', 'revised'] as const)('keeps the %s report read-only even when the service field is editable', async (mode) => {
+        const source = editableReport();
+        if (mode === 'revised' && source.automatic_preparation) source.automatic_preparation.input = { ...source.automatic_preparation.input, provenance: { conditional_revision_ref: 'source-revision' } };
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            kind: 'financial_reports', version: 'v1', produced_by: 'fundamental_analysis', created_at: '2026-11-23T00:00:00Z',
+            data: { ticker: 'EXAMPLE', model_type: 'fcff_dcf', status: 'done', financial_reports: [], fundamental_service: source },
+        }), { status: 200 })));
+        await act(async () => render(<SWRConfig value={{ provider: () => new Map() }}><FundamentalAnalysisOutput reference={reference} resolvedTicker="EXAMPLE" status="done" threadId="thread-1" runId="run-1" revisionControl={mode === 'history' ? { kind: 'read-only', reason: 'Historical reports are read-only.' } : { kind: 'available', isPending: false, pendingSource: null, onRecalculate: vi.fn() }} /></SWRConfig>));
+        await screen.findByText(mode === 'history' ? 'Historical reports are read-only.' : 'Revised and manual reports are read-only. Start from an original automatic report for one revision.');
+        expect(screen.queryByLabelText('Terminal growth (%)')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Recalculate' })).toBeNull();
+    });
     it('labels conditional quantiles and keeps their binding available for inspection', () => {
         render(<FundamentalReport report={model(uncertaintyReport({ quantile_basis: conditionalQuantileBasis }))} />);
         screen.getByText('Conditional on the retained base hypotheses');

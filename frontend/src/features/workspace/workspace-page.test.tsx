@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
 import {
@@ -9,6 +9,7 @@ import {
 import { ReportPanel, WorkspacePage } from './workspace-page';
 import type { StandardAgentOutput } from '@/types/agents';
 import { reference, uncertaintyReport } from './outputs/fundamental-analysis/fundamental-report.test-fixtures';
+import { deferred, editableReport } from './outputs/fundamental-analysis/valuation-revision.test-fixtures';
 
 const hook = vi.hoisted(() => ({
     sendMessage: vi.fn(),
@@ -478,5 +479,36 @@ describe('WorkspacePage', () => {
         const currentInspector = screen.getByLabelText('Evidence inspector');
         expect(within(currentInspector).queryByText('Inputs')).toBeNull();
         expect(within(currentInspector).queryByRole('button', { name: /Calculation · equity_value/ })).toBeNull();
+    });
+    it('recalculates from the saved source in the same thread and labels its retained result', async () => {
+        const source = editableReport();
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            kind: 'financial_reports', version: 'v1', produced_by: 'fundamental_analysis', created_at: '2026-11-23T00:00:00Z',
+            data: { ticker: 'EXAMPLE', model_type: 'fcff_dcf', status: 'done', financial_reports: [], fundamental_service: source },
+        }), { status: 200 })));
+        const pending = deferred<{ kind: 'started'; threadId: string; runId: string }>();
+        hook.sendMessage.mockReturnValueOnce(pending.promise);
+        hook.value = defaultHook({ threadId: 'thread-1', runId: 'run-1', agentOutputs: {
+            fundamental_analysis: { kind: 'fundamental_analysis.output', version: 'v1', reference },
+        }, agentStatuses: { fundamental_analysis: 'done' } });
+        const cache = new Map();
+        const page = () => <SWRConfig value={{ provider: () => cache }}><WorkspacePage /></SWRConfig>;
+        const { rerender } = render(page());
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'Fundamental' }), { button: 0, ctrlKey: false });
+        await screen.findByLabelText('Terminal growth (%)');
+        fireEvent.change(screen.getByLabelText('Company ticker'), { target: { value: 'WRONG' } });
+        fireEvent.change(screen.getByLabelText('Terminal growth (%)'), { target: { value: '2.51234567890123456789' } });
+        fireEvent.change(screen.getByLabelText('Reason for change'), { target: { value: 'Updated long-term outlook.' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Recalculate' }));
+        expect(hook.sendMessage).toHaveBeenCalledWith('Recalculate EXAMPLE valuation from its saved report', false, {
+            contract_version: 'fundamental.v1', revision: { source: { thread_id: 'thread-1', run_id: 'run-1', artifact_id: 'report-1', preparation_digest: source.automatic_preparation?.preparation_digest }, path: 'assumptions.terminal_growth', value: '0.0251234567890123456789', reason: 'Updated long-term outlook.' },
+        });
+        screen.getByText('Previous result');
+        hook.value = defaultHook({ threadId: 'thread-1', runId: 'run-2', agentOutputs: {}, agentStatuses: { fundamental_analysis: 'running' }, isLoading: true });
+        rerender(page());
+        screen.getByText('Previous result');
+        screen.getByText('25.1234567890123456789');
+        expect(screen.queryByRole('button', { name: 'Recalculate' })).toBeNull();
+        await act(async () => pending.resolve({ kind: 'started', threadId: 'thread-1', runId: 'run-2' }));
     });
 });
