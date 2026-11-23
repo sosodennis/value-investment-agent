@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from .contracts import CanonicalFactV1, InitialModelId, SourceSnapshotV1, StrictModel
-from .policies import initial_model_specs
+from .policies import executable_model_specs
 from .serialization import canonical_bytes, sha256_digest
 from .valuation_requirements import composite_working_capital_requirements_profile
 from .working_capital import (
@@ -80,7 +80,7 @@ class ValuationWorkingCapitalRecipeV1(StrictModel):
         if self.requirements_profile_digest != profile.digest or not any(
             model.model_id == self.model_id
             and model.model_version == self.model_version
-            for model in initial_model_specs()
+            for model in executable_model_specs()
         ):
             raise ValueError("recipe must pin the service model and requirements")
         periods = tuple(item.period_end for item in self.periods)

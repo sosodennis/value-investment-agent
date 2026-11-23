@@ -2,14 +2,13 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from pydantic import ValidationError
-
 from fundamental_service.forecast_timeline import (
     ForecastTimelineError,
     build_forecast_timeline,
     verify_forecast_timeline_sources,
 )
 from fundamental_service.forecast_timeline_contracts import ForecastTimelineV1
+from pydantic import ValidationError
 from test_valuation_preparation import _fact
 
 

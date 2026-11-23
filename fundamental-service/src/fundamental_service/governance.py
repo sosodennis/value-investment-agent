@@ -95,9 +95,15 @@ class ModelReleaseEvidenceV1(BaseModel):
     model_version: str = Field(min_length=1)
     source_ids: tuple[str, ...] = Field(min_length=1)
     artifacts: tuple[ModelEvidenceArtifactV1, ...] = Field(min_length=10)
-    calibration_training_end: datetime
-    calibration_oos_start: datetime
-    calibration_oos_end: datetime
+    calibration_training_end: datetime | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    calibration_oos_start: datetime | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    calibration_oos_end: datetime | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     approved_by: str = Field(min_length=1)
     approved_at: datetime
     expires_at: datetime
@@ -111,7 +117,9 @@ class ModelReleaseEvidenceV1(BaseModel):
         "calibration_oos_end",
     )
     @classmethod
-    def timestamps_are_aware(cls, value: datetime) -> datetime:
+    def timestamps_are_aware(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("release evidence timestamps must include a timezone")
         return value.astimezone(timezone.utc)
@@ -143,15 +151,26 @@ class ModelReleaseEvidenceV1(BaseModel):
             )
         if len(self.source_ids) != len(set(self.source_ids)):
             raise ValueError("model release source IDs must be unique")
-        if not (
-            self.calibration_training_end
-            < self.calibration_oos_start
-            <= self.calibration_oos_end
-            < self.approved_at
-        ):
-            raise ValueError(
-                "calibration evidence must be chronologically out of sample"
-            )
+        window = (
+            self.calibration_training_end,
+            self.calibration_oos_start,
+            self.calibration_oos_end,
+        )
+        if any(value is not None for value in window):
+            if any(value is None for value in window):
+                raise ValueError("calibration window must be complete or absent")
+            assert self.calibration_training_end is not None
+            assert self.calibration_oos_start is not None
+            assert self.calibration_oos_end is not None
+            if (
+                not self.calibration_training_end
+                < self.calibration_oos_start
+                <= self.calibration_oos_end
+                < self.approved_at
+            ):
+                raise ValueError(
+                    "calibration evidence must be chronologically out of sample"
+                )
         evidence_sources = {
             item.source_id for item in self.artifacts if item.role == "public_source"
         }
@@ -317,37 +336,38 @@ def release_subject_digest(
     *,
     source_ids: tuple[str, ...],
     artifacts: tuple[ModelEvidenceArtifactV1, ...],
-    calibration_training_end: datetime,
-    calibration_oos_start: datetime,
-    calibration_oos_end: datetime,
+    calibration_training_end: datetime | None,
+    calibration_oos_start: datetime | None,
+    calibration_oos_end: datetime | None,
     approved_by: str,
     approved_at: datetime,
     expires_at: datetime,
 ) -> str:
     """Digest all release inputs except the verifier statement itself."""
 
+    payload = {
+        "contract_version": "fundamental.v1",
+        "model_sha256": sha256_digest(model),
+        "source_ids": source_ids,
+        "artifacts": tuple(
+            sorted(
+                (
+                    artifact.model_dump()
+                    for artifact in artifacts
+                    if artifact.role != "verification_attestation"
+                ),
+                key=lambda item: item["artifact_id"],
+            )
+        ),
+        "calibration_training_end": calibration_training_end,
+        "calibration_oos_start": calibration_oos_start,
+        "calibration_oos_end": calibration_oos_end,
+        "approved_by": approved_by,
+        "approved_at": approved_at,
+        "expires_at": expires_at,
+    }
     return sha256_digest(
-        {
-            "contract_version": "fundamental.v1",
-            "model_sha256": sha256_digest(model),
-            "source_ids": source_ids,
-            "artifacts": tuple(
-                sorted(
-                    (
-                        artifact.model_dump()
-                        for artifact in artifacts
-                        if artifact.role != "verification_attestation"
-                    ),
-                    key=lambda item: item["artifact_id"],
-                )
-            ),
-            "calibration_training_end": calibration_training_end,
-            "calibration_oos_start": calibration_oos_start,
-            "calibration_oos_end": calibration_oos_end,
-            "approved_by": approved_by,
-            "approved_at": approved_at,
-            "expires_at": expires_at,
-        }
+        {key: value for key, value in payload.items() if value is not None}
     )
 
 
@@ -451,6 +471,18 @@ class ModelInventory:
             raise ValueError(
                 "model promotion requires out-of-sample calibration evidence"
             )
+        if model.calibration_required_for_promotion and (
+            evidence.calibration_training_end is None
+            or evidence.calibration_oos_start is None
+            or evidence.calibration_oos_end is None
+        ):
+            raise ValueError("model promotion requires a complete calibration window")
+        if not model.calibration_required_for_promotion and (
+            calibration_reports or evidence.calibration_training_end is not None
+        ):
+            raise ValueError(
+                "uncalibrated model release cannot claim calibration evidence"
+            )
         artifacts_by_id = {item.artifact_id: item for item in evidence.artifacts}
         if len(artifacts_by_id) != len(evidence.artifacts):
             raise ValueError("release evidence artifact IDs must be unique")
@@ -551,6 +583,8 @@ class ModelInventory:
                     "calibration-oos": {"calibration_report"},
                     "replay-reproducibility": {"replay_report"},
                 }
+                if not model.calibration_required_for_promotion:
+                    gate_roles.pop("calibration-oos")
                 if set(model.required_release_gates) != set(gate_roles):
                     raise ValueError("model declares an unsupported release gate")
                 for gate_id, gate_evidence in report.gates.items():
@@ -690,6 +724,9 @@ class ModelInventory:
                 "model promotion requires approval by its independent validator"
             )
         if model.calibration_required_for_promotion:
+            assert evidence.calibration_training_end is not None
+            assert evidence.calibration_oos_start is not None
+            assert evidence.calibration_oos_end is not None
             if not calibration_reports:  # pragma: no cover - guarded above
                 raise ValueError(
                     "model promotion requires out-of-sample calibration evidence"

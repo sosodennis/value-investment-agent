@@ -65,6 +65,7 @@ from .equity_award_evidence import (
     EquityDilutionEvidenceV1,
     verify_dilution_fact_bindings,
 )
+from .forecast_timeline import ForecastTimelineError, build_forecast_timeline
 from .equity_dilution import (
     DilutionError,
     CommonShareQuoteV1,
@@ -233,14 +234,14 @@ class ApprovedMarketPolicyInputsV1(StrictModel):
             )
         if self.debt_weight is not None and self.equity_weight is not None:
             if not all(
-                Decimal("0") <= value <= Decimal("1")
+                Decimal(0) <= value <= Decimal(1)
                 for value in (self.debt_weight, self.equity_weight)
             ):
                 raise ValueError("market policy weights must be between zero and one")
-            if self.debt_weight + self.equity_weight != Decimal("1"):
+            if self.debt_weight + self.equity_weight != Decimal(1):
                 raise ValueError("market policy weights must sum to one")
         if self.terminal_growth is not None and not (
-            Decimal("-1") < self.terminal_growth < Decimal("1")
+            Decimal(-1) < self.terminal_growth < Decimal(1)
         ):
             raise ValueError("terminal growth must be between -100% and 100%")
         return self
@@ -258,7 +259,7 @@ class AssumptionEvidenceV1(StrictModel):
     policy_version: str = Field(min_length=1)
     as_of: datetime
     editable: bool = True
-    manual_provenance: "ManualProvenanceV1 | None" = None
+    manual_provenance: ManualProvenanceV1 | None = None
 
     @model_validator(mode="after")
     def timestamp_has_timezone(self) -> AssumptionEvidenceV1:
@@ -284,7 +285,7 @@ class ManualProvenanceV1(StrictModel):
     modified_at: datetime
     reason: str = Field(min_length=1)
     automatic_preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    forward_reference: "ForwardReferenceProvenanceV1 | None" = None
+    forward_reference: ForwardReferenceProvenanceV1 | None = None
 
     @model_validator(mode="after")
     def timestamp_has_timezone(self) -> ManualProvenanceV1:
@@ -487,7 +488,7 @@ def _derive_historical_metrics(
             issue_codes.append("METRIC_TAX_DENOMINATOR_UNSTABLE")
             continue
         tax_rate = tax_expense / income_before_tax
-        nopat = operating_income * (Decimal("1") - tax_rate)
+        nopat = operating_income * (Decimal(1) - tax_rate)
         metrics.extend(
             (
                 _metric(
@@ -531,7 +532,7 @@ def _derive_historical_metrics(
         growth = _metric(
             "revenue_growth",
             period,
-            revenue / previous_revenue.value - Decimal("1"),
+            revenue / previous_revenue.value - Decimal(1),
             "revenue / prior_revenue - 1",
             (fields["revenue"], previous_revenue),
         )
@@ -986,6 +987,8 @@ def compose_forecast_assumptions(
     metrics: HistoricalMetricsV1,
     *,
     reinvestment_hypothesis: ReinvestmentHypothesisV1 | None = None,
+    valuation_timestamp: datetime | None = None,
+    dated: bool = False,
 ) -> ForecastAssumptionsV1:
     """Compose the shared #352 operating assumptions without valuation claims."""
 
@@ -1007,8 +1010,8 @@ def compose_forecast_assumptions(
         )
     latest_revenue = history.periods[-1].fact("revenue")
     assert latest_revenue is not None and isinstance(latest_revenue.value, Decimal)
-    mean_growth = sum(growth, Decimal("0")) / Decimal(len(growth))
-    mean_margin = sum(margins[-3:], Decimal("0")) / Decimal(min(3, len(margins)))
+    mean_growth = sum(growth, Decimal(0)) / Decimal(len(growth))
+    mean_margin = sum(margins[-3:], Decimal(0)) / Decimal(min(3, len(margins)))
     if not _MIN_REVENUE_GROWTH <= mean_growth <= _MAX_REVENUE_GROWTH:
         raise PreparationError(
             "FORECAST_GROWTH_OUT_OF_BOUNDS", "mean revenue growth exceeds policy bounds"
@@ -1028,7 +1031,30 @@ def compose_forecast_assumptions(
         mean_growth * (Decimal(_FORECAST_PERIODS - index) / Decimal(_FORECAST_PERIODS))
         for index in range(_FORECAST_PERIODS)
     )
+    timeline = None
+    if dated:
+        if valuation_timestamp is None:
+            raise PreparationError(
+                "FORECAST_VALUATION_DATE_MISSING",
+                "dated forecasts require the explicit valuation timestamp",
+            )
+        try:
+            timeline = build_forecast_timeline(
+                (
+                    fact
+                    for period in history.periods
+                    for fact in period.duration_facts
+                    if fact.normalized_field == "revenue"
+                ),
+                valuation_timestamp=valuation_timestamp,
+                horizon=_FORECAST_PERIODS,
+            )
+        except ForecastTimelineError as error:
+            raise PreparationError(
+                error.code, str(error), missing=("forecast_calendar",)
+            ) from error
     return ForecastAssumptionsV1(
+        timeline=timeline,
         base_revenue=latest_revenue.value,
         revenue_growth=forecast_growth,
         operating_margin=(mean_margin,) * _FORECAST_PERIODS,
@@ -1102,7 +1128,11 @@ def compose_conditional_operating_forecasts(
             ConditionalOperatingScenarioV1(
                 hypothesis=hypothesis,
                 forecast=compose_forecast_assumptions(
-                    history, metrics, reinvestment_hypothesis=hypothesis
+                    history,
+                    metrics,
+                    reinvestment_hypothesis=hypothesis,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    dated=policy.recipe.model_version == f"{policy.recipe.model_id}-v3",
                 ),
             )
             for hypothesis in policy.recipe.scenarios
@@ -1311,7 +1341,12 @@ def _prepare_automatic_valuation(
         forecast = (
             conditional_operating.scenarios[0].forecast
             if conditional_operating is not None
-            else compose_forecast_assumptions(history, metrics)
+            else compose_forecast_assumptions(
+                history,
+                metrics,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                dated=model_version == f"{model_id}-v3",
+            )
         )
     except PreparationError as error:
         return _blocked_from_metrics(
@@ -1387,7 +1422,7 @@ def _prepare_automatic_valuation(
         cost_of_equity = wacc.risk_free_rate + wacc.beta * wacc.equity_risk_premium
         weighted_average_cost = (
             cost_of_equity * wacc.equity_weight
-            + wacc.pre_tax_cost_of_debt * (Decimal("1") - tax_rate) * wacc.debt_weight
+            + wacc.pre_tax_cost_of_debt * (Decimal(1) - tax_rate) * wacc.debt_weight
         )
         if terminal_growth >= min(cost_of_equity, weighted_average_cost):
             raise PreparationError(
@@ -1582,7 +1617,17 @@ def _prepare_automatic_valuation(
         uncertainty=UncertaintyV1(mode="none"),
         quality=QualityInputV1(
             status=metrics.quality_status,
-            issue_codes=metrics.issue_codes,
+            issue_codes=(
+                *metrics.issue_codes,
+                *(
+                    (
+                        "UNIFORM_FCFF_ACCRUAL_ASSUMPTION",
+                        "ANNUAL_GORDON_TERMINAL_APPROXIMATION",
+                    )
+                    if forecast.timeline is not None
+                    else ()
+                ),
+            ),
             missing_evidence=metrics.missing_evidence,
         ),
         provenance=ProvenanceInputV1(
@@ -2328,8 +2373,8 @@ __all__ = [
     "ManualProvenanceV1",
     "ManualValuationOverrideRequestV1",
     "PreparationError",
+    "apply_conditional_terminal_growth_revision",
     "apply_manual_override",
     "derive_historical_metrics",
     "prepare_automatic_valuation",
-    "apply_conditional_terminal_growth_revision",
 ]

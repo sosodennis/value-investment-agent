@@ -97,7 +97,7 @@ def test_separate_corporate_bonds_raise_equity_once_without_changing_operating_v
     assert not invariant_findings(with_bonds, reference)
 
 
-@pytest.mark.parametrize("version", ["fcff_dcf-v1", "fcff_dcf-v3"])
+@pytest.mark.parametrize("version", ["fcff_dcf-v1", "fcff_dcf-v999"])
 def test_current_graph_cannot_relabel_an_unsupported_model_version(version):
     request = (
         make_valuation().model_copy(update={"model_version": version}).with_digest()

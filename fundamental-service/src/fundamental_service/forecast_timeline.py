@@ -69,6 +69,10 @@ def build_forecast_timeline(
             or fact.issuer_id != anchor.issuer_id
             or fact.unit != anchor.unit
             or fact.currency != anchor.currency
+            or fact.context.start_date != fact.period_start
+            or fact.context.end_date != fact.period_end
+            or fact.context.consolidation_scope != "consolidated"
+            or fact.context.entity_scope != anchor.context.entity_scope
             or fact.context.dimensions != anchor.context.dimensions
             or (
                 index

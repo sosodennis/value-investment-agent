@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from decimal import Decimal
 
 from .contracts import (
@@ -12,12 +13,12 @@ from .contracts import (
     TraceV1,
     ValuationInputV1,
 )
+from .enterprise_projection import project_enterprise_nodes
 from .numerical_policy import using_valuation_context
 from .operating_projection import (
     OperatingProjectionError,
     resolve_operating_model,
 )
-from .enterprise_projection import project_enterprise_nodes
 from .serialization import sha256_digest
 
 
@@ -122,6 +123,22 @@ def calculate(
     growth = request.assumptions.terminal_growth
     forecast = request.assumptions.forecast
     bridge = request.assumptions.capital_bridge
+    dated = request.model_version == f"{request.model_id}-v3"
+    timeline = forecast.timeline if forecast is not None else None
+    if dated != (timeline is not None):
+        raise CalculationRefusal(
+            "FORECAST_TIMING_POLICY_MISMATCH",
+            "dated model requires its timeline; integer-period model cannot accept one",
+        )
+    if (
+        timeline is not None
+        and timeline.valuation_date
+        != request.valuation_context.valuation_timestamp.astimezone(UTC).date()
+    ):
+        raise CalculationRefusal(
+            "FORECAST_VALUATION_DATE_MISMATCH",
+            "timeline must use the request valuation date in UTC",
+        )
     if wacc is None or growth is None or forecast is None or bridge is None:
         raise CalculationRefusal(
             "ASSUMPTIONS_INCOMPLETE", "complete FCFF assumptions are required"
@@ -178,9 +195,17 @@ def calculate(
     input_digest = expected_input_digest
     result = CalculationArtifactV1(
         contract_version="fundamental.v1",
-        calculation_version=CALCULATOR_RESULT_VERSION,
+        calculation_version="calculator-v3-dated-fcff"
+        if dated
+        else CALCULATOR_RESULT_VERSION,
         calculation_status=CalculationStatus.COMPLETED,
         quality_status=quality_status,
+        issue_codes=(
+            "UNIFORM_FCFF_ACCRUAL_ASSUMPTION",
+            "ANNUAL_GORDON_TERMINAL_APPROXIMATION",
+        )
+        if dated
+        else (),
         input_digest=input_digest,
         intrinsic_value=equity,
         per_share_value=per_share,

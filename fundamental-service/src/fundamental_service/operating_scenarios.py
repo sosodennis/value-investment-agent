@@ -551,7 +551,12 @@ def replay_operating_scenarios(
                         "scenario metrics failed their shared numeric gates",
                         missing=metrics.missing_evidence,
                     )
-                forecast = compose_forecast_assumptions(history, metrics)
+                forecast = compose_forecast_assumptions(
+                    history,
+                    metrics,
+                    valuation_timestamp=request.source.valuation_timestamp,
+                    dated=request.model_versions[model_id] == f"{model_id}-v3",
+                )
                 rates = tuple(
                     metric.value
                     for metric in metrics.metrics

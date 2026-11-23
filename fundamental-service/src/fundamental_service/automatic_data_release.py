@@ -41,7 +41,12 @@ from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
 from .market_reference_evidence import read_release_market_reference_plan
 from .terminal_growth_evidence import read_release_terminal_growth_plan
-from .policies import PolicyError, PolicyRecordV1, PolicyRegistry, initial_model_specs
+from .policies import (
+    PolicyError,
+    PolicyRecordV1,
+    PolicyRegistry,
+    executable_model_specs,
+)
 from .operations import guard_execution_deadline
 from .quote_providers import QuoteSourceProviderPort
 from .release_runner import (
@@ -308,7 +313,7 @@ class AutomaticDataReleaseService:
             or not any(
                 (model.model_id, model.model_version)
                 == (policy.model_id, policy.model_version)
-                for model in initial_model_specs()
+                for model in executable_model_specs()
             )
             or manifest.parser_version != policy.parser_version
             or manifest.quality_profile_digest != policy.quality_profile_digest

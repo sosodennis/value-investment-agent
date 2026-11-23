@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from .contracts import CalculationNodeV1, ForecastAssumptionsV1, TraceV1
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
-from .policies import ModelSpecV1, initial_model_specs
+from .policies import ModelSpecV1, executable_model_specs
 
 OPERATING_FORMULA_GRAPH = "calculator-v2-fcff"
 
@@ -17,22 +17,31 @@ class OperatingProjectionError(ValueError):
 
 def resolve_operating_model(model_id: str, model_version: str) -> ModelSpecV1:
     """Bind a requested version to the specification of this executable graph."""
+    specs = executable_model_specs()
     spec = next(
-        (item for item in initial_model_specs() if item.model_id == model_id), None
+        (
+            item
+            for item in specs
+            if (item.model_id, item.model_version) == (model_id, model_version)
+        ),
+        None,
     )
     if spec is None:
-        raise OperatingProjectionError(
-            "MODEL_UNSUPPORTED", f"model {model_id} has no executable operating graph"
+        code = (
+            "MODEL_VERSION_UNSUPPORTED"
+            if any(item.model_id == model_id for item in specs)
+            else "MODEL_UNSUPPORTED"
         )
-    if model_version != spec.model_version:
         raise OperatingProjectionError(
-            "MODEL_VERSION_UNSUPPORTED",
-            f"model {model_id} requires executable version {spec.model_version}",
+            code,
+            f"model {model_id} requires executable version from its registered model pairs; got {model_version}",
         )
-    if (
-        spec.formula_graph != OPERATING_FORMULA_GRAPH
-        or spec.numerical_policy != VALUATION_NUMERICAL_POLICY
-    ):
+    expected = (
+        ("calculator-v3-dated-fcff", "decimal-50-dated-uniform-fcff-act365f-v1")
+        if model_version == f"{model_id}-v3"
+        else (OPERATING_FORMULA_GRAPH, VALUATION_NUMERICAL_POLICY)
+    )
+    if (spec.formula_graph, spec.numerical_policy) != expected:
         raise OperatingProjectionError(
             "MODEL_SPEC_EXECUTION_MISMATCH",
             "model specification differs from the executable operating graph",
@@ -87,10 +96,8 @@ def project_operating_nodes(
         ),
         start=1,
     ):
-        revenue *= Decimal("1") + growth
-        fcff = (
-            revenue * margin * (Decimal("1") - tax_rate) * (Decimal("1") - reinvestment)
-        )
+        revenue *= Decimal(1) + growth
+        fcff = revenue * margin * (Decimal(1) - tax_rate) * (Decimal(1) - reinvestment)
         nodes.extend(
             (
                 node(

@@ -117,7 +117,7 @@ def test_incoherent_or_unbound_conditional_release_refuses_metadata(
         capital = capital.model_copy(update={"mapping_version": "other-mapping"})
     elif fault == "executable_version":
         monkeypatch.setattr(
-            "fundamental_service.valuation_release_inputs.initial_model_specs",
+            "fundamental_service.valuation_release_inputs.executable_model_specs",
             lambda: (),
         )
     elif fault == "snapshot":

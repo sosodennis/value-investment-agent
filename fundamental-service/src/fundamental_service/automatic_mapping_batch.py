@@ -8,7 +8,7 @@ from pydantic import Field, model_validator
 
 from .automatic_mapping import AutomaticMappingSourceV1
 from .data_releases import ArtifactRefV1, ReleaseModel
-from .policies import initial_model_specs
+from .policies import executable_model_specs
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
     automatic_source_requirements_profile,
@@ -36,7 +36,7 @@ class AutomaticMappingBatchRequestV1(AutomaticMappingSourceV1):
         if self.requirements != profile or not any(
             model.model_id == self.requirements.model_id
             and model.model_version == self.model_version
-            for model in initial_model_specs()
+            for model in executable_model_specs()
         ):
             raise ValueError("batch requires the exact service model and requirements")
         return self
