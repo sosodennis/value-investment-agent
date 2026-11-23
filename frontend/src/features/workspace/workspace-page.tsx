@@ -222,7 +222,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         if (isReportTab(id)) setActiveTab(id);
     }} />;
     return (
-        <main className="mx-auto grid min-h-[calc(100dvh-3.5rem)] w-full max-w-[1600px] grid-rows-[auto_auto_1fr] text-foreground">
+        <main className="mx-auto grid min-h-[calc(100dvh-3.5rem)] w-full max-w-[1600px] grid-cols-1 grid-rows-[auto_auto_1fr] text-foreground">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex items-center gap-2 min-[1440px]:hidden">

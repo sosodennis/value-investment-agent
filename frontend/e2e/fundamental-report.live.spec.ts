@@ -96,6 +96,9 @@ test.describe('Fundamental report against the real service', () => {
 
     test('draft stays separate, exact 2.5% revision creates a new read-only report', async ({ page }, info) => {
         const original = await waitForReport(page, await startAnalysis(page));
+        await page.setViewportSize({ width: 320, height: 900 });
+        await expectNoPageOverflow(page);
+        await page.setViewportSize({ width: 1440, height: 1000 });
         const baseButton = baseValueButton(page);
         const previousDisplay = await baseButton.innerText();
         let runStarts = 0;
