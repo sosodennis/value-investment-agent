@@ -142,15 +142,20 @@ async def prepare_retained_valuation_revision(
         provenance["forward_reference"] = revision.forward_reference.model_dump(
             mode="json"
         )
+    override_request: JSONObject = {
+        "contract_version": "fundamental.v1",
+        "preparation": original.model_dump(mode="json", exclude_unset=True),
+        "path": revision.path,
+        "value": revision.value,
+        "provenance": provenance,
+    }
+    if revision.forward_review_ref is not None:
+        override_request["forward_review_ref"] = revision.forward_review_ref.model_dump(
+            mode="json"
+        )
     response = await client.execute(
         "override_prepared_valuation",
-        {
-            "contract_version": "fundamental.v1",
-            "preparation": original.model_dump(mode="json", exclude_unset=True),
-            "path": revision.path,
-            "value": revision.value,
-            "provenance": provenance,
-        },
+        override_request,
         principal=principal,
         correlation_id=correlation_id,
         deadline_at=deadline_at,

@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -13,6 +14,7 @@ from src.agents.fundamental.capabilities.forward_evidence.research_service impor
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalForwardEvidenceBudgetPolicyV1,
+    FundamentalForwardEvidenceReviewRefV1,
     FundamentalForwardEvidenceReviewResultV1,
     FundamentalForwardEvidenceUsageV1,
 )
@@ -119,8 +121,9 @@ class FakeLLM:
 
 
 class FakeFundamentalService:
-    def __init__(self):
+    def __init__(self, *, review_ref=None):
         self.calls: list[dict[str, object]] = []
+        self.review_ref = review_ref
 
     async def review_forward_evidence(self, input_payload, **_kwargs):
         self.calls.append(dict(input_payload))
@@ -128,11 +131,12 @@ class FakeFundamentalService:
             contract_version="fundamental.v1",
             status="prepared",
             label="forward-looking external evidence",
-            policy_version="forward-evidence-policy-v1",
+            policy_version="forward-evidence-policy-v2",
             automatic_preparation_digest="a" * 64,
             budget=FundamentalForwardEvidenceBudgetPolicyV1(),
             usage=FundamentalForwardEvidenceUsageV1(),
             reference_digest="b" * 64,
+            review_ref=self.review_ref,
         )
 
 
@@ -168,6 +172,91 @@ async def test_research_calls_search_llm_and_service_only_after_opt_in() -> None
     assert fundamental.calls[0]["usage"]["search_queries"] == 1
     assert fundamental.calls[0]["usage"]["source_fetches"] == 0
     assert fundamental.calls[0]["budget"]["max_duration_ms"] == 15000
+    assert (
+        fundamental.calls[0]["budget"]["policy_version"] == "forward-evidence-policy-v2"
+    )
+
+
+@pytest.mark.anyio
+async def test_terminal_growth_research_preserves_service_review_witness() -> None:
+    request = _request().model_copy(
+        update={"assumption_path": "assumptions.terminal_growth"}
+    )
+    extraction = ForwardEvidenceExtraction.model_validate(
+        {
+            "claims": (
+                _extraction()
+                .claims[0]
+                .model_copy(
+                    update={
+                        "metric": "terminal_growth",
+                        "assumption_path": "assumptions.terminal_growth",
+                        "value": Decimal("0.025"),
+                    }
+                ),
+            )
+        }
+    )
+    review_ref = FundamentalForwardEvidenceReviewRefV1(
+        artifact_id="forward-review-v1-" + "c" * 64, content_hash="c" * 64
+    )
+    fundamental = FakeFundamentalService(review_ref=review_ref)
+    result = await _service(
+        lambda _request: _search_result(), FakeLLM(extraction), fundamental
+    ).research(
+        request,
+        principal=InternalPrincipal(
+            subject_id="user-1", organization_id="org-1", membership_id="member-1"
+        ),
+        correlation_id="corr-terminal",
+        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
+    )
+    assert fundamental.calls[0]["claims"][0]["metric"] == "terminal_growth"
+    assert (
+        fundamental.calls[0]["claims"][0]["assumption_path"]
+        == "assumptions.terminal_growth"
+    )
+    wire = json.loads(json.dumps(fundamental.calls[0], allow_nan=False))
+    assert wire["valuation_timestamp"] == "2026-11-01T00:00:00+00:00"
+    assert wire["claims"][0]["value"] == "0.025"
+    assert result.review_ref == review_ref
+    assert (
+        result.model_dump(mode="json")["review_ref"]["artifact_id"]
+        == review_ref.artifact_id
+    )
+
+
+def test_legacy_review_without_witness_does_not_fabricate_one():
+    result = FundamentalForwardEvidenceReviewResultV1(
+        contract_version="fundamental.v1",
+        status="prepared",
+        label="forward-looking external evidence",
+        policy_version="forward-evidence-policy-v2",
+        automatic_preparation_digest="a" * 64,
+        budget=FundamentalForwardEvidenceBudgetPolicyV1(),
+        usage=FundamentalForwardEvidenceUsageV1(),
+        reference_digest="b" * 64,
+    )
+    assert result.review_ref is None
+    assert "review_ref" not in result.model_dump(mode="json")
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("artifact_id", "untrusted-id"),
+        ("content_hash", "not-a-digest"),
+        ("media_type", "text/plain"),
+        ("accepted", True),
+    ],
+)
+def test_review_witness_reference_rejects_malformed_or_caller_status_fields(
+    field, value
+):
+    payload = {"artifact_id": "forward-review-v1-" + "c" * 64, "content_hash": "c" * 64}
+    payload[field] = value
+    with pytest.raises(ValueError):
+        FundamentalForwardEvidenceReviewRefV1.model_validate(payload)
 
 
 @pytest.mark.anyio

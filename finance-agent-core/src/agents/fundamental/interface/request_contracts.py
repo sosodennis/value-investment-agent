@@ -8,6 +8,9 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
+from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalForwardEvidenceReviewRefV1,
+)
 from src.shared.artifacts.fundamental_contracts import CanonicalDecimal
 
 FiscalSelectorVersion = Literal["fundamental.fiscal-period-selector.v1"]
@@ -38,11 +41,18 @@ class FundamentalValuationRevisionV1(_StrictRequestModel):
     value: CanonicalDecimal = Field(max_length=128)
     reason: str = Field(min_length=1, max_length=8192)
     forward_reference: FundamentalRevisionForwardReferenceV1 | None = None
+    forward_review_ref: FundamentalForwardEvidenceReviewRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def reason_is_nonblank(self) -> FundamentalValuationRevisionV1:
         if not self.reason.strip():
             raise ValueError("revision reason must not be blank")
+        if (self.forward_reference is None) != (self.forward_review_ref is None):
+            raise ValueError(
+                "researched revisions require both forward_reference and forward_review_ref"
+            )
         return self
 
 

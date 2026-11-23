@@ -185,7 +185,11 @@ class FundamentalForwardEvidenceClaimV1(BaseModel):
     ticker: str = Field(min_length=1, max_length=32, pattern=r"^[A-Z0-9.-]+$")
     model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
     metric: Literal[
-        "revenue_growth", "operating_margin", "reinvestment_rate", "debt_term"
+        "revenue_growth",
+        "operating_margin",
+        "reinvestment_rate",
+        "terminal_growth",
+        "debt_term",
     ]
     assumption_path: str | None = Field(default=None, max_length=256)
     value: Decimal
@@ -203,7 +207,7 @@ class FundamentalForwardEvidenceClaimV1(BaseModel):
 class FundamentalForwardEvidenceBudgetPolicyV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    policy_version: str = "forward-evidence-policy-v1"
+    policy_version: str = "forward-evidence-policy-v2"
     max_search_queries: int = Field(default=2, ge=1, le=5)
     max_results_per_query: int = Field(default=5, ge=1, le=20)
     max_source_bytes: int = Field(default=120_000, ge=1_000, le=1_000_000)
@@ -223,6 +227,14 @@ class FundamentalForwardEvidenceUsageV1(BaseModel):
     elapsed_ms: int = Field(default=0, ge=0)
 
 
+class FundamentalForwardEvidenceReviewRefV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    artifact_id: str = Field(pattern=r"^forward-review-v1-[0-9a-f]{64}$")
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    media_type: Literal["application/json"] = "application/json"
+
+
 class FundamentalForwardEvidenceReviewResultV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -238,9 +250,13 @@ class FundamentalForwardEvidenceReviewResultV1(BaseModel):
     budget: FundamentalForwardEvidenceBudgetPolicyV1
     usage: FundamentalForwardEvidenceUsageV1
     reference_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    review_ref: FundamentalForwardEvidenceReviewRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 __all__ = [
+    "FundamentalForwardEvidenceReviewRefV1",
     "FundamentalIdentityResolutionRequestV1",
     "FundamentalIdentityResolutionV1",
     "FundamentalIdentitySourceEvidenceV1",

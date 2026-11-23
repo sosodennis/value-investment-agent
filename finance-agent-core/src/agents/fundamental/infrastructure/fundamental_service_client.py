@@ -468,8 +468,8 @@ class HttpFundamentalServiceClient:
             deadline_at=deadline_at,
         )
         try:
-            return FundamentalForwardEvidenceReviewResultV1.model_validate(
-                response.result
+            result = FundamentalForwardEvidenceReviewResultV1.model_validate_json(
+                json.dumps(response.result, allow_nan=False)
             )
         except ValidationError as exc:
             raise FundamentalServiceFailure(
@@ -478,6 +478,16 @@ class HttpFundamentalServiceClient:
                 retryable=False,
                 status_code=502,
             ) from exc
+        if result.automatic_preparation_digest != input_payload.get(
+            "automatic_preparation_digest"
+        ):
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental forward review changed its preparation binding",
+                retryable=False,
+                status_code=502,
+            )
+        return result
 
     async def resolve_identity(
         self,

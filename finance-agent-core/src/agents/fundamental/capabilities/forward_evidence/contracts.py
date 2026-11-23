@@ -47,7 +47,11 @@ class ForwardEvidenceClaimDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     metric: Literal[
-        "revenue_growth", "operating_margin", "reinvestment_rate", "debt_term"
+        "revenue_growth",
+        "operating_margin",
+        "reinvestment_rate",
+        "terminal_growth",
+        "debt_term",
     ]
     assumption_path: str | None = Field(default=None, max_length=256)
     value: Decimal

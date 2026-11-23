@@ -32,6 +32,103 @@ def _settings(*, max_attempts: int = 2) -> FundamentalServiceClientSettings:
     )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("matching_context", [True, False])
+async def test_forward_review_transport_preserves_witness_and_preparation_binding(
+    matching_context,
+):
+    witness = {
+        "artifact_id": "forward-review-v1-" + "c" * 64,
+        "content_hash": "c" * 64,
+        "media_type": "application/json",
+    }
+
+    async def respond(request):
+        envelope = json.loads(request.content)
+        assert envelope["context"]["principal"]["subject_id"] == "subject-1"
+        assert envelope["input"]["automatic_preparation_digest"] == "a" * 64
+        return httpx.Response(
+            200,
+            json={
+                "contract_version": "internal.v1",
+                "schema_version": "fundamental.v1",
+                "correlation_id": "corr-forward",
+                "result": {
+                    "contract_version": "fundamental.v1",
+                    "status": "prepared",
+                    "label": "forward-looking external evidence",
+                    "policy_version": "forward-evidence-policy-v2",
+                    "automatic_preparation_digest": ("a" if matching_context else "d")
+                    * 64,
+                    "claims": [
+                        {
+                            "claim_id": "claim-terminal",
+                            "issuer_id": "0000320193",
+                            "ticker": "AAPL",
+                            "model_id": "fcff_dcf",
+                            "metric": "terminal_growth",
+                            "assumption_path": "assumptions.terminal_growth",
+                            "value": "0.025",
+                            "unit": "ratio",
+                            "fiscal_period": "FY2027",
+                            "period_type": "annual",
+                            "period_end": "2027-09-30",
+                            "extraction_method": "llm_from_source_passage",
+                            "source": {
+                                "source_id": "source-1",
+                                "source_url": "https://issuer.test/guidance",
+                                "publisher": "Issuer",
+                                "source_type": "issuer_guidance",
+                                "retained_passage": "Retained source passage for the terminal assumption",
+                                "content_hash": "d" * 64,
+                                "published_at": "2026-10-01T00:00:00Z",
+                                "retrieved_at": "2026-11-01T00:00:00Z",
+                                "license_status": "approved",
+                                "license_reference": "issuer-terms",
+                            },
+                            "status": "accepted",
+                            "issue_codes": [],
+                            "exclusion_reasons": [],
+                        }
+                    ],
+                    "accepted_claim_ids": ["claim-terminal"],
+                    "excluded_claim_ids": [],
+                    "issue_codes": [],
+                    "budget": {},
+                    "usage": {},
+                    "reference_digest": "b" * 64,
+                    "review_ref": witness,
+                },
+            },
+        )
+
+    client = HttpFundamentalServiceClient(
+        _settings(), client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    )
+    try:
+        if matching_context:
+            result = await client.review_forward_evidence(
+                {"automatic_preparation_digest": "a" * 64},
+                principal=_principal(),
+                correlation_id="corr-forward",
+                deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+            )
+            assert result.review_ref.model_dump(mode="json") == witness
+            assert str(result.claims[0].value) == "0.025"
+            assert result.claims[0].metric == "terminal_growth"
+        else:
+            with pytest.raises(FundamentalServiceFailure) as error:
+                await client.review_forward_evidence(
+                    {"automatic_preparation_digest": "a" * 64},
+                    principal=_principal(),
+                    correlation_id="corr-forward",
+                    deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+                )
+            assert error.value.code == "UPSTREAM_MALFORMED"
+    finally:
+        await client.aclose()
+
+
 def _principal() -> InternalPrincipal:
     return InternalPrincipal(
         subject_id="subject-1",

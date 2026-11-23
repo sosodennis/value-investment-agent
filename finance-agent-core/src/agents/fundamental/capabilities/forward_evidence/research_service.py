@@ -222,7 +222,7 @@ class ForwardEvidenceResearchService:
                 "issuer_id": request.issuer_id,
                 "model_id": request.model_id,
                 "assumption_path": request.assumption_path,
-                "valuation_timestamp": request.valuation_timestamp,
+                "valuation_timestamp": request.valuation_timestamp.isoformat(),
                 "automatic_preparation_digest": request.automatic_preparation_digest,
                 "claims": [claim.model_dump(mode="json") for claim in claims],
                 "budget": budget.model_dump(mode="json"),

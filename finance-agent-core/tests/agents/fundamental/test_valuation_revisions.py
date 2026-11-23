@@ -360,8 +360,75 @@ async def test_supported_forward_reference_is_forwarded_without_reconstruction(
         "license_reference": "public-filing",
     }
     request["revision"]["forward_reference"] = reference
+    review_ref = {
+        "artifact_id": "forward-review-v1-" + "e" * 64,
+        "content_hash": "e" * 64,
+        "media_type": "application/json",
+    }
+    request["revision"]["forward_review_ref"] = review_ref
     await _prepare(client, report, request)
     assert client.calls[-1][1]["provenance"]["forward_reference"] == reference
+    assert client.calls[-1][1]["forward_review_ref"] == review_ref
+
+
+@pytest.mark.parametrize("missing", ["forward_reference", "forward_review_ref"])
+async def test_researched_revision_requires_citation_and_review_witness_pair(
+    published_source, missing
+):
+    client, _, report = published_source
+    request = _revision(report)
+    request["revision"]["forward_reference"] = {
+        "claim_id": "claim-1",
+        "source_url": "https://example.test/filing",
+        "source_content_hash": "f" * 64,
+        "citation": "Retained source passage for the terminal assumption",
+        "license_reference": "public-filing",
+    }
+    request["revision"]["forward_review_ref"] = {
+        "artifact_id": "forward-review-v1-" + "e" * 64,
+        "content_hash": "e" * 64,
+    }
+    request["revision"].pop(missing)
+    with pytest.raises(ValueError, match="require both"):
+        await _prepare(client, report, request)
+    assert client.calls == []
+
+
+async def test_service_rejected_witness_is_preserved_as_a_typed_failure(
+    published_source,
+):
+    client, _, report = published_source
+    request = _revision(report)
+    request["revision"]["forward_reference"] = {
+        "claim_id": "claim-1",
+        "source_url": "https://example.test/filing",
+        "source_content_hash": "f" * 64,
+        "citation": "Retained source passage for the terminal assumption",
+        "license_reference": "public-filing",
+    }
+    request["revision"]["forward_review_ref"] = {
+        "artifact_id": "forward-review-v1-" + "e" * 64,
+        "content_hash": "e" * 64,
+    }
+    execute = client.execute
+
+    async def refuse_witness(operation, payload, **kwargs):
+        if operation == "override_prepared_valuation":
+            assert kwargs["principal"] == _PRINCIPAL
+            assert payload["forward_review_ref"]["content_hash"] == "e" * 64
+            raise FundamentalServiceFailure(
+                "FORWARD_REVIEW_BINDING_MISMATCH",
+                "Retained witness does not match",
+                retryable=False,
+                status_code=422,
+            )
+        return await execute(operation, payload, **kwargs)
+
+    client.execute = refuse_witness
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await _prepare(client, report, request)
+    assert error.value.code == "FORWARD_REVIEW_BINDING_MISMATCH"
+    assert error.value.retryable is False
 
 
 async def test_source_failure_remains_typed_without_an_override_call(published_source):
