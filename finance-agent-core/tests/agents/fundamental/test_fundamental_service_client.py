@@ -639,6 +639,58 @@ async def test_active_release_read_uses_signed_get_and_empty_operation_input() -
     assert payload["context"]["signature"]
     assert request.headers["authorization"] == "Bearer fundamental-token"
     assert release.manifest.required_fields == ("revenue", "operating_income")
+    assert release.automatic_model is None
+    assert "automatic_model" not in release.model_dump(mode="json")
+
+
+@pytest.mark.asyncio
+async def test_active_release_read_retains_typed_automatic_model_binding() -> None:
+    payload = _active_release_response("correlation-release")
+    payload["result"]["automatic_model"] = {
+        "model_id": "fcff_dcf",
+        "model_version": "fcff_dcf-v2",
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    ) as transport:
+        client = HttpFundamentalServiceClient(_settings(), client=transport)
+        release = await client.read_active_release(
+            "configured-release-v1",
+            principal=_principal(),
+            correlation_id="correlation-release",
+            deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+        )
+    assert release.automatic_model.model_id == "fcff_dcf"
+    assert release.automatic_model.model_version == "fcff_dcf-v2"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "binding",
+    [
+        {},
+        {"model_id": "ddm", "model_version": "ddm-v1"},
+        {"model_id": "fcff_dcf", "model_version": ""},
+        {"model_id": "fcff_dcf", "model_version": "   "},
+        {"model_id": "fcff_dcf", "model_version": 2},
+        {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2", "fallback": True},
+    ],
+)
+async def test_active_release_read_rejects_malformed_automatic_model_binding(binding):
+    payload = _active_release_response("correlation-release")
+    payload["result"]["automatic_model"] = binding
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    ) as transport:
+        client = HttpFundamentalServiceClient(_settings(), client=transport)
+        with pytest.raises(FundamentalServiceFailure) as error:
+            await client.read_active_release(
+                "configured-release-v1",
+                principal=_principal(),
+                correlation_id="correlation-release",
+                deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+            )
+    assert error.value.code == "UPSTREAM_MALFORMED"
 
 
 @pytest.mark.asyncio

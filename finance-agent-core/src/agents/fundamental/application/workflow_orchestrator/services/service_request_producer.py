@@ -29,6 +29,7 @@ from src.agents.fundamental.application.workflow_orchestrator.state_readers impo
     read_intent_state,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalAutomaticModelBindingV1,
     FundamentalIdentityResolutionRequestV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
@@ -62,6 +63,7 @@ class PreparedServiceValuation:
     snapshot_selector: JSONObject
     preparation: FundamentalValuationPreparationResultV1 | None = None
     reason: str | None = None
+    model_selection_reason: str | None = None
 
 
 def _mapping(value: object, *, context: str) -> Mapping[str, object]:
@@ -117,12 +119,10 @@ def _timestamp(value: object) -> datetime:
 
 
 def _model_id(
-    request: Mapping[str, object] | None,
+    request: Mapping[str, object],
     fundamental: Mapping[str, object],
 ) -> str:
-    if request is None:
-        return "fcff_dcf"
-    candidate = request.get("model_id") if request is not None else None
+    candidate = request.get("model_id")
     if not isinstance(candidate, str) or not candidate:
         selection = fundamental.get("model_type")
         candidate = (
@@ -147,6 +147,22 @@ def is_compact_valuation_request(value: Mapping[str, object]) -> bool:
         "quality",
         "provenance",
     }.intersection(value)
+
+
+def _configured_model(
+    request: Mapping[str, object],
+    automatic_model: FundamentalAutomaticModelBindingV1,
+) -> str:
+    if request.get("model_id") not in (None, automatic_model.model_id) or request.get(
+        "model_version"
+    ) not in (None, automatic_model.model_version):
+        raise FundamentalServiceFailure(
+            "RELEASE_MODEL_MISMATCH",
+            "The explicitly requested model does not match the configured release",
+            retryable=False,
+            status_code=422,
+        )
+    return automatic_model.model_id
 
 
 def _explicit_fiscal_period_selector(
@@ -293,7 +309,6 @@ async def prepare_service_valuation_request(
         else None
     )
     revision = compact.revision if compact is not None else None
-    model_id = _model_id(request, fundamental) if revision is None else None
     if revision is None and release_selector is None:
         raise FundamentalServiceFailure(
             "SERVICE_NOT_CONFIGURED",
@@ -409,7 +424,6 @@ async def prepare_service_valuation_request(
             preparation=preparation,
         )
     assert release_selector is not None
-    assert model_id is not None
     cik = identity.get("issuer_id")
     if not isinstance(cik, str) or not cik.isdigit():
         raise FundamentalServiceFailure(
@@ -455,6 +469,19 @@ async def prepare_service_valuation_request(
             snapshot_selector=snapshot_selector,
             reason="caller valuation assumptions are required",
         )
+    automatic_model = release.automatic_model
+    model_id = (
+        _configured_model(request, automatic_model)
+        if automatic_model is not None
+        else _model_id(request, fundamental)
+    )
+    model_selection_reason = (
+        f"Selected {automatic_model.model_id} ({automatic_model.model_version}) "
+        f"from configured release {release.active.profile_id} "
+        f"at {release.active.manifest_digest}; no caller model was specified."
+        if automatic_model is not None and request.get("model_id") is None
+        else None
+    )
     snapshot_response = await client.execute(
         "resolve_snapshot",
         snapshot_selector,
@@ -486,6 +513,16 @@ async def prepare_service_valuation_request(
         correlation_id=correlation_id,
         deadline_at=deadline_at,
     )
+    if automatic_model is not None and (
+        preparation.model_id != automatic_model.model_id
+        or preparation.model_version != automatic_model.model_version
+    ):
+        raise FundamentalServiceFailure(
+            "PREPARATION_MODEL_MISMATCH",
+            "Fundamental preparation does not match the configured release model binding",
+            retryable=False,
+            status_code=502,
+        )
     if preparation.status != "prepared":
         return PreparedServiceValuation(
             valuation_request=None,
@@ -494,6 +531,7 @@ async def prepare_service_valuation_request(
             snapshot_selector=snapshot_selector,
             preparation=preparation,
             reason=preparation.status,
+            model_selection_reason=model_selection_reason,
         )
     prepared = _prepared_input(
         preparation,
@@ -508,6 +546,7 @@ async def prepare_service_valuation_request(
         release_manifest_digest=release.active.manifest_digest,
         snapshot_selector=snapshot_selector,
         preparation=preparation,
+        model_selection_reason=model_selection_reason,
     )
 
 

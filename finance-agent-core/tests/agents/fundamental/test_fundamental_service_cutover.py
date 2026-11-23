@@ -580,6 +580,7 @@ class _FactsOnlyClient(_Client):
         resolved_fact_ids: list[str] | None = None,
         snapshot_timestamp: str = "2026-11-01T00:00:00Z",
         preparation_padding: str = "",
+        automatic_model: dict[str, str] | None = None,
     ) -> None:
         identity = _resolved_identity().identity.model_dump(mode="json")
         self.resolved_fact_ids = list(resolved_fact_ids or self._fact_ids)
@@ -592,6 +593,7 @@ class _FactsOnlyClient(_Client):
         self.identity = identity
         self.snapshot_timestamp = snapshot_timestamp
         self.preparation_padding = preparation_padding
+        self.automatic_model = automatic_model
 
     async def resolve_identity(self, request, **_kwargs):
         self.calls.append(("resolve_identity", request.model_dump(mode="json")))
@@ -640,6 +642,11 @@ class _FactsOnlyClient(_Client):
                     "manifest_digest": "c" * 64,
                     "required_fields": _FCFF_REQUIRED_FIELDS,
                 },
+                **(
+                    {"automatic_model": self.automatic_model}
+                    if self.automatic_model is not None
+                    else {}
+                ),
             }
         )
 
@@ -880,12 +887,18 @@ async def test_cutover_binds_release_digest_to_context_without_provenance_leak()
 
 
 @pytest.mark.asyncio
-async def test_cutover_enriches_compact_caller_request_before_snapshot_resolution() -> (
-    None
-):
+@pytest.mark.parametrize("configured_model", [False, True])
+async def test_cutover_enriches_compact_caller_request_before_snapshot_resolution(
+    configured_model,
+) -> None:
     client = _FactsOnlyClient(
         snapshot_timestamp="2026-11-01T00:00:00Z",
         preparation_padding="evidence" * 20000,
+        automatic_model=(
+            {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2"}
+            if configured_model
+            else None
+        ),
     )
     runtime = _Runtime()
     compact = {
@@ -904,7 +917,9 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
             {
                 "valuation_request": compact,
                 "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
-                "fundamental_analysis": {"model_type": "dcf_standard"},
+                "fundamental_analysis": {
+                    "model_type": "dcf_growth" if configured_model else "dcf_standard"
+                },
             },
             client=client,
             clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
@@ -951,6 +966,59 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
     assert facts["data_release_manifest_digest"] == "c" * 64
     assert facts["provenance"]["fact_ids"] == _FactsOnlyClient._fact_ids
     assert facts["hashes"]["source_content_hashes"] == ["f" * 64]
+    final_state = result.update["fundamental_analysis"]
+    assert final_state["model_type"] == artifact["model_type"] == "fcff_dcf"
+    assert final_state["model_version"] == "fcff_dcf-v2"
+    if configured_model:
+        assert "configured release" in final_state["model_selection_reasoning"]
+        assert artifact["reasoning"] == final_state["model_selection_reasoning"]
+        assert "fcff_dcf-v2" in artifact["reasoning"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [("model_id", "transition_fcff_dcf"), ("model_version", "fcff_dcf-v99")],
+)
+async def test_validation_cannot_change_configured_model_before_calculation(
+    field, value
+):
+    class ChangedModel(_FactsOnlyClient):
+        async def execute(self, operation, input_payload, **kwargs):
+            response = await super().execute(operation, input_payload, **kwargs)
+            if operation == "validate_with_policy":
+                result = dict(response.result)
+                result["input"] = {**result["input"], field: value}
+                return response.model_copy(update={"result": result})
+            return response
+
+    client = ChangedModel(
+        automatic_model={"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2"}
+    )
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {
+                "valuation_request": {},
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_growth"},
+            },
+            client=client,
+            release_selector=_RELEASE_SELECTOR,
+        )
+    finally:
+        reset_request_principal(token)
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "INPUT_MODEL_CHANGED"
+    )
+    assert result.update["fundamental_analysis"]["model_type"] == "fcff_dcf"
+    assert result.update["fundamental_analysis"]["model_version"] == "fcff_dcf-v2"
+    assert "calculate" not in [operation for operation, _ in client.calls]
 
 
 @pytest.mark.asyncio

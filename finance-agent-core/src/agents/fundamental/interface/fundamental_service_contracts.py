@@ -124,10 +124,28 @@ class FundamentalReleaseManifestProjectionV1(BaseModel):
         return value
 
 
+class FundamentalAutomaticModelBindingV1(BaseModel):
+    """The service-owned model supported by this configured release."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
+    model_version: str = Field(min_length=1)
+
+    @field_validator("model_version")
+    @classmethod
+    def version_is_nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("automatic model version must be nonblank")
+        return value
+
+
 class FundamentalActiveReleaseV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     active: FundamentalActiveReleasePointerV1
     manifest: FundamentalReleaseManifestProjectionV1
+    automatic_model: FundamentalAutomaticModelBindingV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def pointer_matches_manifest(self) -> FundamentalActiveReleaseV1:

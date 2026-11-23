@@ -1003,6 +1003,7 @@ def _service_valuation_artifact_payload(
     validation_quality_status: str,
     calculation_trace: Mapping[str, object],
     automatic_preparation: Mapping[str, object] | None = None,
+    model_selection_reason: str | None = None,
 ) -> JSONObject:
     facts = _as_mapping(projection.get("facts"), context="fundamental facts projection")
     provenance = _as_mapping(
@@ -1063,6 +1064,8 @@ def _service_valuation_artifact_payload(
         "model_type": input_payload.get("model_id"),
         "ticker": _ticker_from_input(input_payload),
     }
+    if model_selection_reason is not None:
+        payload["reasoning"] = model_selection_reason
     return FinancialReportsArtifactData.model_validate(payload).model_dump(
         mode="json", exclude_unset=True
     )
@@ -1448,6 +1451,8 @@ async def _preparation_gate_update(
             "preparation_issue_codes": list(preparation.get("issue_codes", ())),
             "missing_evidence": list(preparation.get("missing_evidence", ())),
             "preparation_digest": preparation.get("preparation_digest"),
+            "model_type": preparation["model_id"],
+            "model_version": preparation["model_version"],
         }
     )
     projection = {
@@ -1530,6 +1535,7 @@ async def run_service_valuation_flow(
             raw_request = fundamental.get(_SERVICE_INPUT_KEY)
         input_payload: JSONObject | None = None
         automatic_preparation: JSONObject | None = None
+        model_selection_reason: str | None = None
         compact_request = False
         if raw_request is not None:
             input_payload = read_service_valuation_input(state)
@@ -1580,6 +1586,9 @@ async def run_service_valuation_flow(
                 current_thread_id=current_thread_id,
                 clock=clock,
             )
+            model_selection_reason = prepared.model_selection_reason
+            if model_selection_reason is not None:
+                fundamental["model_selection_reasoning"] = model_selection_reason
             if prepared.valuation_request is None:
                 if prepared.preparation is not None:
                     return await _preparation_gate_update(
@@ -1667,6 +1676,8 @@ async def run_service_valuation_flow(
                     goto="END",
                 )
             input_payload = prepared.valuation_request
+            fundamental["model_type"] = input_payload["model_id"]
+            fundamental["model_version"] = input_payload["model_version"]
             if (
                 compact_request
                 and isinstance(raw_request, Mapping)
@@ -1718,6 +1729,16 @@ async def run_service_valuation_flow(
             quality_status,
             policy_resolution,
         ) = _validated_input(validation_result)
+        if any(
+            validated_input.get(field) != input_payload.get(field)
+            for field in ("model_id", "model_version")
+        ):
+            raise FundamentalServiceFailure(
+                "INPUT_MODEL_CHANGED",
+                "Fundamental validation changed the selected model binding",
+                retryable=False,
+                status_code=502,
+            )
         if not _caller_values_preserved(
             input_payload.get("assumptions"),
             validated_input.get("assumptions"),
@@ -1925,6 +1946,7 @@ async def run_service_valuation_flow(
             validation_quality_status=quality_status,
             calculation_trace=calculation_trace,
             automatic_preparation=automatic_preparation,
+            model_selection_reason=model_selection_reason,
         )
         try:
             artifact_id = await runtime.save_financial_reports(
@@ -1954,6 +1976,8 @@ async def run_service_valuation_flow(
             "quality_status": projection["quality_status"],
             "input_digest": projection["input_digest"],
             "result_hash": projection["result_hash"],
+            "model_type": calculation_input["model_id"],
+            "model_version": calculation_input["model_version"],
             "fundamental_service": projection,
             "assumption_breakdown": {
                 "source": "fundamental-service",

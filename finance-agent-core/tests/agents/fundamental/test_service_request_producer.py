@@ -30,10 +30,16 @@ from src.shared.internal_services import InternalPrincipal
 
 
 class _Client:
-    def __init__(self, *, snapshot: Mapping[str, object]) -> None:
+    def __init__(
+        self,
+        *,
+        snapshot: Mapping[str, object],
+        automatic_model: Mapping[str, object] | None = None,
+    ) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
         self.snapshot = dict(snapshot)
         self.last_preparation: FundamentalValuationPreparationResultV1 | None = None
+        self.automatic_model = automatic_model
 
     async def resolve_identity(self, request, **_kwargs):
         self.calls.append(("resolve_identity", request.model_dump(mode="json")))
@@ -86,7 +92,10 @@ class _Client:
 
     async def read_active_release(self, profile_id, **_kwargs):
         self.calls.append(("read_active_release", {"profile_id": profile_id}))
-        return FundamentalActiveReleaseV1.model_validate(_release(profile_id))
+        payload = _release(profile_id)
+        if self.automatic_model is not None:
+            payload["automatic_model"] = dict(self.automatic_model)
+        return FundamentalActiveReleaseV1.model_validate(payload)
 
     async def execute(self, operation, input_payload, **_kwargs):
         self.calls.append((operation, dict(input_payload)))
@@ -243,10 +252,16 @@ def _state(request: Mapping[str, object] | None = None) -> dict[str, object]:
 
 
 async def _prepare(
-    client: _Client, request: Mapping[str, object] | None = None, **kwargs
+    client: _Client,
+    request: Mapping[str, object] | None = None,
+    *,
+    model_type: str = "dcf_standard",
+    **kwargs,
 ):
+    state = _state(request)
+    state["fundamental_analysis"] = {"model_type": model_type}
     return await prepare_service_valuation_request(
-        _state(request),
+        state,
         client=client,
         principal=_principal(),
         correlation_id="correlation-1",
@@ -257,6 +272,86 @@ async def _prepare(
         ),
         **kwargs,
     )
+
+
+_AUTOMATIC_MODEL = {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2"}
+
+
+@pytest.mark.parametrize("model_type", ["dcf_growth", "unknown-selection"])
+async def test_configured_automatic_model_binds_implicit_request(model_type):
+    client = _Client(snapshot=_snapshot(), automatic_model=_AUTOMATIC_MODEL)
+    prepared = await _prepare(client, {}, model_type=model_type)
+    assert prepared.valuation_request["model_id"] == "fcff_dcf"
+    assert prepared.valuation_request["model_version"] == "fcff_dcf-v2"
+    assert prepared.preparation.model_id == "fcff_dcf"
+    assert "configured release configured-release-v1" in prepared.model_selection_reason
+    assert "fcff_dcf-v2" in prepared.model_selection_reason
+    assert "b" * 64 in prepared.model_selection_reason
+    assert client.calls[-1][1]["model_id"] == "fcff_dcf"
+
+
+async def test_explicit_model_matching_configured_release_is_preserved():
+    client = _Client(snapshot=_snapshot(), automatic_model=_AUTOMATIC_MODEL)
+    prepared = await _prepare(
+        client,
+        _AUTOMATIC_MODEL,
+        model_type="dcf_growth",
+    )
+    assert prepared.valuation_request["model_id"] == "fcff_dcf"
+    assert prepared.valuation_request["model_version"] == "fcff_dcf-v2"
+    assert prepared.model_selection_reason is None
+
+
+@pytest.mark.parametrize(
+    "valuation_request",
+    [
+        {"model_id": "transition_fcff_dcf"},
+        {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v1"},
+        {"model_version": "fcff_dcf-v1"},
+    ],
+)
+async def test_explicit_model_conflict_refuses_before_snapshot_or_preparation(
+    valuation_request,
+):
+    client = _Client(snapshot=_snapshot(), automatic_model=_AUTOMATIC_MODEL)
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await _prepare(client, valuation_request)
+    assert error.value.code == "RELEASE_MODEL_MISMATCH"
+    assert error.value.status_code == 422
+    assert [name for name, _ in client.calls] == [
+        "resolve_identity",
+        "read_active_release",
+    ]
+
+
+async def test_ordinary_release_without_binding_keeps_existing_model_selection():
+    prepared = await _prepare(
+        _Client(snapshot=_snapshot()), {}, model_type="dcf_growth"
+    )
+    assert prepared.valuation_request["model_id"] == "transition_fcff_dcf"
+    assert prepared.model_selection_reason is None
+
+
+async def test_stale_model_version_in_automatic_binding_refuses_prepared_response():
+    client = _Client(
+        snapshot=_snapshot(),
+        automatic_model={"model_id": "fcff_dcf", "model_version": "fcff_dcf-v99"},
+    )
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await _prepare(client, {}, model_type="dcf_growth")
+    assert error.value.code == "PREPARATION_MODEL_MISMATCH"
+    assert error.value.status_code == 502
+
+
+async def test_facts_only_request_keeps_existing_path_with_automatic_binding():
+    client = _Client(snapshot=_snapshot(), automatic_model=_AUTOMATIC_MODEL)
+    prepared = await _prepare(client)
+    assert prepared.valuation_request is None
+    assert prepared.model_selection_reason is None
+    assert [name for name, _ in client.calls] == [
+        "resolve_identity",
+        "read_active_release",
+    ]
 
 
 @pytest.mark.asyncio
