@@ -22,6 +22,8 @@ npx playwright test --config e2e/fundamental-report-live.config.ts
 
 本設定不重試失敗案例。Revision 與 Research 都從 `/workspace` 的新 analysis 開始，提交前會確認未切換成 history route。History 案例使用獨立的唯讀 session，並核對提供的 artifact ID。
 
+Revision 的新 run 若要求 typed ticker selection，案例會從報告上的 **Open Activity** 入口開啟既有表單，選擇 MSFT／NASDAQ，再返回 Fundamental。測試核對 exact resume 路徑、interaction identity、提交內容及不變的 thread/run，並等待服務確認該互動已消失；它不會透過 API 直接送出選擇，也不把等待輸入當作計算完成。
+
 一般 CI 未設定 `FUNDAMENTAL_LIVE=1` 時，六個案例會明確 skip。Skip 只代表沒有執行，不是驗收通過。可先用以下指令檢查測試載入，這不會開啟瀏覽器。
 
 ```sh

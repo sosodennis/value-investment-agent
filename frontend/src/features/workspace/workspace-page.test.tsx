@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
 import {
     createWorkflowActivityState,
@@ -20,6 +20,14 @@ const hook = vi.hoisted(() => ({
 }));
 
 vi.mock('@/hooks/useAgent', () => ({ useAgent: () => hook.value }));
+
+beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    });
+});
 
 function workflowState(overrides: Record<string, unknown> = {}): WorkflowActivityState {
     return createWorkflowActivityState(parseWorkflowActivitySnapshot({
@@ -152,6 +160,39 @@ describe('Workspace Fundamental revision lifecycle', () => {
         expect(screen.getByLabelText('Reason for change')).toHaveProperty('value', 'Updated outlook.');
         expect(screen.getByRole('button', { name: 'Recalculate' }).hasAttribute('disabled')).toBe(true);
         expect(screen.queryByRole('region', { name: 'Revision comparison' })).toBeNull();
+    });
+
+    it('opens the existing Activity interaction during revision and preserves the previous report and draft on return', async () => {
+        const { pending, showRun } = await startRevision(revisedReport());
+        const interaction = { ...tickerInteraction, identity: { ...tickerInteraction.identity, run_id: 'run-2' } };
+        const activity = { ...tickerActivity, run_id: 'run-2' };
+        const workflow = workflowState({ run_id: 'run-2', run_status: 'waiting', active_activities: [activity], recent_activities: [activity], pending_interactions: [interaction] });
+        showRun({ workflow, agentOutputs: {} });
+        await act(async () => pending.resolve({ kind: 'started', threadId: 'thread-1', runId: 'run-2' }));
+
+        const alert = screen.getByRole('alert');
+        within(alert).getByText('Input required to continue');
+        within(screen.getByRole('article', { name: 'Fundamental valuation report' })).getByText('USD 25.12 / share');
+        expect(screen.getByRole('button', { name: 'Recalculating…' }).hasAttribute('disabled')).toBe(true);
+        fireEvent.click(within(alert).getByRole('button', { name: 'Open Activity' }));
+        const activityTab = screen.getByRole('tab', { name: 'Activity' });
+        expect(activityTab).toHaveProperty('ariaSelected', 'true');
+        expect(document.activeElement).toBe(activityTab);
+        expect(screen.queryByRole('button', { name: 'Open Activity' })).toBeNull();
+        fireEvent.click(screen.getByRole('radio', { name: /AAPL Apple Inc\./ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue with AAPL' }));
+        expect(hook.submitCommand).toHaveBeenCalledWith([...workflow.interactions.values()][0], { type: 'ticker_selection', selected_symbol: 'AAPL' });
+        expect(hook.sendMessage).toHaveBeenCalledOnce();
+
+        showRun({ workflow: workflowState({ run_id: 'run-2', run_status: 'running', active_activities: [], recent_activities: [] }), agentOutputs: {} });
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'Fundamental' }), { button: 0, ctrlKey: false });
+        expect(screen.queryByRole('button', { name: 'Open Activity' })).toBeNull();
+        expect(screen.getByLabelText('Terminal growth (%)')).toHaveProperty('value', '2.5');
+        expect(screen.getByLabelText('Reason for change')).toHaveProperty('value', 'Updated outlook.');
+        within(screen.getByRole('article', { name: 'Fundamental valuation report' })).getByText('USD 25.12 / share');
+        expect(screen.getByRole('button', { name: 'Recalculating…' }).hasAttribute('disabled')).toBe(true);
+        showRun();
+        await screen.findByRole('region', { name: 'Revision comparison' });
     });
 
     it.each(['wrong value', 'wrong origin', 'parser failure'])('keeps the old report when a new artifact has %s', async (failure) => {
@@ -424,11 +465,6 @@ describe('WorkspacePage', () => {
     });
 
     it('renders a typed ticker interaction outside the activity projection and submits its identity', () => {
-        vi.stubGlobal('ResizeObserver', class {
-            observe() {}
-            unobserve() {}
-            disconnect() {}
-        });
         hook.value = defaultHook({ workflow: waitingWorkflow, isLoading: true });
         render(<WorkspacePage />);
 
@@ -444,16 +480,35 @@ describe('WorkspacePage', () => {
     });
 
     it('disables a pending ticker interaction only while its response is submitting', () => {
-        vi.stubGlobal('ResizeObserver', class {
-            observe() {}
-            unobserve() {}
-            disconnect() {}
-        });
         hook.value = defaultHook({ workflow: waitingWorkflow, isLoading: true, isSubmittingInteraction: true });
         render(<WorkspacePage />);
 
         expect(screen.getByRole('radio', { name: /AAPL Apple Inc\./ }).hasAttribute('disabled')).toBe(true);
         expect(screen.getByRole('button', { name: 'Continue with selected company' }).hasAttribute('disabled')).toBe(true);
+    });
+
+    it.each(['Fundamental', 'Technical', 'News', 'Debate'])('exposes the current typed input from the %s report', (tab) => {
+        hook.value = defaultHook({ threadId: 'thread-1', runId: 'run-1', workflow: waitingWorkflow });
+        render(<WorkspacePage />);
+        fireEvent.mouseDown(screen.getByRole('tab', { name: tab }), { button: 0, ctrlKey: false });
+        const alert = screen.getByRole('alert');
+        within(alert).getByText('Input required to continue');
+        fireEvent.click(within(alert).getByRole('button', { name: 'Open Activity' }));
+        screen.getByRole('radio', { name: /AAPL Apple Inc\./ });
+        expect(screen.queryByRole('button', { name: 'Open Activity' })).toBeNull();
+        expect(hook.submitCommand).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { threadId: 'thread-1', runId: 'run-other', workflow: waitingWorkflow },
+        { threadId: 'thread-other', runId: 'run-1', workflow: waitingWorkflow },
+        { threadId: 'thread-1', runId: 'run-1', workflow: workflowState({ run_status: 'waiting' }) },
+    ])('does not offer an input action for a stale or untyped workflow', (state) => {
+        hook.value = defaultHook(state);
+        render(<WorkspacePage />);
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'Fundamental' }), { button: 0, ctrlKey: false });
+        expect(screen.queryByRole('button', { name: 'Open Activity' })).toBeNull();
+        expect(screen.queryByText('Input required to continue')).toBeNull();
     });
 
     it('shows waiting as unavailable when the snapshot has no pending interaction', () => {

@@ -67,23 +67,44 @@ export async function startAnalysis(page: Page): Promise<RunIdentity> {
     const started = page.waitForResponse(isRunStart);
     await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
     const run = await readRun(await started);
-    await expect.poll(async () => {
-        const snapshot = await readSnapshot(page, run);
-        return snapshot.pending_interactions.some((item) => item.kind === 'ticker_selection' && item.status === 'pending') ||
-            snapshot.completed_outputs.some((item) => item.agent_id === 'fundamental_analysis');
-    }, { timeout: 180_000, intervals: [500, 1000, 2000] }).toBe(true);
-    const snapshot = await readSnapshot(page, run);
-    if (snapshot.pending_interactions.some((item) => item.kind === 'ticker_selection' && item.status === 'pending')) {
-        const candidate = page.getByRole('radio', { name: /^MSFT\s/ });
-        await expect(candidate).toHaveCount(1);
-        await expect(candidate).toHaveAccessibleName(/NASDAQ/i);
-        await candidate.check();
-        await page.getByRole('button', { name: 'Continue with MSFT', exact: true }).click();
-    }
+    await resolveRequiredTickerSelection(page, run, { fromReport: false });
     await page.getByRole('tab', { name: 'Fundamental', exact: true }).click();
     await expect(page.getByRole('article', { name: 'Fundamental valuation report' })).toBeVisible({ timeout: 180_000 });
     await expect(page.getByLabel('Terminal growth (%)', { exact: true })).toBeEnabled({ timeout: 180_000 });
     return run;
+}
+
+export async function resolveRequiredTickerSelection(page: Page, run: RunIdentity, { fromReport = true }: { fromReport?: boolean } = {}): Promise<void> {
+    await expect.poll(async () => {
+        const snapshot = await readSnapshot(page, run);
+        return snapshot.pending_interactions.some((item) => item.kind === 'ticker_selection' && item.status === 'pending') ||
+            snapshot.completed_outputs.some((item) => item.agent_id === 'fundamental_analysis' && item.artifact_id);
+    }, { timeout: 180_000, intervals: [500, 1000, 2000] }).toBe(true);
+    const snapshot = await readSnapshot(page, run);
+    const interaction = snapshot.pending_interactions.find((item) => item.kind === 'ticker_selection' && item.status === 'pending');
+    if (!interaction) return;
+    expect(snapshot.pending_interactions).toHaveLength(1);
+    if (fromReport) {
+        await expect(page.getByRole('alert').filter({ hasText: 'Input required to continue' })).toBeVisible();
+        await page.getByRole('button', { name: 'Open Activity', exact: true }).click();
+    }
+    await expect(page.getByRole('tab', { name: 'Activity', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { name: interaction.request.title, exact: true })).toBeVisible();
+    const candidate = page.getByRole('radio', { name: /^MSFT\s/ });
+    await expect(candidate).toHaveCount(1);
+    await expect(candidate).toHaveAccessibleName(/NASDAQ/i);
+    await candidate.check();
+    const resumePath = `/api/v1/threads/${encodeURIComponent(run.threadId)}/runs/${encodeURIComponent(run.runId)}/resume`;
+    const resumed = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === resumePath);
+    await page.getByRole('button', { name: 'Continue with MSFT', exact: true }).click();
+    const response = await resumed;
+    const submitted: unknown = response.request().postDataJSON();
+    expect(submitted).toEqual({ identity: interaction.identity, response: { type: 'ticker_selection', selected_symbol: 'MSFT' } });
+    expect(await readRun(response)).toEqual(run);
+    await expect.poll(async () => (await readSnapshot(page, run)).pending_interactions.some(
+        (item) => item.identity.interaction_id === interaction.identity.interaction_id,
+    ), { timeout: 60_000, intervals: [500, 1000, 2000] }).toBe(false);
+    if (fromReport) await page.getByRole('tab', { name: 'Fundamental', exact: true }).click();
 }
 
 export async function readSnapshot(page: Page, run: RunIdentity) {

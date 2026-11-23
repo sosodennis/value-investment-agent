@@ -56,6 +56,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [retainedFundamental, dispatchRevision] = useReducer(revisionAttemptReducer, null);
     const [loadedFundamental, setLoadedFundamental] = useState<FundamentalReportModel | null>(null);
     const revisionOperation = useRef<string | null>(null);
+    const activityTab = useRef<HTMLButtonElement | null>(null);
     const mobileEvidenceReturnFocus = useRef<HTMLElement | null>(null);
     const autoStarted = useRef(false);
     useEffect(() => () => { revisionOperation.current = null; }, []);
@@ -73,6 +74,8 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const historyThreadId = routeIntent.kind === 'exact-run' ? routeIntent.threadId : null;
     const historyRunId = routeIntent.kind === 'exact-run' ? routeIntent.runId : null;
     const isHistoryRoute = routeIntent.kind !== 'new-analysis';
+    const hasPendingInput = agent.workflow?.threadId === agent.threadId && agent.workflow?.runId === agent.runId
+        && [...agent.workflow.interactions.values()].some((interaction) => interaction.status === 'pending');
     const evidenceAgent = useMemo(() => {
         const agentId = activeTab === 'activity' ? selectedAgentId ?? preferredAgentId : activeTab;
         return agents.find((item) => item.id === agentId) ?? null;
@@ -256,10 +259,15 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Run details</h2><p className="text-sm text-muted-foreground">{agent.workflow ? `Run ${agent.runId ?? agent.workflow.runId} · cursor ${agent.workflow.cursor}` : routeIntent.kind === 'exact-run' ? agent.error ? 'The selected historical run is unavailable.' : 'Loading the selected historical run.' : isHistoryRoute ? 'The selected history link is unavailable.' : 'Run a valuation to follow agent activity and reports.'}</p></div>{agent.workflow && <Badge variant={agent.workflow.runStatus === 'failed' ? 'destructive' : agent.workflow.runStatus === 'completed' ? 'success' : agent.workflow.runStatus === 'waiting' ? 'warning' : 'secondary'}>{agent.workflow.runStatus}</Badge>}</div>
                     <Tabs value={activeTab} onValueChange={(value) => { if (isReportTab(value)) setActiveTab(value); }}>
                         <TabsList aria-label="Workspace views" className="mb-4 h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0">
-                            {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
+                            {reportTabs.map((tab) => <TabsTrigger key={tab.id} ref={tab.id === 'activity' ? activityTab : undefined} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
+                        {activeTab !== 'activity' && hasPendingInput && <Alert variant="warning" role="alert" className="mb-4">
+                            <AlertTitle>Input required to continue</AlertTitle>
+                            <AlertDescription>This run needs a response. Review the request in Activity.</AlertDescription>
+                            <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => { setActiveTab('activity'); activityTab.current?.focus(); }}>Open Activity</Button>
+                        </Alert>}
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel threadId={agent.threadId} runId={agent.runId} tab={item.id} outputs={reportOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} onEvidenceInventory={setFundamentalEvidenceInventory} onReportReady={setLoadedFundamental} selectedEvidenceId={selectedEvidence?.id} revisionControl={revisionControl} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id} forceMount={item.id === 'fundamental_analysis' && previousFundamental ? true : undefined} hidden={activeTab !== item.id}><ReportPanel threadId={agent.threadId} runId={agent.runId} tab={item.id} outputs={reportOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} onEvidenceInventory={setFundamentalEvidenceInventory} onReportReady={setLoadedFundamental} selectedEvidenceId={selectedEvidence?.id} revisionControl={revisionControl} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>

@@ -14,6 +14,7 @@ import {
     readSnapshot,
     recordEvidence,
     requiredEnv,
+    resolveRequiredTickerSelection,
     startAnalysis,
     verifySheetFocusCycle,
     verifyTechnicalIdentity,
@@ -129,7 +130,9 @@ test.describe('Fundamental report against the real service', () => {
             },
         } });
         const revisedRun = await readRun(response);
+        expect(revisedRun.threadId).toBe(original.threadId);
         expect(revisedRun.runId).not.toBe(original.runId);
+        await resolveRequiredTickerSelection(page, revisedRun);
         const revised = await waitForReport(page, revisedRun);
         expect(revised.artifactId).not.toBe(original.artifactId);
         expect(revised.report.result_hash).not.toBe(original.report.result_hash);
@@ -184,6 +187,9 @@ test.describe('Fundamental report against the real service', () => {
         const submitted: unknown = response.request().postDataJSON();
         expect(submitted).toMatchObject({ valuation_request: { revision: { value: '0.05' } } });
         const refusedRun = await readRun(response);
+        expect(refusedRun.threadId).toBe(original.threadId);
+        expect(refusedRun.runId).not.toBe(original.runId);
+        await resolveRequiredTickerSelection(page, refusedRun);
         await expect(page.getByRole('alert').filter({ hasText: 'MANUAL_OVERRIDE_INVALID' }).first()).toBeVisible({ timeout: 180_000 });
         await expect(baseButton).toHaveText(previousDisplay);
         await expect(page.getByLabel('Terminal growth (%)', { exact: true })).toHaveValue('5');
