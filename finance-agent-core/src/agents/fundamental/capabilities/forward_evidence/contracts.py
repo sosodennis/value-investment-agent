@@ -61,11 +61,6 @@ class ForwardEvidenceClaimDraft(BaseModel):
     period_end: str = Field(min_length=10, max_length=32)
     source_url: str = Field(min_length=1, max_length=2048)
     source_passage: str = Field(min_length=20, max_length=8192)
-    source_type: Literal[
-        "issuer_guidance", "analyst_estimate", "debt_terms", "search_discovery"
-    ]
-    license_status: Literal["approved", "unknown", "rejected"] = "unknown"
-    license_reference: str | None = Field(default=None, max_length=2048)
 
 
 class ForwardEvidenceExtraction(BaseModel):

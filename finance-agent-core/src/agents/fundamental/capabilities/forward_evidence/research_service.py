@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import monotonic
+from typing import Literal
 from uuid import uuid4
 
 from src.agents.fundamental.application.fundamental_service_port import (
@@ -36,7 +37,7 @@ from src.llm_provider.entrypoint import (
     reset_provider_principal,
     set_provider_principal,
 )
-from src.search.contracts import WebSearchRequest
+from src.search.contracts import SearchOperationResult, SearchResult, WebSearchRequest
 from src.shared.internal_services import (
     InternalPrincipal,
     reset_request_principal,
@@ -45,9 +46,15 @@ from src.shared.internal_services import (
 
 
 @dataclass(frozen=True)
+class _SourceBoundClaims:
+    claims: tuple[FundamentalForwardEvidenceClaimV1, ...]
+    issue_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ForwardEvidenceResearchService:
     fundamental_service_client: FundamentalServiceClient
-    search_fn: Callable[[WebSearchRequest], object]
+    search_fn: Callable[[WebSearchRequest], SearchOperationResult]
     llm_provider: LLMProviderPort
     llm_route: ModelRoute
     search_result_limit: int = 5
@@ -87,7 +94,7 @@ class ForwardEvidenceResearchService:
                 (deadline_at.astimezone(UTC) - datetime.now(UTC)).total_seconds(),
             )
             if remaining <= 0:
-                return self._unavailable(
+                return self._without_claims(
                     request,
                     budget=budget,
                     code="DEADLINE_EXCEEDED",
@@ -105,25 +112,24 @@ class ForwardEvidenceResearchService:
                     timeout=min(self.request_timeout_seconds, remaining),
                 )
             except asyncio.TimeoutError:
-                return self._unavailable(
+                return self._without_claims(
                     request,
                     budget=budget,
                     code="DEADLINE_EXCEEDED",
                     elapsed_ms=int((monotonic() - started) * 1000),
                 )
             except Exception:
-                return self._unavailable(
+                return self._without_claims(
                     request,
                     budget=budget,
                     code="SEARCH_PROVIDER_FAILURE",
                     elapsed_ms=int((monotonic() - started) * 1000),
                 )
-            try:
-                results = tuple(getattr(raw_search, "results", ()))
-            except Exception:
-                results = ()
+            results = raw_search.results
+            retrieved_at = datetime.now(UTC)
 
             source_payloads: list[dict[str, object]] = []
+            sources: list[SearchResult] = []
             source_bytes = 0
             for item in results[: self.search_result_limit]:
                 candidate = {
@@ -144,9 +150,10 @@ class ForwardEvidenceResearchService:
                 if source_bytes + candidate_bytes > budget.max_source_bytes:
                     continue
                 source_payloads.append(candidate)
+                sources.append(item)
                 source_bytes += candidate_bytes
             if not source_payloads:
-                return self._unavailable(
+                return self._without_claims(
                     request,
                     budget=budget,
                     code="SOURCE_BUDGET_EXCEEDED" if results else "SEARCH_NO_RESULTS",
@@ -157,8 +164,11 @@ class ForwardEvidenceResearchService:
                 "Extract only numeric forward-looking claims relevant to the "
                 "requested assumption path. Every claim must quote a direct source "
                 "passage, retain the exact source URL, and use a future fiscal "
-                "period. Do not infer or average values. Return an empty claims "
-                "array when evidence is unsupported or ambiguous.\n\n"
+                "period. The available sources are search discovery snippets, not "
+                "retained full text. Quote an exact substring of a supplied snippet. "
+                "Do not infer source permissions. Do not infer or average numeric "
+                "values. Return an empty claims array when evidence is unsupported "
+                "or ambiguous.\n\n"
                 f"Request: {request.model_dump_json()}\n"
                 f"Search sources: {json.dumps(source_payloads, ensure_ascii=False)}"
             )
@@ -191,7 +201,7 @@ class ForwardEvidenceResearchService:
                     timeout=min(self.request_timeout_seconds, remaining),
                 )
             except asyncio.TimeoutError:
-                return self._unavailable(
+                return self._without_claims(
                     request,
                     budget=budget,
                     code="DEADLINE_EXCEEDED",
@@ -200,7 +210,7 @@ class ForwardEvidenceResearchService:
                     llm_input_bytes=len(prompt.encode("utf-8")),
                 )
             except Exception:
-                return self._unavailable(
+                return self._without_claims(
                     request,
                     budget=budget,
                     code="LLM_PROVIDER_FAILURE",
@@ -209,12 +219,24 @@ class ForwardEvidenceResearchService:
                     llm_input_bytes=len(prompt.encode("utf-8")),
                 )
 
-            claims = self._build_claims(
+            candidates = self._build_claims(
                 request,
                 extraction,
-                source_payloads,
+                sources,
                 max_claims=budget.max_llm_claims,
+                retrieved_at=retrieved_at,
             )
+            if candidates.issue_codes:
+                return self._without_claims(
+                    request,
+                    budget=budget,
+                    code=candidates.issue_codes[0],
+                    additional_issue_codes=candidates.issue_codes[1:],
+                    status="unsupported",
+                    elapsed_ms=int((monotonic() - started) * 1000),
+                    search_results=len(source_payloads),
+                    llm_input_bytes=len(prompt.encode("utf-8")),
+                )
             service_request = {
                 "contract_version": "fundamental.v1",
                 "opt_in": True,
@@ -224,7 +246,9 @@ class ForwardEvidenceResearchService:
                 "assumption_path": request.assumption_path,
                 "valuation_timestamp": request.valuation_timestamp.isoformat(),
                 "automatic_preparation_digest": request.automatic_preparation_digest,
-                "claims": [claim.model_dump(mode="json") for claim in claims],
+                "claims": [
+                    claim.model_dump(mode="json") for claim in candidates.claims
+                ],
                 "budget": budget.model_dump(mode="json"),
                 "usage": FundamentalForwardEvidenceUsageV1(
                     search_queries=1,
@@ -243,7 +267,7 @@ class ForwardEvidenceResearchService:
                     deadline_at=deadline_at,
                 )
             except FundamentalServiceFailure:
-                return self._unavailable(
+                return self._without_claims(
                     request,
                     budget=budget,
                     code="FUNDAMENTAL_SERVICE_FAILURE",
@@ -259,21 +283,34 @@ class ForwardEvidenceResearchService:
     def _build_claims(
         request: ForwardEvidenceResearchRequest,
         extraction: ForwardEvidenceExtraction,
-        source_payloads: Sequence[dict[str, object]],
+        sources: Sequence[SearchResult],
         *,
         max_claims: int,
-    ) -> tuple[FundamentalForwardEvidenceClaimV1, ...]:
-        by_url = {str(item["source_url"]): item for item in source_payloads}
+        retrieved_at: datetime,
+    ) -> _SourceBoundClaims:
+        by_url = {item.canonical_url: item for item in sources}
         claims: list[FundamentalForwardEvidenceClaimV1] = []
+        issue_codes: list[str] = []
         for index, draft in enumerate(extraction.claims[:max_claims]):
             source = by_url.get(draft.source_url)
-            published_at = (
-                datetime.fromisoformat(str(source["published_at"]))
-                if source and source.get("published_at")
-                else request.valuation_timestamp
-            )
-            if published_at.tzinfo is None:
-                published_at = published_at.replace(tzinfo=UTC)
+            if source is None:
+                issue_codes.append("SOURCE_NOT_IN_SEARCH_INVENTORY")
+                continue
+            if draft.source_passage not in source.snippet:
+                issue_codes.append("SOURCE_PASSAGE_NOT_RETAINED")
+                continue
+            if source.published_at is None:
+                issue_codes.append("SOURCE_PUBLICATION_DATE_MISSING")
+                continue
+            publisher = source.source or source.provider
+            if not publisher.strip():
+                issue_codes.append("SOURCE_PUBLISHER_MISSING")
+                continue
+            try:
+                period_end = datetime.fromisoformat(draft.period_end).date()
+            except ValueError:
+                issue_codes.append("CLAIM_PERIOD_INVALID")
+                continue
             passage_hash = hashlib.sha256(
                 draft.source_passage.encode("utf-8")
             ).hexdigest()
@@ -289,55 +326,60 @@ class ForwardEvidenceResearchService:
                     unit=draft.unit,
                     fiscal_period=draft.fiscal_period,
                     period_type=draft.period_type,
-                    period_end=datetime.fromisoformat(draft.period_end).date(),
+                    period_end=period_end,
                     extraction_method="llm_from_source_passage",
                     source=FundamentalForwardEvidenceSourceV1(
-                        source_id=(
-                            str(source["source_url"]) if source else draft.source_url
-                        ),
-                        source_url=draft.source_url,
-                        publisher=(str(source["publisher"]) if source else "unknown"),
-                        source_type=draft.source_type,
+                        source_id="search-"
+                        + hashlib.sha256(
+                            source.canonical_url.encode("utf-8")
+                        ).hexdigest(),
+                        source_url=source.canonical_url,
+                        publisher=publisher,
+                        source_type="search_discovery",
                         retained_passage=draft.source_passage,
                         content_hash=passage_hash,
-                        published_at=published_at,
-                        retrieved_at=request.valuation_timestamp,
-                        license_status=draft.license_status,
-                        license_reference=draft.license_reference,
+                        published_at=source.published_at,
+                        retrieved_at=retrieved_at,
+                        license_status="unknown",
+                        license_reference=None,
                     ),
-                    status="accepted",
+                    status="excluded",
+                    issue_codes=("SOURCE_LICENSE_NOT_APPROVED",),
+                    exclusion_reasons=(
+                        "Search discovery does not establish source usage rights.",
+                    ),
                 )
             )
-        return tuple(claims)
+        return _SourceBoundClaims(tuple(claims), tuple(dict.fromkeys(issue_codes)))
 
     @staticmethod
-    def _unavailable(
+    def _without_claims(
         request: ForwardEvidenceResearchRequest,
         *,
         budget: FundamentalForwardEvidenceBudgetPolicyV1,
         code: str,
         elapsed_ms: int,
+        additional_issue_codes: tuple[str, ...] = (),
+        status: Literal["unsupported", "unavailable"] = "unavailable",
         search_results: int = 0,
         llm_input_bytes: int = 0,
     ) -> FundamentalForwardEvidenceReviewResultV1:
         usage = FundamentalForwardEvidenceUsageV1(
             search_queries=1 if code != "SEARCH_PROVIDER_FAILURE" else 0,
             search_results=search_results,
-            llm_calls=1
-            if code in {"LLM_PROVIDER_FAILURE", "FUNDAMENTAL_SERVICE_FAILURE"}
-            else 0,
+            llm_calls=1 if llm_input_bytes else 0,
             llm_input_bytes=llm_input_bytes,
             elapsed_ms=elapsed_ms,
         )
         payload = {
-            "status": "unavailable",
+            "status": status,
             "label": "forward-looking external evidence",
             "policy_version": budget.policy_version,
             "automatic_preparation_digest": request.automatic_preparation_digest,
             "claims": (),
             "accepted_claim_ids": (),
             "excluded_claim_ids": (),
-            "issue_codes": (code,),
+            "issue_codes": (code, *additional_issue_codes),
             "budget": budget,
             "usage": usage,
         }
