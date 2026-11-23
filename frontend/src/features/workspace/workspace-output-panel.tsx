@@ -5,7 +5,7 @@ import {
 } from './outputs/debate/DebateOutput';
 import {
     FundamentalAnalysisOutput,
-} from './outputs/fundamental-analysis/FundamentalAnalysisOutput';
+} from './outputs/fundamental-analysis/fundamental-analysis-output';
 import {
     GenericAgentOutput,
 } from './outputs/shared/GenericAgentOutput';
@@ -28,6 +28,8 @@ import type {
 
 type WorkspaceOutputPanelProps = {
     agent: AgentInfo;
+    threadId?: string | null;
+    runId?: string | null;
     output: StandardAgentOutput | null;
     resolvedTicker?: string | null;
     status: AgentStatus;
@@ -49,13 +51,8 @@ export function WorkspaceOutputPanel({
     status,
     onSelectEvidence,
     selectedEvidenceId,
-    isSubmitting = false,
-    onRecalculate,
-    forwardEvidence = null,
-    isResearchingForwardEvidence = false,
-    researchError = null,
-    onResearchForwardEvidence,
-    onApplyForwardEvidence,
+    threadId,
+    runId,
 }: WorkspaceOutputPanelProps) {
     const viewModel = adaptAgentOutput(
         agent.id,
@@ -69,17 +66,11 @@ export function WorkspaceOutputPanel({
             report = (
                 <FundamentalAnalysisOutput
                     reference={viewModel.reference}
-                    previewData={viewModel.preview}
                     resolvedTicker={resolvedTicker}
                     status={status}
-                onSelectEvidence={onSelectEvidence}
-                isSubmitting={isSubmitting}
-                onRecalculate={onRecalculate}
-                    forwardEvidence={forwardEvidence}
-                    isResearchingForwardEvidence={isResearchingForwardEvidence}
-                    researchError={researchError}
-                    onResearchForwardEvidence={onResearchForwardEvidence}
-                    onApplyForwardEvidence={onApplyForwardEvidence}
+                    onSelectEvidence={onSelectEvidence}
+                    threadId={threadId}
+                    runId={runId}
                 />
             );
             break;

@@ -6,10 +6,6 @@ import {
     isRecord,
 } from '../preview';
 import { parseDebatePreview } from './debate-preview-parser';
-import {
-    parseFinancialPreview,
-    ParsedFinancialPreview,
-} from './fundamental-preview-parser';
 import { parseNewsPreview } from './news-preview-parser';
 import { parseTechnicalPreview } from './technical-preview-parser';
 import {
@@ -29,7 +25,7 @@ interface OutputViewModelBase {
 
 export interface FundamentalOutputViewModel extends OutputViewModelBase {
     kind: 'fundamental_analysis';
-    preview: ParsedFinancialPreview | null;
+    preview: null;
 }
 
 export interface NewsOutputViewModel extends OutputViewModelBase {
@@ -81,12 +77,6 @@ const buildBaseViewModel = (
     outputKind: output?.kind ?? null,
 });
 
-export const parseFundamentalPreviewFromOutput = (
-    output: StandardAgentOutput | null,
-    context: string
-): ParsedFinancialPreview | null =>
-    parseFinancialPreview(output?.preview, `${context}.preview`);
-
 export const parseNewsPreviewFromOutput = (
     output: StandardAgentOutput | null,
     context: string
@@ -122,7 +112,7 @@ export const adaptAgentOutput = (
         return {
             ...base,
             kind: 'fundamental_analysis',
-            preview: parseFundamentalPreviewFromOutput(output, context),
+            preview: null,
         };
     }
     if (output.kind === 'financial_news_research.output') {

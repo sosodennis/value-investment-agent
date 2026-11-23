@@ -14,7 +14,7 @@ const toOutput = (
     }) as unknown as StandardAgentOutput;
 
 describe('output adapter', () => {
-    it('adapts fundamental output to typed preview', () => {
+    it('uses the Fundamental artifact reference without exposing legacy preview valuations', () => {
         const viewModel = adaptAgentOutput(
             'fundamental_analysis',
             {
@@ -42,8 +42,7 @@ describe('output adapter', () => {
             throw new Error('Unexpected view model kind.');
         }
         expect(viewModel.reference?.artifact_id).toBe('artifact_1');
-        expect(viewModel.preview?.ticker).toBe('AAPL');
-        expect(viewModel.preview?.valuation_score).toBe(72);
+        expect(viewModel.preview).toBeNull();
     });
 
     it('adapts news output to typed preview', () => {

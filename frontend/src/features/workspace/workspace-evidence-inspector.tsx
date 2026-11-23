@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { AgentOutputViewModel } from '@/types/agents/output-adapter';
 import type { AgentInfo } from '@/types/agents';
-import { isRecord, type UnknownRecord } from '@/types/preview';
 import { cn } from '@/lib/cn';
 
 export interface EvidenceSelection {
@@ -75,49 +74,8 @@ export function buildEvidenceItems(agent: AgentInfo, viewModel: AgentOutputViewM
             });
             if (items.length >= 8) break;
         }
-
-        if (viewModel.kind === 'fundamental_analysis') {
-            appendFinancialReportEvidence(items, agent, preview as UnknownRecord);
-        }
     }
     return items;
-}
-
-function appendFinancialReportEvidence(
-    items: EvidenceSelection[],
-    agent: AgentInfo,
-    preview: UnknownRecord,
-) {
-    if (!Array.isArray(preview.financial_reports)) return;
-    const report = preview.financial_reports[0];
-    if (!isRecord(report) || !isRecord(report.base)) return;
-
-    const period = getFinancialReportPeriod(report.base);
-    const fields = Object.entries(report.base).filter(([key]) => key !== 'period_end_date');
-    for (const [key, value] of fields) {
-        if (items.length >= 12 || !isTraceableField(value) || value.value === null) continue;
-        const provenance = isRecord(value.provenance) ? value.provenance : undefined;
-        const concept = typeof provenance?.concept === 'string' ? provenance.concept : undefined;
-        const expression = typeof provenance?.expression === 'string' ? provenance.expression : undefined;
-        items.push({
-            id: `${agent.id}:financial-report:${key}`,
-            title: `Financial report · ${formatEvidenceLabel(key)}`,
-            value: String(value.value),
-            source: concept ? `SEC XBRL concept ${concept}` : 'Typed financial report artifact',
-            period,
-            formula: expression,
-        });
-    }
-}
-
-function getFinancialReportPeriod(base: UnknownRecord): string | undefined {
-    const periodEndDate = isTraceableField(base.period_end_date) ? base.period_end_date.value : undefined;
-    if (periodEndDate !== undefined && periodEndDate !== null) return String(periodEndDate);
-
-    const fiscalYear = isTraceableField(base.fiscal_year) ? base.fiscal_year.value : undefined;
-    if (fiscalYear === undefined || fiscalYear === null) return undefined;
-    const fiscalPeriod = isTraceableField(base.fiscal_period) ? base.fiscal_period.value : undefined;
-    return `${String(fiscalYear)}${fiscalPeriod !== undefined && fiscalPeriod !== null ? ` (${String(fiscalPeriod)})` : ''}`;
 }
 
 export function EvidenceInspector({
@@ -243,10 +201,6 @@ function formatIssueCodes(item: EvidenceSelection): string | undefined {
 
 function isInspectableValue(value: unknown): value is string | number | boolean {
     return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
-}
-
-function isTraceableField(value: unknown): value is { value: string | number | null; provenance?: UnknownRecord | null } {
-    return isRecord(value) && ('value' in value) && (value.value === null || typeof value.value === 'string' || typeof value.value === 'number');
 }
 
 function formatEvidenceLabel(value: string) {
