@@ -3,11 +3,11 @@
   "issue": 462,
   "status": "WIP",
   "branch": "codex/issue-462-fundamental-report",
-  "commit": "abbf83aff004af173399baf11d81ac260ee763b1",
+  "commit": "dbb474aa833ab613b054936594673517075e3ace",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent",
-    "browser_session": "iab:7,8:issue462-mapping-contract-final",
+    "browser_session": "iab:7,8,9:issue462-final-report",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-462-app",
@@ -68,7 +68,7 @@
     }
   ],
   "blockers": [
-    "Owner fixes #463/#465/#466/#467/#468/#469/#470/#471 integrated. Browser acceptance, final independent verdict, CI and merge-SHA smoke are pending."
+    "Owner fixes #463/#465/#466/#467/#468/#469/#470/#471/#472 integrated; final revision/refusal browser verification, review, CI and merge-SHA smoke pending."
   ],
-  "next_step": "Verify final source with production browser manual/auto MC, controlled refusal, one revision, evidence inspector and exact history. Service acquisition source revision 97037435 and release b6224b61 remain unchanged."
+  "next_step": "Run exact direct-output source reader with real revision/refusal; retain earlier REVISION_SOURCE_NOT_FOUND evidence as a repaired failure, not a successful policy refusal."
 }
