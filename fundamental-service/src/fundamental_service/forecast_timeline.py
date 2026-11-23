@@ -71,7 +71,7 @@ def build_forecast_timeline(
             or fact.context.end_date != fact.period_end
             or fact.context.consolidation_scope != "consolidated"
             or fact.context.entity_scope != anchor.context.entity_scope
-            or fact.context.dimensions != anchor.context.dimensions
+            or fact.context.dimensions
             or (
                 index
                 and fact.period_start != facts[index - 1].period_end + timedelta(days=1)

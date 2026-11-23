@@ -88,7 +88,7 @@ export function ValuationForecast({ report, onSelectEvidence }: EvidenceActionPr
         {timeline && <div className="space-y-2 rounded-md border bg-muted/10 p-3 text-xs text-muted-foreground">
             <p>Revenue and FCFF cover complete annual periods. Future FCFF included covers {timeline.periods[0].included_start} onward, after the valuation date of {timeline.valuation_date} (UTC, end of day).</p>
             <p>FCFF accrues uniformly through each year and settles at year end. This assumption does not use observed year-to-date cash flows. Discounting uses actual days / 365 (ACT/365F).</p>
-            <p>Terminal value uses the final full-year FCFF and the annual Gordon growth approximation, discounted to the final period end. The model is uncalibrated.</p>
+            <p>Terminal value uses the final full-year FCFF and the annual Gordon growth approximation at the final period end, then discounts back to the valuation date. The model is uncalibrated.</p>
             <details><summary className="cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Forecast periods and included coverage</summary>
                 <ul className="mt-2 space-y-1">{timeline.periods.map((period) => <li key={period.ordinal} className="font-mono tabular-nums">{period.period_start} → {period.period_end} · included {period.included_start} → {period.period_end} ({period.included_days}/{period.full_period_days} days)</li>)}</ul>
             </details>

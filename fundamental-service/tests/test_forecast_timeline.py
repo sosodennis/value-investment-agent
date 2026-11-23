@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from fundamental_service.contracts import CanonicalFactV1
 from fundamental_service.forecast_timeline import (
     ForecastTimelineError,
     build_forecast_timeline,
@@ -138,6 +139,39 @@ def test_unsupported_or_unavailable_calendar_is_explicit(change):
     with pytest.raises(ForecastTimelineError) as error:
         build_forecast_timeline(
             facts, valuation_timestamp=datetime(2026, 11, 23, tzinfo=UTC), horizon=5
+        )
+    assert error.value.code == "FORECAST_CALENDAR_UNRESOLVED"
+
+
+@pytest.mark.parametrize(
+    "axis",
+    ["us-gaap:StatementBusinessSegmentsAxis", "srt:StatementGeographicalAxis"],
+)
+def test_dimensioned_revenue_cannot_anchor_an_issuer_forecast(axis):
+    facts = revenue_history()
+    timestamp = datetime(2026, 11, 23, tzinfo=UTC)
+    timeline = build_forecast_timeline(facts, valuation_timestamp=timestamp, horizon=5)
+    dimensioned_facts = []
+    for fact in facts:
+        payload = fact.model_dump()
+        payload["context"]["dimensions"] = (
+            {"name": axis, "member": "issuer:SelectedMember"},
+        )
+        payload["captured_at"] = timestamp
+        payload["source"]["captured_at"] = timestamp
+        dimensioned_facts.append(CanonicalFactV1.model_validate(payload))
+    with pytest.raises(ForecastTimelineError) as error:
+        build_forecast_timeline(
+            dimensioned_facts, valuation_timestamp=timestamp, horizon=5
+        )
+    assert error.value.code == "FORECAST_CALENDAR_UNRESOLVED"
+    with pytest.raises(ForecastTimelineError) as error:
+        verify_forecast_timeline_sources(
+            timeline,
+            dimensioned_facts,
+            valuation_timestamp=timestamp,
+            horizon=5,
+            base_revenue=Decimal(2026),
         )
     assert error.value.code == "FORECAST_CALENDAR_UNRESOLVED"
 
