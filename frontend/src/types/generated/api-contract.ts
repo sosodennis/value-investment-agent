@@ -2583,18 +2583,12 @@ export interface components {
              * @enum {string}
              */
             quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
-            /**
-             * Working Capital Assessments
-             * @default []
-             */
-            working_capital_assessments: {
+            /** Working Capital Assessments */
+            working_capital_assessments?: {
                 [key: string]: components["schemas"]["JsonValue"];
             }[];
-            /**
-             * Working Capital Inputs
-             * @default []
-             */
-            working_capital_inputs: {
+            /** Working Capital Inputs */
+            working_capital_inputs?: {
                 [key: string]: components["schemas"]["JsonValue"];
             }[];
         };

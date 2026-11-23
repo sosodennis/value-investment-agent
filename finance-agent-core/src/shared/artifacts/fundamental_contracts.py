@@ -213,10 +213,10 @@ class FundamentalHistoricalMetricsV1(BaseModel):
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
     working_capital_assessments: tuple[dict[str, JsonValue], ...] = Field(
-        default=(), exclude_if=lambda value: not value
+        default_factory=tuple, exclude_if=lambda value: not value
     )
     working_capital_inputs: tuple[dict[str, JsonValue], ...] = Field(
-        default=(), exclude_if=lambda value: not value
+        default_factory=tuple, exclude_if=lambda value: not value
     )
 
 

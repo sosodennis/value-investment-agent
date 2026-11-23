@@ -4803,7 +4803,6 @@
             "type": "string"
           },
           "working_capital_assessments": {
-            "default": [],
             "items": {
               "additionalProperties": {
                 "$ref": "#/components/schemas/JsonValue"
@@ -4814,7 +4813,6 @@
             "type": "array"
           },
           "working_capital_inputs": {
-            "default": [],
             "items": {
               "additionalProperties": {
                 "$ref": "#/components/schemas/JsonValue"
