@@ -192,7 +192,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         const output = previousFundamental?.kind === 'failed' ? previousFundamental.previousOutput : agent.agentOutputs.fundamental_analysis;
         const report = previousFundamental?.kind === 'failed' ? previousFundamental.previousReport : loadedFundamental;
         if (isHistoryRoute || agent.isLoading || isActive || revisionOperation.current) throw new Error('A valuation run is already active or this report is read-only.');
-        if (revision.source.thread_id !== agent.threadId || revision.source.run_id !== agent.runId || output?.reference?.artifact_id !== revision.source.artifact_id || report?.kind !== 'valuation' || report.identity.preparationDigest !== revision.source.preparation_digest || report.identity.runId !== revision.source.run_id) throw new Error('The saved valuation source changed. Review the current report before recalculating.');
+        if (revision.source.thread_id !== agent.threadId || revision.source.run_id !== agent.runId || output?.reference?.artifact_id !== revision.source.artifact_id || report?.kind !== 'valuation' || report.identity.preparationDigest !== revision.source.preparation_digest || report.identity.runId !== revision.source.run_id || report.identity.threadId !== revision.source.thread_id || report.identity.artifactId !== revision.source.artifact_id) throw new Error('The saved valuation source changed. Review the current report before recalculating.');
         const operationId = crypto.randomUUID();
         revisionOperation.current = operationId;
         setSelectedEvidenceState(null);

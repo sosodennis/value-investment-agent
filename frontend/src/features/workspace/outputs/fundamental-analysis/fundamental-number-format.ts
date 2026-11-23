@@ -6,6 +6,7 @@ export type NumberSemantic =
 export type ReportDatum =
     | { kind: 'number'; raw: string; semantic: NumberSemantic }
     | { kind: 'boolean'; value: boolean }
+    | { kind: 'text'; value: string }
     | { kind: 'unavailable'; status: 'missing' | 'not_applicable' | 'unsupported' | 'unresolved'; reason: string };
 
 type Decimal = { negative: boolean; digits: string; exponent: bigint };
@@ -137,6 +138,7 @@ export function formatReportDatum(datum: ReportDatum): string {
     switch (datum.kind) {
         case 'number': return formatReportNumber(datum.raw, datum.semantic);
         case 'boolean': return String(datum.value);
+        case 'text': return datum.value;
         case 'unavailable': return `${datum.status === 'not_applicable' ? 'Not applicable' : datum.status === 'missing' ? 'Missing' : 'Unavailable'} · ${datum.reason}`;
         default: { const exhaustive: never = datum; return exhaustive; }
     }

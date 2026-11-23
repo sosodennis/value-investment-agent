@@ -26,8 +26,8 @@ function SeriesChart({ series }: { series: ReportSeries }) {
                     <circle cx={x(index)} cy={y(current)} r="3" className="fill-primary stroke-background"><title>{point.label}: {point.value && formatReportNumber(point.value.raw, { kind: 'money', currency: series.currency })}</title></circle>
                 </g>;
             })}
-            {series.points.map((point, index) => <text key={point.label} x={x(index)} y="120" textAnchor="middle" className="fill-muted-foreground text-[8px]">{point.label}</text>)}
         </svg>
+        <div className="mb-2 flex justify-between gap-2 text-xs text-muted-foreground">{series.points.map((point) => <span key={point.label} className="min-w-0 [overflow-wrap:anywhere]">{point.label}</span>)}</div>
         <p className="text-xs text-muted-foreground">Separate scale for this series. Supplied values and evidence are in the table; missing points remain gaps.</p>
     </figure>;
 }

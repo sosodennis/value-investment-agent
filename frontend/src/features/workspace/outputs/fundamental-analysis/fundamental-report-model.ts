@@ -1,6 +1,6 @@
 import type { components } from '@/types/generated/api-contract';
 import type { ArtifactReference } from '@/types/agents';
-import { isRevisedFundamentalPreparation, type FundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
+import { isFundamentalDecimalText, isRevisedFundamentalPreparation, type FundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
 import { getArtifactRunId } from '@/features/artifacts/api';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 import { assumptionNumberSemantic, factNumberSemantic, formatReportDatum, formatReportNumber, nodeNumberSemantic, type NumberSemantic, type ReportDatum } from './fundamental-number-format';
@@ -75,7 +75,7 @@ export type PreparationSummary = {
     issueCodes: string[];
     missingEvidence: string[];
     assumptions: { path: string; value: ExactNumber; semantic: NumberSemantic; method: string; editable: boolean; isManual: boolean; originalPreparationDigest: string | null; revisionLabel: AssumptionRevisionLabel | null; formula: string; evidence: EvidenceSelection }[];
-    historicalMetrics: { id: string; year: number; value: ExactNumber; unit: string; periodEnd: string; formula: string; factIds: string[] }[];
+    historicalMetrics: { id: string; year: number; value: ExactNumber; semantic: NumberSemantic; evidence: EvidenceSelection; unit: string; periodEnd: string; formula: string; factIds: string[] }[];
 };
 type UncertaintyModel = {
     kind: 'provided';
@@ -148,6 +148,7 @@ export function buildFundamentalEvidenceInventory(report: FundamentalReportModel
     const items = report.facts.map((fact) => fact.evidence);
     if (report.kind === 'valuation' || report.kind === 'preparation-outcome') {
         items.push(...(report.preparationSummary?.assumptions.map((item) => item.evidence) ?? []));
+        items.push(...(report.preparationSummary?.historicalMetrics.map((item) => item.evidence) ?? []));
     }
     if (report.kind === 'valuation') {
         if (report.base.perShare) items.push(report.base.perShare.evidence);
@@ -207,10 +208,12 @@ function evidenceIdentity(identity: FundamentalReportIdentity) {
 
 function factModel(fact: Fact, snapshotId: string, snapshotDigest: string, identity: FundamentalReportIdentity): FundamentalFactModel {
     const label = fact.normalized_field.replaceAll('_', ' ');
-    const value: ReportDatum = typeof fact.value === 'string' ? { kind: 'number', raw: fact.value, semantic: factNumberSemantic(fact.normalized_field, fact.currency ?? null, fact.unit) }
+    const value: ReportDatum = typeof fact.value === 'string' ? isFundamentalDecimalText(fact.value)
+        ? { kind: 'number', raw: fact.value, semantic: factNumberSemantic(fact.normalized_field, fact.currency ?? null, fact.unit) }
+        : { kind: 'text', value: fact.value }
         : typeof fact.value === 'boolean' ? { kind: 'boolean', value: fact.value }
             : { kind: 'unavailable', status: fact.value.status, reason: fact.value.reason };
-    const rawValue = value.kind === 'number' ? value.raw : value.kind === 'boolean' ? String(value.value) : `${value.status}: ${value.reason}`;
+    const rawValue = value.kind === 'number' ? value.raw : value.kind === 'boolean' || value.kind === 'text' ? String(value.value) : `${value.status}: ${value.reason}`;
     const period = fact.context.period_type === 'instant'
         ? `Instant · ${fact.instant ?? fact.context.instant ?? fact.period_end}`
         : `${fact.period_start ?? fact.context.start_date ?? 'Start unavailable'} → ${fact.period_end}`;
@@ -323,10 +326,21 @@ function preparationSummary(preparation: Contracts['FundamentalValuationPreparat
                 },
             };
         }),
-        historicalMetrics: preparation.historical_metrics.metrics.map((metric) => ({
-            id: metric.metric_id, year: metric.fiscal_year, value: exactNumber(metric.value),
-            unit: metric.unit, periodEnd: metric.period_end, formula: metric.formula, factIds: metric.fact_ids,
-        })),
+        historicalMetrics: preparation.historical_metrics.metrics.map((metric, index) => {
+            const semantic = nodeNumberSemantic(metric.metric_id, metric.unit, currency);
+            return {
+                id: metric.metric_id, year: metric.fiscal_year, value: exactNumber(metric.value), semantic,
+                unit: metric.unit, periodEnd: metric.period_end, formula: metric.formula, factIds: metric.fact_ids,
+                evidence: {
+                    id: evidenceKey(identity, 'historical-metric', `${metric.metric_id}:${metric.fiscal_year}:${index}`),
+                    title: `Historical metric · ${metric.metric_id} · FY${metric.fiscal_year}`,
+                    value: metric.value, displayValue: formatReportNumber(metric.value, semantic), unit: metric.unit,
+                    period: `FY${metric.fiscal_year} · period ending ${metric.period_end}`, formula: metric.formula,
+                    source: metric.source_refs.join(', '), inputs: metric.fact_ids,
+                    dataQuality: preparation.historical_metrics.quality_status, ...evidenceIdentity(identity),
+                },
+            };
+        }),
     };
 }
 

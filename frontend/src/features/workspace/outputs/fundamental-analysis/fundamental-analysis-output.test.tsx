@@ -81,6 +81,29 @@ describe('Fundamental report', () => {
         const descriptionId = source.getAttribute('aria-describedby');
         expect(descriptionId && document.getElementById(descriptionId)?.textContent).toBe('USD 25.12 / share');
     });
+    it('formats retained historical ratios and money while preserving their exact evidence', () => {
+        const source = valuationReport();
+        const preparation = source.automatic_preparation;
+        if (!preparation) throw new Error('Expected preparation.');
+        const metric = preparation.historical_metrics.metrics[0];
+        if (!metric) throw new Error('Expected metric fixture.');
+        preparation.historical_metrics.metrics = [
+            { ...metric, metric_id: 'operating_margin', value: '0.417728123456789', unit: 'ratio' },
+            { ...metric, metric_id: 'nopat', value: '123456789012.123456789', unit: 'currency' },
+        ];
+        const select = vi.fn();
+        render(<FundamentalReport report={model(source)} onSelectEvidence={select} />);
+        fireEvent.click(screen.getByText('Historical metrics used in preparation'));
+        screen.getByText('41.77%');
+        screen.getByText('USD 123.46B');
+        fireEvent.click(screen.getByRole('button', { name: 'Inspect Historical metric · operating_margin · FY2025' }));
+        expect(select).toHaveBeenCalledWith(expect.objectContaining({ value: '0.417728123456789', displayValue: '41.77%', formula: metric.formula, inputs: metric.fact_ids }));
+    });
+    it('separates formatted sample counts from the unmodified seed identity', () => {
+        render(<FundamentalReport report={model(uncertaintyReport({ requested_samples: 10000, valid_samples: 9998, invalid_samples: 2, seed: '10000' }))} />);
+        screen.getByText('Samples requested 10,000 · valid 9,998 · invalid 2');
+        screen.getByText(/Seed 10000/);
+    });
     it('shows canonical MC values and a distinct deterministic base without a synthetic price curve', () => {
         render(<FundamentalReport report={model(uncertaintyReport())} />);
         screen.getByText('Deterministic base per share');

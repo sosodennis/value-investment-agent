@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import type { FundamentalValuationModel } from './fundamental-report-model';
+import { formatReportNumber } from './fundamental-number-format';
 import { ExactValue, type EvidenceActionProps } from './report-value';
 
 type Uncertainty = Extract<FundamentalValuationModel['uncertainty'], { kind: 'provided' }>;
@@ -66,7 +67,7 @@ function QuantileMarkers({
                         Deterministic base
                     </span>
                 )}
-                <span>Values and evidence below</span>
+                <span>Values and evidence are in the valuation summary above</span>
             </figcaption>
         </figure>
     );
@@ -123,7 +124,7 @@ export function ValuationUncertainty({
                         <AlertTitle>Sampling limitations</AlertTitle>
                         <AlertDescription>
                             {uncertainty.convergence.converged === false && <p>Sampling did not converge.</p>}
-                            {uncertainty.invalidReasons.map((reason) => <p key={reason.code}>{reason.code} · {reason.count}</p>)}
+                            {uncertainty.invalidReasons.map((reason) => <p key={reason.code}>{reason.code} · {formatReportNumber(String(reason.count), { kind: 'count' })}</p>)}
                         </AlertDescription>
                     </Alert>}
                     <details className="rounded-md border px-3 py-2">
@@ -155,8 +156,7 @@ export function ValuationUncertainty({
                                             {row.path}
                                         </dt>
                                         <dd className="mt-1 [overflow-wrap:anywhere] font-mono text-sm tabular-nums">
-                                            {row.values.map((value) => value.raw).join(', ')}{' '}
-                                            {report.currency} / share
+                                            {row.values.map((value) => formatReportNumber(value.raw, { kind: 'per-share', currency: report.currency ?? '' })).join(', ')}
                                         </dd>
                                     </div>
                                 ))}
@@ -195,8 +195,8 @@ export function ValuationUncertainty({
                         <summary className="cursor-pointer font-medium">Sampling diagnostics</summary>
                         <div className="mt-3 space-y-2 text-muted-foreground">
                             <p>
-                                Samples requested {uncertainty.requestedSamples} · valid{' '}
-                                {uncertainty.validSamples} · invalid {uncertainty.invalidSamples}
+                                Samples requested {formatReportNumber(String(uncertainty.requestedSamples), { kind: 'count' })} · valid{' '}
+                                {formatReportNumber(String(uncertainty.validSamples), { kind: 'count' })} · invalid {formatReportNumber(String(uncertainty.invalidSamples), { kind: 'count' })}
                             </p>
                             <p>
                                 Converged ·{' '}
@@ -204,8 +204,8 @@ export function ValuationUncertainty({
                                     ? 'Unavailable'
                                     : String(uncertainty.convergence.converged)}{' '}
                                 · minimum valid samples{' '}
-                                {uncertainty.convergence.minimumValidSamples ?? 'Unavailable'} · invalid ratio{' '}
-                                {uncertainty.convergence.invalidRatio?.raw ?? 'Unavailable'}
+                                {uncertainty.convergence.minimumValidSamples == null ? 'Unavailable' : formatReportNumber(String(uncertainty.convergence.minimumValidSamples), { kind: 'count' })} · invalid ratio{' '}
+                                {uncertainty.convergence.invalidRatio ? formatReportNumber(uncertainty.convergence.invalidRatio.raw, { kind: 'ratio' }) : 'Unavailable'}
                             </p>
                             <p className="[overflow-wrap:anywhere]">
                                 Seed {uncertainty.seed ?? 'Unavailable'} · sampler{' '}

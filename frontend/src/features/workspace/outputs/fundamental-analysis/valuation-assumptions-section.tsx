@@ -63,7 +63,7 @@ export function ValuationAssumptionsSection({
                                     {metric.id} · {metric.year} · {metric.periodEnd}
                                 </dt>
                                 <dd className="mt-1 [overflow-wrap:anywhere] font-mono text-sm tabular-nums">
-                                    {metric.value.raw} {metric.unit}
+                                    <InspectionValue evidence={metric.evidence} onSelectEvidence={onSelectEvidence} />
                                 </dd>
                                 <dd className="mt-1 break-words text-xs text-muted-foreground">
                                     {metric.formula}

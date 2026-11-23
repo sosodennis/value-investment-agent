@@ -71,9 +71,28 @@ describe('Fundamental artifact boundary', () => {
     });
     it('preserves missing, boolean and nonnumeric text facts with period, unit and provenance', () => {
         const source = factsOnlyReport();
-        source.facts.facts = [canonicalFact({ value: { status: 'unresolved', reason: 'No verified period.' } }), canonicalFact({ fact_id: 'boolean', value: false }), canonicalFact({ fact_id: 'text', value: 'Not applicable to this class' })];
+        const textFact = canonicalFact({ fact_id: 'text', normalized_field: 'issuer_description', unit: 'text', currency: null, value: 'Not applicable to this class' });
+        textFact.context.unit_qname = textFact.context.measure = 'text';
+        source.facts.facts = [canonicalFact({ value: { status: 'unresolved', reason: 'No verified period.' } }), canonicalFact({ fact_id: 'boolean', value: false }), textFact];
         source.facts.fact_ids = source.fact_ids = source.facts.facts.map((fact) => fact.fact_id);
         expect(parseFundamentalServiceArtifact(source)).toEqual(source);
+    });
+    it.each(['NaN', 'Infinity', '', 'not-a-number', '1,000', 42])('rejects malformed numeric fact value %s at the artifact boundary', (value) => {
+        const source = factsOnlyReport();
+        const fact = source.facts.facts[0];
+        expect(() => parseFundamentalServiceArtifact({ ...source, facts: { ...source.facts, facts: [{ ...fact, value }] } })).toThrow(TypeError);
+    });
+    it.each(['2025-99-99', '2025-02-29', '2024-02-30', '2025-04-31', '2025-00-01'])('rejects invalid calendar date %s before history projection', (period) => {
+        const source = factsOnlyReport();
+        source.facts.facts = [canonicalFact({ period_end: period, context: { ...canonicalFact().context, end_date: period } })];
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/valid ISO calendar date/);
+    });
+    it('accepts a valid leap day and rejects impossible timestamp calendar days', () => {
+        const source = factsOnlyReport();
+        source.facts.facts = [canonicalFact({ period_end: '2024-02-29', context: { ...canonicalFact().context, end_date: '2024-02-29' } })];
+        expect(parseFundamentalServiceArtifact(source)).toEqual(source);
+        source.facts.facts = [canonicalFact({ available_at: '2025-02-29T12:00:00Z' })];
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/valid ISO calendar date/);
     });
     it.each(['requires_input', 'abstained', 'unsupported'] as const)('accepts the typed %s preparation outcome', (status) => {
         expect(parseFundamentalServiceArtifact(preparationOutcome(status))).toEqual(preparationOutcome(status));
