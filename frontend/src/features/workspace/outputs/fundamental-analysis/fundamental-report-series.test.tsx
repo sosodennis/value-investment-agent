@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { parseFundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
 import { projectFundamentalReport } from './fundamental-report-model';
 import { projectForecastSeries, projectHistoricalSeries } from './fundamental-report-series';
@@ -27,6 +27,11 @@ function historicalReport(facts: ReturnType<typeof canonicalFact>[]) {
 }
 
 describe('Fundamental series reading', () => {
+    beforeAll(() => {
+        vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 400, 208));
+    });
+    afterAll(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
     afterEach(cleanup);
     it('uses supplied forecast nodes and leaves a missing middle year as a gap with exact evidence', () => {
         const source = valuationReport();
@@ -44,8 +49,17 @@ describe('Fundamental series reading', () => {
         const onSelectEvidence = vi.fn();
         render(<ValuationForecast report={report} onSelectEvidence={onSelectEvidence} />);
         const chart = screen.getByRole('figure', { name: 'Revenue trend' });
-        expect(chart.querySelectorAll('circle')).toHaveLength(2);
-        expect(chart.querySelectorAll('g line')).toHaveLength(0);
+        const chartControls = within(chart);
+        expect(chartControls.getAllByRole('button')).toHaveLength(2);
+        expect(chartControls.queryByRole('button', { name: /Year 2/ })).toBeNull();
+        const firstPoint = chartControls.getByRole('button', { name: /^Inspect Revenue · Year 1 · USD 331.84B$/ });
+        fireEvent.mouseEnter(firstPoint);
+        expect(chartControls.getByRole('status', { name: 'Revenue selected point' }).textContent).toContain('Year 1');
+        const thirdPoint = chartControls.getByRole('button', { name: /^Inspect Revenue · Year 3 · USD 30,000.00$/ });
+        fireEvent.focus(thirdPoint);
+        expect(chartControls.getByRole('status', { name: 'Revenue selected point' }).textContent).toContain('Year 3');
+        fireEvent.click(thirdPoint);
+        expect(onSelectEvidence).toHaveBeenLastCalledWith(series[0]?.points[2].evidence);
         screen.getByText('331.839000');
         screen.getByText('0.000030');
         const table = within(screen.getByRole('region', { name: 'Forecast annual values' }));

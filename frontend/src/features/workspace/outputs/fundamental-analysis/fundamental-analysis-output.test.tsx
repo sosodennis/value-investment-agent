@@ -117,9 +117,10 @@ describe('Fundamental report', () => {
         expect(document.querySelector('svg.recharts-surface')).toBeNull();
         expect(screen.queryByRole('button', { name: /recalculate|edit|continue/i })).toBeNull();
         const markers = screen.getByRole('figure', { name: 'Service quantile markers' });
-        expect(markers.querySelectorAll('circle')).toHaveLength(3);
-        expect(markers.querySelectorAll('path')).toHaveLength(1);
-        expect(markers.querySelectorAll('circle title')[1]?.textContent).toBe('p50: 26.1234567890123456789');
+        expect(within(markers).getAllByRole('button')).toHaveLength(4);
+        within(markers).getByRole('button', { name: 'Read P50 · USD 26.12 / share' });
+        within(markers).getByRole('button', { name: 'Read Deterministic base · USD 25.12 / share' });
+        within(markers).getByRole('img', { name: 'Supplied P05–P95 interval' });
     });
     it('keeps the base marker outside P95 and retains equal canonical quantiles while removing contract aliases', () => {
         const source = uncertaintyReport({
@@ -131,10 +132,9 @@ describe('Fundamental report', () => {
         screen.getByText('USD 229.88 / share');
         screen.getByText('USD 173.10 / share');
         const markers = screen.getByRole('figure', { name: 'Service quantile markers' });
-        const quantilePositions = [...markers.querySelectorAll('circle')].map((circle) => Number(circle.getAttribute('cx')));
-        const basePosition = Number(markers.querySelector('path')?.getAttribute('d')?.split(' ')[1]);
-        expect(basePosition).toBeGreaterThan(Math.max(...quantilePositions));
-        expect(basePosition).toBeLessThanOrEqual(92);
+        expect(within(markers).getAllByRole('button')).toHaveLength(4);
+        within(markers).getByRole('button', { name: 'Read P95 · USD 198.00 / share' });
+        within(markers).getByRole('button', { name: 'Read Deterministic base · USD 229.88 / share' });
         expect(screen.queryByText('Model quantile LOWER')).toBeNull();
         rerender(<FundamentalReport report={model(uncertaintyReport({ quantiles: { p05: '20', p50: '20', p95: '20' } }))} />);
         screen.getByText('Model quantile P05');
@@ -153,8 +153,10 @@ describe('Fundamental report', () => {
         screen.getByText('USD 25.12 / share');
         screen.getByText('USD 1.00e+400 / share');
         screen.getAllByText('abstain');
-        expect(screen.queryByRole('figure')).toBeNull();
-        expect(screen.queryByText('Model quantile p50')).toBeNull();
+        const chart = within(screen.getByRole('figure', { name: 'Service quantile markers' }));
+        chart.getByRole('button', { name: 'Read P05 · USD 1.00e+400 / share' });
+        expect(chart.queryByRole('img', { name: 'Supplied P05–P95 interval' })).toBeNull();
+        expect(chart.queryByRole('button', { name: /P50/ })).toBeNull();
     });
     it('renders zero-sample scenarios without labeling the result Monte Carlo', () => {
         render(<FundamentalReport report={model(uncertaintyReport({ requested_samples: 0, valid_samples: 0, invalid_samples: 0, quantiles: {}, scenario_results: [calculation()] }))} />);

@@ -1,34 +1,50 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+import { chartColorCssVariable } from '@/lib/chart-theme';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { FundamentalReportModel, FundamentalValuationModel } from './fundamental-report-model';
 import { formatReportNumber, formatReportSeries } from './fundamental-number-format';
 import { projectForecastSeries, projectHistoricalSeries, type ReportSeries } from './fundamental-report-series';
 import type { EvidenceActionProps } from './report-value';
 
-function SeriesChart({ series }: { series: ReportSeries }) {
+function SeriesChart({ series, onSelectEvidence }: EvidenceActionProps & { series: ReportSeries }) {
+    const [activeIndex, setActiveIndex] = useState(0);
+    const readoutId = useId();
     const coordinates = series.points.flatMap((point) => point.value?.coordinate == null ? [] : [point.value.coordinate]);
     if (coordinates.length === 0) return <p className="text-xs text-muted-foreground">No finite chart coordinates are available. Read the supplied values in the table.</p>;
     const magnitude = Math.max(...coordinates.map(Math.abs)) || 1;
-    const low = Math.min(0, ...coordinates.map((value) => value / magnitude));
-    const high = Math.max(0, ...coordinates.map((value) => value / magnitude));
-    const y = (value: number) => high === low ? 55 : 100 - 85 * ((value / magnitude - low) / (high - low));
-    const x = (index: number) => 16 + (268 * index) / Math.max(1, series.points.length - 1);
+    const minimum = Math.min(0, ...coordinates.map((value) => value / magnitude));
+    const maximum = Math.max(0, ...coordinates.map((value) => value / magnitude));
+    const domain = minimum === maximum ? [-1, 1] : [minimum, maximum];
+    const points = series.points.map((point) => ({ label: point.label, coordinate: point.value?.coordinate == null ? null : point.value.coordinate / magnitude }));
+    const active = series.points[activeIndex]?.value ? series.points[activeIndex] : series.points.find((point) => point.value !== null);
+    const display = (raw: string) => formatReportNumber(raw, { kind: 'money', currency: series.currency });
     return <figure aria-label={`${series.label} trend`} className="min-w-0 rounded-md border bg-muted/10 p-3">
-        <figcaption className="mb-2 text-sm font-medium">{series.label} <span className="text-xs font-normal text-muted-foreground">· {series.currency}</span></figcaption>
-        <svg viewBox="0 0 300 125" className="h-40 w-full" aria-hidden="true">
-            <line x1="16" x2="284" y1={y(0)} y2={y(0)} className="stroke-border" />
-            {series.points.map((point, index) => {
-                const current = point.value?.coordinate;
-                const previous = series.points[index - 1]?.value?.coordinate;
-                if (current == null) return null;
-                return <g key={point.label}>
-                    {previous != null && <line x1={x(index - 1)} y1={y(previous)} x2={x(index)} y2={y(current)} className="stroke-primary" strokeWidth="2" />}
-                    <circle cx={x(index)} cy={y(current)} r="3" className="fill-primary stroke-background"><title>{point.label}: {point.value && formatReportNumber(point.value.raw, { kind: 'money', currency: series.currency })}</title></circle>
-                </g>;
-            })}
-        </svg>
-        <div className="mb-2 flex justify-between gap-2 text-xs text-muted-foreground">{series.points.map((point) => <span key={point.label} className="min-w-0 [overflow-wrap:anywhere]">{point.label}</span>)}</div>
-        <p className="text-xs text-muted-foreground">Separate scale for this series. Supplied values and evidence are in the table; missing points remain gaps.</p>
+        <figcaption className="text-sm font-medium">{series.label}</figcaption>
+        <p className="mb-1 text-xs text-muted-foreground">{series.currency} billions (B) · separate scale</p>
+        <div className="h-52 min-w-0">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 400, height: 208 }}>
+                <LineChart data={points} margin={{ top: 18, right: 18, bottom: 4, left: 0 }}>
+                    <CartesianGrid vertical={false} stroke={chartColorCssVariable('gridLineSoft')} />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: chartColorCssVariable('axisText') }} axisLine={{ stroke: chartColorCssVariable('axisBorder') }} tickLine={false} minTickGap={12} interval="preserveStartEnd" />
+                    <YAxis width={62} domain={domain} tick={{ fontSize: 12, fill: chartColorCssVariable('axisText') }} axisLine={false} tickLine={false} tickFormatter={(value: number) => formatReportNumber(String(value * magnitude), { kind: 'money', currency: series.currency }, { moneyScale: 9, includeUnit: false })} />
+                    <Line dataKey="coordinate" type="linear" connectNulls={false} isAnimationActive={false} stroke={chartColorCssVariable('seriesPrimary')} strokeWidth={2} activeDot={false} dot={({ cx, cy, index }: { cx?: number; cy?: number; index?: number }) => {
+                        const point = index === undefined ? undefined : series.points[index];
+                        if (cx == null || cy == null || index == null || !point?.value || point.value.coordinate === null) return <g key={index} />;
+                        const evidence = point.evidence;
+                        return <foreignObject key={point.label} x={cx - 14} y={cy - 14} width={28} height={28} overflow="visible">
+                            <button type="button" className="flex size-7 items-center justify-center rounded-full outline-none hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-ring" aria-label={`${onSelectEvidence && evidence ? 'Inspect' : 'Read'} ${series.label} · ${point.label} · ${display(point.value.raw)}`} aria-describedby={readoutId} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} onClick={() => { setActiveIndex(index); if (onSelectEvidence && evidence) onSelectEvidence(evidence); }}>
+                                <span aria-hidden="true" className="size-2.5 rounded-full border-2 border-background" style={{ backgroundColor: chartColorCssVariable('seriesPrimary') }} />
+                            </button>
+                        </foreignObject>;
+                    }} />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+        <p id={readoutId} role="status" aria-label={`${series.label} selected point`} className="min-h-10 text-sm">
+            {active?.value && <><span className="text-muted-foreground">{active.label}</span><span className="ml-2 whitespace-nowrap font-mono tabular-nums">{display(active.value.raw)}</span></>}
+        </p>
+        <p className="text-xs text-muted-foreground">Hover or focus a point to read its value{onSelectEvidence ? '; activate it to inspect its source' : ''}. Missing points remain gaps.</p>
     </figure>;
 }
 
@@ -67,7 +83,7 @@ export function ValuationForecast({ report, onSelectEvidence }: EvidenceActionPr
         <h3 className="font-semibold">Five-year forecast</h3>
         <p className="text-sm text-muted-foreground">Service calculation nodes from this deterministic base. Year 1–5 are forecast ordinals; calendar years were not supplied.</p>
         {hasValues ? <>
-            <div className="grid min-w-0 gap-3 @min-[44rem]:grid-cols-2">{series.map((item) => <SeriesChart key={item.id} series={item} />)}</div>
+            <div className="grid min-w-0 gap-3 @min-[44rem]:grid-cols-2">{series.map((item) => <SeriesChart key={item.id} series={item} onSelectEvidence={onSelectEvidence} />)}</div>
             <SeriesTable series={series} caption="Forecast annual values" onSelectEvidence={onSelectEvidence} />
         </> : <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">No supported five-year revenue or FCFF nodes were supplied. No forecast was inferred.</p>}
     </section>;
@@ -79,7 +95,7 @@ export function ValuationHistory({ report, onSelectEvidence }: EvidenceActionPro
         <h3 className="font-semibold">Comparable history</h3>
         <p className="text-sm text-muted-foreground">Historical facts are separate from forecasts. Trends require comparable annual scope, units, dimensions, coverage and filing versions.</p>
         {history.map((item) => item.kind === 'comparable' ? <div key={item.series.id} className="space-y-3">
-            <SeriesChart series={item.series} />
+            <SeriesChart series={item.series} onSelectEvidence={onSelectEvidence} />
             <SeriesTable series={[item.series]} caption={`${item.series.label} historical period-end values`} onSelectEvidence={onSelectEvidence} />
             <p className="text-xs text-muted-foreground">Source periods · {item.periods.join('; ')}</p>
         </div> : <div key={item.id} className="rounded-md border border-dashed p-3">
