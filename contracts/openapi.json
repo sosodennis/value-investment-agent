@@ -5801,6 +5801,18 @@
             "title": "Issue Codes",
             "type": "array"
           },
+          "mapping_version": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Version"
+          },
           "missing_fields": {
             "default": [],
             "items": {

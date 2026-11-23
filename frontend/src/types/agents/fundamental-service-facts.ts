@@ -319,6 +319,7 @@ const parseFundamentalValuationEvidence = object<Contracts['FundamentalValuation
     identity: parseFundamentalIdentity,
     issue_codes: array(text),
     missing_fields: array(text),
+    mapping_version: optional(union(nonEmpty, nullValue)),
     model_id: literal("fcff_dcf", "transition_fcff_dcf"),
     profile_digest: digest,
     profile_id: nonEmpty,

@@ -34,7 +34,7 @@ describe('Fundamental artifact boundary', () => {
             fact_ids: [],
             facts: {
                 ...boundFacts(), facts: [], fact_ids: [], projection_type: 'valuation_evidence', snapshot_timestamp: timestamp,
-                model_id: 'fcff_dcf', profile_id: 'industrial-v1', profile_digest: sourceHash,
+                model_id: 'fcff_dcf', mapping_version: 'sec-mapping-v3', profile_id: 'industrial-v1', profile_digest: sourceHash,
                 data_release_manifest_digest: sourceHash, missing_fields: ['revenue'], rejected_fact_ids: ['rejected-1'],
                 provenance: {}, quality: { facts_status: 'degraded', issue_codes: [], missing_fields: ['revenue'], rejected_fact_ids: ['rejected-1'] },
                 hashes: { snapshot_manifest_digest: boundFacts().snapshot_manifest_digest, data_release_manifest_digest: sourceHash, source_content_hashes: [] },

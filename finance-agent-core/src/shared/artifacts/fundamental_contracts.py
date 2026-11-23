@@ -136,7 +136,9 @@ class FundamentalCanonicalFactV1(BaseModel):
     rejected_candidate_reasons: tuple[FundamentalCandidateRejectionV1, ...] = ()
     point_in_time_policy: str | None = None
     selection_reason: str | None = None
-    accounting_evidence: dict[str, JsonValue] | None = None
+    accounting_evidence: dict[str, JsonValue] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class FundamentalFactsReadResultV1(BaseModel):
@@ -287,6 +289,7 @@ class FundamentalValuationEvidenceReadResultV1(BaseModel):
     issue_codes: tuple[str, ...] = ()
     missing_fields: tuple[str, ...] = ()
     rejected_fact_ids: tuple[str, ...] = ()
+    mapping_version: str | None = Field(default=None, min_length=1)
     facts: tuple[FundamentalCanonicalFactV1, ...] = ()
 
 

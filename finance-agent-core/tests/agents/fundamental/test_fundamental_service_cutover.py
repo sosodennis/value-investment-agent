@@ -709,6 +709,7 @@ class _FactsOnlyClient(_Client):
                     "data_release_manifest_digest"
                 ],
                 "snapshot_manifest_digest": facts.snapshot_manifest_digest,
+                "mapping_version": "mapping-v1",
                 "identity": facts.identity.model_dump(mode="json"),
                 "valuation_timestamp": facts.valuation_timestamp,
                 "model_id": input_payload["model_id"],
@@ -964,6 +965,7 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
     facts = service_artifact["facts"]
     assert isinstance(facts, dict)
     assert facts["data_release_manifest_digest"] == "c" * 64
+    assert facts["mapping_version"] == "mapping-v1"
     assert facts["provenance"]["fact_ids"] == _FactsOnlyClient._fact_ids
     assert facts["hashes"]["source_content_hashes"] == ["f" * 64]
     final_state = result.update["fundamental_analysis"]
@@ -1019,6 +1021,43 @@ async def test_validation_cannot_change_configured_model_before_calculation(
     assert result.update["fundamental_analysis"]["model_type"] == "fcff_dcf"
     assert result.update["fundamental_analysis"]["model_version"] == "fcff_dcf-v2"
     assert "calculate" not in [operation for operation, _ in client.calls]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mapping_version", [None, "different-mapping"])
+async def test_cutover_refuses_evidence_from_a_different_mapping(mapping_version):
+    class ChangedEvidenceMapping(_FactsOnlyClient):
+        async def read_valuation_evidence(self, input_payload, **kwargs):
+            response = await super().read_valuation_evidence(input_payload, **kwargs)
+            return response.model_copy(update={"mapping_version": mapping_version})
+
+    client = ChangedEvidenceMapping()
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "valuation_request": {},
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            release_selector=_RELEASE_SELECTOR,
+        )
+    finally:
+        reset_request_principal(token)
+    context = result.update["fundamental_analysis"]
+    assert context["service_failure"]["code"] == "UPSTREAM_MALFORMED"
+    assert context["input_digest"] is None
+    assert context["result_hash"] is None
+    assert runtime.saved_calls[0]["data"]["fundamental_service"]["projection_type"] == (
+        "degraded"
+    )
 
 
 @pytest.mark.asyncio

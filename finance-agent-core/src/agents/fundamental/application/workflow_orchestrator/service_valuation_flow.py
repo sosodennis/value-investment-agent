@@ -724,6 +724,7 @@ def _valuation_evidence_projection(
     expected_release_digest: str,
     expected_identity: Mapping[str, object],
     expected_model_id: str,
+    expected_mapping_version: str,
     expected_fact_ids: tuple[str, ...],
 ) -> JSONObject:
     """Project release-bound evidence without selecting facts in Agent Core."""
@@ -733,6 +734,7 @@ def _valuation_evidence_projection(
         result.snapshot_id != expected_snapshot_id
         or result.data_release_manifest_digest != expected_release_digest
         or result.model_id != expected_model_id
+        or result.mapping_version != expected_mapping_version
         or not _payload_equal(
             result.identity.model_dump(mode="json"), expected_identity
         )
@@ -1789,6 +1791,7 @@ async def run_service_valuation_flow(
         )
         model_id = validated_input.get("model_id")
         model_version = validated_input.get("model_version")
+        mapping_version = provenance.get("mapping_version")
         policy_id = validated_input.get("policy_id")
         policy_version = provenance.get("policy_version")
         policy_digest = policy_resolution.get("policy_digest")
@@ -1808,6 +1811,8 @@ async def run_service_valuation_flow(
                     source_selection_policy,
                 )
             )
+            or not isinstance(mapping_version, str)
+            or not mapping_version
             or not isinstance(fact_ids, list | tuple)
             or not fact_ids
             or any(not isinstance(value, str) or not value for value in fact_ids)
@@ -1896,6 +1901,7 @@ async def run_service_valuation_flow(
                     validated_input["identity"], context="validated_input.identity"
                 ),
                 expected_model_id=model_id,
+                expected_mapping_version=mapping_version,
                 expected_fact_ids=tuple(fact_ids),
             )
         else:

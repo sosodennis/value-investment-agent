@@ -2993,6 +2993,8 @@ export interface components {
              * @default []
              */
             issue_codes: string[];
+            /** Mapping Version */
+            mapping_version?: string | null;
             /**
              * Missing Fields
              * @default []
