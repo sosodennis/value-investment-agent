@@ -3950,6 +3950,66 @@
         "title": "FundamentalCanonicalFactV1",
         "type": "object"
       },
+      "FundamentalConditionalQuantileBasisV1": {
+        "additionalProperties": false,
+        "properties": {
+          "conditioning": {
+            "const": "retained_base_joint_hypotheses",
+            "title": "Conditioning",
+            "type": "string"
+          },
+          "conditioning_assumptions_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Conditioning Assumptions Digest",
+            "type": "string"
+          },
+          "hypothesis_probabilities": {
+            "const": "not_assigned",
+            "title": "Hypothesis Probabilities",
+            "type": "string"
+          },
+          "joint_scenarios_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Joint Scenarios Digest",
+            "type": "string"
+          },
+          "policy_version": {
+            "const": "conditional-fcff-monte-carlo-policy-v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "sampled_paths": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "const": "assumptions.forecast.revenue_growth[0]",
+                "type": "string"
+              },
+              {
+                "const": "assumptions.forecast.operating_margin[0]",
+                "type": "string"
+              },
+              {
+                "const": "assumptions.terminal_growth",
+                "type": "string"
+              }
+            ],
+            "title": "Sampled Paths",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conditioning",
+          "joint_scenarios_digest",
+          "conditioning_assumptions_digest",
+          "policy_version",
+          "sampled_paths",
+          "hypothesis_probabilities"
+        ],
+        "title": "FundamentalConditionalQuantileBasisV1",
+        "type": "object"
+      },
       "FundamentalConvergenceDiagnosticsV1": {
         "additionalProperties": false,
         "properties": {
@@ -5556,6 +5616,16 @@
             "default": 0,
             "title": "Invalid Samples",
             "type": "integer"
+          },
+          "quantile_basis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalConditionalQuantileBasisV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "quantile_contract": {
             "additionalProperties": {

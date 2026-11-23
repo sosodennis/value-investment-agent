@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { parseFundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
 import { buildFundamentalEvidenceInventory, fundamentalReportSourceKey, projectFundamentalReport } from './fundamental-report-model';
-import { baseDigest, baseHash, calculation, factsOnlyReport, preparation, preparationOutcome, reference, rootDigest, rootHash, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
+import { baseDigest, baseHash, calculation, conditionalQuantileBasis, factsOnlyReport, preparation, preparationOutcome, reference, rootDigest, rootHash, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
 
 function project(artifact: unknown) {
     return projectFundamentalReport({ artifact: parseFundamentalServiceArtifact(artifact), reference, threadId: 'thread-1', ticker: 'EXAMPLE' });
 }
 
 describe('Fundamental report projection', () => {
+    it('preserves service conditional quantile provenance and rejects changes to its sampled paths', () => {
+        const source = uncertaintyReport({ quantile_basis: conditionalQuantileBasis });
+        const report = project(source);
+        if (report.kind !== 'valuation' || report.uncertainty.kind !== 'provided') throw new Error('Expected uncertainty.');
+        expect(report.uncertainty.quantileBasis).toEqual(conditionalQuantileBasis);
+        expect(() => project({ ...source, service_result: { ...source.service_result, quantile_basis: { ...conditionalQuantileBasis, sampled_paths: [] } } })).toThrow();
+    });
     it('keeps deterministic base, median, root/base bindings and identities independent', () => {
         const report = project(uncertaintyReport());
         if (report.kind !== 'valuation' || report.uncertainty.kind !== 'provided') throw new Error('Expected valuation.');

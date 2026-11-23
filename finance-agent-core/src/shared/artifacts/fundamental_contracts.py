@@ -413,6 +413,21 @@ class FundamentalConvergenceDiagnosticsV1(BaseModel):
     converged: bool | None = None
 
 
+class FundamentalConditionalQuantileBasisV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    conditioning: Literal["retained_base_joint_hypotheses"]
+    joint_scenarios_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    conditioning_assumptions_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    policy_version: Literal["conditional-fcff-monte-carlo-policy-v1"]
+    sampled_paths: tuple[
+        Literal["assumptions.forecast.revenue_growth[0]"],
+        Literal["assumptions.forecast.operating_margin[0]"],
+        Literal["assumptions.terminal_growth"],
+    ]
+    hypothesis_probabilities: Literal["not_assigned"]
+
+
 class FundamentalUncertaintyResultV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     status: FundamentalQualityStatus
@@ -431,6 +446,7 @@ class FundamentalUncertaintyResultV1(BaseModel):
     ) = None
     sampler_version: str | None = None
     quantiles: dict[str, CanonicalDecimal] = Field(default_factory=dict)
+    quantile_basis: FundamentalConditionalQuantileBasisV1 | None = None
     quantile_contract: dict[str, str] = Field(default_factory=dict)
     convergence_diagnostics: FundamentalConvergenceDiagnosticsV1 = Field(
         default_factory=FundamentalConvergenceDiagnosticsV1

@@ -65,6 +65,7 @@ type UncertaintyModel = {
     quality: Quality;
     quantiles: { label: string; value: ExactAmount; evidence: EvidenceSelection }[];
     quantileContract: { label: string; quantile: string }[];
+    quantileBasis: Contracts['FundamentalConditionalQuantileBasisV1'] | null;
     requestedSamples: number;
     validSamples: number;
     invalidSamples: number;
@@ -287,6 +288,7 @@ export function projectFundamentalReport({ artifact, reference, threadId = null,
                         },
                     })),
                     quantileContract: Object.entries(result.quantile_contract ?? {}).map(([label, quantile]) => ({ label, quantile })),
+                    quantileBasis: result.quantile_basis ?? null,
                     requestedSamples: result.requested_samples, validSamples: result.valid_samples, invalidSamples: result.invalid_samples,
                     invalidReasons: Object.entries(result.invalid_reasons ?? {}).map(([code, count]) => ({ code, count })),
                     seed: result.seed ?? null, samplerVersion: result.sampler_version ?? null, invalidDrawPolicy: result.invalid_draw_policy ?? null,

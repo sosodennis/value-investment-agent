@@ -4,7 +4,7 @@ import { SWRConfig } from 'swr';
 import { FundamentalAnalysisOutput, FundamentalReport } from './fundamental-analysis-output';
 import { parseFundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
 import { projectFundamentalReport } from './fundamental-report-model';
-import { calculation, factsOnlyReport, preparationOutcome, reference, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
+import { calculation, conditionalQuantileBasis, factsOnlyReport, preparationOutcome, reference, uncertaintyReport, valuationReport } from './fundamental-report.test-fixtures';
 
 function model(artifact: unknown) {
     return projectFundamentalReport({ artifact: parseFundamentalServiceArtifact(artifact), reference, threadId: 'thread-1', ticker: 'EXAMPLE' });
@@ -12,6 +12,12 @@ function model(artifact: unknown) {
 
 describe('Fundamental report', () => {
     afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+    it('labels conditional quantiles and keeps their binding available for inspection', () => {
+        render(<FundamentalReport report={model(uncertaintyReport({ quantile_basis: conditionalQuantileBasis }))} />);
+        screen.getByText('Conditional on the retained base hypotheses');
+        screen.getByText(/Capital and reinvestment hypotheses remain fixed/);
+        screen.getByText(`Joint scenarios digest ${conditionalQuantileBasis.joint_scenarios_digest}`);
+    });
     it('shows canonical MC values and a distinct deterministic base without a synthetic price curve', () => {
         render(<FundamentalReport report={model(uncertaintyReport())} />);
         screen.getByText('Deterministic base per share');

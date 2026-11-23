@@ -8,6 +8,14 @@ export const baseHash = 'd'.repeat(64);
 export const snapshotDigest = 'e'.repeat(64);
 export const sourceHash = 'f'.repeat(64);
 export const timestamp = '2026-11-23T00:00:00Z';
+export const conditionalQuantileBasis: Contracts['FundamentalConditionalQuantileBasisV1'] = {
+    conditioning: 'retained_base_joint_hypotheses',
+    joint_scenarios_digest: rootDigest,
+    conditioning_assumptions_digest: baseDigest,
+    policy_version: 'conditional-fcff-monte-carlo-policy-v1',
+    sampled_paths: ['assumptions.forecast.revenue_growth[0]', 'assumptions.forecast.operating_margin[0]', 'assumptions.terminal_growth'],
+    hypothesis_probabilities: 'not_assigned',
+};
 
 export const identity: Contracts['FundamentalIdentityV1'] = {
     issuer_id: 'issuer-1', issuer_name: 'Example Corp', domicile: 'US', reporting_basis: 'us-gaap',

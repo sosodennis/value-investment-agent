@@ -445,6 +445,23 @@ const parseFundamentalConvergenceDiagnostics = object<Contracts['FundamentalConv
     minimum_valid_samples: optional(union(integer, nullValue)),
 });
 
+const sampledPaths: Parser<Contracts['FundamentalConditionalQuantileBasisV1']['sampled_paths']> = (value, context) => {
+    if (!Array.isArray(value) || value.length !== 3) throw new TypeError(`${context} must contain the three ordered sampled paths.`);
+    return [
+        literal('assumptions.forecast.revenue_growth[0]')(value[0], `${context}[0]`),
+        literal('assumptions.forecast.operating_margin[0]')(value[1], `${context}[1]`),
+        literal('assumptions.terminal_growth')(value[2], `${context}[2]`),
+    ];
+};
+const parseFundamentalConditionalQuantileBasis = object<Contracts['FundamentalConditionalQuantileBasisV1']>({
+    conditioning: literal('retained_base_joint_hypotheses'),
+    joint_scenarios_digest: digest,
+    conditioning_assumptions_digest: digest,
+    policy_version: literal('conditional-fcff-monte-carlo-policy-v1'),
+    sampled_paths: sampledPaths,
+    hypothesis_probabilities: literal('not_assigned'),
+});
+
 const parseFundamentalUncertaintyResult = object<Contracts['FundamentalUncertaintyResultV1']>({
     artifact_references: array(parseFundamentalServiceEvidenceReference),
     base: parseFundamentalCalculationResult,
@@ -456,6 +473,7 @@ const parseFundamentalUncertaintyResult = object<Contracts['FundamentalUncertain
     invalid_samples: integer,
     quantile_contract: optional(dictionary(text)),
     quantiles: optional(dictionary(decimal)),
+    quantile_basis: optional(union(parseFundamentalConditionalQuantileBasis, nullValue)),
     requested_samples: integer,
     result_hash: digest,
     sampler_version: optional(union(text, nullValue)),

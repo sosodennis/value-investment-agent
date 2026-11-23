@@ -2176,6 +2176,34 @@ export interface components {
             /** Value */
             value: string | boolean | components["schemas"]["FundamentalMissingValueV1"];
         };
+        /** FundamentalConditionalQuantileBasisV1 */
+        FundamentalConditionalQuantileBasisV1: {
+            /**
+             * Conditioning
+             * @constant
+             */
+            conditioning: "retained_base_joint_hypotheses";
+            /** Conditioning Assumptions Digest */
+            conditioning_assumptions_digest: string;
+            /**
+             * Hypothesis Probabilities
+             * @constant
+             */
+            hypothesis_probabilities: "not_assigned";
+            /** Joint Scenarios Digest */
+            joint_scenarios_digest: string;
+            /**
+             * Policy Version
+             * @constant
+             */
+            policy_version: "conditional-fcff-monte-carlo-policy-v1";
+            /** Sampled Paths */
+            sampled_paths: [
+                "assumptions.forecast.revenue_growth[0]",
+                "assumptions.forecast.operating_margin[0]",
+                "assumptions.terminal_growth"
+            ];
+        };
         /** FundamentalConvergenceDiagnosticsV1 */
         FundamentalConvergenceDiagnosticsV1: {
             /** Converged */
@@ -2888,6 +2916,7 @@ export interface components {
              * @default 0
              */
             invalid_samples: number;
+            quantile_basis?: components["schemas"]["FundamentalConditionalQuantileBasisV1"] | null;
             /** Quantile Contract */
             quantile_contract?: {
                 [key: string]: string;

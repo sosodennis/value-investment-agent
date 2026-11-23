@@ -96,6 +96,15 @@ export function ValuationUncertainty({
                             {uncertainty.quality}
                         </Badge>
                     </div>
+                    {uncertainty.quantileBasis !== null && (
+                        <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
+                            <p className="font-medium">Conditional on the retained base hypotheses</p>
+                            <p className="mt-1 text-muted-foreground">
+                                Revenue growth, operating margin and terminal growth are sampled. Capital and
+                                reinvestment hypotheses remain fixed. The scenarios have no assigned probabilities.
+                            </p>
+                        </div>
+                    )}
                     {uncertainty.quantiles.length > 0 ? (
                         <>
                             <QuantileMarkers uncertainty={uncertainty} base={report.base.perShare} />
@@ -206,6 +215,13 @@ export function ValuationUncertainty({
                                 {uncertainty.samplerVersion ?? 'Unavailable'} · invalid draw policy{' '}
                                 {uncertainty.invalidDrawPolicy ?? 'Unavailable'}
                             </p>
+                            {uncertainty.quantileBasis !== null && (
+                                <div className="space-y-1 break-all">
+                                    <p>Conditional policy {uncertainty.quantileBasis.policy_version}</p>
+                                    <p>Joint scenarios digest {uncertainty.quantileBasis.joint_scenarios_digest}</p>
+                                    <p>Conditioning assumptions digest {uncertainty.quantileBasis.conditioning_assumptions_digest}</p>
+                                </div>
+                            )}
                             {uncertainty.invalidReasons.length > 0 && (
                                 <ul className="space-y-1">
                                     {uncertainty.invalidReasons.map((reason) => (
