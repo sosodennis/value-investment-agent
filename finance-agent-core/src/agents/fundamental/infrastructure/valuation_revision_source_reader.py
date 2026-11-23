@@ -70,7 +70,7 @@ class ArtifactFundamentalRevisionSourceReader:
             != source.thread_id
         ):
             raise self._not_found()
-        if not await self._artifacts.is_referenced_artifact_for_run(
+        if not await self._artifacts.is_agent_output_for_run(
             artifact_id=source.artifact_id,
             thread_id=source.thread_id,
             run_id=source.run_id,

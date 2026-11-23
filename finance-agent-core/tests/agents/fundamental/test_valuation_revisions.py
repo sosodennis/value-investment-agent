@@ -3,9 +3,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import uuid
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import delete
 
 from src.agents.fundamental.application.fundamental_service_port import (
     FundamentalServiceFailure,
@@ -32,7 +35,16 @@ from src.analysis_runtime.application.execution_context import (
     set_workflow_execution_context,
 )
 from src.artifacts.domain.record import ArtifactRecord
+from src.artifacts.infrastructure.sqlalchemy_repository import (
+    SqlAlchemyArtifactRepository,
+)
 from src.artifacts.public import ArtifactService, build_artifact_envelope
+from src.infrastructure.database import AsyncSessionLocal, init_db
+from src.infrastructure.models import (
+    Artifact,
+    WorkflowActivityEvent,
+    WorkflowRunHistory,
+)
 from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.shared.artifacts.fundamental_contracts import (
     FundamentalValuationPreparationResultV1,
@@ -477,8 +489,15 @@ class _ArtifactRepository:
     async def get_thread_id(self, artifact_id):
         return self.thread_id if artifact_id == self.artifact_id else None
 
+    async def is_agent_output_for_run(self, *, artifact_id, thread_id, run_id):
+        return self.referenced and (artifact_id, thread_id, run_id) == (
+            self.artifact_id,
+            self.thread_id,
+            self.run_id,
+        )
+
     async def is_referenced_artifact_for_run(self, **_kwargs):
-        return self.referenced
+        return False
 
     async def get_by_id(self, artifact_id):
         self.content_reads += 1
@@ -658,6 +677,141 @@ async def test_reader_enforces_owner_run_artifact_and_complete_content(
     assert repository.content_reads == (
         1 if mutation in {"missing", "truncated"} else 0
     )
+
+
+@pytest.mark.skipif(
+    os.getenv("FUNDAMENTAL_REVISION_POSTGRES_TEST") != "1",
+    reason="requires the isolated PostgreSQL integration project",
+)
+async def test_real_repository_reads_direct_output_and_refuses_child_source(
+    published_source,
+):
+    _, raw, report = published_source
+    await init_db()
+    thread_id, run_id, artifact_id, child_id, parent_id = (
+        str(uuid.uuid4()) for _ in range(5)
+    )
+    now = _NOW.replace(tzinfo=None)
+    source = FundamentalValuationRevisionSourceV1.model_validate(
+        {
+            **_revision(report)["revision"]["source"],
+            "thread_id": thread_id,
+            "run_id": run_id,
+            "artifact_id": artifact_id,
+        }
+    )
+    repository = SqlAlchemyArtifactRepository()
+
+    async def owns_thread(subject_id, requested_thread):
+        return subject_id == _PRINCIPAL.subject_id and requested_thread == thread_id
+
+    reader = ArtifactFundamentalRevisionSourceReader(
+        artifacts=ArtifactService(repository), owns_thread=owns_thread
+    )
+    try:
+        async with AsyncSessionLocal() as session:
+            session.add(
+                WorkflowRunHistory(
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    principal_id=_PRINCIPAL.subject_id,
+                    organization_id=_PRINCIPAL.organization_id,
+                    membership_id=_PRINCIPAL.membership_id,
+                    status="completed",
+                )
+            )
+            for saved_id in (artifact_id, child_id):
+                session.add(
+                    Artifact(
+                        id=saved_id,
+                        thread_id=thread_id,
+                        type="financial_reports",
+                        data=build_artifact_envelope(
+                            kind="financial_reports",
+                            produced_by="fundamental",
+                            data=raw,
+                        ).model_dump(mode="json"),
+                    )
+                )
+            session.add(
+                Artifact(
+                    id=parent_id,
+                    thread_id=thread_id,
+                    type="news_items",
+                    data=build_artifact_envelope(
+                        kind="news_items",
+                        produced_by="news",
+                        data={"artifact_refs": {"chart_data_id": child_id}},
+                    ).model_dump(mode="json"),
+                )
+            )
+            for seq, output_id in enumerate((artifact_id, parent_id), start=1):
+                session.add(
+                    WorkflowActivityEvent(
+                        event_id=str(uuid.uuid4()),
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        seq_id=seq,
+                        event_version="v1",
+                        event_name="workflow.agent_output",
+                        occurred_at=now,
+                        payload={"artifact_id": output_id},
+                    )
+                )
+            await session.commit()
+        assert (
+            await reader.read_source(
+                source, principal=_PRINCIPAL, current_thread_id=thread_id
+            )
+            == report
+        )
+        assert await repository.is_referenced_artifact_for_run(
+            artifact_id=child_id, thread_id=thread_id, run_id=run_id
+        )
+        for changed_source, principal in (
+            (source.model_copy(update={"artifact_id": child_id}), _PRINCIPAL),
+            (source.model_copy(update={"run_id": "unrelated-run"}), _PRINCIPAL),
+            (
+                source,
+                InternalPrincipal(
+                    subject_id=_PRINCIPAL.subject_id,
+                    organization_id="other-org",
+                    membership_id=_PRINCIPAL.membership_id,
+                ),
+            ),
+            (
+                source,
+                InternalPrincipal(
+                    subject_id="other-owner",
+                    organization_id=_PRINCIPAL.organization_id,
+                    membership_id=_PRINCIPAL.membership_id,
+                ),
+            ),
+        ):
+            with pytest.raises(FundamentalServiceFailure) as error:
+                await reader.read_source(
+                    changed_source, principal=principal, current_thread_id=thread_id
+                )
+            assert error.value.code == "REVISION_SOURCE_NOT_FOUND"
+        saved = await repository.get_by_id(artifact_id)
+        assert saved is not None
+        assert saved.envelope.data == raw
+    finally:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(WorkflowActivityEvent).where(
+                    WorkflowActivityEvent.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowRunHistory).where(
+                    WorkflowRunHistory.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(Artifact).where(Artifact.thread_id == thread_id)
+            )
+            await session.commit()
 
 
 async def test_source_storage_failure_has_a_typed_retryable_outcome(published_source):
