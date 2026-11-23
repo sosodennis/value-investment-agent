@@ -3,11 +3,11 @@
   "issue": 462,
   "status": "WIP",
   "branch": "codex/issue-462-fundamental-report",
-  "commit": "97037435327b9a022dd2bf87796e25a35d180661",
+  "commit": "8f51fd3c5ea0397c08536bd2493e4f6d547c95a0",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent",
-    "browser_session": "iab:5:issue462-final-resource-retry",
+    "browser_session": "iab:7,8:issue462-mapping-contract-final",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-462-app",
@@ -68,7 +68,7 @@
     }
   ],
   "blockers": [
-    "#463/#465/#466/#467/#468/#469 owner fixes are integrated; final exact-runtime/browser acceptance, independent verdict, CI and merge-SHA smoke remain pending."
+    "Owner fixes #463/#465/#466/#467/#468/#469/#470 integrated. Final browser acceptance, independent verdict, final CI and merge-SHA smoke remain pending."
   ],
-  "next_step": "Restore only the recorded owned stacks after external container removal; retry preparation with child parser 3 GiB/container 4 GiB/concurrency 1, preserving original resource refusal, then final browser acceptance and review."
+  "next_step": "Run exact-source backend/frontend at 8f51fd3c against prepared SEC release b6224b61a0aa631bebf2f74bc3902150b786e1b43620679381199e1ba7baeab6. Verify manual/auto MC, rejection, revision, evidence and history."
 }
