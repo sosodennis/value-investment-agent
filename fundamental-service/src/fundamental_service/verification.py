@@ -133,14 +133,6 @@ def independent_calculate(
             "MODEL_VERSION_UNSUPPORTED",
             "the FCFF graph requires an exact executable version",
         )
-    if request.model_id == "transition_fcff_dcf" and (
-        "filed_operating_evidence" not in request.historical_facts
-    ):
-        raise VerificationRefusal(
-            "TRANSITION_EVIDENCE_MISSING",
-            "guarded transition DCF requires filed operating evidence",
-        )
-
     assumptions = request.assumptions
     wacc = assumptions.wacc
     growth = assumptions.terminal_growth
