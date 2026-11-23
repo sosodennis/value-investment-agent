@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Copy, ExternalLink, FileSearch, PanelRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -102,23 +102,26 @@ export function EvidenceInspector({
     selected,
     onSelect,
     className,
+    headerAction,
 }: {
     items: EvidenceSelection[];
     selected: EvidenceSelection | null;
     onSelect: (item: EvidenceSelection) => void;
     className?: string;
+    headerAction?: ReactNode;
 }) {
     return (
         <aside aria-label="Evidence inspector" className={cn('flex min-h-0 min-w-0 flex-col bg-muted/10', className)}>
-            <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-                <div className="flex items-center gap-2">
-                    <FileSearch aria-hidden="true" className="size-4 text-primary" />
-                    <div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <FileSearch aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
                         <h2 className="text-sm font-semibold">Evidence inspector</h2>
                         <p className="text-xs text-muted-foreground">Select a report value to inspect its source.</p>
                     </div>
                 </div>
-                <Badge variant="outline">{items.length} items</Badge>
+                <Badge variant="outline" className="shrink-0">{items.length} items</Badge>
+                {headerAction}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
                 {selected ? <EvidenceDetail key={selected.id} item={selected} /> : null}
