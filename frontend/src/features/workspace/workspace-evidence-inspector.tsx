@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Copy, ExternalLink, FileSearch, PanelRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -155,8 +155,15 @@ export function EvidenceInspector({
 function EvidenceDetail({ item }: { item: EvidenceSelection }) {
     const rawId = useId();
     const rawField = useRef<HTMLTextAreaElement>(null);
+    const displayField = useRef<HTMLTextAreaElement>(null);
     const [copy, setCopy] = useState<{ kind: 'idle' } | { kind: 'pending' | 'copied' | 'failed'; target: 'raw' | 'display' }>({ kind: 'idle' });
     const sourceUrl = safeSourceUrl(item.sourceUrl);
+    useEffect(() => {
+        if (copy.kind !== 'failed') return;
+        const field = copy.target === 'raw' ? rawField.current : displayField.current;
+        field?.focus();
+        field?.select();
+    }, [copy]);
     async function copyValue(target: 'raw' | 'display') {
         setCopy({ kind: 'pending', target });
         try {
@@ -164,8 +171,6 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
             setCopy({ kind: 'copied', target });
         } catch {
             setCopy({ kind: 'failed', target });
-            rawField.current?.focus();
-            rawField.current?.select();
         }
     }
     return (
@@ -184,9 +189,9 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                         <Button type="button" variant="outline" size="sm" disabled={copy.kind === 'pending'} onClick={() => void copyValue('display')}><Copy aria-hidden="true" />Copy displayed value</Button>
                     </div>
                     <p role="status" className="mt-2 text-xs text-muted-foreground">
-                        {copy.kind === 'copied' ? `${copy.target === 'raw' ? 'Original' : 'Displayed'} value copied.` : copy.kind === 'failed' ? 'Clipboard unavailable. Select the original value above and copy it manually.' : copy.kind === 'pending' ? 'Copying value…' : ''}
+                        {copy.kind === 'copied' ? `${copy.target === 'raw' ? 'Original' : 'Displayed'} value copied.` : copy.kind === 'failed' ? `Clipboard unavailable. Select the ${copy.target === 'raw' ? 'original value above' : 'displayed value below'} and copy it manually.` : copy.kind === 'pending' ? 'Copying value…' : ''}
                     </p>
-                    {copy.kind === 'failed' && copy.target === 'display' && <Textarea aria-label="Displayed value for manual copy" readOnly value={item.displayValue ?? item.value} rows={2} className="mt-2 font-mono text-xs" />}
+                    {copy.kind === 'failed' && copy.target === 'display' && <Textarea ref={displayField} aria-label="Displayed value for manual copy" readOnly value={item.displayValue ?? item.value} rows={2} className="mt-2 font-mono text-xs" />}
                 </div>
                 <dl className="grid gap-2 text-xs">
                     <EvidenceField label="Source" value={item.source} />
@@ -200,17 +205,25 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Data quality" value={item.dataQuality} />
                     <EvidenceField label="Assumption method" value={item.assumptionMethod} />
                     <EvidenceField label="Evidence assessment" value={item.confidence} />
+                    <EvidenceField label="Inputs" value={item.inputs?.join(', ') || undefined} />
+                    <EvidenceField label="Dimensions" value={item.dimensions?.join(', ') || undefined} />
+                    <EvidenceField label="Concept" value={factMetadataValue(item, item.concept)} />
+                    <EvidenceField label="Accession" value={factMetadataValue(item, item.accessionNumber)} />
+                    <EvidenceField label="Unit" value={factMetadataValue(item, item.unit)} />
+                    <EvidenceField label="Source scale" value={item.scale === undefined ? undefined : String(item.scale)} />
+                    <EvidenceField label="Issue codes" value={formatIssueCodes(item)} />
+                </dl>
+                <details className="min-w-0 rounded-md border px-3 py-2 text-xs">
+                    <summary className="cursor-pointer font-medium">Technical identity</summary>
+                    <dl className="mt-3 grid gap-2">
                     <EvidenceField label="Thread" value={item.threadId} />
                     <EvidenceField label="Run" value={item.runId} />
                     <EvidenceField label="Artifact" value={item.artifactId} />
                     <EvidenceField label="Preparation" value={item.preparationDigest} />
+                    <EvidenceField label="Original automatic preparation digest" value={item.originalPreparationDigest} />
                     <EvidenceField label="Input digest" value={item.inputDigest} />
                     <EvidenceField label="Result hash" value={item.resultHash} />
-                    <EvidenceField label="Inputs" value={item.inputs?.join(', ') || undefined} />
-                    <EvidenceField label="Dimensions" value={item.dimensions?.join(', ') || undefined} />
                     <EvidenceField label="Fact ID" value={item.factId} />
-                    <EvidenceField label="Concept" value={factMetadataValue(item, item.concept)} />
-                    <EvidenceField label="Accession" value={factMetadataValue(item, item.accessionNumber)} />
                     <EvidenceField label="Filed at" value={factMetadataValue(item, item.filedAt)} />
                     <EvidenceField label="Available at" value={factMetadataValue(item, item.availableAt)} />
                     <EvidenceField label="Captured at" value={factMetadataValue(item, item.capturedAt)} />
@@ -221,10 +234,8 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Source hash" value={factMetadataValue(item, item.sourceHash)} />
                     <EvidenceField label="Snapshot" value={factMetadataValue(item, item.snapshotId)} />
                     <EvidenceField label="Snapshot manifest" value={factMetadataValue(item, item.snapshotManifestDigest)} />
-                    <EvidenceField label="Unit" value={factMetadataValue(item, item.unit)} />
-                    <EvidenceField label="Source scale" value={item.scale === undefined ? undefined : String(item.scale)} />
-                    <EvidenceField label="Issue codes" value={formatIssueCodes(item)} />
-                </dl>
+                    </dl>
+                </details>
                 {sourceUrl && <Button asChild variant="outline" size="sm" className="justify-start"><a href={sourceUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />Open source document</a></Button>}
                 {item.artifactUrl ? (
                     <Button asChild variant="outline" size="sm" className="justify-start">

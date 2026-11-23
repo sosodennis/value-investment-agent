@@ -67,6 +67,7 @@ describe('buildEvidenceItems', () => {
         const inventory = screen.getByText('Browse all evidence (2)');
         expect(detail.compareDocumentPosition(inventory) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(inventory.closest('details')?.open).toBe(false);
+        expect(screen.getByText('Technical identity').closest('details')?.open).toBe(false);
         await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy original value' })));
         expect(writeText).toHaveBeenCalledWith(first.value);
         screen.getByText('Original value copied.');
@@ -94,6 +95,10 @@ describe('buildEvidenceItems', () => {
         expect(raw.value.slice(raw.selectionStart, raw.selectionEnd)).toBe(item.value);
         writeText.mockRejectedValueOnce(new Error('Permission denied'));
         await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy displayed value' })));
-        expect(screen.getByLabelText('Displayed value for manual copy')).toHaveProperty('value', item.displayValue);
+        const displayed = screen.getByLabelText<HTMLTextAreaElement>('Displayed value for manual copy');
+        expect(displayed.value).toBe(item.displayValue);
+        expect(document.activeElement).toBe(displayed);
+        expect(displayed.value.slice(displayed.selectionStart, displayed.selectionEnd)).toBe(item.displayValue);
+        screen.getByText('Clipboard unavailable. Select the displayed value below and copy it manually.');
     });
 });

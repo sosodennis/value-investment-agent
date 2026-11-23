@@ -22,6 +22,7 @@ describe('Fundamental number presentation', () => {
         ['-0.000', ratio, '0.00%'],
         ['1.25', ratio, '125.00%'],
         ['331839000000', money, 'USD 331.84B'],
+        ['999999.995', money, 'USD 1.00M'],
         ['999995000', money, 'USD 1.00B'],
         ['999995000000', money, 'USD 1.00T'],
         ['1000000000000000000000000', money, 'USD 1.00e+24'],
@@ -43,10 +44,12 @@ describe('Fundamental number presentation', () => {
         expect(assumptionNumberSemantic('assumptions.wacc.beta', 'USD')).toEqual({ kind: 'beta' });
         expect(assumptionNumberSemantic('assumptions.forecast.reinvestment_rate[4]', 'USD')).toEqual(ratio);
         expect(factNumberSemantic('revenue', 'USD', 'iso4217:USD')).toEqual(money);
+        expect(nodeNumberSemantic('beta', 'ratio', 'USD')).toEqual({ kind: 'beta' });
         expect(nodeNumberSemantic('per_share_value', 'currency/share', 'USD')).toEqual(perShare);
         expect(formatReportNumber('0.6', assumptionNumberSemantic('unknown.growth', 'USD'))).toBe('0.6 · Format not defined');
     });
     it('keeps a common table unit and extends the whole series precision for small nonzero values', () => {
+        expect(formatReportSeries(['0.0492', '0.40'], ratio).values).toEqual(['4.92%', '40.00%']);
         const series = formatReportSeries(['331839000000', '30000'], money);
         expect(series.values).toEqual(['331.839000', '0.000030']);
         expect(series.precision).toBe(6);

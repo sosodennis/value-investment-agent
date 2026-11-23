@@ -43,11 +43,11 @@ export function assumptionNumberSemantic(path: string, currency: string): Number
 }
 
 export function nodeNumberSemantic(nodeId: string, unit: string, currency: string): NumberSemantic {
+    if (nodeId === 'beta') return { kind: 'beta' };
     if (unit === 'rate' || unit === 'ratio') return { kind: 'ratio' };
     if (unit === 'currency/share' || unit === `${currency}/share` || unit === `${currency} / share`) return { kind: 'per-share', currency };
     if (unit === 'currency' || unit === currency || unit === `iso4217:${currency}`) return { kind: 'money', currency };
     if (unit === 'shares' || unit === 'xbrli:shares') return { kind: 'shares' };
-    if (nodeId === 'beta') return { kind: 'beta' };
     return { kind: 'unclassified', unit };
 }
 
@@ -112,7 +112,8 @@ export function formatReportNumber(raw: string, semantic: NumberSemantic, contex
         : semantic.kind === 'basis-points' ? ' bps' : semantic.kind === 'shares' && unit ? ' shares'
             : semantic.kind === 'per-share' && unit ? ' / share' : '';
     const rateShift = semantic.kind === 'ratio' || semantic.kind === 'percentage-points' ? 2 : semantic.kind === 'basis-points' ? 4 : 0;
-    let scale = context.moneyScale ?? 0;
+    const scalable = semantic.kind === 'money' || semantic.kind === 'shares';
+    let scale = scalable ? context.moneyScale ?? 0 : 0;
     const compact = context.moneyScale === undefined && (semantic.kind === 'money' || semantic.kind === 'shares');
     if (compact) {
         const power = magnitude(original);
@@ -122,8 +123,8 @@ export function formatReportNumber(raw: string, semantic: NumberSemantic, contex
     if (semantic.kind !== 'count' && magnitude(original) >= BigInt(15)) return `${prefix}${scientific(context.moneyScale === undefined ? shifted(original, rateShift) : value)}${suffix}`;
     const preferred = context.precision ?? (semantic.kind === 'count' ? 0 : 2);
     let precision = context.precision ?? nonzeroPrecision(value, preferred);
-    if (compact && scale < 12 && scale > 0 && precision !== null && coefficient(value, precision) >= BigInt(1000) * (BigInt(10) ** BigInt(precision))) {
-        scale = scale === 6 ? 9 : 12;
+    if (compact && scale < 12 && precision !== null && coefficient(value, precision) >= BigInt(scale === 0 ? 1000000 : 1000) * (BigInt(10) ** BigInt(precision))) {
+        scale = scale === 0 ? 6 : scale === 6 ? 9 : 12;
         value = shifted(original, -scale);
         precision = context.precision ?? nonzeroPrecision(value, preferred);
     }
@@ -142,7 +143,7 @@ export function formatReportDatum(datum: ReportDatum): string {
 }
 
 export function formatReportSeries(raws: readonly string[], semantic: NumberSemantic, moneyScale: 0 | 6 | 9 | 12 = 9) {
-    const shift = semantic.kind === 'ratio' ? 2 : semantic.kind === 'money' ? -moneyScale : 0;
+    const shift = semantic.kind === 'ratio' ? 2 : semantic.kind === 'money' || semantic.kind === 'shares' ? -moneyScale : 0;
     const needsPrecision = raws.some((raw) => nonzeroPrecision(shifted(decimal(raw), shift), 2) !== 2);
     const precision = needsPrecision ? 6 : 2;
     return {
