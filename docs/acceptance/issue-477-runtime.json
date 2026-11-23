@@ -7,7 +7,7 @@
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-477-fundamental-report-ui/value-investment-agent",
-    "browser_session": "Main Playwright live-c46d9fba isolated contexts;native Chrome dedicated477 window;independent read-only session independent-review-d1975fef-8900-49e3-8774-af685cf1e7df (closed)",
+    "browser_session": "Final Playwright live-541c8a9c /runner pid27190 /six isolated per-test contexts (closed);native Chrome dedicated477 window retained;earlier live-c46d9fba and independent-review-d1975fef-8900-49e3-8774-af685cf1e7df contexts closed",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-477-app",
@@ -117,6 +117,12 @@
       "status": "not_run",
       "command": "Actual VoiceOver heading/value/status/focus observation",
       "evidence": "Process running was observed;spoken output/caption could not be verified by CUA;human observation pending"
+    },
+    {
+      "name": "metadata_head_preflight",
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-477-runtime.json REQUIRE_SEC_IDENTITY_RESOLUTION=1 scripts/acceptance_preflight.sh",
+      "evidence": "preflight-metadata-9cbeb164.log;exit0;metadata descendant of541c8a9c;onlyissue477 acceptance md/json changed"
     }
   ],
   "blockers": [
