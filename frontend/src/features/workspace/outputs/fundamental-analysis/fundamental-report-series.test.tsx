@@ -5,6 +5,7 @@ import { projectFundamentalReport } from './fundamental-report-model';
 import { projectForecastSeries, projectHistoricalSeries } from './fundamental-report-series';
 import { calculation, canonicalFact, factsOnlyReport, reference, valuationReport } from './fundamental-report.test-fixtures';
 import { ValuationForecast, ValuationHistory } from './valuation-series';
+import { FinancialFactsTable } from './financial-facts-table';
 
 function project(artifact: unknown) {
     return projectFundamentalReport({ artifact: parseFundamentalServiceArtifact(artifact), reference, threadId: 'thread-1', ticker: 'EXAMPLE' });
@@ -61,6 +62,45 @@ describe('Fundamental series reading', () => {
         render(<ValuationHistory report={report} />);
         screen.getByRole('figure', { name: 'Revenue trend' });
         screen.getByText('2024-01-01 → 2024-12-31; 2025-01-01 → 2025-12-31', { exact: false });
+    });
+
+    it.each(['shares', 'ratio', 'unsupported-unit', 'iso4217:EUR'])('withholds uniformly unsupported monetary unit %s and keeps raw facts inspectable', (unit) => {
+        const facts = [2024, 2025].map((year) => {
+            const fact = annualFact(year, { value: '123456789', unit });
+            return { ...fact, context: { ...fact.context, unit_qname: unit, measure: unit } };
+        });
+        const report = historicalReport(facts);
+        const history = projectHistoricalSeries(report)[0];
+        expect(history).toMatchObject({ kind: 'unavailable', reasons: expect.arrayContaining(['A numeric monetary value is missing or has unsupported units.']) });
+        const onSelectEvidence = vi.fn();
+        render(<><ValuationHistory report={report} /><FinancialFactsTable facts={report.facts} onSelectEvidence={onSelectEvidence} /></>);
+        expect(screen.queryByRole('figure', { name: 'Revenue trend' })).toBeNull();
+        expect(screen.queryByText('USD 123.46M')).toBeNull();
+        expect(screen.getAllByText(`123456789 ${unit} · Format not defined`)).toHaveLength(2);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Inspect Service fact · revenue' })[0]);
+        expect(onSelectEvidence).toHaveBeenCalledWith(expect.objectContaining({ value: '123456789', unit, displayValue: `123456789 ${unit} · Format not defined` }));
+        expect(report.facts).toHaveLength(2);
+    });
+
+    it.each(['unit_qname', 'measure'] satisfies ('unit_qname' | 'measure')[])('withholds a trend when both annual contexts have the same conflicting %s', (key) => {
+        const facts = [2024, 2025].map((year) => {
+            const fact = annualFact(year, { value: '123456789' });
+            return { ...fact, context: { ...fact.context, [key]: 'iso4217:EUR' } };
+        });
+        const report = historicalReport(facts);
+        expect(report.facts.every((fact) => fact.evidence.displayValue === '123456789 USD · Format not defined')).toBe(true);
+        expect(projectHistoricalSeries(report)[0]).toMatchObject({ kind: 'unavailable', reasons: expect.arrayContaining(['A numeric monetary value is missing or has unsupported units.']) });
+        render(<ValuationHistory report={report} />);
+        expect(screen.queryByRole('figure', { name: 'Revenue trend' })).toBeNull();
+        screen.getByText('Revenue · trend unavailable');
+    });
+
+    it('withholds internally consistent foreign-currency facts from a report in another currency', () => {
+        const facts = [2024, 2025].map((year) => {
+            const fact = annualFact(year, { currency: 'EUR', unit: 'iso4217:EUR' });
+            return { ...fact, context: { ...fact.context, unit_qname: 'iso4217:EUR', measure: 'iso4217:EUR' } };
+        });
+        expect(projectHistoricalSeries(historicalReport(facts))[0]).toMatchObject({ kind: 'unavailable', reasons: expect.arrayContaining(['Fact and report currencies must agree.']) });
     });
 
     it('rejects consistently instant revenue facts rather than treating snapshots as income periods', () => {

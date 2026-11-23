@@ -55,6 +55,7 @@ function comparableHistory(report: FundamentalReportModel, field: typeof HISTORY
     if (first && facts.some((fact) => contextKey(fact) !== contextKey(first))) reasons.add('Issuer, security, consolidation, currency, unit, period type, concept or dimensions differ.');
     if (facts.some((fact) => fact.context.issuerId !== report.issuerId || fact.context.entityScope !== fact.context.issuerId || fact.context.consolidationScope !== 'consolidated')) reasons.add('Consolidated issuer coverage is not established.');
     if (facts.some((fact) => fact.value.kind !== 'number' || fact.value.semantic.kind !== 'money')) reasons.add('A numeric monetary value is missing or has unsupported units.');
+    if (facts.some((fact) => fact.currency !== report.currency || (fact.value.kind === 'number' && fact.value.semantic.kind === 'money' && fact.value.semantic.currency !== fact.currency))) reasons.add('Fact and report currencies must agree.');
     if (facts.some((fact) => !fact.context.accession || !fact.context.filingVersion)) reasons.add('Filing version or accession metadata is unavailable.');
     if (facts.some((fact) => fact.context.isAmendment && (!fact.context.amendsAccession || fact.context.amendmentScope !== 'valuation_relevant'))) reasons.add('Amendment lineage is unresolved.');
     if (new Set(facts.map((fact) => fact.context.end)).size !== facts.length) reasons.add('Multiple facts or filing versions cover the same period.');

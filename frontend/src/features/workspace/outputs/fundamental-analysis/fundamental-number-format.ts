@@ -1,3 +1,5 @@
+import type { components } from '@/types/generated/api-contract';
+
 export type NumberSemantic =
     | { kind: 'money' | 'per-share'; currency: string }
     | { kind: 'ratio' | 'beta' | 'shares' | 'count' | 'year' | 'percentage-points' | 'basis-points' }
@@ -11,6 +13,7 @@ export type ReportDatum =
 
 type Decimal = { negative: boolean; digits: string; exponent: bigint };
 type FormatContext = { precision?: number; moneyScale?: 0 | 6 | 9 | 12; includeUnit?: boolean };
+type FactNumberSource = Pick<components['schemas']['FundamentalCanonicalFactV1'], 'normalized_field' | 'currency' | 'unit' | 'context'>;
 
 const MONEY_FIELDS = new Set([
     'revenue', 'cash_and_equivalents', 'income_before_tax', 'income_tax_expense', 'inventory',
@@ -28,9 +31,10 @@ const RATE_PATHS = new Set([
 ]);
 const CAPITAL_MONEY_PATHS = new Set(['cash', 'non_operating_assets', 'debt', 'preferred_stock', 'lease_liabilities', 'non_controlling_interest'].map((key) => `assumptions.capital_bridge.${key}`));
 
-export function factNumberSemantic(field: string, currency: string | null, unit: string): NumberSemantic {
-    if (SHARE_FIELDS.has(field)) return { kind: 'shares' };
-    if (MONEY_FIELDS.has(field) && currency) return { kind: 'money', currency };
+export function factNumberSemantic({ normalized_field: field, currency, unit, context }: FactNumberSource): NumberSemantic {
+    const units = [unit, context.unit_qname, context.measure];
+    if (SHARE_FIELDS.has(field) && units.every((value) => value === 'shares' || value === 'xbrli:shares')) return { kind: 'shares' };
+    if (MONEY_FIELDS.has(field) && currency && /^[A-Z]{3}$/.test(currency) && units.every((value) => value === currency || value === `iso4217:${currency}`)) return { kind: 'money', currency };
     if (field === 'fiscal_year') return { kind: 'year' };
     return { kind: 'unclassified', unit };
 }

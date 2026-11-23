@@ -209,7 +209,7 @@ function evidenceIdentity(identity: FundamentalReportIdentity) {
 function factModel(fact: Fact, snapshotId: string, snapshotDigest: string, identity: FundamentalReportIdentity): FundamentalFactModel {
     const label = fact.normalized_field.replaceAll('_', ' ');
     const value: ReportDatum = typeof fact.value === 'string' ? isFundamentalDecimalText(fact.value)
-        ? { kind: 'number', raw: fact.value, semantic: factNumberSemantic(fact.normalized_field, fact.currency ?? null, fact.unit) }
+        ? { kind: 'number', raw: fact.value, semantic: factNumberSemantic(fact) }
         : { kind: 'text', value: fact.value }
         : typeof fact.value === 'boolean' ? { kind: 'boolean', value: fact.value }
             : { kind: 'unavailable', status: fact.value.status, reason: fact.value.reason };

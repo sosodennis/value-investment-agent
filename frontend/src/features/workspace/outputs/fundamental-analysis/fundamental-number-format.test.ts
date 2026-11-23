@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assumptionNumberSemantic, factNumberSemantic, formatReportDatum, formatReportNumber, formatReportSeries, nodeNumberSemantic, type NumberSemantic } from './fundamental-number-format';
+import { canonicalFact } from './fundamental-report.test-fixtures';
 
 const perShare: NumberSemantic = { kind: 'per-share', currency: 'USD' };
 const money: NumberSemantic = { kind: 'money', currency: 'USD' };
@@ -43,10 +44,43 @@ describe('Fundamental number presentation', () => {
         expect(formatReportNumber('-0.0242', { kind: 'basis-points' })).toBe('−242.00 bps');
         expect(assumptionNumberSemantic('assumptions.wacc.beta', 'USD')).toEqual({ kind: 'beta' });
         expect(assumptionNumberSemantic('assumptions.forecast.reinvestment_rate[4]', 'USD')).toEqual(ratio);
-        expect(factNumberSemantic('revenue', 'USD', 'iso4217:USD')).toEqual(money);
+        expect(factNumberSemantic(canonicalFact({ unit: 'iso4217:USD' }))).toEqual(money);
         expect(nodeNumberSemantic('beta', 'ratio', 'USD')).toEqual({ kind: 'beta' });
         expect(nodeNumberSemantic('per_share_value', 'currency/share', 'USD')).toEqual(perShare);
         expect(formatReportNumber('0.6', assumptionNumberSemantic('unknown.growth', 'USD'))).toBe('0.6 · Format not defined');
+    });
+    it.each(['USD', 'iso4217:USD'])('formats monetary facts only when %s agrees with currency and context', (unit) => {
+        const fact = canonicalFact({ unit });
+        expect(formatReportNumber('123456789', factNumberSemantic(fact))).toBe('USD 123.46M');
+    });
+    it.each(['shares', 'xbrli:shares'])('formats share facts only when all source units prove %s', (unit) => {
+        const fact = canonicalFact({ normalized_field: 'common_shares_outstanding', currency: null, unit });
+        fact.context = { ...fact.context, unit_qname: 'xbrli:shares', measure: 'xbrli:shares' };
+        expect(formatReportNumber('7532000000', factNumberSemantic(fact))).toBe('7.53B shares');
+    });
+    it.each(['shares', 'ratio', 'unsupported-unit', 'iso4217:EUR', 'currency'])('keeps monetary raw text and the true unsupported unit %s', (unit) => {
+        const fact = canonicalFact({ unit });
+        fact.context = { ...fact.context, unit_qname: unit, measure: unit };
+        expect(formatReportNumber('123456789', factNumberSemantic(fact))).toBe(`123456789 ${unit} · Format not defined`);
+    });
+    it.each(['USD', 'ratio', 'unsupported-unit'])('does not infer shares from a field name with unit %s', (unit) => {
+        const fact = canonicalFact({ normalized_field: 'common_shares_outstanding', unit });
+        fact.context = { ...fact.context, unit_qname: unit, measure: unit };
+        expect(formatReportNumber('123456789', factNumberSemantic(fact))).toBe(`123456789 ${unit} · Format not defined`);
+    });
+    it.each(['unit_qname', 'measure'] satisfies ('unit_qname' | 'measure')[])('requires monetary %s to match the declared currency', (key) => {
+        const fact = canonicalFact();
+        fact.context = { ...fact.context, [key]: 'iso4217:EUR' };
+        expect(formatReportNumber('123456789', factNumberSemantic(fact))).toBe('123456789 USD · Format not defined');
+    });
+    it.each(['unit_qname', 'measure'] satisfies ('unit_qname' | 'measure')[])('requires share %s to prove a share unit', (key) => {
+        const fact = canonicalFact({ normalized_field: 'common_shares_outstanding', currency: null, unit: 'xbrli:shares' });
+        fact.context = { ...fact.context, unit_qname: 'xbrli:shares', measure: 'xbrli:shares', [key]: 'iso4217:USD' };
+        expect(formatReportNumber('123456789', factNumberSemantic(fact))).toBe('123456789 xbrli:shares · Format not defined');
+    });
+    it('keeps monetary facts unclassified without a currency', () => {
+        const fact = canonicalFact({ currency: null });
+        expect(formatReportNumber('123456789', factNumberSemantic(fact))).toBe('123456789 USD · Format not defined');
     });
     it('keeps a common table unit and extends the whole series precision for small nonzero values', () => {
         expect(formatReportSeries(['0.0492', '0.40'], ratio).values).toEqual(['4.92%', '40.00%']);
