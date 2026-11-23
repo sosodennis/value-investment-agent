@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "issue": 462,
+  "status": "WIP",
+  "branch": "codex/issue-462-fundamental-report",
+  "commit": "92b22792d962898ac8a87960e00e5f2ba8837b57",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent",
+    "browser_session": "iab:1:issue462-registration-prerequisites",
+    "allowed_untracked_paths": [],
+    "app": {
+      "compose_project": "value-investment-agent-denniswong-462-app",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/docker-compose.yml",
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/docker-compose.override.yml",
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/compose/verification/docker-compose.issue325-app-fundamental.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/app-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/app.env",
+      "env_file_sha256": "3633e32d7bc4f234d3db0ab7c6e129c471973a14338ac4fddfd53b289b4a991a",
+      "service": "backend",
+      "container_port": 8000,
+      "published_port": 21680,
+      "url": "http://127.0.0.1:21680"
+    },
+    "fundamental": {
+      "compose_project": "value-investment-agent-denniswong-462-fundamental",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-462-fundamental-report/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/fundamental-overlay.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-462-fundamental-report/runtime/fundamental.env",
+      "env_file_sha256": "510b75f962aa6685227c124d645637a6641510059617a92a6312d749d0752a04",
+      "service": "fundamental-service",
+      "container_port": 8080,
+      "published_port": 21690,
+      "url": "http://127.0.0.1:21690"
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "exact_commit_preflight",
+      "status": "not_run",
+      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-462-runtime.json scripts/acceptance_preflight.sh"
+    },
+    {
+      "name": "browser_acceptance",
+      "status": "not_run",
+      "command": "Real browser default MC, controlled refusal, edit/recalculate and exact history compared with authenticated artifacts"
+    },
+    {
+      "name": "independent_source_review",
+      "status": "not_run",
+      "command": "Independent review of final source commit and relevant user behavior"
+    },
+    {
+      "name": "merge_sha_smoke",
+      "status": "not_run",
+      "command": "Ordinary main merge and browser/service smoke at actual merge SHA"
+    }
+  ],
+  "blockers": [
+    "https://github.com/sosodennis/value-investment-agent/issues/463: deployment selector is not wired to the configured active release."
+  ],
+  "next_step": "Complete A typed frontend projection and authentic default valuation/refusal acceptance, then B report reading, C source-bound revision, exact-commit checks and independent review. Runtime images currently contain baseline source; rebuild before implementation acceptance."
+}
