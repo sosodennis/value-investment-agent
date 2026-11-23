@@ -8,6 +8,8 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from pydantic import TypeAdapter
+
 from src.agents.fundamental.application.fundamental_service_port import (
     FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     FundamentalServiceClient,
@@ -22,9 +24,7 @@ from src.agents.fundamental.application.workflow_orchestrator.state_readers impo
     read_intent_state,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
-    FundamentalValuationEvidenceReadResultV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
@@ -37,6 +37,12 @@ from src.artifacts.public import (
     ArtifactReference,
     build_artifact_payload,
     to_artifact_reference_payload,
+)
+from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalFactsReadResultV1,
+    FundamentalServiceResultV1,
+    FundamentalValuationEvidenceReadResultV1,
 )
 from src.shared.internal_services import InternalPrincipal, get_request_principal
 from src.shared.kernel.correlation import resolve_correlation_id
@@ -79,42 +85,6 @@ _LEGACY_INPUT_FIELDS = frozenset(
         "intrinsic_value",
         "market_snapshot",
     }
-)
-_PROJECTION_FIELDS = (
-    "status",
-    "calculation_version",
-    "calculation_status",
-    "quality_status",
-    "input_digest",
-    "result_hash",
-    "intrinsic_value",
-    "per_share_value",
-    "nodes",
-    "assumptions",
-    "model_version",
-    "policy_version",
-    "policy_id",
-    "trace",
-    "issue_codes",
-    "missing_evidence",
-    "snapshot_id",
-    "evaluated_at",
-    "correlation_id",
-    "requested_samples",
-    "valid_samples",
-    "invalid_samples",
-    "invalid_reasons",
-    "invalid_draw_policy",
-    "seed",
-    "sampler_version",
-    "quantiles",
-    "quantile_contract",
-    "convergence_diagnostics",
-    "dominant_drivers",
-    "sensitivity",
-    "scenario_results",
-    "artifact_references",
-    "value_drivers",
 )
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _QUALITY_STATUSES = frozenset(
@@ -589,14 +559,14 @@ def _ticker_from_input(input_payload: Mapping[str, object]) -> str:
     return "UNKNOWN"
 
 
-def _uncertainty_projection(
+def _validate_uncertainty_binding(
     response: FundamentalServiceResponseV1,
     *,
     expected_input_digest: str,
     expected_seed: int,
     expected_samples: int,
     expected_invalid_draw_policy: str,
-) -> JSONObject:
+) -> None:
     result = _response_result(response)
     input_digest = result.get("input_digest")
     if not isinstance(input_digest, str) or not _DIGEST_PATTERN.fullmatch(input_digest):
@@ -698,18 +668,14 @@ def _uncertainty_projection(
             retryable=False,
             status_code=502,
         )
-    return _narrow_result(result)
 
 
-def _narrow_result(result: Mapping[str, object]) -> JSONObject:
-    projection: JSONObject = {}
-    for field in _PROJECTION_FIELDS:
-        if field in result:
-            projection[field] = result[field]
-    base = result.get("base")
-    if isinstance(base, Mapping):
-        projection["base"] = _narrow_result(base)
-    return projection
+def _parse_service_result(result: Mapping[str, object]) -> JSONObject:
+    return (
+        TypeAdapter(FundamentalServiceResultV1)
+        .validate_python(result)
+        .model_dump(mode="json", exclude_unset=True)
+    )
 
 
 def _required_fact_fields(input_payload: Mapping[str, object]) -> tuple[str, ...]:
@@ -1040,6 +1006,12 @@ async def _facts_only_projection(
     }
 
 
+def _base_calculation_quality(projection: Mapping[str, object]) -> object:
+    result = _as_mapping(projection["service_result"], context="service result")
+    base = _as_mapping(result.get("base", result), context="base calculation")
+    return base["quality_status"]
+
+
 def _service_valuation_artifact_payload(
     *,
     projection: Mapping[str, object],
@@ -1082,7 +1054,7 @@ def _service_valuation_artifact_payload(
                 "input": dict(quality),
                 "validation_status": validation_quality_status,
                 "facts_status": facts.get("quality_status"),
-                "calculation_status": projection.get("quality_status"),
+                "calculation_status": _base_calculation_quality(projection),
                 "issue_codes": facts.get("issue_codes", ()),
             },
             "hashes": {
@@ -1101,13 +1073,16 @@ def _service_valuation_artifact_payload(
     )
     if automatic_preparation is not None:
         artifact_projection["automatic_preparation"] = dict(automatic_preparation)
-    return {
+    payload = {
         "financial_reports": [],
         "fundamental_service": artifact_projection,
         "status": "done",
         "model_type": input_payload.get("model_id"),
         "ticker": _ticker_from_input(input_payload),
     }
+    return FinancialReportsArtifactData.model_validate(payload).model_dump(
+        mode="json", exclude_unset=True
+    )
 
 
 def _build_fundamental_output_artifact(
@@ -1332,11 +1307,29 @@ def _calculation_projection(
     return {
         "calculation_version": calculation_version,
         "calculation_status": calculation_status,
-        "quality_status": quality_status,
+        "quality_status": result.get("status", quality_status),
         "input_digest": expected_input_digest,
-        "result_hash": result_hash,
-        "service_result": _narrow_result(result),
+        "result_hash": result.get("result_hash", result_hash),
+        "service_result": _parse_service_result(result),
         "correlation_id": response.correlation_id,
+    }
+
+
+def _clear_execution(fundamental: Mapping[str, object]) -> FundamentalAnalysisContext:
+    return {
+        **fundamental,
+        "artifact": None,
+        "artifact_publication_failure": None,
+        "input_digest": None,
+        "result_hash": None,
+        "assumption_breakdown": None,
+        "automatic_preparation": None,
+        "preparation_status": None,
+        "preparation_issue_codes": None,
+        "missing_evidence": None,
+        "preparation_digest": None,
+        "service_failure": None,
+        "fundamental_service": None,
     }
 
 
@@ -1367,7 +1360,7 @@ async def _service_error_update(
             "retryable": retryable,
         },
     }
-    updated: FundamentalAnalysisContext = dict(fundamental)
+    updated = _clear_execution(fundamental)
     updated.update(
         {
             "valuation_status": "service_unavailable",
@@ -1377,6 +1370,7 @@ async def _service_error_update(
         }
     )
     artifact_id: str | None = None
+    error_logs = [{"node": "calculation", "error": message, "severity": "error"}]
     try:
         artifact_id = await runtime.save_financial_reports(
             data={
@@ -1391,7 +1385,19 @@ async def _service_error_update(
             key_prefix="fundamental_service_degraded",
         )
     except Exception:
-        artifact_id = None
+        publication_message = "Fundamental service report artifact could not be saved"
+        updated["artifact_publication_failure"] = {
+            "code": "ARTIFACT_SAVE_FAILED",
+            "message": publication_message,
+            "retryable": True,
+        }
+        error_logs.append(
+            {
+                "node": "calculation",
+                "error": publication_message,
+                "severity": "error",
+            }
+        )
     if artifact_id is not None:
         updated["artifact"] = _build_fundamental_output_artifact(
             summary=f"Fundamental valuation degraded for {ticker}",
@@ -1413,25 +1419,26 @@ async def _service_error_update(
                     }
                 }
                 if artifact_id is not None
-                else {}
+                else {"artifact_references": {}}
             ),
             "active_activity_id": "calculation",
             "workflow_activity_updates": {"calculation": "error"},
-            "error_logs": [
-                {"node": "calculation", "error": message, "severity": "error"}
-            ],
+            "error_logs": error_logs,
         },
         goto="END",
     )
 
 
-def _preparation_gate_update(
+async def _preparation_gate_update(
     *,
+    runtime: ServiceValuationRuntime,
     fundamental: Mapping[str, object],
-    preparation: Mapping[str, object],
+    prepared: PreparedServiceValuation,
 ) -> FundamentalNodeResult:
     """Publish a service-owned preparation gate as a domain outcome."""
 
+    assert prepared.preparation is not None
+    preparation = prepared.preparation.model_dump(mode="json", exclude_unset=True)
     status = preparation.get("status")
     quality_status = preparation.get("quality_status")
     if status not in {"requires_input", "abstained", "unsupported"}:
@@ -1448,8 +1455,7 @@ def _preparation_gate_update(
             retryable=False,
             status_code=502,
         )
-    updated: FundamentalAnalysisContext = dict(fundamental)
-    updated.pop("service_failure", None)
+    updated = _clear_execution(fundamental)
     updated.update(
         {
             "valuation_status": status,
@@ -1461,12 +1467,60 @@ def _preparation_gate_update(
             "preparation_digest": preparation.get("preparation_digest"),
         }
     )
-    activity_status = "waiting" if status == "requires_input" else "done"
+    projection = {
+        "projection_type": "preparation_outcome",
+        "contract_version": "fundamental.v1",
+        "valuation_status": status,
+        "quality_status": quality_status,
+        "automatic_preparation": preparation,
+        "identity": prepared.identity,
+        "snapshot_selector": prepared.snapshot_selector,
+        "issue_codes": list(preparation.get("issue_codes", ())),
+        "missing_evidence": list(preparation.get("missing_evidence", ())),
+        "reason": prepared.reason,
+    }
+    payload = FinancialReportsArtifactData.model_validate(
+        {
+            "financial_reports": [],
+            "fundamental_service": projection,
+            "ticker": prepared.identity.get("security_id"),
+            "company_name": prepared.identity.get("issuer_name"),
+            "model_type": preparation["model_id"],
+            "status": "done",
+        }
+    ).model_dump(mode="json", exclude_unset=True)
+    try:
+        artifact_id = await runtime.save_financial_reports(
+            data=payload,
+            produced_by="fundamental_analysis.service_preparation_outcome",
+            key_prefix="fundamental_service_preparation_outcome",
+        )
+    except Exception as exc:
+        raise FundamentalServiceFailure(
+            "ARTIFACT_SAVE_FAILED",
+            "Fundamental preparation outcome artifact could not be saved",
+            retryable=True,
+            status_code=503,
+        ) from exc
+    updated["fundamental_service"] = projection
+    updated["artifact"] = _build_fundamental_output_artifact(
+        summary=f"Fundamental valuation {status} for {prepared.identity['security_id']}",
+        artifact_id=artifact_id,
+    )
     return FundamentalNodeResult(
         update={
             "fundamental_analysis": updated,
             "active_activity_id": "calculation",
-            "workflow_activity_updates": {"calculation": activity_status},
+            "workflow_activity_updates": {"calculation": "skipped"},
+            "artifact_references": {
+                "financial_reports": to_artifact_reference_payload(
+                    ArtifactReference(
+                        artifact_id=artifact_id,
+                        download_url=f"/api/v1/artifacts/{artifact_id}",
+                        type=ARTIFACT_KIND_FINANCIAL_REPORTS,
+                    )
+                )
+            },
         },
         goto="END",
     )
@@ -1481,7 +1535,9 @@ async def run_service_valuation_flow(
     clock: Callable[[], datetime] | None = None,
 ) -> FundamentalNodeResult:
     fundamental_raw = state.get("fundamental_analysis", {})
-    fundamental = _as_mapping(fundamental_raw, context="fundamental_analysis")
+    fundamental = _clear_execution(
+        _as_mapping(fundamental_raw, context="fundamental_analysis")
+    )
     resolved_ticker = read_intent_state(state).resolved_ticker
     try:
         raw_request = state.get("valuation_request")
@@ -1529,9 +1585,10 @@ async def run_service_valuation_flow(
             )
             if prepared.valuation_request is None:
                 if prepared.preparation is not None:
-                    return _preparation_gate_update(
+                    return await _preparation_gate_update(
+                        runtime=runtime,
                         fundamental=fundamental,
-                        preparation=prepared.preparation.model_dump(mode="json"),
+                        prepared=prepared,
                     )
                 facts_projection = await _facts_only_projection(
                     prepared,
@@ -1575,7 +1632,6 @@ async def run_service_valuation_flow(
                         status_code=503,
                     ) from exc
                 updated = dict(fundamental)
-                updated.pop("service_failure", None)
                 updated.update(
                     {
                         "valuation_status": "not_requested",
@@ -1609,7 +1665,9 @@ async def run_service_valuation_flow(
                 )
             input_payload = prepared.valuation_request
             if compact_request and prepared.preparation is not None:
-                automatic_preparation = prepared.preparation.model_dump(mode="json")
+                automatic_preparation = prepared.preparation.model_dump(
+                    mode="json", exclude_unset=True
+                )
         assert input_payload is not None
         # Snapshot resolution replaces the selector with canonical fact IDs;
         # retain the service-owned normalized field selection for the later
@@ -1840,7 +1898,7 @@ async def run_service_valuation_flow(
                     retryable=False,
                     status_code=502,
                 )
-            projection["uncertainty_summary"] = _uncertainty_projection(
+            _validate_uncertainty_binding(
                 calculation_response,
                 expected_input_digest=input_digest,
                 expected_seed=seed,

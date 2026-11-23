@@ -18,13 +18,15 @@ from src.agents.fundamental.application.workflow_orchestrator.service_valuation_
     run_service_valuation_flow,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalFactsReadResultV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
+)
+from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalValuationEvidenceReadResultV1,
     FundamentalValuationPreparationResultV1,
 )
-from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.internal_services import (
     InternalPrincipal,
@@ -224,6 +226,7 @@ class _Client:
                 "policy_id": validated_input["policy_id"],
                 "policy_version": provenance["policy_version"],
                 "policy_digest": "1" * 64,
+                "selection_mode": "pinned",
                 "resolved_fields": {},
                 "precedence": {},
                 "input_digest": "a" * 64,
@@ -272,6 +275,7 @@ class _Client:
                 "policy_id": input_payload["policy_id"],
                 "policy_version": provenance["policy_version"],
                 "policy_digest": "1" * 64,
+                "selection_mode": "pinned",
                 "resolved_fields": {},
                 "precedence": {},
                 "input_digest": calculation_digest,
@@ -284,6 +288,8 @@ class _Client:
                 }
             ],
             "trace": {
+                "valuation_timestamp": valuation_context["valuation_timestamp"],
+                "fiscal_period_selector": {"mode": "latest_complete", "count": 3},
                 "source_selection_policy": valuation_context["source_selection_policy"],
                 "source_selection_policy_version": "pit-v1",
                 "snapshot_id": valuation_context["data_snapshot_id"],
@@ -301,6 +307,7 @@ class _Client:
             "issue_codes": [],
             "missing_evidence": [],
             "snapshot_id": valuation_context["data_snapshot_id"],
+            "valuation_timestamp": valuation_context["valuation_timestamp"],
             "evaluated_at": "2026-11-04T00:00:00Z",
             "correlation_id": "trace-281",
         }
@@ -329,6 +336,7 @@ class _Client:
             ]
             result = {
                 "status": "verified",
+                "result_hash": "8" * 64,
                 "input_digest": self.uncertainty_report_digest,
                 "base": base,
                 "requested_samples": monte_carlo["samples"],
@@ -370,7 +378,7 @@ class _Client:
                 "security_id": self.facts_identity.get("security_id"),
                 "concept": f"us-gaap:{fact_id}",
                 "normalized_field": fact_id,
-                "value": 100,
+                "value": "100",
                 "unit": "USD",
                 "scale": 0,
                 "currency": "USD",
@@ -661,7 +669,11 @@ class _FactsOnlyClient(_Client):
                 "quality_status": "provisional",
                 "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
                 "missing_evidence": [],
-                "historical_metrics": {},
+                "historical_metrics": {
+                    "profile_id": "fcff-valuation-requirements-v3",
+                    "profile_digest": "d" * 64,
+                    "quality_status": "provisional",
+                },
                 "assumptions_evidence": [],
                 "input": prepared,
                 "preparation_digest": "e" * 64,
@@ -858,7 +870,10 @@ async def test_cutover_binds_release_digest_to_context_without_provenance_leak()
 async def test_cutover_enriches_compact_caller_request_before_snapshot_resolution() -> (
     None
 ):
-    client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
+    client = _FactsOnlyClient(
+        snapshot_timestamp="2026-11-01T00:00:00Z",
+        preparation_padding="evidence" * 20000,
+    )
     runtime = _Runtime()
     compact = {
         "assumptions": {"terminal_growth": "0.02"},
@@ -913,6 +928,10 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
     automatic_preparation = service_artifact["automatic_preparation"]
     assert isinstance(automatic_preparation, dict)
     assert automatic_preparation["profile_digest"] == "d" * 64
+    assert (
+        automatic_preparation["input"]["provenance"]["source_evidence"]
+        == "evidence" * 20000
+    )
     facts = service_artifact["facts"]
     assert isinstance(facts, dict)
     assert facts["data_release_manifest_digest"] == "c" * 64
@@ -1273,7 +1292,7 @@ async def test_cutover_routes_explicit_monte_carlo_controls_to_calculation_repor
     assert projection["input_digest"] == "a" * 64
     assert projection["service_result"]["input_digest"] == "a" * 64
     summary = result.update["fundamental_analysis"]["fundamental_service"][
-        "uncertainty_summary"
+        "service_result"
     ]
     assert summary["seed"] == 7
     assert summary["requested_samples"] == 10
@@ -1638,3 +1657,225 @@ def test_service_input_rejects_extensions_outside_the_frozen_contract(
         read_service_valuation_input(
             {"valuation_request": {**_input(monte_carlo=True), field: {}}}
         )
+
+
+class _PreparationOutcomeClient(_FactsOnlyClient):
+    def __init__(self, status: str) -> None:
+        super().__init__()
+        self.status = status
+
+    async def prepare_valuation(self, input_payload, **kwargs):
+        prepared = await super().prepare_valuation(input_payload, **kwargs)
+        return FundamentalValuationPreparationResultV1.model_validate(
+            {
+                **prepared.model_dump(mode="json", exclude_unset=True),
+                "status": self.status,
+                "quality_status": "abstain",
+                "issue_codes": ["MISSING_EVIDENCE"],
+                "missing_evidence": ["assumptions.wacc.risk_free_rate"],
+                "input": None,
+            }
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["requires_input", "abstained", "unsupported"])
+async def test_preparation_outcome_publishes_a_report_without_execution(
+    status: str,
+) -> None:
+    runtime = _Runtime()
+    client = _PreparationOutcomeClient(status)
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "valuation_request": {
+                    "assumptions": {},
+                    "uncertainty": {"mode": "none"},
+                },
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {
+                    "model_type": "dcf_standard",
+                    "artifact": {"reference": {"artifact_id": "previous-success"}},
+                    "input_digest": "previous-input",
+                    "result_hash": "previous-result",
+                    "assumption_breakdown": {"source": "previous-execution"},
+                },
+            },
+            client=client,
+            clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+        )
+    finally:
+        reset_request_principal(token)
+    assert all(
+        operation not in {"validate", "validate_with_policy", "calculate"}
+        for operation, _ in client.calls
+    )
+    assert len(runtime.saved_calls) == 1
+    saved = runtime.saved_calls[0]
+    assert saved["produced_by"] == "fundamental_analysis.service_preparation_outcome"
+    report = FinancialReportsArtifactData.model_validate(
+        saved["data"]
+    ).fundamental_service
+    assert report.projection_type == "preparation_outcome"
+    assert report.valuation_status == status
+    assert report.missing_evidence == ("assumptions.wacc.risk_free_rate",)
+    assert report.automatic_preparation.input is None
+    context = result.update["fundamental_analysis"]
+    assert (
+        context["artifact"]["reference"]["artifact_id"] == "service-valuation-artifact"
+    )
+    assert context["input_digest"] is None
+    assert context["result_hash"] is None
+    assert context["assumption_breakdown"] is None
+    assert result.update["workflow_activity_updates"]["calculation"] == "skipped"
+    assert (
+        result.update["artifact_references"]["financial_reports"]["artifact_id"]
+        == "service-valuation-artifact"
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_publication_clears_previous_execution_and_artifact() -> None:
+    class UnavailableStorage(_Runtime):
+        async def save_financial_reports(self, **kwargs):
+            raise OSError("storage unavailable")
+
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            UnavailableStorage(),
+            {
+                "valuation_request": _input(),
+                "fundamental_analysis": {
+                    "model_type": "dcf_standard",
+                    "artifact": {"reference": {"artifact_id": "previous-success"}},
+                    "input_digest": "previous-input",
+                    "result_hash": "previous-result",
+                    "automatic_preparation": {
+                        "preparation_digest": "previous-preparation"
+                    },
+                },
+            },
+            client=_Client(),
+        )
+    finally:
+        reset_request_principal(token)
+    context = result.update["fundamental_analysis"]
+    assert context["artifact"] is None
+    assert context["input_digest"] is None
+    assert context["result_hash"] is None
+    assert context["automatic_preparation"] is None
+    assert context["service_failure"]["code"] == "ARTIFACT_SAVE_FAILED"
+    assert context["artifact_publication_failure"]["code"] == "ARTIFACT_SAVE_FAILED"
+    assert result.update["artifact_references"] == {}
+    assert result.update["workflow_activity_updates"]["calculation"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_uncertainty_binding_quality_and_exact_values_keep_their_scopes() -> None:
+    class AbstainingUncertainty(_Client):
+        async def execute(self, operation, input_payload, **kwargs):
+            response = await super().execute(operation, input_payload, **kwargs)
+            if operation != "calculate":
+                return response
+            result = dict(response.result)
+            result.update(
+                {
+                    "status": "abstain",
+                    "valid_samples": 1,
+                    "invalid_samples": 9,
+                    "invalid_reasons": {"CALCULATION_REFUSAL": 9},
+                    "quantiles": {
+                        "p05": "-0.00000000000000000001",
+                        "p50": "0",
+                        "p95": "1E+9999",
+                    },
+                    "convergence_diagnostics": {
+                        "minimum_valid_samples": 10,
+                        "invalid_ratio": "0.9",
+                        "converged": False,
+                    },
+                    "sensitivity": {
+                        "assumptions.terminal_growth": ["-1.23", "0", "1E+9999"]
+                    },
+                }
+            )
+            base = dict(result["base"])
+            base["intrinsic_value"] = "123456789012345678901234567890.123456789"
+            base["per_share_value"] = "0"
+            base["nodes"] = [
+                {
+                    "node_id": "equity",
+                    "formula": "actual service formula",
+                    "inputs": ["fcff"],
+                    "value": "-1E+9999",
+                    "unit": "USD",
+                    "trace": {
+                        "expression": "actual service expression",
+                        "inputs": ["fact-revenue"],
+                    },
+                }
+            ]
+            result["base"] = base
+            return response.model_copy(update={"result": result})
+
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {"valuation_request": _input(monte_carlo=True)},
+            client=AbstainingUncertainty(),
+        )
+    finally:
+        reset_request_principal(token)
+    report = FinancialReportsArtifactData.model_validate(
+        runtime.saved_calls[0]["data"]
+    ).fundamental_service
+    assert report.projection_type == "valuation"
+    assert report.input_digest == "a" * 64
+    assert report.result_hash == "8" * 64
+    assert report.quality_status == "abstain"
+    assert report.quality.calculation_status == "verified"
+    assert report.service_result.base.input_digest == "b" * 64
+    assert report.service_result.base.result_hash == "b" * 64
+    assert (
+        report.service_result.base.intrinsic_value
+        == "123456789012345678901234567890.123456789"
+    )
+    assert report.service_result.base.per_share_value == "0"
+    assert report.service_result.base.nodes[0].value == "-1E+9999"
+    assert report.service_result.quantiles["p95"] == "1E+9999"
+    assert report.service_result.invalid_reasons == {"CALCULATION_REFUSAL": 9}
+    assert report.service_result.convergence_diagnostics.converged is False
+    assert report.service_result.sensitivity["assumptions.terminal_growth"] == (
+        "-1.23",
+        "0",
+        "1E+9999",
+    )
+    assert report.service_result.base.policy_resolution.input_digest == "b" * 64
+    assert (
+        report.service_result.base.valuation_timestamp.isoformat()
+        == "2026-11-04T00:00:00+00:00"
+    )
+    assert result.update["fundamental_analysis"]["quality_status"] == "abstain"

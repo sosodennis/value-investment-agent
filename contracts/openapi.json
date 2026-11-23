@@ -2491,8 +2491,29 @@
           "fundamental_service": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "discriminator": {
+                  "mapping": {
+                    "degraded": "#/components/schemas/FundamentalDegradedReportV1",
+                    "facts_only": "#/components/schemas/FundamentalFactsOnlyReportV1",
+                    "preparation_outcome": "#/components/schemas/FundamentalPreparationOutcomeV1",
+                    "valuation": "#/components/schemas/FundamentalValuationReportV1"
+                  },
+                  "propertyName": "projection_type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/FundamentalValuationReportV1"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FundamentalFactsOnlyReportV1"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FundamentalPreparationOutcomeV1"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FundamentalDegradedReportV1"
+                  }
+                ]
               },
               {
                 "type": "null"
@@ -2859,6 +2880,84 @@
         "title": "ForwardEvidenceResearchResponse",
         "type": "object"
       },
+      "FundamentalAssumptionEvidenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "editable": {
+            "default": true,
+            "title": "Editable",
+            "type": "boolean"
+          },
+          "fact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "formula": {
+            "title": "Formula",
+            "type": "string"
+          },
+          "manual_provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalManualProvenanceV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "method": {
+            "enum": [
+              "derived",
+              "approved_source",
+              "approved_policy",
+              "manual"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "source_refs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "value": {
+            "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "value",
+          "method",
+          "formula",
+          "policy_version",
+          "as_of"
+        ],
+        "title": "FundamentalAssumptionEvidenceV1",
+        "type": "object"
+      },
       "FundamentalBaseModel": {
         "additionalProperties": true,
         "properties": {
@@ -3044,6 +3143,1108 @@
           }
         },
         "title": "FundamentalBaseModel",
+        "type": "object"
+      },
+      "FundamentalBoundFactsV1": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "data_release_manifest_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Release Manifest Digest"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/FundamentalCanonicalFactV1"
+            },
+            "minItems": 1,
+            "title": "Facts",
+            "type": "array"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/FundamentalIdentityV1"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "minLength": 1,
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_manifest_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Manifest Digest",
+            "type": "string"
+          },
+          "valuation_timestamp": {
+            "format": "date-time",
+            "title": "Valuation Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "snapshot_id",
+          "snapshot_manifest_digest",
+          "identity",
+          "valuation_timestamp",
+          "quality_status",
+          "facts",
+          "fact_ids"
+        ],
+        "title": "FundamentalBoundFactsV1",
+        "type": "object"
+      },
+      "FundamentalCalculationNodeV1": {
+        "additionalProperties": false,
+        "properties": {
+          "formula": {
+            "title": "Formula",
+            "type": "string"
+          },
+          "inputs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "trace": {
+            "$ref": "#/components/schemas/FundamentalTraceV1"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "node_id",
+          "formula",
+          "unit",
+          "trace"
+        ],
+        "title": "FundamentalCalculationNodeV1",
+        "type": "object"
+      },
+      "FundamentalCalculationResultV1": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_references": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalServiceEvidenceReferenceV1"
+            },
+            "title": "Artifact References",
+            "type": "array"
+          },
+          "assumptions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Assumptions",
+            "type": "object"
+          },
+          "calculation_status": {
+            "enum": [
+              "completed",
+              "abstained",
+              "rejected",
+              "unavailable",
+              "error"
+            ],
+            "title": "Calculation Status",
+            "type": "string"
+          },
+          "calculation_version": {
+            "title": "Calculation Version",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "input_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input Digest",
+            "type": "string"
+          },
+          "intrinsic_value": {
+            "anyOf": [
+              {
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intrinsic Value"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "missing_evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Evidence",
+            "type": "array"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "nodes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalCalculationNodeV1"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "per_share_value": {
+            "anyOf": [
+              {
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Share Value"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "policy_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalPolicyResolutionV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Version"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "result_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Result Hash",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "trace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalCalculationTraceV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "valuation_timestamp": {
+            "format": "date-time",
+            "title": "Valuation Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "calculation_version",
+          "calculation_status",
+          "quality_status",
+          "input_digest",
+          "result_hash",
+          "assumptions",
+          "model_version",
+          "snapshot_id",
+          "valuation_timestamp",
+          "evaluated_at",
+          "correlation_id"
+        ],
+        "title": "FundamentalCalculationResultV1",
+        "type": "object"
+      },
+      "FundamentalCalculationTraceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "assumptions_digest": {
+            "title": "Assumptions Digest",
+            "type": "string"
+          },
+          "calculation_version": {
+            "title": "Calculation Version",
+            "type": "string"
+          },
+          "data_release_manifest_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Release Manifest Digest"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "fiscal_period_selector": {
+            "$ref": "#/components/schemas/FundamentalFiscalPeriodSelectorV1"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "policy_digest": {
+            "title": "Policy Digest",
+            "type": "string"
+          },
+          "policy_id": {
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "resolved_fiscal_periods": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalResolvedFiscalPeriodV1"
+            },
+            "title": "Resolved Fiscal Periods",
+            "type": "array"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_manifest_digest": {
+            "title": "Snapshot Manifest Digest",
+            "type": "string"
+          },
+          "source_content_hashes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Content Hashes",
+            "type": "array"
+          },
+          "source_selection_policy": {
+            "title": "Source Selection Policy",
+            "type": "string"
+          },
+          "source_selection_policy_version": {
+            "title": "Source Selection Policy Version",
+            "type": "string"
+          },
+          "valuation_timestamp": {
+            "format": "date-time",
+            "title": "Valuation Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "valuation_timestamp",
+          "fiscal_period_selector",
+          "source_selection_policy",
+          "source_selection_policy_version",
+          "snapshot_id",
+          "snapshot_manifest_digest",
+          "fact_ids",
+          "source_content_hashes",
+          "policy_id",
+          "policy_version",
+          "policy_digest",
+          "model_id",
+          "model_version",
+          "assumptions_digest",
+          "calculation_version"
+        ],
+        "title": "FundamentalCalculationTraceV1",
+        "type": "object"
+      },
+      "FundamentalCandidateRejectionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "minLength": 1,
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "reason"
+        ],
+        "title": "FundamentalCandidateRejectionV1",
+        "type": "object"
+      },
+      "FundamentalCanonicalFactV1": {
+        "additionalProperties": false,
+        "description": "Typed fact projection; no browser or Agent-side SEC fallback is implied.",
+        "properties": {
+          "accession_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accession Number"
+          },
+          "accounting_evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accounting Evidence"
+          },
+          "amendment_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "valuation_relevant",
+                  "unrelated",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendment Scope"
+          },
+          "amends_accession": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amends Accession"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "concept": {
+            "minLength": 1,
+            "title": "Concept",
+            "type": "string"
+          },
+          "context": {
+            "$ref": "#/components/schemas/FundamentalXbrlContextV1"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decimals"
+          },
+          "fact_id": {
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "filed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filed At"
+          },
+          "filing_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Version"
+          },
+          "instant": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instant"
+          },
+          "is_amendment": {
+            "default": false,
+            "title": "Is Amendment",
+            "type": "boolean"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "issuer_id": {
+            "minLength": 1,
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "mapping_confidence": {
+            "anyOf": [
+              {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  "unresolved"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Confidence"
+          },
+          "mapping_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Decision Id"
+          },
+          "normalized_field": {
+            "minLength": 1,
+            "title": "Normalized Field",
+            "type": "string"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "point_in_time_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point In Time Policy"
+          },
+          "quality": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "rejected_candidate_reasons": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalCandidateRejectionV1"
+            },
+            "title": "Rejected Candidate Reasons",
+            "type": "array"
+          },
+          "rejected_candidates": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Rejected Candidates",
+            "type": "array"
+          },
+          "scale": {
+            "title": "Scale",
+            "type": "integer"
+          },
+          "security_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Id"
+          },
+          "security_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Scope"
+          },
+          "selection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Reason"
+          },
+          "source": {
+            "$ref": "#/components/schemas/FundamentalSourceProvenanceV1"
+          },
+          "supersedes_accession": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Accession"
+          },
+          "taxonomy_version": {
+            "minLength": 1,
+            "title": "Taxonomy Version",
+            "type": "string"
+          },
+          "unit": {
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "$ref": "#/components/schemas/FundamentalMissingValueV1"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "contract_version",
+          "fact_id",
+          "issuer_id",
+          "concept",
+          "normalized_field",
+          "value",
+          "unit",
+          "scale",
+          "period_end",
+          "context",
+          "as_of",
+          "available_at",
+          "captured_at",
+          "taxonomy_version",
+          "source",
+          "quality"
+        ],
+        "title": "FundamentalCanonicalFactV1",
+        "type": "object"
+      },
+      "FundamentalConvergenceDiagnosticsV1": {
+        "additionalProperties": false,
+        "properties": {
+          "converged": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Converged"
+          },
+          "invalid_ratio": {
+            "anyOf": [
+              {
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalid Ratio"
+          },
+          "minimum_valid_samples": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Valid Samples"
+          }
+        },
+        "title": "FundamentalConvergenceDiagnosticsV1",
+        "type": "object"
+      },
+      "FundamentalDegradedReportV1": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "projection_type": {
+            "const": "degraded",
+            "title": "Projection Type",
+            "type": "string"
+          },
+          "quality_status": {
+            "const": "degraded",
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "service_failure": {
+            "$ref": "#/components/schemas/FundamentalServiceFailureV1"
+          },
+          "valuation_status": {
+            "const": "service_unavailable",
+            "title": "Valuation Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projection_type",
+          "contract_version",
+          "valuation_status",
+          "quality_status",
+          "issue_codes",
+          "service_failure"
+        ],
+        "title": "FundamentalDegradedReportV1",
+        "type": "object"
+      },
+      "FundamentalDimensionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "member": {
+            "minLength": 1,
+            "title": "Member",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "member"
+        ],
+        "title": "FundamentalDimensionV1",
+        "type": "object"
+      },
+      "FundamentalFactsOnlyReportV1": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "facts": {
+            "$ref": "#/components/schemas/FundamentalBoundFactsV1"
+          },
+          "hashes": {
+            "$ref": "#/components/schemas/FundamentalReportHashesV1"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "projection_type": {
+            "const": "facts_only",
+            "title": "Projection Type",
+            "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Provenance",
+            "type": "object"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/FundamentalFactsQualityV1"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_manifest_digest": {
+            "title": "Snapshot Manifest Digest",
+            "type": "string"
+          },
+          "snapshot_selector": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Snapshot Selector",
+            "type": "object"
+          },
+          "snapshot_timestamp": {
+            "format": "date-time",
+            "title": "Snapshot Timestamp",
+            "type": "string"
+          },
+          "valuation_status": {
+            "const": "not_requested",
+            "title": "Valuation Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projection_type",
+          "contract_version",
+          "valuation_status",
+          "snapshot_id",
+          "snapshot_timestamp",
+          "snapshot_manifest_digest",
+          "fact_ids",
+          "facts",
+          "snapshot_selector",
+          "provenance",
+          "quality",
+          "hashes"
+        ],
+        "title": "FundamentalFactsOnlyReportV1",
+        "type": "object"
+      },
+      "FundamentalFactsQualityV1": {
+        "additionalProperties": false,
+        "properties": {
+          "facts_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Facts Status",
+            "type": "string"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "missing_fields": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "rejected_fact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Rejected Fact Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "facts_status"
+        ],
+        "title": "FundamentalFactsQualityV1",
+        "type": "object"
+      },
+      "FundamentalFiscalPeriodSelectorV1": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "mode": {
+            "enum": [
+              "latest_complete",
+              "explicit_periods"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "periods": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalFiscalPeriodV1"
+            },
+            "title": "Periods",
+            "type": "array"
+          },
+          "version": {
+            "const": "fundamental.fiscal-period-selector.v1",
+            "default": "fundamental.fiscal-period-selector.v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "FundamentalFiscalPeriodSelectorV1",
+        "type": "object"
+      },
+      "FundamentalFiscalPeriodV1": {
+        "additionalProperties": false,
+        "properties": {
+          "fiscal_year": {
+            "title": "Fiscal Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fiscal_year"
+        ],
+        "title": "FundamentalFiscalPeriodV1",
         "type": "object"
       },
       "FundamentalForwardEvidenceBudgetPolicyV1": {
@@ -3462,6 +4663,1587 @@
           }
         },
         "title": "FundamentalForwardEvidenceUsageV1",
+        "type": "object"
+      },
+      "FundamentalForwardReferenceProvenanceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "citation": {
+            "title": "Citation",
+            "type": "string"
+          },
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "license_reference": {
+            "title": "License Reference",
+            "type": "string"
+          },
+          "source_content_hash": {
+            "title": "Source Content Hash",
+            "type": "string"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_id",
+          "source_url",
+          "source_content_hash",
+          "citation",
+          "license_reference"
+        ],
+        "title": "FundamentalForwardReferenceProvenanceV1",
+        "type": "object"
+      },
+      "FundamentalHistoricalMetricV1": {
+        "additionalProperties": false,
+        "properties": {
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "fiscal_year": {
+            "title": "Fiscal Year",
+            "type": "integer"
+          },
+          "formula": {
+            "title": "Formula",
+            "type": "string"
+          },
+          "metric_id": {
+            "title": "Metric Id",
+            "type": "string"
+          },
+          "period_end": {
+            "title": "Period End",
+            "type": "string"
+          },
+          "source_refs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_id",
+          "fiscal_year",
+          "value",
+          "unit",
+          "formula",
+          "fact_ids",
+          "period_end"
+        ],
+        "title": "FundamentalHistoricalMetricV1",
+        "type": "object"
+      },
+      "FundamentalHistoricalMetricsV1": {
+        "additionalProperties": false,
+        "properties": {
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "metrics": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalHistoricalMetricV1"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "missing_evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Evidence",
+            "type": "array"
+          },
+          "profile_digest": {
+            "title": "Profile Digest",
+            "type": "string"
+          },
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "working_capital_assessments": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Working Capital Assessments",
+            "type": "array"
+          },
+          "working_capital_inputs": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Working Capital Inputs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile_id",
+          "profile_digest",
+          "quality_status"
+        ],
+        "title": "FundamentalHistoricalMetricsV1",
+        "type": "object"
+      },
+      "FundamentalIdentityV1": {
+        "additionalProperties": false,
+        "description": "Identity pinned by a service-owned snapshot or resolver result.",
+        "properties": {
+          "currency": {
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "domicile": {
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Domicile",
+            "type": "string"
+          },
+          "issuer_id": {
+            "minLength": 1,
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "issuer_name": {
+            "minLength": 1,
+            "title": "Issuer Name",
+            "type": "string"
+          },
+          "reporting_basis": {
+            "enum": [
+              "us-gaap",
+              "ifrs"
+            ],
+            "title": "Reporting Basis",
+            "type": "string"
+          },
+          "security_id": {
+            "minLength": 1,
+            "title": "Security Id",
+            "type": "string"
+          },
+          "share_class": {
+            "minLength": 1,
+            "title": "Share Class",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issuer_id",
+          "issuer_name",
+          "domicile",
+          "reporting_basis",
+          "security_id",
+          "share_class",
+          "currency"
+        ],
+        "title": "FundamentalIdentityV1",
+        "type": "object"
+      },
+      "FundamentalManualProvenanceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "automatic_preparation_digest": {
+            "title": "Automatic Preparation Digest",
+            "type": "string"
+          },
+          "forward_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalForwardReferenceProvenanceV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modified_at": {
+            "format": "date-time",
+            "title": "Modified At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "modified_at",
+          "reason",
+          "automatic_preparation_digest"
+        ],
+        "title": "FundamentalManualProvenanceV1",
+        "type": "object"
+      },
+      "FundamentalMissingValueV1": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "missing",
+              "not_applicable",
+              "unsupported",
+              "unresolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason"
+        ],
+        "title": "FundamentalMissingValueV1",
+        "type": "object"
+      },
+      "FundamentalPolicyResolutionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "input_digest": {
+            "title": "Input Digest",
+            "type": "string"
+          },
+          "policy_digest": {
+            "title": "Policy Digest",
+            "type": "string"
+          },
+          "policy_id": {
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "precedence": {
+            "additionalProperties": {
+              "enum": [
+                "caller",
+                "policy"
+              ],
+              "type": "string"
+            },
+            "title": "Precedence",
+            "type": "object"
+          },
+          "resolved_fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Resolved Fields",
+            "type": "object"
+          },
+          "selection_mode": {
+            "enum": [
+              "pinned",
+              "exploratory_active"
+            ],
+            "title": "Selection Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "policy_id",
+          "policy_version",
+          "policy_digest",
+          "selection_mode",
+          "resolved_fields",
+          "precedence",
+          "input_digest"
+        ],
+        "title": "FundamentalPolicyResolutionV1",
+        "type": "object"
+      },
+      "FundamentalPreparationOutcomeV1": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic_preparation": {
+            "$ref": "#/components/schemas/FundamentalValuationPreparationResultV1"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/FundamentalIdentityV1"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "missing_evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Evidence",
+            "type": "array"
+          },
+          "projection_type": {
+            "const": "preparation_outcome",
+            "title": "Projection Type",
+            "type": "string"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "snapshot_selector": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Snapshot Selector",
+            "type": "object"
+          },
+          "valuation_status": {
+            "enum": [
+              "requires_input",
+              "abstained",
+              "unsupported"
+            ],
+            "title": "Valuation Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projection_type",
+          "contract_version",
+          "valuation_status",
+          "quality_status",
+          "automatic_preparation",
+          "identity",
+          "snapshot_selector"
+        ],
+        "title": "FundamentalPreparationOutcomeV1",
+        "type": "object"
+      },
+      "FundamentalReportHashesV1": {
+        "additionalProperties": false,
+        "properties": {
+          "data_release_manifest_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Release Manifest Digest"
+          },
+          "input_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Digest"
+          },
+          "result_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Hash"
+          },
+          "snapshot_manifest_digest": {
+            "title": "Snapshot Manifest Digest",
+            "type": "string"
+          },
+          "source_content_hashes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Content Hashes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "snapshot_manifest_digest"
+        ],
+        "title": "FundamentalReportHashesV1",
+        "type": "object"
+      },
+      "FundamentalResolvedFiscalPeriodV1": {
+        "additionalProperties": false,
+        "properties": {
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "fiscal_year": {
+            "title": "Fiscal Year",
+            "type": "integer"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date",
+            "title": "Period Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fiscal_year",
+          "period_start",
+          "period_end",
+          "available_at"
+        ],
+        "title": "FundamentalResolvedFiscalPeriodV1",
+        "type": "object"
+      },
+      "FundamentalServiceEvidenceReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "artifact_type": {
+            "enum": [
+              "calculation_evidence",
+              "uncertainty_evidence"
+            ],
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "media_type": {
+            "const": "application/json",
+            "default": "application/json",
+            "title": "Media Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "content_hash"
+        ],
+        "title": "FundamentalServiceEvidenceReferenceV1",
+        "type": "object"
+      },
+      "FundamentalServiceFailureV1": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "title": "FundamentalServiceFailureV1",
+        "type": "object"
+      },
+      "FundamentalSourceProvenanceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "accession_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accession Number"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "filed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filed At"
+          },
+          "parser_version": {
+            "minLength": 1,
+            "title": "Parser Version",
+            "type": "string"
+          },
+          "source_role": {
+            "enum": [
+              "filing",
+              "company_facts",
+              "taxonomy",
+              "acquisition",
+              "macro",
+              "market",
+              "reference"
+            ],
+            "title": "Source Role",
+            "type": "string"
+          },
+          "source_url": {
+            "minLength": 1,
+            "title": "Source Url",
+            "type": "string"
+          },
+          "taxonomy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Version"
+          },
+          "terms_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Reference"
+          }
+        },
+        "required": [
+          "source_url",
+          "content_hash",
+          "source_role",
+          "captured_at",
+          "available_at",
+          "parser_version"
+        ],
+        "title": "FundamentalSourceProvenanceV1",
+        "type": "object"
+      },
+      "FundamentalTraceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "available_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available At"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "inputs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "source_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Ids",
+            "type": "array"
+          },
+          "source_refs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "source_uris": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Uris",
+            "type": "array"
+          },
+          "source_versions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Versions",
+            "type": "array"
+          },
+          "terms_references": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Terms References",
+            "type": "array"
+          }
+        },
+        "title": "FundamentalTraceV1",
+        "type": "object"
+      },
+      "FundamentalUncertaintyResultV1": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_references": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalServiceEvidenceReferenceV1"
+            },
+            "title": "Artifact References",
+            "type": "array"
+          },
+          "base": {
+            "$ref": "#/components/schemas/FundamentalCalculationResultV1"
+          },
+          "convergence_diagnostics": {
+            "$ref": "#/components/schemas/FundamentalConvergenceDiagnosticsV1"
+          },
+          "dominant_drivers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Dominant Drivers",
+            "type": "array"
+          },
+          "input_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input Digest",
+            "type": "string"
+          },
+          "invalid_draw_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalid Draw Policy"
+          },
+          "invalid_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Invalid Reasons",
+            "type": "object"
+          },
+          "invalid_samples": {
+            "default": 0,
+            "title": "Invalid Samples",
+            "type": "integer"
+          },
+          "quantile_contract": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Quantile Contract",
+            "type": "object"
+          },
+          "quantiles": {
+            "additionalProperties": {
+              "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+              "type": "string"
+            },
+            "title": "Quantiles",
+            "type": "object"
+          },
+          "requested_samples": {
+            "default": 0,
+            "title": "Requested Samples",
+            "type": "integer"
+          },
+          "result_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Result Hash",
+            "type": "string"
+          },
+          "sampler_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampler Version"
+          },
+          "scenario_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalCalculationResultV1"
+            },
+            "title": "Scenario Results",
+            "type": "array"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "sensitivity": {
+            "additionalProperties": {
+              "items": {
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Sensitivity",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "valid_samples": {
+            "default": 0,
+            "title": "Valid Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "input_digest",
+          "result_hash",
+          "base"
+        ],
+        "title": "FundamentalUncertaintyResultV1",
+        "type": "object"
+      },
+      "FundamentalValuationEvidenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "data_release_manifest_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Data Release Manifest Digest",
+            "type": "string"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "facts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalCanonicalFactV1"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "hashes": {
+            "$ref": "#/components/schemas/FundamentalReportHashesV1"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/FundamentalIdentityV1"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "missing_fields": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "model_id": {
+            "enum": [
+              "fcff_dcf",
+              "transition_fcff_dcf"
+            ],
+            "title": "Model Id",
+            "type": "string"
+          },
+          "profile_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Profile Digest",
+            "type": "string"
+          },
+          "profile_id": {
+            "minLength": 1,
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "projection_type": {
+            "const": "valuation_evidence",
+            "title": "Projection Type",
+            "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Provenance",
+            "type": "object"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/FundamentalFactsQualityV1"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "rejected_fact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Rejected Fact Ids",
+            "type": "array"
+          },
+          "snapshot_id": {
+            "minLength": 1,
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_manifest_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Manifest Digest",
+            "type": "string"
+          },
+          "snapshot_timestamp": {
+            "format": "date-time",
+            "title": "Snapshot Timestamp",
+            "type": "string"
+          },
+          "valuation_timestamp": {
+            "format": "date-time",
+            "title": "Valuation Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "snapshot_id",
+          "data_release_manifest_digest",
+          "snapshot_manifest_digest",
+          "identity",
+          "valuation_timestamp",
+          "model_id",
+          "profile_id",
+          "profile_digest",
+          "quality_status",
+          "projection_type",
+          "snapshot_timestamp",
+          "fact_ids",
+          "provenance",
+          "quality",
+          "hashes"
+        ],
+        "title": "FundamentalValuationEvidenceV1",
+        "type": "object"
+      },
+      "FundamentalValuationPreparationResultV1": {
+        "additionalProperties": false,
+        "description": "Narrow projection of the service-owned automatic preparation result.\n\nAgent Core validates the boundary metadata and carries the opaque service\ninput forward. It does not model formulas, mappings, or policy semantics.",
+        "properties": {
+          "assumptions_evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalAssumptionEvidenceV1"
+            },
+            "title": "Assumptions Evidence",
+            "type": "array"
+          },
+          "conditional_capital": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditional Capital"
+          },
+          "conditional_operating": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditional Operating"
+          },
+          "conditional_quote": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditional Quote"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "equity_dilution": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equity Dilution"
+          },
+          "historical_metrics": {
+            "$ref": "#/components/schemas/FundamentalHistoricalMetricsV1"
+          },
+          "input": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "missing_evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Evidence",
+            "type": "array"
+          },
+          "model_id": {
+            "enum": [
+              "fcff_dcf",
+              "transition_fcff_dcf"
+            ],
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_version": {
+            "minLength": 1,
+            "title": "Model Version",
+            "type": "string"
+          },
+          "policy_id": {
+            "minLength": 1,
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "minLength": 1,
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "preparation_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Preparation Digest",
+            "type": "string"
+          },
+          "profile_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Profile Digest",
+            "type": "string"
+          },
+          "profile_id": {
+            "minLength": 1,
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "prepared",
+              "requires_input",
+              "abstained",
+              "unsupported"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "status",
+          "model_id",
+          "model_version",
+          "profile_id",
+          "profile_digest",
+          "policy_id",
+          "policy_version",
+          "quality_status",
+          "historical_metrics",
+          "preparation_digest"
+        ],
+        "title": "FundamentalValuationPreparationResultV1",
+        "type": "object"
+      },
+      "FundamentalValuationQualityV1": {
+        "additionalProperties": false,
+        "properties": {
+          "calculation_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Calculation Status",
+            "type": "string"
+          },
+          "facts_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Facts Status",
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Input",
+            "type": "object"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "validation_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Validation Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input",
+          "validation_status",
+          "facts_status",
+          "calculation_status"
+        ],
+        "title": "FundamentalValuationQualityV1",
+        "type": "object"
+      },
+      "FundamentalValuationReportV1": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic_preparation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalValuationPreparationResultV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calculation_status": {
+            "enum": [
+              "completed",
+              "abstained",
+              "rejected",
+              "unavailable",
+              "error"
+            ],
+            "title": "Calculation Status",
+            "type": "string"
+          },
+          "calculation_version": {
+            "title": "Calculation Version",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalBoundFactsV1"
+              },
+              {
+                "$ref": "#/components/schemas/FundamentalValuationEvidenceV1"
+              }
+            ],
+            "title": "Facts"
+          },
+          "hashes": {
+            "$ref": "#/components/schemas/FundamentalReportHashesV1"
+          },
+          "input_digest": {
+            "title": "Input Digest",
+            "type": "string"
+          },
+          "projection_type": {
+            "const": "valuation",
+            "title": "Projection Type",
+            "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Provenance",
+            "type": "object"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/FundamentalValuationQualityV1"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "result_hash": {
+            "title": "Result Hash",
+            "type": "string"
+          },
+          "service_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundamentalCalculationResultV1"
+              },
+              {
+                "$ref": "#/components/schemas/FundamentalUncertaintyResultV1"
+              }
+            ],
+            "title": "Service Result"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_manifest_digest": {
+            "title": "Snapshot Manifest Digest",
+            "type": "string"
+          },
+          "valuation_input": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Valuation Input",
+            "type": "object"
+          },
+          "valuation_trace": {
+            "$ref": "#/components/schemas/FundamentalCalculationTraceV1"
+          }
+        },
+        "required": [
+          "projection_type",
+          "contract_version",
+          "calculation_version",
+          "calculation_status",
+          "quality_status",
+          "input_digest",
+          "result_hash",
+          "service_result",
+          "correlation_id",
+          "facts",
+          "snapshot_id",
+          "snapshot_manifest_digest",
+          "fact_ids",
+          "valuation_trace",
+          "provenance",
+          "quality",
+          "hashes",
+          "valuation_input"
+        ],
+        "title": "FundamentalValuationReportV1",
+        "type": "object"
+      },
+      "FundamentalXbrlContextV1": {
+        "additionalProperties": false,
+        "properties": {
+          "concept_qname": {
+            "minLength": 1,
+            "title": "Concept Qname",
+            "type": "string"
+          },
+          "consolidation_scope": {
+            "minLength": 1,
+            "title": "Consolidation Scope",
+            "type": "string"
+          },
+          "context_id": {
+            "minLength": 1,
+            "title": "Context Id",
+            "type": "string"
+          },
+          "dimensions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalDimensionV1"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "entity_scope": {
+            "minLength": 1,
+            "title": "Entity Scope",
+            "type": "string"
+          },
+          "instant": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instant"
+          },
+          "measure": {
+            "minLength": 1,
+            "title": "Measure",
+            "type": "string"
+          },
+          "period_type": {
+            "enum": [
+              "instant",
+              "duration"
+            ],
+            "title": "Period Type",
+            "type": "string"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "unit_qname": {
+            "minLength": 1,
+            "title": "Unit Qname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "concept_qname",
+          "period_type",
+          "unit_qname",
+          "measure",
+          "entity_scope",
+          "consolidation_scope",
+          "context_id"
+        ],
+        "title": "FundamentalXbrlContextV1",
         "type": "object"
       },
       "HTTPValidationError": {

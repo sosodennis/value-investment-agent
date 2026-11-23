@@ -12,10 +12,11 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    JsonValue,
     field_validator,
     model_validator,
 )
+
+from src.shared.artifacts.fundamental_contracts import FundamentalIdentityV1
 
 
 class FundamentalIdentityResolutionRequestV1(BaseModel):
@@ -29,20 +30,6 @@ class FundamentalIdentityResolutionRequestV1(BaseModel):
     @classmethod
     def normalize_ticker(cls, value: object) -> object:
         return value.strip().upper() if isinstance(value, str) else value
-
-
-class FundamentalIdentityV1(BaseModel):
-    """Identity pinned by a service-owned snapshot or resolver result."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    issuer_id: str = Field(min_length=1)
-    issuer_name: str = Field(min_length=1)
-    domicile: str = Field(min_length=2, max_length=2)
-    reporting_basis: Literal["us-gaap", "ifrs"]
-    security_id: str = Field(min_length=1)
-    share_class: str = Field(min_length=1)
-    currency: str = Field(min_length=3, max_length=3)
 
 
 class FundamentalIdentitySourceEvidenceV1(BaseModel):
@@ -134,204 +121,6 @@ class FundamentalServiceErrorV1(BaseModel):
     error: dict[str, object]
 
 
-class FundamentalDimensionV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    name: str = Field(min_length=1)
-    member: str = Field(min_length=1)
-
-
-class FundamentalXbrlContextV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    concept_qname: str = Field(min_length=1)
-    period_type: Literal["instant", "duration"]
-    start_date: date | None = None
-    end_date: date | None = None
-    instant: date | None = None
-    unit_qname: str = Field(min_length=1)
-    measure: str = Field(min_length=1)
-    dimensions: tuple[FundamentalDimensionV1, ...] = ()
-    entity_scope: str = Field(min_length=1)
-    consolidation_scope: str = Field(min_length=1)
-    context_id: str = Field(min_length=1)
-
-
-class FundamentalSourceProvenanceV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    source_url: str = Field(min_length=1)
-    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    source_role: Literal[
-        "filing",
-        "company_facts",
-        "taxonomy",
-        "acquisition",
-        "macro",
-        "market",
-        "reference",
-    ]
-    captured_at: datetime
-    available_at: datetime
-    filed_at: datetime | None = None
-    accession_number: str | None = None
-    parser_version: str = Field(min_length=1)
-    taxonomy_version: str | None = None
-    terms_reference: str | None = None
-
-
-class FundamentalMissingValueV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    status: Literal["missing", "not_applicable", "unsupported", "unresolved"]
-    reason: str = Field(min_length=1)
-
-
-class FundamentalCandidateRejectionV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    candidate_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-
-
-class FundamentalCanonicalFactV1(BaseModel):
-    """Typed fact projection; no browser or Agent-side SEC fallback is implied."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    contract_version: Literal["fundamental.v1"]
-    fact_id: str = Field(min_length=1)
-    issuer_id: str = Field(min_length=1)
-    security_id: str | None = None
-    concept: str = Field(min_length=1)
-    normalized_field: str = Field(min_length=1)
-    value: Decimal | str | bool | FundamentalMissingValueV1
-    unit: str = Field(min_length=1)
-    scale: int
-    currency: str | None = None
-    period_start: date | None = None
-    period_end: date
-    instant: date | None = None
-    context: FundamentalXbrlContextV1
-    security_scope: str | None = None
-    as_of: datetime
-    available_at: datetime
-    filed_at: datetime | None = None
-    captured_at: datetime
-    accession_number: str | None = None
-    filing_version: str | None = None
-    is_amendment: bool = False
-    amends_accession: str | None = None
-    supersedes_accession: str | None = None
-    amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"] | None = None
-    decimals: int | None = None
-    taxonomy_version: str = Field(min_length=1)
-    source: FundamentalSourceProvenanceV1
-    quality: Literal[
-        "verified", "provisional", "degraded", "unsupported", "abstain", "error"
-    ]
-    issue_codes: tuple[str, ...] = ()
-    mapping_decision_id: str | None = None
-    mapping_confidence: Literal["high", "medium", "low", "unresolved"] | None = None
-    rejected_candidates: tuple[str, ...] = ()
-    rejected_candidate_reasons: tuple[FundamentalCandidateRejectionV1, ...] = ()
-    point_in_time_policy: str | None = None
-    selection_reason: str | None = None
-    # Validated by Fundamental Service; callers preserve the source evidence.
-    accounting_evidence: dict[str, JsonValue] | None = None
-
-
-class FundamentalFactsReadResultV1(BaseModel):
-    """Immutable fact selection returned for one valuation snapshot."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    contract_version: Literal["fundamental.v1"]
-    snapshot_id: str = Field(min_length=1)
-    data_release_manifest_digest: str | None = Field(
-        default=None, pattern=r"^[0-9a-f]{64}$"
-    )
-    snapshot_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    identity: FundamentalIdentityV1
-    valuation_timestamp: datetime
-    quality_status: Literal[
-        "verified", "provisional", "degraded", "unsupported", "abstain", "error"
-    ]
-    issue_codes: tuple[str, ...] = ()
-    facts: tuple[FundamentalCanonicalFactV1, ...] = Field(min_length=1)
-
-
-class FundamentalValuationPreparationResultV1(BaseModel):
-    """Narrow projection of the service-owned automatic preparation result.
-
-    Agent Core validates the boundary metadata and carries the opaque service
-    input forward. It does not model formulas, mappings, or policy semantics.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    contract_version: Literal["fundamental.v1"]
-    status: Literal["prepared", "requires_input", "abstained", "unsupported"]
-    model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
-    model_version: str = Field(min_length=1)
-    profile_id: str = Field(min_length=1)
-    profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    policy_id: str = Field(min_length=1)
-    policy_version: str = Field(min_length=1)
-    quality_status: Literal[
-        "verified", "provisional", "degraded", "unsupported", "abstain", "error"
-    ]
-    issue_codes: tuple[str, ...] = ()
-    missing_evidence: tuple[str, ...] = ()
-    historical_metrics: dict[str, object]
-    assumptions_evidence: tuple[dict[str, object], ...] = ()
-    input: dict[str, object] | None = None
-    preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    equity_dilution: dict[str, object] | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    conditional_capital: dict[str, JsonValue] | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    conditional_quote: dict[str, JsonValue] | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    conditional_operating: dict[str, JsonValue] | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-
-    @model_validator(mode="after")
-    def status_matches_input(
-        self,
-    ) -> FundamentalValuationPreparationResultV1:
-        if (self.status == "prepared") != (self.input is not None):
-            raise ValueError("prepared status must match the presence of input")
-        return self
-
-
-class FundamentalValuationEvidenceReadResultV1(BaseModel):
-    """Release-bound evidence projection used after automatic preparation."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    contract_version: Literal["fundamental.v1"]
-    snapshot_id: str = Field(min_length=1)
-    data_release_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    snapshot_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    identity: FundamentalIdentityV1
-    valuation_timestamp: datetime
-    model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
-    profile_id: str = Field(min_length=1)
-    profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    quality_status: Literal[
-        "verified", "provisional", "degraded", "unsupported", "abstain", "error"
-    ]
-    issue_codes: tuple[str, ...] = ()
-    missing_fields: tuple[str, ...] = ()
-    rejected_fact_ids: tuple[str, ...] = ()
-    facts: tuple[FundamentalCanonicalFactV1, ...] = ()
-
-
 class FundamentalForwardEvidenceSourceV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -413,17 +202,11 @@ class FundamentalForwardEvidenceReviewResultV1(BaseModel):
 
 
 __all__ = [
-    "FundamentalCandidateRejectionV1",
-    "FundamentalCanonicalFactV1",
-    "FundamentalFactsReadResultV1",
     "FundamentalIdentityResolutionRequestV1",
     "FundamentalIdentityResolutionV1",
     "FundamentalIdentitySourceEvidenceV1",
-    "FundamentalIdentityV1",
     "FundamentalServiceErrorV1",
     "FundamentalServiceResponseV1",
-    "FundamentalValuationPreparationResultV1",
-    "FundamentalValuationEvidenceReadResultV1",
     "FundamentalForwardEvidenceSourceV1",
     "FundamentalForwardEvidenceClaimV1",
     "FundamentalForwardEvidenceBudgetPolicyV1",

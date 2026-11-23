@@ -18,10 +18,12 @@ from src.agents.fundamental.application.workflow_orchestrator.state_readers impo
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionRequestV1,
-    FundamentalValuationPreparationResultV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
+)
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalValuationPreparationResultV1,
 )
 from src.shared.internal_services import InternalPrincipal
 from src.shared.kernel.types import JSONObject

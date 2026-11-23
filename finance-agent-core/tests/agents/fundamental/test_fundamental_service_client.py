@@ -15,8 +15,10 @@ from src.agents.fundamental.infrastructure.fundamental_service_client import (
     HttpFundamentalServiceClient,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalCanonicalFactV1,
     FundamentalIdentityResolutionRequestV1,
+)
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalCanonicalFactV1,
 )
 from src.shared.internal_services import InternalPrincipal
 
@@ -74,7 +76,7 @@ def _facts_success(correlation_id: str) -> dict[str, object]:
                     "issuer_id": "320193",
                     "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
                     "normalized_field": "total_revenue",
-                    "value": 100,
+                    "value": "100",
                     "unit": "USD",
                     "scale": 0,
                     "currency": "USD",

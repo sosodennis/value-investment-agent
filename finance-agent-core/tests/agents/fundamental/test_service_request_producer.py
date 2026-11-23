@@ -16,10 +16,12 @@ from src.agents.fundamental.application.workflow_orchestrator.services.service_r
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
-    FundamentalValuationPreparationResultV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
+)
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalValuationPreparationResultV1,
 )
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.internal_services import InternalPrincipal
@@ -182,7 +184,11 @@ class _Client:
                 "quality_status": "provisional",
                 "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
                 "missing_evidence": [],
-                "historical_metrics": {},
+                "historical_metrics": {
+                    "profile_id": "fcff-valuation-requirements-v3",
+                    "profile_digest": "d" * 64,
+                    "quality_status": "provisional",
+                },
                 "assumptions_evidence": [],
                 "input": prepared,
                 "preparation_digest": "e" * 64,

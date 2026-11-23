@@ -8,6 +8,7 @@ from src.shared.artifacts.debate_contracts import EvidenceFactModel
 from src.shared.artifacts.financial_statement_contracts import (
     FinancialReportModel,
 )
+from src.shared.artifacts.fundamental_contracts import FundamentalServiceArtifactV1
 from src.shared.artifacts.news_contracts import (
     FinancialNewsItemModel,
     NewsSearchResultItemModel,
@@ -18,7 +19,7 @@ class FinancialReportsArtifactData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     financial_reports: list[FinancialReportModel] = Field(default_factory=list)
-    fundamental_service: dict[str, object] | None = None
+    fundamental_service: FundamentalServiceArtifactV1 | None = None
     forward_signals: list[dict[str, object]] | None = None
     diagnostics: dict[str, object] | None = None
     quality_gates: dict[str, object] | None = None

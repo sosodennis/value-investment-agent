@@ -7,11 +7,13 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 from src.agents.fundamental.interface.fundamental_service_contracts import (
-    FundamentalFactsReadResultV1,
     FundamentalForwardEvidenceReviewResultV1,
     FundamentalIdentityResolutionRequestV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
+)
+from src.shared.artifacts.fundamental_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalValuationEvidenceReadResultV1,
     FundamentalValuationPreparationResultV1,
 )
