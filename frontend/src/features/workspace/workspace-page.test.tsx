@@ -303,7 +303,24 @@ describe('WorkspacePage', () => {
         hook.value = defaultHook();
         const prompt = 'What are the main risks to Apple\'s valuation?';
         render(<WorkspacePage initialPrompt={prompt} autoStart />);
-        expect(hook.sendMessage).toHaveBeenCalledWith(prompt, true);
+        expect(hook.sendMessage).toHaveBeenCalledWith(prompt, true, {
+            contract_version: 'fundamental.v1',
+            assumptions: {},
+            uncertainty: { mode: 'monte_carlo' },
+        });
+    });
+
+    it('uses the same valuation request for automatic and manual ticker starts', () => {
+        hook.value = defaultHook();
+        const { unmount } = render(<WorkspacePage initialTicker="aapl" autoStart />);
+        const automaticCall = hook.sendMessage.mock.calls[0];
+        unmount();
+        hook.sendMessage.mockClear();
+
+        render(<WorkspacePage initialTicker="aapl" />);
+        fireEvent.click(screen.getByRole('button', { name: 'Start analysis' }));
+
+        expect(hook.sendMessage.mock.calls[0]).toEqual(automaticCall);
     });
 
     it('renders a typed ticker interaction outside the activity projection and submits its identity', () => {
