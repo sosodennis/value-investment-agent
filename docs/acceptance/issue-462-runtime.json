@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "issue": 462,
-  "status": "WIP",
+  "status": "VERIFIED",
   "branch": "codex/issue-462-fundamental-report",
   "commit": "83e5d7dac04189c90e908017f3ab7eab3efba57b",
   "sec_identity_required": true,
@@ -68,24 +68,31 @@
     },
     {
       "name": "exact_commit_preflight",
-      "status": "not_run",
-      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-462-runtime.json scripts/acceptance_preflight.sh"
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-462-runtime.json scripts/acceptance_preflight.sh",
+      "evidence": "preflight-final-candidate.log; exit 0; clean metadata head 047000636d7a204bf1a75898de1ba2e8212bca25 descends from tested implementation"
     },
     {
       "name": "independent_source_review",
-      "status": "not_run",
-      "command": "Independent final source/runtime review; separate reviewer worktree and authenticated API/artifact verification"
+      "status": "pass",
+      "command": "Independent final source/runtime review; separate reviewer worktree and authenticated API/artifact verification",
+      "evidence": "Independent reviewer /root/independent_delivery_review: PASS+NOTES at implementation83e5d7da and metadata04700063; independent source/tests/real API/PostgreSQL/artifact checks; author browser evidence cross-checked"
     }
   ],
-  "blockers": [
-    "All owning source fixes integrated; final clean preflight and independent final acceptance review pending."
-  ],
-  "next_step": "Complete clean exact-implementation preflight and final independent review, then final-head CI before ready/ordinary merge.",
+  "blockers": [],
+  "next_step": "Pre-merge implementation/runtime acceptance complete. Keep draft until final remote-head CI and independent PR verdict, then ordinary merge and actual merge-SHA smoke before issue closure.",
   "post_merge_checks": [
     {
       "name": "merge_sha_service_browser_smoke",
       "status": "not_run",
       "command": "After ordinary main merge, verify actual merge SHA installed source, service and browser behavior before issue closure."
     }
-  ]
+  ],
+  "delivery_gates": {
+    "final_head_ci": "pending",
+    "ordinary_main_merge": "pending",
+    "post_merge_smoke": "pending",
+    "issue_closure": "pending",
+    "scoped_cleanup": "pending"
+  }
 }

@@ -91,7 +91,7 @@ Commands used the dedicated worktree and its installed dependency environments. 
 
 Earlier owning checks remain applicable where source is unchanged: service full suite 5006 passed, 163 PostgreSQL-dependent skips, four warnings; independent calculator release gate; core broader contracts/producer/cutover 303 passed, 7 skips; public graph 14 passed. Final-head CI separately runs the full service suite with PostgreSQL and the calculator release gate. Skips are not counted as passes.
 
-Final clean preflight and independent source verdict are recorded in the runtime manifest once complete. Final-head CI, ordinary merge identity, and post-merge smoke are recorded on PR #464 and #462; no post-merge result is claimed by this pre-merge record.
+Final clean preflight passed with exit 0 at metadata head `047000636d7a204bf1a75898de1ba2e8212bca25`, which contains no implementation drift. The independent reviewer returned PASS+NOTES for source/runtime acceptance at that head. The reviewer independently ran source tests, real service API checks, PostgreSQL, and actual artifact parsing; browser actions were performed by the author and cross-checked against saved DOM/artifacts, not claimed as independent browser execution. The runtime manifest records these completed pre-merge checks. Final-head CI, ordinary merge identity, and post-merge smoke are recorded on PR #464 and #462; no post-merge result is claimed by this pre-merge record.
 
 ## Evidence retention and limits
 
