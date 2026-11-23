@@ -63,6 +63,7 @@ from .market_reference import MarketReferenceProviderPort
 from .source_admission import SourceUsePolicyV1
 from .source_use_deployment import load_runtime_source_use_policy
 from .governance import ModelInventory
+from .conditional_revision import RevisionActor
 from .interface.transport import (
     EmptyOperationInputV1,
     TypedFundamentalRequestEnvelopeV1,
@@ -714,7 +715,17 @@ def create_app(
     )
     async def override_prepared_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ManualValuationOverrideRequestV1)
-        return success_response(request, application.apply_manual_override(value))
+        result = await run_valuation_operation(
+            request,
+            application.apply_manual_override,
+            value,
+            revision_actor=RevisionActor(
+                subject_id=request.state.context.principal.subject_id,
+                organization_id=request.state.context.principal.organization_id,
+            ),
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
 
     @app.post(
         "/v1/valuation/forward-evidence/review",
@@ -984,11 +995,30 @@ def create_app(
 
     @app.get("/v1/artifacts/{artifact_id}", response_model=None)
     async def get_artifact(request: Request, artifact_id: str) -> JSONResponse:
-        return success_response(request, application.artifact(artifact_id))
+        record = await run_valuation_operation(
+            request,
+            application.artifact,
+            artifact_id,
+            revision_actor=RevisionActor(
+                subject_id=request.state.context.principal.subject_id,
+                organization_id=request.state.context.principal.organization_id,
+            ),
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, record)
 
     @app.get("/v1/artifacts/{artifact_id}/content")
     async def get_artifact_content(request: Request, artifact_id: str) -> Response:
-        record, content = application.artifact_content(artifact_id)
+        record, content = await run_valuation_operation(
+            request,
+            application.artifact_content,
+            artifact_id,
+            revision_actor=RevisionActor(
+                subject_id=request.state.context.principal.subject_id,
+                organization_id=request.state.context.principal.organization_id,
+            ),
+            deadline_at=request.state.deadline,
+        )
         return Response(
             content=content,
             media_type=record.media_type,
@@ -1061,6 +1091,10 @@ def create_app(
             request,
             application.calculate_valuation,
             value,
+            revision_actor=RevisionActor(
+                subject_id=request.state.context.principal.subject_id,
+                organization_id=request.state.context.principal.organization_id,
+            ),
             correlation_id=request.state.correlation_id,
             deadline_at=request.state.deadline,
         )
@@ -1093,6 +1127,10 @@ def create_app(
             request,
             application.calculate_with_policy,
             value,
+            revision_actor=RevisionActor(
+                subject_id=request.state.context.principal.subject_id,
+                organization_id=request.state.context.principal.organization_id,
+            ),
             correlation_id=request.state.correlation_id,
             deadline_at=request.state.deadline,
         )

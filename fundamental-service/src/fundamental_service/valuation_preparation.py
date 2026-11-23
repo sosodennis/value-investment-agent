@@ -81,6 +81,7 @@ from .serialization import sha256_digest
 from .uncertainty_policy import (
     DEFAULT_UNCERTAINTY_POLICY_VERSION,
     build_default_uncertainty,
+    build_conditional_uncertainty,
 )
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
@@ -1638,9 +1639,10 @@ def _prepare_automatic_valuation(
             )
         request = request.model_copy(
             update={
-                "uncertainty": UncertaintyV1(
-                    mode="scenarios",
-                    scenarios=tuple(
+                "uncertainty": build_conditional_uncertainty(
+                    request,
+                    historical_metrics=metrics.metrics,
+                    joint_scenarios=tuple(
                         ScenarioInputV1(
                             name=name,
                             assumptions={
@@ -1900,6 +1902,13 @@ def _prepare_automatic_valuation(
         ),
         *capital_evidence,
     )
+    if conditional_assessment is not None or conditional_operating is not None:
+        assumptions_evidence = tuple(
+            item.model_copy(
+                update={"editable": item.path == "assumptions.terminal_growth"}
+            )
+            for item in assumptions_evidence
+        )
     digest_payload = {
         "input": request,
         "metrics": metrics,
@@ -2203,6 +2212,108 @@ def _blocked_preparation(
     )
 
 
+@using_valuation_context
+def apply_conditional_terminal_growth_revision(
+    automatic: AutomaticValuationPreparationV1,
+    *,
+    value: Decimal,
+    provenance: ManualProvenanceV1,
+) -> AutomaticValuationPreparationV1:
+    """Transform fresh automatic evidence without altering its joint hypotheses."""
+    if automatic.input is None or not (
+        automatic.conditional_capital is not None
+        or automatic.conditional_operating is not None
+    ):
+        raise PreparationError(
+            "CONDITIONAL_REVISION_UNAVAILABLE",
+            "revision requires a prepared conditional input",
+        )
+    if automatic.input.provenance.conditional_revision_ref is not None or any(
+        item.method == "manual" for item in automatic.assumptions_evidence
+    ):
+        raise PreparationError(
+            "CONDITIONAL_REVISION_CHAINED", "revision requires an automatic preparation"
+        )
+    if provenance.forward_reference is not None:
+        raise PreparationError(
+            "CONDITIONAL_REVISION_CITATION_UNSUPPORTED",
+            "conditional revision does not support forward citations",
+        )
+    if provenance.automatic_preparation_digest != automatic.preparation_digest:
+        raise PreparationError(
+            "MANUAL_OVERRIDE_DIGEST_MISMATCH",
+            "revision is bound to another preparation",
+        )
+    if not value.is_finite() or not Decimal("0") <= value <= Decimal("0.04"):
+        raise PreparationError(
+            "CONDITIONAL_REVISION_BOUNDS", "terminal growth must be between 0 and 0.04"
+        )
+    if value == automatic.input.assumptions.terminal_growth:
+        raise PreparationError(
+            "CONDITIONAL_REVISION_NOOP", "terminal growth must change"
+        )
+    path = "assumptions.terminal_growth"
+    evidence = tuple(
+        item for item in automatic.assumptions_evidence if item.path == path
+    )
+    if len(evidence) != 1 or not evidence[0].editable:
+        raise PreparationError(
+            "MANUAL_OVERRIDE_UNSUPPORTED",
+            "terminal growth has no unique editable automatic evidence",
+        )
+    assumptions = _override_assumptions(
+        automatic.input.assumptions, path=path, value=value
+    )
+    updated_input = automatic.input.model_copy(
+        update={
+            "assumptions": assumptions,
+            "uncertainty": UncertaintyV1(mode="none"),
+            "input_digest": None,
+        }
+    ).with_digest()
+    updated_input = updated_input.model_copy(
+        update={
+            "uncertainty": build_conditional_uncertainty(
+                updated_input,
+                historical_metrics=automatic.historical_metrics.metrics,
+                joint_scenarios=automatic.input.uncertainty.scenarios,
+            ),
+        }
+    ).with_digest()
+    manual = evidence[0].model_copy(
+        update={
+            "value": value,
+            "method": "manual",
+            "editable": False,
+            "formula": f"manual override of {path}",
+            "manual_provenance": provenance,
+        }
+    )
+    payload = automatic.model_dump(exclude={"preparation_digest"})
+    payload.update(
+        input=updated_input,
+        assumptions_evidence=tuple(
+            item.model_copy(update={"editable": False})
+            for item in automatic.assumptions_evidence
+        )
+        + (manual,),
+        issue_codes=tuple(
+            dict.fromkeys((*automatic.issue_codes, "MANUAL_OVERRIDE_APPLIED"))
+        ),
+    )
+    return AutomaticValuationPreparationV1.model_validate(
+        {
+            **payload,
+            "preparation_digest": sha256_digest(
+                {
+                    **payload,
+                    "automatic_preparation_digest": automatic.preparation_digest,
+                }
+            ),
+        }
+    )
+
+
 __all__ = [
     "ApprovedMarketPolicyInputsV1",
     "AssumptionEvidenceV1",
@@ -2216,4 +2327,5 @@ __all__ = [
     "apply_manual_override",
     "derive_historical_metrics",
     "prepare_automatic_valuation",
+    "apply_conditional_terminal_growth_revision",
 ]

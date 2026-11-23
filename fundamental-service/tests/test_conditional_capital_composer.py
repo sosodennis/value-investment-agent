@@ -65,7 +65,7 @@ def test_conditional_http_preparation_and_approved_scenarios_save_and_replay(tmp
     )
     assert prepared.equity_dilution is None
     assert prepared.conditional_quote is not None
-    assert prepared.input.uncertainty.mode == "scenarios"
+    assert prepared.input.uncertainty.mode == "monte_carlo"
     assert (
         prepared.conditional_capital.output_digest
         in prepared.input.assumptions.trace.source_refs
@@ -87,7 +87,7 @@ def test_conditional_http_preparation_and_approved_scenarios_save_and_replay(tmp
     assert first.status_code == 200, first.text
     result = first.json()["result"]
     assert result["status"] == "provisional"
-    assert result["requested_samples"] == 0
+    assert result["requested_samples"] == 256
     assert result["input_digest"] == value.input_digest
     assert result["base"]["quality_status"] == "provisional"
     assert result["base"]["per_share_value"] is not None
@@ -205,7 +205,9 @@ def test_alternate_uncertainty_route_cannot_drop_conditional_scenarios(tmp_path)
         json=make_internal_envelope(payload),
     )
     assert response.status_code == 422, response.text
-    assert response.json()["error"]["code"] == "CONDITIONAL_CAPITAL_INPUT_MISMATCH"
+    assert (
+        response.json()["error"]["code"] == "CONDITIONAL_UNCERTAINTY_ROUTE_UNSUPPORTED"
+    )
 
 
 @pytest.mark.parametrize(

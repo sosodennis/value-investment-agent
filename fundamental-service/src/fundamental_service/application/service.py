@@ -11,6 +11,17 @@ from typing import Any, overload
 
 from pydantic import model_validator
 
+from ..conditional_revision import (
+    REVISION_PREFIX,
+    ConditionalRevisionError,
+    ConditionalRevisionForbidden,
+    ConditionalRevisionSelectorV1,
+    RevisionActor,
+    bind_revision,
+    issue_revision,
+    read_revision,
+    revision_selector,
+)
 from ..calculator import (
     CalculationRefusal,
     calculate,
@@ -24,10 +35,12 @@ from ..contracts import (
     CalculationArtifactV1,
     CalculationEvidenceV1,
     CalculationTraceV1,
+    ConditionalRevisionRefV1,
     FactsReadRequestV1,
     FactsReadResponseV1,
     FiscalPeriodSelectorV1,
     PolicyValuationInputV1,
+    ProvenanceInputV1,
     QualityStatus,
     ResolvedFiscalPeriodV1,
     SnapshotResolutionRequestV1,
@@ -1126,6 +1139,11 @@ class FundamentalApplication:
             *trace.source_content_hashes,
             trace.policy_digest,
             trace.assumptions_digest,
+            *(
+                (request.provenance.conditional_revision_ref.content_hash,)
+                if request.provenance.conditional_revision_ref is not None
+                else ()
+            ),
         )
         try:
             record = self.artifact_store.put(
@@ -1174,6 +1192,9 @@ class FundamentalApplication:
         evidence = UncertaintyEvidenceV1(request=request, report=stable_result)
         evidence_digest = sha256_digest(evidence.model_dump(mode="json"))
         artifact_id = f"uncertainty-evidence-{evidence_digest}"
+        revision_ref = ProvenanceInputV1.model_validate_json(
+            canonical_bytes(request["provenance"])
+        ).conditional_revision_ref
         dependencies = (
             result.input_digest,
             result.base.input_digest,
@@ -1187,6 +1208,7 @@ class FundamentalApplication:
             *trace.source_content_hashes,
             trace.policy_digest,
             trace.assumptions_digest,
+            *((revision_ref.content_hash,) if revision_ref is not None else ()),
         )
         try:
             record = self.artifact_store.put(
@@ -1604,16 +1626,124 @@ class FundamentalApplication:
         guard_execution_deadline(deadline_at)
         return preparation
 
+    def _reproduce_conditional_preparation(
+        self,
+        selector: ConditionalRevisionSelectorV1,
+        *,
+        deadline_at: datetime | None,
+    ) -> AutomaticValuationPreparationV1:
+        return self.prepare_valuation(
+            ValuationEvidenceReadRequestV1(
+                contract_version="fundamental.v1",
+                snapshot_id=selector.snapshot_id,
+                data_release_manifest_digest=selector.data_release_manifest_digest,
+                model_id=selector.model_id,
+            ),
+            policy_id=selector.policy_id,
+            deadline_at=deadline_at,
+        )
+
+    def _revision_dependencies(
+        self, automatic: AutomaticValuationPreparationV1
+    ) -> tuple[str, ...]:
+        selector = revision_selector(automatic)
+        manifest = self._data_release_manifest(selector.data_release_manifest_digest)
+        if manifest is None or automatic.input is None:
+            raise ConditionalRevisionError(
+                "revision requires retained release evidence"
+            )
+        assert automatic.input.input_digest is not None
+        assert automatic.input.assumptions.trace is not None
+        return tuple(
+            sorted(
+                {
+                    automatic.preparation_digest,
+                    automatic.input.input_digest,
+                    manifest.manifest_digest,
+                    *(ref.content_hash for ref in manifest.artifact_refs),
+                    *(
+                        ref
+                        for ref in automatic.input.assumptions.trace.source_refs
+                        if is_digest(ref)
+                    ),
+                }
+            )
+        )
+
+    def _recompose_revision(
+        self,
+        ref: ConditionalRevisionRefV1,
+        *,
+        revision_actor: RevisionActor | None,
+        deadline_at: datetime | None,
+        automatic: AutomaticValuationPreparationV1 | None = None,
+    ) -> AutomaticValuationPreparationV1:
+        if self.artifact_store is None:
+            raise ConditionalRevisionError("retained revision storage is unavailable")
+        proof = read_revision(
+            self.artifact_store, ref, actor=revision_actor, deadline_at=deadline_at
+        )
+        if automatic is None:
+            automatic = self._reproduce_conditional_preparation(
+                proof.selector, deadline_at=deadline_at
+            )
+        expected_dependencies = self._revision_dependencies(automatic)
+        record = self.artifact_store.get(ref.artifact_id)
+        if (
+            record.dependency_hashes != expected_dependencies
+            or record.status != "valid"
+        ):
+            raise ConditionalRevisionError("revision dependencies are not retained")
+        guard_execution_deadline(deadline_at)
+        return bind_revision(automatic, proof, ref)
+
     def apply_manual_override(
-        self, request: ManualValuationOverrideRequestV1
+        self,
+        request: ManualValuationOverrideRequestV1,
+        *,
+        revision_actor: RevisionActor | None = None,
+        deadline_at: datetime | None = None,
     ) -> AutomaticValuationPreparationV1:
         try:
+            if (
+                request.preparation.conditional_operating is not None
+                or request.preparation.conditional_capital is not None
+            ):
+                if revision_actor is None:
+                    raise ConditionalRevisionForbidden(
+                        "revision requires an authenticated owner"
+                    )
+                if self.artifact_store is None:
+                    raise ConditionalRevisionError(
+                        "retained revision storage is unavailable"
+                    )
+                guard_execution_deadline(deadline_at)
+                automatic = self._reproduce_conditional_preparation(
+                    revision_selector(request.preparation), deadline_at=deadline_at
+                )
+                return issue_revision(
+                    self.artifact_store,
+                    automatic,
+                    request,
+                    actor=revision_actor,
+                    dependency_hashes=self._revision_dependencies(automatic),
+                    deadline_at=deadline_at,
+                )
             return apply_manual_override(
                 request.preparation,
                 path=request.path,
                 value=request.value,
                 provenance=request.provenance,
             )
+        except ConditionalRevisionForbidden as error:
+            raise ServiceError(
+                "CONDITIONAL_REVISION_FORBIDDEN",
+                str(error),
+                status_code=403,
+                retryable=False,
+            ) from error
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
         except ValueError as error:
             raise ServiceError(
                 "MANUAL_OVERRIDE_INVALID",
@@ -1914,7 +2044,13 @@ class FundamentalApplication:
             retryable=False,
         )
 
-    def artifact(self, artifact_id: str) -> ArtifactRecordV1:
+    def _read_authorized_artifact(
+        self,
+        artifact_id: str,
+        *,
+        revision_actor: RevisionActor | None,
+        deadline_at: datetime | None,
+    ) -> tuple[ArtifactRecordV1, bytes | None]:
         if self.artifact_store is None:
             raise ServiceError(
                 "source_unavailable",
@@ -1923,19 +2059,98 @@ class FundamentalApplication:
                 retryable=True,
             )
         try:
-            return self.artifact_store.get(artifact_id)
+            record = self.artifact_store.get(artifact_id)
+            guarded = artifact_id.startswith(
+                (REVISION_PREFIX, "calculation-evidence-", "uncertainty-evidence-")
+            )
+            if not guarded:
+                return record, None
+            if record.media_type != "application/json":
+                raise ConditionalRevisionError(
+                    "retained evidence media type is invalid"
+                )
+            raw = read_retained_artifact(
+                self.artifact_store,
+                ArtifactRefV1(
+                    artifact_id=record.artifact_id,
+                    content_hash=record.content_hash,
+                    media_type=record.media_type,
+                    role="calculation_evidence",
+                ),
+            )
+            if (
+                record.media_type != "application/json"
+                or sha256(raw).hexdigest() != record.content_hash
+            ):
+                raise ConditionalRevisionError("retained evidence bytes are invalid")
+            ref: ConditionalRevisionRefV1 | None
+            if artifact_id.startswith(REVISION_PREFIX):
+                ref = ConditionalRevisionRefV1(
+                    artifact_id=artifact_id, content_hash=record.content_hash
+                )
+            elif artifact_id.startswith("calculation-evidence-"):
+                ref = CalculationEvidenceV1.model_validate_json(
+                    raw
+                ).request.provenance.conditional_revision_ref
+            else:
+                evidence = UncertaintyEvidenceV1.model_validate_json(raw)
+                ref = ValuationInputV1.model_validate_json(
+                    canonical_bytes(evidence.request)
+                ).provenance.conditional_revision_ref
+            if ref is not None:
+                self._recompose_revision(
+                    ref, revision_actor=revision_actor, deadline_at=deadline_at
+                )
+                if (
+                    artifact_id != ref.artifact_id
+                    and ref.content_hash not in record.dependency_hashes
+                ):
+                    raise ConditionalRevisionError(
+                        "derived evidence is not revision bound"
+                    )
+            guard_execution_deadline(deadline_at)
+            return record, raw
+        except ConditionalRevisionForbidden as error:
+            raise ServiceError(
+                "CONDITIONAL_REVISION_FORBIDDEN",
+                "evidence requires its authenticated owner",
+                status_code=403,
+                retryable=False,
+            ) from error
         except SnapshotError as error:
             raise _snapshot_error(error) from error
-
-    def artifact_content(self, artifact_id: str) -> tuple[ArtifactRecordV1, bytes]:
-        record = self.artifact(artifact_id)
-        if self.artifact_store is None:  # pragma: no cover - guarded by artifact()
+        except (ValueError, DataReleaseError) as error:
             raise ServiceError(
-                "source_unavailable",
-                "released artifact is unavailable",
-                status_code=503,
-                retryable=True,
-            )
+                "ARTIFACT_EVIDENCE_INVALID",
+                "retained evidence did not verify",
+                status_code=422,
+                retryable=False,
+            ) from error
+
+    def artifact(
+        self,
+        artifact_id: str,
+        *,
+        revision_actor: RevisionActor | None = None,
+        deadline_at: datetime | None = None,
+    ) -> ArtifactRecordV1:
+        record, _ = self._read_authorized_artifact(
+            artifact_id, revision_actor=revision_actor, deadline_at=deadline_at
+        )
+        return record
+
+    def artifact_content(
+        self,
+        artifact_id: str,
+        *,
+        revision_actor: RevisionActor | None = None,
+        deadline_at: datetime | None = None,
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        record, raw = self._read_authorized_artifact(
+            artifact_id, revision_actor=revision_actor, deadline_at=deadline_at
+        )
+        if raw is not None:
+            return record, raw
         try:
             return record, self.artifact_store.read(artifact_id)
         except SnapshotError as error:
@@ -1961,9 +2176,13 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
+        revision_actor: RevisionActor | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         return self._calculate_valuation(
-            value, correlation_id=correlation_id, deadline_at=deadline_at
+            value,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+            revision_actor=revision_actor,
         )
 
     def _calculate_valuation(
@@ -1972,6 +2191,7 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
+        revision_actor: RevisionActor | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         self._require_released_calculator_model(value)
@@ -1988,6 +2208,7 @@ class FundamentalApplication:
             resolution,
             correlation_id=correlation_id,
             deadline_at=deadline_at,
+            revision_actor=revision_actor,
         )
 
     def calculate_with_policy(
@@ -1996,11 +2217,16 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
+        revision_actor: RevisionActor | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         resolved, resolution = self._resolve_policy_overrides(value)
         return self._calculate_resolved(
-            resolved, resolution, correlation_id=correlation_id, deadline_at=deadline_at
+            resolved,
+            resolution,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+            revision_actor=revision_actor,
         )
 
     @timed_valuation_stage("release.conditional_input")
@@ -2009,6 +2235,7 @@ class FundamentalApplication:
         value: ValuationInputV1,
         *,
         deadline_at: datetime | None = None,
+        revision_actor: RevisionActor | None = None,
     ) -> bool:
         manifest = self._data_release_manifest(
             value.valuation_context.data_release_manifest_digest
@@ -2023,7 +2250,7 @@ class FundamentalApplication:
             manifest.conditional_capital_policies
             or manifest.conditional_reinvestment_policies
         ):
-            if tagged:
+            if tagged or value.provenance.conditional_revision_ref is not None:
                 raise ServiceError(
                     "CONDITIONAL_CAPITAL_RELEASE_MISSING",
                     "conditional composition requires a pinned conditional release",
@@ -2048,6 +2275,28 @@ class FundamentalApplication:
             policy_id=value.policy_id,
             deadline_at=deadline_at,
         )
+        if value.provenance.conditional_revision_ref is not None:
+            try:
+                expected = self._recompose_revision(
+                    value.provenance.conditional_revision_ref,
+                    revision_actor=revision_actor,
+                    deadline_at=deadline_at,
+                    automatic=expected,
+                )
+            except ConditionalRevisionForbidden as error:
+                raise ServiceError(
+                    "CONDITIONAL_REVISION_FORBIDDEN",
+                    str(error),
+                    status_code=403,
+                    retryable=False,
+                ) from error
+            except (ValueError, SnapshotError, DataReleaseError) as error:
+                raise ServiceError(
+                    "CONDITIONAL_REVISION_INVALID",
+                    "retained revision did not reproduce",
+                    status_code=422,
+                    retryable=False,
+                ) from error
         if expected.input is not None:
             resolved, _ = self._resolve_policy(expected.input)
         else:
@@ -2071,6 +2320,7 @@ class FundamentalApplication:
         *,
         correlation_id: str,
         deadline_at: datetime | None = None,
+        revision_actor: RevisionActor | None = None,
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
         if resolution.input_digest != resolved.input_digest:
@@ -2098,7 +2348,7 @@ class FundamentalApplication:
         self._verify_fact_references(resolved)
         guard_execution_deadline(deadline_at)
         released_conditional = self._is_released_conditional_input(
-            resolved, deadline_at=deadline_at
+            resolved, deadline_at=deadline_at, revision_actor=revision_actor
         )
         guard_execution_deadline(deadline_at)
         has_uncertainty = resolved.uncertainty.mode != "none"
@@ -2188,6 +2438,16 @@ class FundamentalApplication:
         return uncertainty
 
     def replay_valuation(self, envelope: ReplayEnvelopeV1) -> ReplayReportV1:
+        if (
+            envelope.request.provenance.conditional_revision_ref is not None
+            or envelope.request.uncertainty.quantile_basis is not None
+        ):
+            raise ServiceError(
+                "CONDITIONAL_REPLAY_UNSUPPORTED",
+                "conditional inputs require the authenticated canonical calculation route",
+                status_code=422,
+                retryable=False,
+            )
         if self.artifact_store is None or self.snapshot_repository is None:
             self.metrics.increment("provenance_replay_failures_total")
             raise ServiceError(
@@ -2220,6 +2480,24 @@ class FundamentalApplication:
         self, value: UncertaintyRequestV1, *, deadline_at: datetime | None = None
     ) -> UncertaintyReportV1:
         guard_execution_deadline(deadline_at)
+        manifest = self._data_release_manifest(
+            value.valuation_context.data_release_manifest_digest
+        )
+        if (
+            value.provenance.conditional_revision_ref is not None
+            or value.uncertainty.quantile_basis is not None
+            or manifest is not None
+            and (
+                manifest.conditional_capital_policies
+                or manifest.conditional_reinvestment_policies
+            )
+        ):
+            raise ServiceError(
+                "CONDITIONAL_UNCERTAINTY_ROUTE_UNSUPPORTED",
+                "conditional inputs require the canonical calculation route",
+                status_code=422,
+                retryable=False,
+            )
         self._require_released_calculator_model(value)
         if value.policy_id is None:
             raise ServiceError(
