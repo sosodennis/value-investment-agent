@@ -1,0 +1,2798 @@
+{
+  "provenance": {
+    "kind": "retained_real_artifact_extract",
+    "source_commit": "cf091fb3b3518ef20c616947ce390bf069bfe031",
+    "source_artifact_sha256": "192c54598fc4cd88fc79c8dfc3a6ac8870aa9ccdd28eb35793a7ada26798549c",
+    "public_evidence_url": "https://github.com/sosodennis/value-investment-agent/issues/462#issuecomment-7094882155",
+    "public_acceptance_url": "https://github.com/sosodennis/value-investment-agent/blob/cf091fb3b3518ef20c616947ce390bf069bfe031/docs/acceptance/issue-462-acceptance.md",
+    "run_id": "bacbf333-83c7-450b-bc23-4e0e06dcf224",
+    "artifact_id": "505feae3-faf5-4f68-a4ca-e05c136884d5",
+    "artifact_created_at": "2026-11-23T07:41:05+00:00",
+    "note": "原始 Decimal 字串不作數值轉換；只抽取研究欄位，不是完整 wire artifact。"
+  },
+  "identity": {
+    "issuer_id": "0000789019",
+    "issuer_name": "MICROSOFT CORPORATION",
+    "domicile": "US",
+    "reporting_basis": "us-gaap",
+    "security_id": "MSFT",
+    "share_class": "Common stock, $0.00000625 par value per share",
+    "currency": "USD"
+  },
+  "valuation_timestamp": "2026-11-23T05:51:07.263703Z",
+  "evaluated_at": "2026-11-23T05:51:07.263703Z",
+  "model_id": "fcff_dcf",
+  "model_version": "fcff_dcf-v2",
+  "calculation_status": "completed",
+  "quality_status": "provisional",
+  "input_digest": "74c6e73a24700b4d3a57d74c732a0ef5fe04caa19e1a0be8d1ffbe6fdf28d076",
+  "result_hash": "ca20c411616fe30122a02d374bae2b6ae5114d12f42f3921657c7b26964a22df",
+  "base_input_digest": "51e9f1ce55d4a78535b96f0a559fdd0f29f07faba3a96f1e634982d9e2f23ad9",
+  "base_result_hash": "734fbae72c00f9a44106860b968186bb1b1de47deee0199a5dea91ab35105da6",
+  "per_share_value": "229.88242539685962775556419207139754074672901162460",
+  "intrinsic_value": "1731474428089.1467162549094946817662769043629155565",
+  "enterprise_value": "1790200428089.1467162549094946817662769043629155565",
+  "quantiles": {
+    "p05": "144.66504923006348207751523639707097017148015276713",
+    "p50": "173.10058984916732564133256488227973785421478949288",
+    "p95": "197.99983774116374973780751746974444493359658532582",
+    "lower": "144.66504923006348207751523639707097017148015276713",
+    "median": "173.10058984916732564133256488227973785421478949288",
+    "upper": "197.99983774116374973780751746974444493359658532582"
+  },
+  "assumptions": {
+    "forecast": {
+      "base_revenue": "331839000000",
+      "revenue_growth": [
+        "0.16130268348441552309797546607728134538929576120257",
+        "0.12904214678753241847838037286182507631143660896206",
+        "0.096781610090649313858785279646368807233577456721542",
+        "0.064521073393766209239190186430912538155718304481028",
+        "0.032260536696883104619595093215456269077859152240514"
+      ],
+      "operating_margin": [
+        "0.45682358074353595379392372231170279398114587197163",
+        "0.45682358074353595379392372231170279398114587197163",
+        "0.45682358074353595379392372231170279398114587197163",
+        "0.45682358074353595379392372231170279398114587197163",
+        "0.45682358074353595379392372231170279398114587197163"
+      ],
+      "reinvestment_rate": [
+        "0.40",
+        "0.40",
+        "0.40",
+        "0.40",
+        "0.40"
+      ]
+    },
+    "wacc": {
+      "risk_free_rate": "0.0492",
+      "beta": "1.27664817807817509986989534809254109859466552734375",
+      "equity_risk_premium": "0.044600000000000001",
+      "pre_tax_cost_of_debt": "0.05291300000000000169908531688633956946432590484619140625",
+      "tax_rate": "0.18558965461557597438523501365980830337605227270572",
+      "debt_weight": "0.052825188757969709918427270167740061879158020019531",
+      "equity_weight": "0.94717481124203029008157272983225993812084197998047"
+    },
+    "terminal_growth": "0.0492",
+    "capital_bridge": {
+      "cash": "20935000000",
+      "non_operating_assets": "40000000000",
+      "debt": "51067000000",
+      "preferred_stock": "1000000000",
+      "lease_liabilities": "66594000000",
+      "non_controlling_interest": "1000000000",
+      "diluted_shares": "7532000000"
+    },
+    "bank": null
+  },
+  "wacc": "0.10280811227513954443826299464966391254835787654367",
+  "nodes": [
+    {
+      "node_id": "cost_of_equity",
+      "value": "0.10613850874228661073084551060310243286721743061207",
+      "unit": "rate",
+      "formula": "risk_free_rate + beta * equity_risk_premium",
+      "inputs": [
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "after_tax_debt",
+      "value": "0.043092894605326029851106719485225915178441357889240",
+      "unit": "rate",
+      "formula": "pre_tax_cost_of_debt * (1 - tax_rate)",
+      "inputs": [
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "wacc",
+      "value": "0.10280811227513954443826299464966391254835787654367",
+      "unit": "rate",
+      "formula": "equity_weight * cost_of_equity + debt_weight * after_tax_debt",
+      "inputs": [
+        "cost_of_equity",
+        "after_tax_debt"
+      ]
+    },
+    {
+      "node_id": "base_revenue",
+      "value": "331839000000",
+      "unit": "currency",
+      "formula": "historical revenue fact",
+      "inputs": [
+        "sec-fact-0913189b81fc0f2c43f32da7",
+        "sec-fact-0e8db7ccae0294e00e5f9f72",
+        "sec-fact-0ef1d09be7d5389343070e44",
+        "sec-fact-15b1bcbb458b8d3043e0ac95",
+        "sec-fact-1603ac9a947233e5d87a9957",
+        "sec-fact-1b096461e9eab405301a89dd",
+        "sec-fact-1d3386347160525e5f17fc2b",
+        "sec-fact-22b23b2e79e611d909d3dfa2",
+        "sec-fact-31902f153990061d9ddfc202",
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-441a59cc6791a948884d0db4",
+        "sec-fact-46b9d2cdbdea2e465a6047a2",
+        "sec-fact-4c9c85a926218c03a6c1039b",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5774a3912ff148a0aeea767a",
+        "sec-fact-5b7b7d4c00a3c228694f0d68",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5bfc6ed1990c1d8b6a1ea656",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-5fe8a40c7b7f7970b2da95b6",
+        "sec-fact-645b5b2062177504a5796999",
+        "sec-fact-6961e31238eefa90c8269743",
+        "sec-fact-6a6bfcf5c07040e527e78fc4",
+        "sec-fact-70a1fe4bd1be2d379a1c0559",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc",
+        "sec-fact-76ae3931bd589ec46d36dc7b",
+        "sec-fact-7713b7edcaf08361921d2fff",
+        "sec-fact-7ab961431362696f98b45dc5",
+        "sec-fact-7bb9ee72de417d8fd6c34762",
+        "sec-fact-7d90ab9b5c070389679db675",
+        "sec-fact-7fa6b97042a109ca4dafa9ab",
+        "sec-fact-811d9920be4963463004a4e7",
+        "sec-fact-821f0e7c177ca423e415a3b2",
+        "sec-fact-8c33bf49c89661c886890566",
+        "sec-fact-919bf83dd9e2da92e08d3093",
+        "sec-fact-93327f20f79886686dceb6e0",
+        "sec-fact-9398b5fb3cadeb137a6870db",
+        "sec-fact-93dc8f20cf1ad7244f5711a2",
+        "sec-fact-990c31b3a098af813943aafc",
+        "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+        "sec-fact-9ec4dfcd84fd8b91a367fc5c",
+        "sec-fact-9f02a4b5d26ee1343947bb71",
+        "sec-fact-a4ae8b1679823ab5d06f73d3",
+        "sec-fact-a8993f52840ccbc79024857a",
+        "sec-fact-ab495494aaae9dc22dc2d059",
+        "sec-fact-afccc6811fd998fcbc9388b1",
+        "sec-fact-b49fb67fb4ad137b70a696f1",
+        "sec-fact-b83ee83e8445bdabd1622ee5",
+        "sec-fact-ba5de7dc30658e91daf0a8eb",
+        "sec-fact-bbb12288113f5d34a60f38c8",
+        "sec-fact-bbda2de7012270ce80a6324d",
+        "sec-fact-bca8495c46cab177effa3c8d",
+        "sec-fact-be0b2d31cf9a57f760fb25e3",
+        "sec-fact-c78dbd30e5108a4c79caff03",
+        "sec-fact-c792154eac31dd1dc5791ebd",
+        "sec-fact-d25787276fca6857303c891e",
+        "sec-fact-db44d12f15c41a10dbc638d6",
+        "sec-fact-e21cf3a9cafb00de1df38a8c",
+        "sec-fact-ea439b57dd6aedf080a8489b",
+        "sec-fact-f087558d7f34e3ec79788a95",
+        "sec-fact-f9b73712012e512809aa59de",
+        "sec-fact-fd645614013a7c60b528fbfe",
+        "sec-role-0bbefcaf07e76d0bb4f1fc913c725d42264a1ba30bb2dd837098bb761a3de253",
+        "sec-role-163cf0516d42dba444eba1ddb6862322acae5d5f3bd624436a1aa77bebb6d263",
+        "sec-role-2baeffd5c4c308dd683b0a925111186fc65a2f69113194900055946f08f055b2",
+        "sec-role-5ea04481bf8f244af3ecbe15b9ef72941b6ddad86e715ce5f240224e07378a66",
+        "sec-role-7110a77a14bc43f14de0be1b4eafc0cbb477b6bd8d8bb43e4fc6c983f97b984a",
+        "sec-role-8059fb4f624e813869ca46d8338af29914aab66b4deaa4cb62a1ba13d2f81ab2",
+        "sec-role-8b3f94cd0c258b8a975980d754df6ac3c52d06ad0a412735a84f6188ec0657c9",
+        "sec-role-9a090253c9072e06d63dc0fea17ca744199ef3af14a2e032e69326dc72a77037",
+        "sec-role-a424a4de41fcb598aae76e0ab861c5535291f33c175b8d02dbb34c53aa03fdbf",
+        "sec-role-a832ed398285ddf4d25952043d65e571e46be8fcae4540a05c050aa1234259b2",
+        "sec-role-a99d6498ea03dcfc91c30033f57605b6f8cc3ab786c8bec3fe8b5434d26518ca",
+        "sec-role-ab3b0b6e5253fb1a8ab2d8b14de260a642566d3209ca785d9ab981b8b6445b7f",
+        "sec-role-b09b8b109ee24953a4079e470d5b157914668d9d958b5541ff93b237dcdc787d",
+        "sec-role-b5f430d46f8fb8e8168057bc37c0cfbd2c9f0dc53c79493e3f037a56f94b6964",
+        "sec-role-c94cb8b2aabc2aa1d196ad8bbd8d783edaeb3c51e1e2c0cc5eb36a98cfb2765a",
+        "sec-role-e03639c71646e69ea3a73101245f644ee77f0f7cd834e8cdddb2c1daa76feb14",
+        "sec-role-e0ef6c847a88e7944175afb3fbcd239635375c9f7d5678c2ce1948ea2cd8a4e9",
+        "sec-role-e13bdf554b856fbb9354c23ab861138829424c6a34eca1ea29a00ec68431ed99",
+        "sec-role-e89e8686696f112d4e98c8872f39293ad7a17008b73cc601f203f50d22dda1da"
+      ]
+    },
+    {
+      "node_id": "revenue_1",
+      "value": "385365521184.78496276930908068761896437263851610171",
+      "unit": "currency",
+      "formula": "prior_revenue * (1 + growth)",
+      "inputs": [
+        "base_revenue"
+      ]
+    },
+    {
+      "node_id": "fcff_1",
+      "value": "86023260896.703266931204972574395821489829287593854",
+      "unit": "currency",
+      "formula": "revenue * margin * (1 - tax_rate) * (1 - reinvestment_rate)",
+      "inputs": [
+        "revenue_1"
+      ]
+    },
+    {
+      "node_id": "discounted_fcff_1",
+      "value": "78003833975.462566770417717866652865974273904943701",
+      "unit": "currency",
+      "formula": "fcff / (1 + wacc)^period",
+      "inputs": [
+        "fcff_1",
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "revenue_2",
+      "value": "435093915336.36591781042605564905940860132106949011",
+      "unit": "currency",
+      "formula": "prior_revenue * (1 + growth)",
+      "inputs": [
+        "revenue_1"
+      ]
+    },
+    {
+      "node_id": "fcff_2",
+      "value": "97123887156.477847520595908258653260448472449251954",
+      "unit": "currency",
+      "formula": "revenue * margin * (1 - tax_rate) * (1 - reinvestment_rate)",
+      "inputs": [
+        "revenue_2"
+      ]
+    },
+    {
+      "node_id": "discounted_fcff_2",
+      "value": "79859419956.227191158494600082217380926724318388702",
+      "unit": "currency",
+      "formula": "fcff / (1 + wacc)^period",
+      "inputs": [
+        "fcff_2",
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "revenue_3",
+      "value": "477203005003.26406777462074822142907799676355670748",
+      "unit": "currency",
+      "formula": "prior_revenue * (1 + growth)",
+      "inputs": [
+        "revenue_2"
+      ]
+    },
+    {
+      "node_id": "fcff_3",
+      "value": "106523693333.74430926300649338881698789619845378896",
+      "unit": "currency",
+      "formula": "revenue * margin * (1 - tax_rate) * (1 - reinvestment_rate)",
+      "inputs": [
+        "revenue_3"
+      ]
+    },
+    {
+      "node_id": "discounted_fcff_3",
+      "value": "79423013147.588978030152763515053714747934105762441",
+      "unit": "currency",
+      "formula": "fcff / (1 + wacc)^period",
+      "inputs": [
+        "fcff_3",
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "revenue_4",
+      "value": "507992655112.80545224746960139039242322203165592655",
+      "unit": "currency",
+      "formula": "prior_revenue * (1 + growth)",
+      "inputs": [
+        "revenue_3"
+      ]
+    },
+    {
+      "node_id": "fcff_4",
+      "value": "113396716369.50587012248600204985617347721239530050",
+      "unit": "currency",
+      "formula": "revenue * margin * (1 - tax_rate) * (1 - reinvestment_rate)",
+      "inputs": [
+        "revenue_4"
+      ]
+    },
+    {
+      "node_id": "discounted_fcff_4",
+      "value": "76665623209.475340189718838111197030845945063157585",
+      "unit": "currency",
+      "formula": "fcff / (1 + wacc)^period",
+      "inputs": [
+        "fcff_4",
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "revenue_5",
+      "value": "524380770804.81919521965846558267904187383133285249",
+      "unit": "currency",
+      "formula": "prior_revenue * (1 + growth)",
+      "inputs": [
+        "revenue_4"
+      ]
+    },
+    {
+      "node_id": "fcff_5",
+      "value": "117054955299.25035930503269689495118305879195206995",
+      "unit": "currency",
+      "formula": "revenue * margin * (1 - tax_rate) * (1 - reinvestment_rate)",
+      "inputs": [
+        "revenue_5"
+      ]
+    },
+    {
+      "node_id": "discounted_fcff_5",
+      "value": "71761257901.111333732743069916498722426597214502377",
+      "unit": "currency",
+      "formula": "fcff / (1 + wacc)^period",
+      "inputs": [
+        "fcff_5",
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "discounted_terminal_value",
+      "value": "1404487279899.2813063733825051901465619828883088017",
+      "unit": "currency",
+      "formula": "terminal_value / (1 + wacc)^forecast_periods",
+      "inputs": [
+        "terminal_value",
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "terminal_value",
+      "value": "2290960339540.3981553307986021861756205415404724758",
+      "unit": "currency",
+      "formula": "last_fcff * (1 + terminal_growth) / (wacc - terminal_growth)",
+      "inputs": [
+        "fcff_5",
+        "wacc"
+      ]
+    },
+    {
+      "node_id": "enterprise_value",
+      "value": "1790200428089.1467162549094946817662769043629155565",
+      "unit": "currency",
+      "formula": "sum(discounted_fcff) + discounted_terminal_value",
+      "inputs": [
+        "discounted_fcff_1",
+        "discounted_fcff_2",
+        "discounted_fcff_3",
+        "discounted_fcff_4",
+        "discounted_fcff_5",
+        "discounted_terminal_value"
+      ]
+    },
+    {
+      "node_id": "equity_value",
+      "value": "1731474428089.1467162549094946817662769043629155565",
+      "unit": "currency",
+      "formula": "enterprise_value + cash + non_operating_assets - debt - preferred - leases - NCI",
+      "inputs": [
+        "enterprise_value"
+      ]
+    },
+    {
+      "node_id": "per_share_value",
+      "value": "229.88242539685962775556419207139754074672901162460",
+      "unit": "currency/share",
+      "formula": "equity_value / diluted_shares",
+      "inputs": [
+        "equity_value"
+      ]
+    }
+  ],
+  "forecasts": [
+    {
+      "year": 1,
+      "period_label": "Year 1",
+      "revenue": "385365521184.78496276930908068761896437263851610171",
+      "fcff": "86023260896.703266931204972574395821489829287593854",
+      "discounted_fcff": "78003833975.462566770417717866652865974273904943701",
+      "node_ids": [
+        "revenue_1",
+        "fcff_1",
+        "discounted_fcff_1"
+      ]
+    },
+    {
+      "year": 2,
+      "period_label": "Year 2",
+      "revenue": "435093915336.36591781042605564905940860132106949011",
+      "fcff": "97123887156.477847520595908258653260448472449251954",
+      "discounted_fcff": "79859419956.227191158494600082217380926724318388702",
+      "node_ids": [
+        "revenue_2",
+        "fcff_2",
+        "discounted_fcff_2"
+      ]
+    },
+    {
+      "year": 3,
+      "period_label": "Year 3",
+      "revenue": "477203005003.26406777462074822142907799676355670748",
+      "fcff": "106523693333.74430926300649338881698789619845378896",
+      "discounted_fcff": "79423013147.588978030152763515053714747934105762441",
+      "node_ids": [
+        "revenue_3",
+        "fcff_3",
+        "discounted_fcff_3"
+      ]
+    },
+    {
+      "year": 4,
+      "period_label": "Year 4",
+      "revenue": "507992655112.80545224746960139039242322203165592655",
+      "fcff": "113396716369.50587012248600204985617347721239530050",
+      "discounted_fcff": "76665623209.475340189718838111197030845945063157585",
+      "node_ids": [
+        "revenue_4",
+        "fcff_4",
+        "discounted_fcff_4"
+      ]
+    },
+    {
+      "year": 5,
+      "period_label": "Year 5",
+      "revenue": "524380770804.81919521965846558267904187383133285249",
+      "fcff": "117054955299.25035930503269689495118305879195206995",
+      "discounted_fcff": "71761257901.111333732743069916498722426597214502377",
+      "node_ids": [
+        "revenue_5",
+        "fcff_5",
+        "discounted_fcff_5"
+      ]
+    }
+  ],
+  "historical_revenue": [
+    {
+      "fact_id": "sec-fact-75e5ebdbbd5f639a7ad6b6cc",
+      "normalized_field": "revenue",
+      "value": "211915000000",
+      "unit": "iso4217:USD",
+      "currency": "USD",
+      "scale": 6,
+      "period_start": "2022-07-01",
+      "period_end": "2023-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "period_type": "duration",
+        "start_date": "2022-07-01",
+        "end_date": "2023-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_deaa7eaf-e13f-4828-9e73-3d077f8605da"
+      },
+      "quality": "verified",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/msft-20250630.htm",
+        "content_hash": "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:51:49.168285Z",
+        "available_at": "2025-07-30T20:11:40Z",
+        "filed_at": "2025-07-30T20:11:40Z",
+        "accession_number": "0000950170-25-100235",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      }
+    },
+    {
+      "fact_id": "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+      "normalized_field": "revenue",
+      "value": "245122000000",
+      "unit": "iso4217:USD",
+      "currency": "USD",
+      "scale": 6,
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "period_type": "duration",
+        "start_date": "2023-07-01",
+        "end_date": "2024-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_7f83b284-3c69-4779-90ec-f0c89f19f47e"
+      },
+      "quality": "verified",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      }
+    },
+    {
+      "fact_id": "sec-fact-3f06f27906b00fb717f3bf0c",
+      "normalized_field": "revenue",
+      "value": "281724000000",
+      "unit": "iso4217:USD",
+      "currency": "USD",
+      "scale": 6,
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "period_type": "duration",
+        "start_date": "2024-07-01",
+        "end_date": "2025-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_7575f467-7692-4974-a3da-f27e7e8e1c47"
+      },
+      "quality": "verified",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      }
+    },
+    {
+      "fact_id": "sec-fact-5bf24a709fb138c5a909734c",
+      "normalized_field": "revenue",
+      "value": "331839000000",
+      "unit": "iso4217:USD",
+      "currency": "USD",
+      "scale": 6,
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "period_type": "duration",
+        "start_date": "2025-07-01",
+        "end_date": "2026-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_29985a27-1d12-4b7e-9a06-156523f6e71e"
+      },
+      "quality": "verified",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      }
+    }
+  ],
+  "historical_metrics": {
+    "profile_id": "fcff_dcf-conditional-forward-reinvestment-v1-history",
+    "profile_digest": "4e201c6f66827d216c689f49fc8fcc6e265673ec353934b53b19c34445f2fbde",
+    "metrics": [
+      {
+        "metric_id": "operating_margin",
+        "fiscal_year": 2023,
+        "value": "0.41772880636104098341316093716820423282920038694760",
+        "unit": "ratio",
+        "formula": "operating_income / revenue",
+        "fact_ids": [
+          "sec-fact-5d713b612f95bb1297520766",
+          "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+        ],
+        "source_refs": [
+          "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+          "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+        ],
+        "period_end": "2023-06-30"
+      },
+      {
+        "metric_id": "normalized_tax_rate",
+        "fiscal_year": 2023,
+        "value": "0.18978625253328257437493701783654868941115875983921",
+        "unit": "ratio",
+        "formula": "income_tax_expense / income_before_tax",
+        "fact_ids": [
+          "sec-fact-9398b5fb3cadeb137a6870db",
+          "sec-fact-1b096461e9eab405301a89dd"
+        ],
+        "source_refs": [
+          "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+          "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+        ],
+        "period_end": "2023-06-30"
+      },
+      {
+        "metric_id": "nopat",
+        "fiscal_year": 2023,
+        "value": "71722551566.996226668607450370055200367255993102754",
+        "unit": "currency",
+        "formula": "operating_income * (1 - normalized_tax_rate)",
+        "fact_ids": [
+          "sec-fact-5d713b612f95bb1297520766",
+          "sec-fact-9398b5fb3cadeb137a6870db",
+          "sec-fact-1b096461e9eab405301a89dd"
+        ],
+        "source_refs": [
+          "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+          "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+          "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+        ],
+        "period_end": "2023-06-30"
+      },
+      {
+        "metric_id": "operating_margin",
+        "fiscal_year": 2024,
+        "value": "0.44644299573273716761449400706586924062303669193300",
+        "unit": "ratio",
+        "formula": "operating_income / revenue",
+        "fact_ids": [
+          "sec-fact-4f1f46cc6207e8339a174419",
+          "sec-fact-43b11c6d36dc2d00f2bbe8c2"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2024-06-30"
+      },
+      {
+        "metric_id": "normalized_tax_rate",
+        "fiscal_year": 2024,
+        "value": "0.18231326597827196229600972287938248582853219776040",
+        "unit": "ratio",
+        "formula": "income_tax_expense / income_before_tax",
+        "fact_ids": [
+          "sec-fact-8c33bf49c89661c886890566",
+          "sec-fact-15b1bcbb458b8d3043e0ac95"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2024-06-30"
+      },
+      {
+        "metric_id": "nopat",
+        "fiscal_year": 2024,
+        "value": "89481912364.199764350060767996140536428326236002486",
+        "unit": "currency",
+        "formula": "operating_income * (1 - normalized_tax_rate)",
+        "fact_ids": [
+          "sec-fact-4f1f46cc6207e8339a174419",
+          "sec-fact-8c33bf49c89661c886890566",
+          "sec-fact-15b1bcbb458b8d3043e0ac95"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2024-06-30"
+      },
+      {
+        "metric_id": "revenue_growth",
+        "fiscal_year": 2024,
+        "value": "0.1566996201307127857867541231154000424698581978624",
+        "unit": "ratio",
+        "formula": "revenue / prior_revenue - 1",
+        "fact_ids": [
+          "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+          "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+        ],
+        "period_end": "2024-06-30"
+      },
+      {
+        "metric_id": "operating_margin",
+        "fiscal_year": 2025,
+        "value": "0.45621956240859848646192727634138376567136630177053",
+        "unit": "ratio",
+        "formula": "operating_income / revenue",
+        "fact_ids": [
+          "sec-fact-35bc4f8050586f5fd1cd30e8",
+          "sec-fact-3f06f27906b00fb717f3bf0c"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2025-06-30"
+      },
+      {
+        "metric_id": "normalized_tax_rate",
+        "fiscal_year": 2025,
+        "value": "0.17629644009803683661336115897012788468538426071975",
+        "unit": "ratio",
+        "formula": "income_tax_expense / income_before_tax",
+        "fact_ids": [
+          "sec-fact-f9b73712012e512809aa59de",
+          "sec-fact-5bfc6ed1990c1d8b6a1ea656"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2025-06-30"
+      },
+      {
+        "metric_id": "nopat",
+        "fiscal_year": 2025,
+        "value": "105868971147.07952146375791695988740323715693173821",
+        "unit": "currency",
+        "formula": "operating_income * (1 - normalized_tax_rate)",
+        "fact_ids": [
+          "sec-fact-35bc4f8050586f5fd1cd30e8",
+          "sec-fact-f9b73712012e512809aa59de",
+          "sec-fact-5bfc6ed1990c1d8b6a1ea656"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2025-06-30"
+      },
+      {
+        "metric_id": "revenue_growth",
+        "fiscal_year": 2025,
+        "value": "0.1493215623240671991906071262473380602312317947797",
+        "unit": "ratio",
+        "formula": "revenue / prior_revenue - 1",
+        "fact_ids": [
+          "sec-fact-3f06f27906b00fb717f3bf0c",
+          "sec-fact-43b11c6d36dc2d00f2bbe8c2"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2025-06-30"
+      },
+      {
+        "metric_id": "operating_margin",
+        "fiscal_year": 2026,
+        "value": "0.46780818408927220730534988352785537564903462221137",
+        "unit": "ratio",
+        "formula": "operating_income / revenue",
+        "fact_ids": [
+          "sec-fact-3b3e5f69d627aa0f0d8f7268",
+          "sec-fact-5bf24a709fb138c5a909734c"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2026-06-30"
+      },
+      {
+        "metric_id": "normalized_tax_rate",
+        "fiscal_year": 2026,
+        "value": "0.19396265985271252425663215495317415357913387250353",
+        "unit": "ratio",
+        "formula": "income_tax_expense / income_before_tax",
+        "fact_ids": [
+          "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+          "sec-fact-7fa6b97042a109ca4dafa9ab"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2026-06-30"
+      },
+      {
+        "metric_id": "nopat",
+        "fiscal_year": 2026,
+        "value": "125126818572.44446587197319416153410392083599503417",
+        "unit": "currency",
+        "formula": "operating_income * (1 - normalized_tax_rate)",
+        "fact_ids": [
+          "sec-fact-3b3e5f69d627aa0f0d8f7268",
+          "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+          "sec-fact-7fa6b97042a109ca4dafa9ab"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2026-06-30"
+      },
+      {
+        "metric_id": "revenue_growth",
+        "fiscal_year": 2026,
+        "value": "0.1778868679984665843165651488691059334667972909656",
+        "unit": "ratio",
+        "formula": "revenue / prior_revenue - 1",
+        "fact_ids": [
+          "sec-fact-5bf24a709fb138c5a909734c",
+          "sec-fact-3f06f27906b00fb717f3bf0c"
+        ],
+        "source_refs": [
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+          "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+        ],
+        "period_end": "2026-06-30"
+      }
+    ],
+    "quality_status": "provisional",
+    "issue_codes": [
+      "HISTORY_THRESHOLD_UNVALIDATED",
+      "HISTORY_WINDOW_PARTIALLY_UNAVAILABLE",
+      "CONDITIONAL_FORWARD_REINVESTMENT_HYPOTHESES",
+      "CONDITIONAL_CAPITAL_HYPOTHESES"
+    ],
+    "missing_evidence": [
+      "historical_capital_expenditure",
+      "historical_depreciation_and_amortization",
+      "historical_operating_working_capital",
+      "historical_reinvestment_rate",
+      "preferred_claims",
+      "convertible_instruments",
+      "other_share_classes",
+      "complete_award_inventory",
+      "per_strike_inventory",
+      "compensation_allocation",
+      "current_interest_bearing_debt",
+      "non_operating_assets",
+      "noncontrolling_interests"
+    ]
+  },
+  "fact_count": 84,
+  "normalized_field_count": 20,
+  "fact_field_counts": {
+    "inventory": 4,
+    "common_shares_outstanding": 6,
+    "operating_current_payables": 4,
+    "income_before_tax": 5,
+    "cash_and_equivalents": 4,
+    "long_term_interest_bearing_debt": 4,
+    "operating_lease_cost": 5,
+    "operating_current_receivables": 4,
+    "operating_income": 5,
+    "revenue": 4,
+    "basic_weighted_average_shares": 5,
+    "net_income": 5,
+    "diluted_weighted_average_shares": 5,
+    "income_tax_expense": 5,
+    "long_term_finance_lease_liabilities": 4,
+    "long_term_operating_lease_liabilities": 4,
+    "current_finance_lease_liabilities": 4,
+    "restricted_stock_nonvested_aggregate_unrecognized_compensation": 1,
+    "current_operating_lease_liabilities": 4,
+    "restricted_stock_nonvested_aggregate_quantity": 2
+  },
+  "selected_facts": [
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-1603ac9a947233e5d87a9957",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+      "normalized_field": "cash_and_equivalents",
+      "value": "18315000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": null,
+      "period_end": "2024-06-30",
+      "instant": "2024-06-30",
+      "context": {
+        "concept_qname": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+        "period_type": "instant",
+        "start_date": null,
+        "end_date": null,
+        "instant": "2024-06-30",
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_670413aa-499b-43fb-803c-735d0fc51f59"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2024-06-30T00:00:00Z",
+      "available_at": "2025-07-30T20:11:40Z",
+      "filed_at": "2025-07-30T20:11:40Z",
+      "captured_at": "2026-11-23T05:51:49.168285Z",
+      "accession_number": "0000950170-25-100235",
+      "filing_version": "0000950170-25-100235",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/msft-20250630.htm",
+        "content_hash": "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:51:49.168285Z",
+        "available_at": "2025-07-30T20:11:40Z",
+        "filed_at": "2025-07-30T20:11:40Z",
+        "accession_number": "0000950170-25-100235",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-2f4282e6b5195376c5f5cf55468965fbcf288bbfa490f180c961bb5ff4905677",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-35bc4f8050586f5fd1cd30e8",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:OperatingIncomeLoss",
+      "normalized_field": "operating_income",
+      "value": "128528000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:OperatingIncomeLoss",
+        "period_type": "duration",
+        "start_date": "2024-07-01",
+        "end_date": "2025-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_7575f467-7692-4974-a3da-f27e7e8e1c47"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2025-06-30T00:00:00Z",
+      "available_at": "2026-07-29T20:08:01Z",
+      "filed_at": "2026-07-29T20:08:01Z",
+      "captured_at": "2026-11-23T05:52:24.793821Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_version": "0001193125-26-323660",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-a0632f597502a3c6951398fd17b8839a2a4cdded8affcc7be428b1a99e1cc193",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-3b3e5f69d627aa0f0d8f7268",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:OperatingIncomeLoss",
+      "normalized_field": "operating_income",
+      "value": "155237000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:OperatingIncomeLoss",
+        "period_type": "duration",
+        "start_date": "2025-07-01",
+        "end_date": "2026-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_29985a27-1d12-4b7e-9a06-156523f6e71e"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2026-06-30T00:00:00Z",
+      "available_at": "2026-07-29T20:08:01Z",
+      "filed_at": "2026-07-29T20:08:01Z",
+      "captured_at": "2026-11-23T05:52:24.793821Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_version": "0001193125-26-323660",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-a0632f597502a3c6951398fd17b8839a2a4cdded8affcc7be428b1a99e1cc193",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-3f06f27906b00fb717f3bf0c",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "normalized_field": "revenue",
+      "value": "281724000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2024-07-01",
+      "period_end": "2025-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "period_type": "duration",
+        "start_date": "2024-07-01",
+        "end_date": "2025-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_7575f467-7692-4974-a3da-f27e7e8e1c47"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2025-06-30T00:00:00Z",
+      "available_at": "2026-07-29T20:08:01Z",
+      "filed_at": "2026-07-29T20:08:01Z",
+      "captured_at": "2026-11-23T05:52:24.793821Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_version": "0001193125-26-323660",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-f70e3ce04fb85b75d938c0045928d440adadb08d9ab97359007f3e1dd17ca70e",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "normalized_field": "revenue",
+      "value": "245122000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "period_type": "duration",
+        "start_date": "2023-07-01",
+        "end_date": "2024-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_7f83b284-3c69-4779-90ec-f0c89f19f47e"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2024-06-30T00:00:00Z",
+      "available_at": "2026-07-29T20:08:01Z",
+      "filed_at": "2026-07-29T20:08:01Z",
+      "captured_at": "2026-11-23T05:52:24.793821Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_version": "0001193125-26-323660",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-f70e3ce04fb85b75d938c0045928d440adadb08d9ab97359007f3e1dd17ca70e",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-46b9d2cdbdea2e465a6047a2",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+      "normalized_field": "cash_and_equivalents",
+      "value": "34704000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": null,
+      "period_end": "2023-06-30",
+      "instant": "2023-06-30",
+      "context": {
+        "concept_qname": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+        "period_type": "instant",
+        "start_date": null,
+        "end_date": null,
+        "instant": "2023-06-30",
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_005805a9-264e-4b1d-93ea-497c67cc9a68"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2023-06-30T00:00:00Z",
+      "available_at": "2024-07-30T20:06:22Z",
+      "filed_at": "2024-07-30T20:06:22Z",
+      "captured_at": "2026-11-23T05:51:15.351266Z",
+      "accession_number": "0000950170-24-087843",
+      "filing_version": "0000950170-24-087843",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/msft-20240630.htm",
+        "content_hash": "014c4f7b2e8a7a83dee20159d645cdeeebb207df602f5973383ca6ad2c02085e",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:51:15.351266Z",
+        "available_at": "2024-07-30T20:06:22Z",
+        "filed_at": "2024-07-30T20:06:22Z",
+        "accession_number": "0000950170-24-087843",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-4560cd59fb931c7302ec065a168cc507d7b4792d1d2a60d5093b2f9a5db21327",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-4f1f46cc6207e8339a174419",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:OperatingIncomeLoss",
+      "normalized_field": "operating_income",
+      "value": "109433000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2023-07-01",
+      "period_end": "2024-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:OperatingIncomeLoss",
+        "period_type": "duration",
+        "start_date": "2023-07-01",
+        "end_date": "2024-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_7f83b284-3c69-4779-90ec-f0c89f19f47e"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2024-06-30T00:00:00Z",
+      "available_at": "2026-07-29T20:08:01Z",
+      "filed_at": "2026-07-29T20:08:01Z",
+      "captured_at": "2026-11-23T05:52:24.793821Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_version": "0001193125-26-323660",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-a0632f597502a3c6951398fd17b8839a2a4cdded8affcc7be428b1a99e1cc193",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-5bf24a709fb138c5a909734c",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "normalized_field": "revenue",
+      "value": "331839000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2025-07-01",
+      "period_end": "2026-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "period_type": "duration",
+        "start_date": "2025-07-01",
+        "end_date": "2026-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_29985a27-1d12-4b7e-9a06-156523f6e71e"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2026-06-30T00:00:00Z",
+      "available_at": "2026-07-29T20:08:01Z",
+      "filed_at": "2026-07-29T20:08:01Z",
+      "captured_at": "2026-11-23T05:52:24.793821Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_version": "0001193125-26-323660",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-f70e3ce04fb85b75d938c0045928d440adadb08d9ab97359007f3e1dd17ca70e",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-5d713b612f95bb1297520766",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:OperatingIncomeLoss",
+      "normalized_field": "operating_income",
+      "value": "88523000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2022-07-01",
+      "period_end": "2023-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:OperatingIncomeLoss",
+        "period_type": "duration",
+        "start_date": "2022-07-01",
+        "end_date": "2023-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_deaa7eaf-e13f-4828-9e73-3d077f8605da"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2023-06-30T00:00:00Z",
+      "available_at": "2025-07-30T20:11:40Z",
+      "filed_at": "2025-07-30T20:11:40Z",
+      "captured_at": "2026-11-23T05:51:49.168285Z",
+      "accession_number": "0000950170-25-100235",
+      "filing_version": "0000950170-25-100235",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/msft-20250630.htm",
+        "content_hash": "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:51:49.168285Z",
+        "available_at": "2025-07-30T20:11:40Z",
+        "filed_at": "2025-07-30T20:11:40Z",
+        "accession_number": "0000950170-25-100235",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-d5ccab6588909aa754619a0ea0dcb591e2f0821fb31adc97559b25b4c42d1bb1",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-70a1fe4bd1be2d379a1c0559",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+      "normalized_field": "cash_and_equivalents",
+      "value": "30242000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": null,
+      "period_end": "2025-06-30",
+      "instant": "2025-06-30",
+      "context": {
+        "concept_qname": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+        "period_type": "instant",
+        "start_date": null,
+        "end_date": null,
+        "instant": "2025-06-30",
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_528a2210-872f-4ed7-b006-dd38f90dd456"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2025-06-30T00:00:00Z",
+      "available_at": "2026-07-29T20:08:01Z",
+      "filed_at": "2026-07-29T20:08:01Z",
+      "captured_at": "2026-11-23T05:52:24.793821Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_version": "0001193125-26-323660",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-556b8ff1577914f5491a01bb961eac7053f701a5f0da23ed3bdbcc529d72ea76",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-75e5ebdbbd5f639a7ad6b6cc",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "normalized_field": "revenue",
+      "value": "211915000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2022-07-01",
+      "period_end": "2023-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "period_type": "duration",
+        "start_date": "2022-07-01",
+        "end_date": "2023-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_deaa7eaf-e13f-4828-9e73-3d077f8605da"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2023-06-30T00:00:00Z",
+      "available_at": "2025-07-30T20:11:40Z",
+      "filed_at": "2025-07-30T20:11:40Z",
+      "captured_at": "2026-11-23T05:51:49.168285Z",
+      "accession_number": "0000950170-25-100235",
+      "filing_version": "0000950170-25-100235",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/msft-20250630.htm",
+        "content_hash": "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:51:49.168285Z",
+        "available_at": "2025-07-30T20:11:40Z",
+        "filed_at": "2025-07-30T20:11:40Z",
+        "accession_number": "0000950170-25-100235",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-0e967a072f2e61ae6afaba52703221f421deb82345071e3899575db1bc181d83",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-990c31b3a098af813943aafc",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+      "normalized_field": "cash_and_equivalents",
+      "value": "20935000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": null,
+      "period_end": "2026-06-30",
+      "instant": "2026-06-30",
+      "context": {
+        "concept_qname": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+        "period_type": "instant",
+        "start_date": null,
+        "end_date": null,
+        "instant": "2026-06-30",
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_ca004a37-7abb-4b0e-8638-a7c6b14ebb45"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2026-06-30T00:00:00Z",
+      "available_at": "2026-07-29T20:08:01Z",
+      "filed_at": "2026-07-29T20:08:01Z",
+      "captured_at": "2026-11-23T05:52:24.793821Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_version": "0001193125-26-323660",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+        "content_hash": "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:52:24.793821Z",
+        "available_at": "2026-07-29T20:08:01Z",
+        "filed_at": "2026-07-29T20:08:01Z",
+        "accession_number": "0001193125-26-323660",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-556b8ff1577914f5491a01bb961eac7053f701a5f0da23ed3bdbcc529d72ea76",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    },
+    {
+      "contract_version": "fundamental.v1",
+      "fact_id": "sec-fact-e21cf3a9cafb00de1df38a8c",
+      "issuer_id": "0000789019",
+      "security_id": "MSFT",
+      "concept": "us-gaap:OperatingIncomeLoss",
+      "normalized_field": "operating_income",
+      "value": "83383000000",
+      "unit": "iso4217:USD",
+      "scale": 6,
+      "currency": "USD",
+      "period_start": "2021-07-01",
+      "period_end": "2022-06-30",
+      "instant": null,
+      "context": {
+        "concept_qname": "us-gaap:OperatingIncomeLoss",
+        "period_type": "duration",
+        "start_date": "2021-07-01",
+        "end_date": "2022-06-30",
+        "instant": null,
+        "unit_qname": "iso4217:USD",
+        "measure": "iso4217:USD",
+        "dimensions": [],
+        "entity_scope": "0000789019",
+        "consolidation_scope": "consolidated",
+        "context_id": "C_ed99bc14-2e8b-442d-834c-3815de823d07"
+      },
+      "security_scope": "unspecified",
+      "as_of": "2022-06-30T00:00:00Z",
+      "available_at": "2024-07-30T20:06:22Z",
+      "filed_at": "2024-07-30T20:06:22Z",
+      "captured_at": "2026-11-23T05:51:15.351266Z",
+      "accession_number": "0000950170-24-087843",
+      "filing_version": "0000950170-24-087843",
+      "is_amendment": false,
+      "amends_accession": null,
+      "supersedes_accession": null,
+      "amendment_scope": null,
+      "decimals": -6,
+      "taxonomy_version": "us-gaap-2023-2026",
+      "source": {
+        "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/msft-20240630.htm",
+        "content_hash": "014c4f7b2e8a7a83dee20159d645cdeeebb207df602f5973383ca6ad2c02085e",
+        "source_role": "filing",
+        "captured_at": "2026-11-23T05:51:15.351266Z",
+        "available_at": "2024-07-30T20:06:22Z",
+        "filed_at": "2024-07-30T20:06:22Z",
+        "accession_number": "0000950170-24-087843",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2026",
+        "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+      },
+      "quality": "verified",
+      "issue_codes": [],
+      "mapping_decision_id": "automatic-mapping-79da797f78ddc23e0a945e5bfeedf7dd0413f41d2c861291ab8488638c23aa04",
+      "mapping_confidence": "high",
+      "rejected_candidates": [],
+      "rejected_candidate_reasons": [],
+      "point_in_time_policy": "pit-v1",
+      "selection_reason": "latest_available_then_highest_xbrl_decimals"
+    }
+  ],
+  "assumptions_evidence": [
+    {
+      "path": "assumptions.forecast.base_revenue",
+      "value": "331839000000",
+      "method": "derived",
+      "formula": "latest annual revenue",
+      "fact_ids": [
+        "sec-fact-5bf24a709fb138c5a909734c"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.terminal_growth",
+      "value": "0.0492",
+      "method": "approved_policy",
+      "formula": "approved market/policy input",
+      "fact_ids": [],
+      "source_refs": [
+        "0d06478c04aa6759cafe3c64a0193ec5c3edc011cb3faa00c7db9d3ca58e740a",
+        "8822dce833408d4b55ebf114824b6d4d8b606cdc8f180edac5ee1c17f011cb32",
+        "972488375c3f42d61cac5c4596084ea49d18fe53a7c0e8f726f8bac534b44571",
+        "9d12d59f970b1c8c17dafacb82ee680808f3a6f41f8d405451f56e90a1b0cb9d",
+        "a4896299ab892ca46bec03b10f34514758da812c9bbfdf6c212ad1cd4da949e7",
+        "a920921a004910f973021dc89236f11fca5120fadefcaba4a8e1ff55f7625e2d",
+        "bb0a0dd3163c6c183aa0ba5743a9a334ca78048cc088567a179e3241af7073ed",
+        "c94021288b17d243272566ee2390f3e38c44eb94c0a7b3fa63b4664f9ab4fcc6",
+        "dadd3fd49e69f30bbfdb64b9c375ffa32cab460853fef9c7b7bff05112262afa",
+        "eacbe9da28ccac86aa1e304f4092077cecb744782795633e9209a6571c8de5e9"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-11-20T00:00:00Z",
+      "editable": true,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.revenue_growth[0]",
+      "value": "0.16130268348441552309797546607728134538929576120257",
+      "method": "derived",
+      "formula": "mean(historical revenue_growth) * (forecast_periods - index) / forecast_periods",
+      "fact_ids": [
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.revenue_growth[1]",
+      "value": "0.12904214678753241847838037286182507631143660896206",
+      "method": "derived",
+      "formula": "mean(historical revenue_growth) * (forecast_periods - index) / forecast_periods",
+      "fact_ids": [
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.revenue_growth[2]",
+      "value": "0.096781610090649313858785279646368807233577456721542",
+      "method": "derived",
+      "formula": "mean(historical revenue_growth) * (forecast_periods - index) / forecast_periods",
+      "fact_ids": [
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.revenue_growth[3]",
+      "value": "0.064521073393766209239190186430912538155718304481028",
+      "method": "derived",
+      "formula": "mean(historical revenue_growth) * (forecast_periods - index) / forecast_periods",
+      "fact_ids": [
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.revenue_growth[4]",
+      "value": "0.032260536696883104619595093215456269077859152240514",
+      "method": "derived",
+      "formula": "mean(historical revenue_growth) * (forecast_periods - index) / forecast_periods",
+      "fact_ids": [
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.operating_margin[0]",
+      "value": "0.45682358074353595379392372231170279398114587197163",
+      "method": "derived",
+      "formula": "mean(last_three historical operating_margin)",
+      "fact_ids": [
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.operating_margin[1]",
+      "value": "0.45682358074353595379392372231170279398114587197163",
+      "method": "derived",
+      "formula": "mean(last_three historical operating_margin)",
+      "fact_ids": [
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.operating_margin[2]",
+      "value": "0.45682358074353595379392372231170279398114587197163",
+      "method": "derived",
+      "formula": "mean(last_three historical operating_margin)",
+      "fact_ids": [
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.operating_margin[3]",
+      "value": "0.45682358074353595379392372231170279398114587197163",
+      "method": "derived",
+      "formula": "mean(last_three historical operating_margin)",
+      "fact_ids": [
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.operating_margin[4]",
+      "value": "0.45682358074353595379392372231170279398114587197163",
+      "method": "derived",
+      "formula": "mean(last_three historical operating_margin)",
+      "fact_ids": [
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.reinvestment_rate[0]",
+      "value": "0.40",
+      "method": "approved_policy",
+      "formula": "source-bound base forward hypothesis; historical reinvestment remains unknown",
+      "fact_ids": [
+        "sec-fact-15b1bcbb458b8d3043e0ac95",
+        "sec-fact-1b096461e9eab405301a89dd",
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5bfc6ed1990c1d8b6a1ea656",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc",
+        "sec-fact-7fa6b97042a109ca4dafa9ab",
+        "sec-fact-8c33bf49c89661c886890566",
+        "sec-fact-9398b5fb3cadeb137a6870db",
+        "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+        "sec-fact-f9b73712012e512809aa59de"
+      ],
+      "source_refs": [
+        "42291e8874927f6e8bd9ea367eb97555adfb1535f5e3c80f8418fb92d2412568",
+        "feb8f7737c0e638572efd0df32121bb66469dd7cba928e82d9aef31777b23d87"
+      ],
+      "policy_version": "conditional-forward-reinvestment-v1:47a13bcb52a73cd75884a136db9568e78020f3c5c80a9813b20f06df1cefafb1",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.reinvestment_rate[1]",
+      "value": "0.40",
+      "method": "approved_policy",
+      "formula": "source-bound base forward hypothesis; historical reinvestment remains unknown",
+      "fact_ids": [
+        "sec-fact-15b1bcbb458b8d3043e0ac95",
+        "sec-fact-1b096461e9eab405301a89dd",
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5bfc6ed1990c1d8b6a1ea656",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc",
+        "sec-fact-7fa6b97042a109ca4dafa9ab",
+        "sec-fact-8c33bf49c89661c886890566",
+        "sec-fact-9398b5fb3cadeb137a6870db",
+        "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+        "sec-fact-f9b73712012e512809aa59de"
+      ],
+      "source_refs": [
+        "42291e8874927f6e8bd9ea367eb97555adfb1535f5e3c80f8418fb92d2412568",
+        "feb8f7737c0e638572efd0df32121bb66469dd7cba928e82d9aef31777b23d87"
+      ],
+      "policy_version": "conditional-forward-reinvestment-v1:47a13bcb52a73cd75884a136db9568e78020f3c5c80a9813b20f06df1cefafb1",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.reinvestment_rate[2]",
+      "value": "0.40",
+      "method": "approved_policy",
+      "formula": "source-bound base forward hypothesis; historical reinvestment remains unknown",
+      "fact_ids": [
+        "sec-fact-15b1bcbb458b8d3043e0ac95",
+        "sec-fact-1b096461e9eab405301a89dd",
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5bfc6ed1990c1d8b6a1ea656",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc",
+        "sec-fact-7fa6b97042a109ca4dafa9ab",
+        "sec-fact-8c33bf49c89661c886890566",
+        "sec-fact-9398b5fb3cadeb137a6870db",
+        "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+        "sec-fact-f9b73712012e512809aa59de"
+      ],
+      "source_refs": [
+        "42291e8874927f6e8bd9ea367eb97555adfb1535f5e3c80f8418fb92d2412568",
+        "feb8f7737c0e638572efd0df32121bb66469dd7cba928e82d9aef31777b23d87"
+      ],
+      "policy_version": "conditional-forward-reinvestment-v1:47a13bcb52a73cd75884a136db9568e78020f3c5c80a9813b20f06df1cefafb1",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.reinvestment_rate[3]",
+      "value": "0.40",
+      "method": "approved_policy",
+      "formula": "source-bound base forward hypothesis; historical reinvestment remains unknown",
+      "fact_ids": [
+        "sec-fact-15b1bcbb458b8d3043e0ac95",
+        "sec-fact-1b096461e9eab405301a89dd",
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5bfc6ed1990c1d8b6a1ea656",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc",
+        "sec-fact-7fa6b97042a109ca4dafa9ab",
+        "sec-fact-8c33bf49c89661c886890566",
+        "sec-fact-9398b5fb3cadeb137a6870db",
+        "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+        "sec-fact-f9b73712012e512809aa59de"
+      ],
+      "source_refs": [
+        "42291e8874927f6e8bd9ea367eb97555adfb1535f5e3c80f8418fb92d2412568",
+        "feb8f7737c0e638572efd0df32121bb66469dd7cba928e82d9aef31777b23d87"
+      ],
+      "policy_version": "conditional-forward-reinvestment-v1:47a13bcb52a73cd75884a136db9568e78020f3c5c80a9813b20f06df1cefafb1",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.forecast.reinvestment_rate[4]",
+      "value": "0.40",
+      "method": "approved_policy",
+      "formula": "source-bound base forward hypothesis; historical reinvestment remains unknown",
+      "fact_ids": [
+        "sec-fact-15b1bcbb458b8d3043e0ac95",
+        "sec-fact-1b096461e9eab405301a89dd",
+        "sec-fact-35bc4f8050586f5fd1cd30e8",
+        "sec-fact-3b3e5f69d627aa0f0d8f7268",
+        "sec-fact-3f06f27906b00fb717f3bf0c",
+        "sec-fact-43b11c6d36dc2d00f2bbe8c2",
+        "sec-fact-4f1f46cc6207e8339a174419",
+        "sec-fact-5bf24a709fb138c5a909734c",
+        "sec-fact-5bfc6ed1990c1d8b6a1ea656",
+        "sec-fact-5d713b612f95bb1297520766",
+        "sec-fact-75e5ebdbbd5f639a7ad6b6cc",
+        "sec-fact-7fa6b97042a109ca4dafa9ab",
+        "sec-fact-8c33bf49c89661c886890566",
+        "sec-fact-9398b5fb3cadeb137a6870db",
+        "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+        "sec-fact-f9b73712012e512809aa59de"
+      ],
+      "source_refs": [
+        "42291e8874927f6e8bd9ea367eb97555adfb1535f5e3c80f8418fb92d2412568",
+        "feb8f7737c0e638572efd0df32121bb66469dd7cba928e82d9aef31777b23d87"
+      ],
+      "policy_version": "conditional-forward-reinvestment-v1:47a13bcb52a73cd75884a136db9568e78020f3c5c80a9813b20f06df1cefafb1",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.wacc.tax_rate",
+      "value": "0.18558965461557597438523501365980830337605227270572",
+      "method": "derived",
+      "formula": "mean(historical normalized_tax_rate)",
+      "fact_ids": [
+        "sec-fact-15b1bcbb458b8d3043e0ac95",
+        "sec-fact-1b096461e9eab405301a89dd",
+        "sec-fact-5bfc6ed1990c1d8b6a1ea656",
+        "sec-fact-7fa6b97042a109ca4dafa9ab",
+        "sec-fact-8c33bf49c89661c886890566",
+        "sec-fact-9398b5fb3cadeb137a6870db",
+        "sec-fact-9c731cbf4fadb83bfb0cc2c4",
+        "sec-fact-f9b73712012e512809aa59de"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "f5250e7c01b3b2741c643c8d725377e9a073ad9b9741fb67dce762cff9d4f6ef",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-07-29T20:08:01Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.wacc.risk_free_rate",
+      "value": "0.0492",
+      "method": "approved_source",
+      "formula": "released market policy input",
+      "fact_ids": [],
+      "source_refs": [
+        "dadd3fd49e69f30bbfdb64b9c375ffa32cab460853fef9c7b7bff05112262afa",
+        "eacbe9da28ccac86aa1e304f4092077cecb744782795633e9209a6571c8de5e9",
+        "8822dce833408d4b55ebf114824b6d4d8b606cdc8f180edac5ee1c17f011cb32",
+        "0d06478c04aa6759cafe3c64a0193ec5c3edc011cb3faa00c7db9d3ca58e740a",
+        "bb0a0dd3163c6c183aa0ba5743a9a334ca78048cc088567a179e3241af7073ed",
+        "9d12d59f970b1c8c17dafacb82ee680808f3a6f41f8d405451f56e90a1b0cb9d"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-11-20T00:00:00Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.wacc.beta",
+      "value": "1.27664817807817509986989534809254109859466552734375",
+      "method": "approved_policy",
+      "formula": "released market policy input",
+      "fact_ids": [],
+      "source_refs": [
+        "41f391ca9e791a328355dd682f0d2e7c480c34be1799c23b024b676187e2b70f",
+        "5cd0644aa7c761db522806aa5ffef642f10b1da048a80a3f76059d994f811193",
+        "6a37d8742fed577cab97f014e10e3ee659488089d11290aa50664bf62a010c59",
+        "760aa31b94c6cf983dd6ca68d6cb9755485244fe261a847c4e11ae31d547508f",
+        "952cf9077184ec1495fa41d85f6ff47fd669a67b0ac23909b9b3803daf51abef",
+        "a8e1e4e19de057669a0a318c1474a1e63c316d52cf263b3a055e46c382a66275",
+        "b6c1591051efb63b746e6e3ba1035bb16c3327199a1d3d28c487acd732209871",
+        "ba818aba50b95fabcc172e9b802cae8bd29d9e485b92cce6858f3103e721ea6a",
+        "d38b149c731bba6847d077ef67c9a4bfa0a54f947ba480b2f9ea89f5451d39a6",
+        "d7a289c03f0bce0a7e064f95aa80429e0b1810889c0c27b1cd85bc62767954a8",
+        "fe1493bf1b66b2de41a73e9ea2f9c8b1847fb79f0150a7d6e60b59d71fa1acba"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-01-05T00:00:00Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.wacc.equity_risk_premium",
+      "value": "0.044600000000000001",
+      "method": "approved_source",
+      "formula": "released market policy input",
+      "fact_ids": [],
+      "source_refs": [
+        "b5200e8abcb09f55a4a56c9493657d7556af30ede0d10928c403e352627109c9",
+        "d9ac45c69887ff2d753047d6c6b79ea56dfed920ae5da6e18e971389ca2bb021",
+        "4be3c60db0691e0746dc184d89b8a06e04e76c63f3129f9918cfa158f0db31eb",
+        "c21f2143bf350b77122b29887d32cf21095dadeec155e587a829b7e8add2a479",
+        "f80a5419162252bec6fae01a4c50978b5c03432f99d001746a8712abab7da967",
+        "76b2b65a6cee8db9b19e1dbf6528093c0bea6173966c284842fac7fdf2a56845"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-01-01T00:00:00Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.wacc.pre_tax_cost_of_debt",
+      "value": "0.05291300000000000169908531688633956946432590484619140625",
+      "method": "approved_policy",
+      "formula": "released market policy input",
+      "fact_ids": [],
+      "source_refs": [
+        "0e55f42fc1b7f3c239b81d699c9780a9aba70001506e61e4a71ccb9997ce75c3",
+        "3611b20ea3a471d8f626b41773470c47bbe314217c92a8136fe6453759dc0b44",
+        "41f391ca9e791a328355dd682f0d2e7c480c34be1799c23b024b676187e2b70f",
+        "6a37d8742fed577cab97f014e10e3ee659488089d11290aa50664bf62a010c59",
+        "950f16ca3a4e453402b28e1bc5125f0eac730d637be4ce4e5b3ab743d15548c5",
+        "952cf9077184ec1495fa41d85f6ff47fd669a67b0ac23909b9b3803daf51abef",
+        "98d26dc6b3dbb272113140b9bd6e99d0882b3c4bb1f44a91db5afcf79a0b1313",
+        "a8e1e4e19de057669a0a318c1474a1e63c316d52cf263b3a055e46c382a66275",
+        "b6c1591051efb63b746e6e3ba1035bb16c3327199a1d3d28c487acd732209871",
+        "ba818aba50b95fabcc172e9b802cae8bd29d9e485b92cce6858f3103e721ea6a",
+        "d38b149c731bba6847d077ef67c9a4bfa0a54f947ba480b2f9ea89f5451d39a6"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-01-05T00:00:00Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.wacc.debt_weight",
+      "value": "0.052825188757969709918427270167740061879158020019531",
+      "method": "approved_policy",
+      "formula": "released market policy input",
+      "fact_ids": [],
+      "source_refs": [
+        "1fcc7450c80f842770b7d85a6336c386508eef722245e5f184a0c1e66baafec8",
+        "41f391ca9e791a328355dd682f0d2e7c480c34be1799c23b024b676187e2b70f",
+        "6a37d8742fed577cab97f014e10e3ee659488089d11290aa50664bf62a010c59",
+        "810042f705dad5cd2f4056ee994ba71abb10b8ed9e13dec019353b9ba908f573",
+        "952cf9077184ec1495fa41d85f6ff47fd669a67b0ac23909b9b3803daf51abef",
+        "a4980a09c35f979066273d197312069978a97596b3702f1aec02243db8a0ac69",
+        "a8e1e4e19de057669a0a318c1474a1e63c316d52cf263b3a055e46c382a66275",
+        "b6c1591051efb63b746e6e3ba1035bb16c3327199a1d3d28c487acd732209871",
+        "ba818aba50b95fabcc172e9b802cae8bd29d9e485b92cce6858f3103e721ea6a",
+        "d38b149c731bba6847d077ef67c9a4bfa0a54f947ba480b2f9ea89f5451d39a6",
+        "e1f5faae850870ad06dd130593e5c7c5efd651b1236077bc00e0395ce2623d4b"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-01-05T00:00:00Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.wacc.equity_weight",
+      "value": "0.94717481124203029008157272983225993812084197998047",
+      "method": "approved_policy",
+      "formula": "released market policy input",
+      "fact_ids": [],
+      "source_refs": [
+        "2850d62a78b64b56b6ab132454ef41eef074388ac63fbac01bea90a85a69b058",
+        "41f391ca9e791a328355dd682f0d2e7c480c34be1799c23b024b676187e2b70f",
+        "6a37d8742fed577cab97f014e10e3ee659488089d11290aa50664bf62a010c59",
+        "952cf9077184ec1495fa41d85f6ff47fd669a67b0ac23909b9b3803daf51abef",
+        "a8e1e4e19de057669a0a318c1474a1e63c316d52cf263b3a055e46c382a66275",
+        "b6c1591051efb63b746e6e3ba1035bb16c3327199a1d3d28c487acd732209871",
+        "ba818aba50b95fabcc172e9b802cae8bd29d9e485b92cce6858f3103e721ea6a",
+        "cdafb851924b15c025a1839bc2007761d066f6f5608fab549613e725d5c5b53a",
+        "d38b149c731bba6847d077ef67c9a4bfa0a54f947ba480b2f9ea89f5451d39a6",
+        "d6eea8ccf70c7941ce2baa1be8e541e7c7fb4c8fba188acc470c227eebdc85f5",
+        "ed537423779aa955dcf911297ced3463e0b2f383bbab5bb5039415e9f5e43389"
+      ],
+      "policy_version": "automatic-usd-market-policy-v1",
+      "as_of": "2026-01-05T00:00:00Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.capital_bridge.cash",
+      "value": "20935000000",
+      "method": "approved_policy",
+      "formula": "source-bound base conditional hypothesis; not an estimate or proven bound",
+      "fact_ids": [
+        "sec-fact-0e8db7ccae0294e00e5f9f72",
+        "sec-fact-1d3386347160525e5f17fc2b",
+        "sec-fact-990c31b3a098af813943aafc",
+        "sec-role-5ea04481bf8f244af3ecbe15b9ef72941b6ddad86e715ce5f240224e07378a66",
+        "sec-role-8059fb4f624e813869ca46d8338af29914aab66b4deaa4cb62a1ba13d2f81ab2",
+        "sec-role-a424a4de41fcb598aae76e0ab861c5535291f33c175b8d02dbb34c53aa03fdbf",
+        "sec-role-a99d6498ea03dcfc91c30033f57605b6f8cc3ab786c8bec3fe8b5434d26518ca",
+        "sec-role-b5f430d46f8fb8e8168057bc37c0cfbd2c9f0dc53c79493e3f037a56f94b6964",
+        "sec-role-c94cb8b2aabc2aa1d196ad8bbd8d783edaeb3c51e1e2c0cc5eb36a98cfb2765a",
+        "sec-role-e13bdf554b856fbb9354c23ab861138829424c6a34eca1ea29a00ec68431ed99"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "710b2e1f0be8ed82ad7880587e0397262e48b58f6f41fd9c3e003e1e167947cd",
+        "abb9cbc7d0451ef3eccb84f65a40839a6ebce56a6eaa97c48a87e369ac0d892c"
+      ],
+      "policy_version": "conditional-capital-hypotheses-v1:4bea6c71acdb4516946237e72186458845e8ea0da70017a743d5bb4303a5ee42",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.capital_bridge.non_operating_assets",
+      "value": "40000000000",
+      "method": "approved_policy",
+      "formula": "source-bound base conditional hypothesis; not an estimate or proven bound",
+      "fact_ids": [
+        "sec-fact-0e8db7ccae0294e00e5f9f72",
+        "sec-fact-1d3386347160525e5f17fc2b",
+        "sec-fact-990c31b3a098af813943aafc",
+        "sec-role-5ea04481bf8f244af3ecbe15b9ef72941b6ddad86e715ce5f240224e07378a66",
+        "sec-role-8059fb4f624e813869ca46d8338af29914aab66b4deaa4cb62a1ba13d2f81ab2",
+        "sec-role-a424a4de41fcb598aae76e0ab861c5535291f33c175b8d02dbb34c53aa03fdbf",
+        "sec-role-a99d6498ea03dcfc91c30033f57605b6f8cc3ab786c8bec3fe8b5434d26518ca",
+        "sec-role-b5f430d46f8fb8e8168057bc37c0cfbd2c9f0dc53c79493e3f037a56f94b6964",
+        "sec-role-c94cb8b2aabc2aa1d196ad8bbd8d783edaeb3c51e1e2c0cc5eb36a98cfb2765a",
+        "sec-role-e13bdf554b856fbb9354c23ab861138829424c6a34eca1ea29a00ec68431ed99"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "710b2e1f0be8ed82ad7880587e0397262e48b58f6f41fd9c3e003e1e167947cd",
+        "abb9cbc7d0451ef3eccb84f65a40839a6ebce56a6eaa97c48a87e369ac0d892c"
+      ],
+      "policy_version": "conditional-capital-hypotheses-v1:4bea6c71acdb4516946237e72186458845e8ea0da70017a743d5bb4303a5ee42",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.capital_bridge.debt",
+      "value": "51067000000",
+      "method": "approved_policy",
+      "formula": "source-bound base conditional hypothesis; not an estimate or proven bound",
+      "fact_ids": [
+        "sec-fact-0e8db7ccae0294e00e5f9f72",
+        "sec-fact-1d3386347160525e5f17fc2b",
+        "sec-fact-990c31b3a098af813943aafc",
+        "sec-role-5ea04481bf8f244af3ecbe15b9ef72941b6ddad86e715ce5f240224e07378a66",
+        "sec-role-8059fb4f624e813869ca46d8338af29914aab66b4deaa4cb62a1ba13d2f81ab2",
+        "sec-role-a424a4de41fcb598aae76e0ab861c5535291f33c175b8d02dbb34c53aa03fdbf",
+        "sec-role-a99d6498ea03dcfc91c30033f57605b6f8cc3ab786c8bec3fe8b5434d26518ca",
+        "sec-role-b5f430d46f8fb8e8168057bc37c0cfbd2c9f0dc53c79493e3f037a56f94b6964",
+        "sec-role-c94cb8b2aabc2aa1d196ad8bbd8d783edaeb3c51e1e2c0cc5eb36a98cfb2765a",
+        "sec-role-e13bdf554b856fbb9354c23ab861138829424c6a34eca1ea29a00ec68431ed99"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "710b2e1f0be8ed82ad7880587e0397262e48b58f6f41fd9c3e003e1e167947cd",
+        "abb9cbc7d0451ef3eccb84f65a40839a6ebce56a6eaa97c48a87e369ac0d892c"
+      ],
+      "policy_version": "conditional-capital-hypotheses-v1:4bea6c71acdb4516946237e72186458845e8ea0da70017a743d5bb4303a5ee42",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.capital_bridge.preferred_stock",
+      "value": "1000000000",
+      "method": "approved_policy",
+      "formula": "source-bound base conditional hypothesis; not an estimate or proven bound",
+      "fact_ids": [
+        "sec-fact-0e8db7ccae0294e00e5f9f72",
+        "sec-fact-1d3386347160525e5f17fc2b",
+        "sec-fact-990c31b3a098af813943aafc",
+        "sec-role-5ea04481bf8f244af3ecbe15b9ef72941b6ddad86e715ce5f240224e07378a66",
+        "sec-role-8059fb4f624e813869ca46d8338af29914aab66b4deaa4cb62a1ba13d2f81ab2",
+        "sec-role-a424a4de41fcb598aae76e0ab861c5535291f33c175b8d02dbb34c53aa03fdbf",
+        "sec-role-a99d6498ea03dcfc91c30033f57605b6f8cc3ab786c8bec3fe8b5434d26518ca",
+        "sec-role-b5f430d46f8fb8e8168057bc37c0cfbd2c9f0dc53c79493e3f037a56f94b6964",
+        "sec-role-c94cb8b2aabc2aa1d196ad8bbd8d783edaeb3c51e1e2c0cc5eb36a98cfb2765a",
+        "sec-role-e13bdf554b856fbb9354c23ab861138829424c6a34eca1ea29a00ec68431ed99"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "710b2e1f0be8ed82ad7880587e0397262e48b58f6f41fd9c3e003e1e167947cd",
+        "abb9cbc7d0451ef3eccb84f65a40839a6ebce56a6eaa97c48a87e369ac0d892c"
+      ],
+      "policy_version": "conditional-capital-hypotheses-v1:4bea6c71acdb4516946237e72186458845e8ea0da70017a743d5bb4303a5ee42",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.capital_bridge.lease_liabilities",
+      "value": "66594000000",
+      "method": "approved_policy",
+      "formula": "source-bound base conditional hypothesis; not an estimate or proven bound",
+      "fact_ids": [
+        "sec-fact-0e8db7ccae0294e00e5f9f72",
+        "sec-fact-1d3386347160525e5f17fc2b",
+        "sec-fact-990c31b3a098af813943aafc",
+        "sec-role-5ea04481bf8f244af3ecbe15b9ef72941b6ddad86e715ce5f240224e07378a66",
+        "sec-role-8059fb4f624e813869ca46d8338af29914aab66b4deaa4cb62a1ba13d2f81ab2",
+        "sec-role-a424a4de41fcb598aae76e0ab861c5535291f33c175b8d02dbb34c53aa03fdbf",
+        "sec-role-a99d6498ea03dcfc91c30033f57605b6f8cc3ab786c8bec3fe8b5434d26518ca",
+        "sec-role-b5f430d46f8fb8e8168057bc37c0cfbd2c9f0dc53c79493e3f037a56f94b6964",
+        "sec-role-c94cb8b2aabc2aa1d196ad8bbd8d783edaeb3c51e1e2c0cc5eb36a98cfb2765a",
+        "sec-role-e13bdf554b856fbb9354c23ab861138829424c6a34eca1ea29a00ec68431ed99"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "710b2e1f0be8ed82ad7880587e0397262e48b58f6f41fd9c3e003e1e167947cd",
+        "abb9cbc7d0451ef3eccb84f65a40839a6ebce56a6eaa97c48a87e369ac0d892c"
+      ],
+      "policy_version": "conditional-capital-hypotheses-v1:4bea6c71acdb4516946237e72186458845e8ea0da70017a743d5bb4303a5ee42",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.capital_bridge.non_controlling_interest",
+      "value": "1000000000",
+      "method": "approved_policy",
+      "formula": "source-bound base conditional hypothesis; not an estimate or proven bound",
+      "fact_ids": [
+        "sec-fact-0e8db7ccae0294e00e5f9f72",
+        "sec-fact-1d3386347160525e5f17fc2b",
+        "sec-fact-990c31b3a098af813943aafc",
+        "sec-role-5ea04481bf8f244af3ecbe15b9ef72941b6ddad86e715ce5f240224e07378a66",
+        "sec-role-8059fb4f624e813869ca46d8338af29914aab66b4deaa4cb62a1ba13d2f81ab2",
+        "sec-role-a424a4de41fcb598aae76e0ab861c5535291f33c175b8d02dbb34c53aa03fdbf",
+        "sec-role-a99d6498ea03dcfc91c30033f57605b6f8cc3ab786c8bec3fe8b5434d26518ca",
+        "sec-role-b5f430d46f8fb8e8168057bc37c0cfbd2c9f0dc53c79493e3f037a56f94b6964",
+        "sec-role-c94cb8b2aabc2aa1d196ad8bbd8d783edaeb3c51e1e2c0cc5eb36a98cfb2765a",
+        "sec-role-e13bdf554b856fbb9354c23ab861138829424c6a34eca1ea29a00ec68431ed99"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "710b2e1f0be8ed82ad7880587e0397262e48b58f6f41fd9c3e003e1e167947cd",
+        "abb9cbc7d0451ef3eccb84f65a40839a6ebce56a6eaa97c48a87e369ac0d892c"
+      ],
+      "policy_version": "conditional-capital-hypotheses-v1:4bea6c71acdb4516946237e72186458845e8ea0da70017a743d5bb4303a5ee42",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    },
+    {
+      "path": "assumptions.capital_bridge.diluted_shares",
+      "value": "7532000000",
+      "method": "approved_policy",
+      "formula": "source-bound base conditional hypothesis; not an estimate or proven bound",
+      "fact_ids": [
+        "sec-fact-0e8db7ccae0294e00e5f9f72",
+        "sec-fact-1d3386347160525e5f17fc2b",
+        "sec-fact-990c31b3a098af813943aafc",
+        "sec-role-5ea04481bf8f244af3ecbe15b9ef72941b6ddad86e715ce5f240224e07378a66",
+        "sec-role-8059fb4f624e813869ca46d8338af29914aab66b4deaa4cb62a1ba13d2f81ab2",
+        "sec-role-a424a4de41fcb598aae76e0ab861c5535291f33c175b8d02dbb34c53aa03fdbf",
+        "sec-role-a99d6498ea03dcfc91c30033f57605b6f8cc3ab786c8bec3fe8b5434d26518ca",
+        "sec-role-b5f430d46f8fb8e8168057bc37c0cfbd2c9f0dc53c79493e3f037a56f94b6964",
+        "sec-role-c94cb8b2aabc2aa1d196ad8bbd8d783edaeb3c51e1e2c0cc5eb36a98cfb2765a",
+        "sec-role-e13bdf554b856fbb9354c23ab861138829424c6a34eca1ea29a00ec68431ed99"
+      ],
+      "source_refs": [
+        "6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b",
+        "710b2e1f0be8ed82ad7880587e0397262e48b58f6f41fd9c3e003e1e167947cd",
+        "abb9cbc7d0451ef3eccb84f65a40839a6ebce56a6eaa97c48a87e369ac0d892c"
+      ],
+      "policy_version": "conditional-capital-hypotheses-v1:4bea6c71acdb4516946237e72186458845e8ea0da70017a743d5bb4303a5ee42",
+      "as_of": "2026-11-23T05:51:07.263703Z",
+      "editable": false,
+      "manual_provenance": null
+    }
+  ],
+  "sampling": {
+    "requested_samples": 256,
+    "valid_samples": 256,
+    "invalid_samples": 0,
+    "invalid_reasons": {},
+    "seed": "1393190347884600171",
+    "sampler_version": "python-random-v1",
+    "quantile_basis": {
+      "conditioning": "retained_base_joint_hypotheses",
+      "joint_scenarios_digest": "22a6801bb32e7f75458a2cb02d9e5e4c8a2e26bbb4d1d272d3e96062c4afa809",
+      "conditioning_assumptions_digest": "4a8334edb0774c97e787702dbce6a99a526795af744dc962bd78fb697a683f4e",
+      "policy_version": "conditional-fcff-monte-carlo-policy-v1",
+      "sampled_paths": [
+        "assumptions.forecast.revenue_growth[0]",
+        "assumptions.forecast.operating_margin[0]",
+        "assumptions.terminal_growth"
+      ],
+      "hypothesis_probabilities": "not_assigned"
+    },
+    "quantile_contract": {
+      "bear": "p05",
+      "base": "p50",
+      "bull": "p95"
+    },
+    "convergence_diagnostics": {
+      "minimum_valid_samples": 10,
+      "invalid_ratio": "0.0",
+      "converged": true
+    },
+    "sensitivity": {},
+    "dominant_drivers": []
+  },
+  "scenario_results": [
+    {
+      "ordinal_label": "服務情境 1",
+      "note": "ordinal UI label，不代表 Bear/Bull 或機率身分",
+      "input_digest": "51e9f1ce55d4a78535b96f0a559fdd0f29f07faba3a96f1e634982d9e2f23ad9",
+      "result_hash": "c65a0aa316a0eb6df83f2d83b8432674d2618e758d5bd79579af6f651ce5cef5",
+      "per_share_value": "229.88242539685962775556419207139754074672901162460",
+      "intrinsic_value": "1731474428089.1467162549094946817662769043629155565",
+      "quality_status": "provisional",
+      "assumptions": {
+        "forecast": {
+          "base_revenue": "331839000000",
+          "revenue_growth": [
+            "0.16130268348441552309797546607728134538929576120257",
+            "0.12904214678753241847838037286182507631143660896206",
+            "0.096781610090649313858785279646368807233577456721542",
+            "0.064521073393766209239190186430912538155718304481028",
+            "0.032260536696883104619595093215456269077859152240514"
+          ],
+          "operating_margin": [
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163"
+          ],
+          "reinvestment_rate": [
+            "0.40",
+            "0.40",
+            "0.40",
+            "0.40",
+            "0.40"
+          ]
+        },
+        "wacc": {
+          "risk_free_rate": "0.0492",
+          "beta": "1.27664817807817509986989534809254109859466552734375",
+          "equity_risk_premium": "0.044600000000000001",
+          "pre_tax_cost_of_debt": "0.05291300000000000169908531688633956946432590484619140625",
+          "tax_rate": "0.18558965461557597438523501365980830337605227270572",
+          "debt_weight": "0.052825188757969709918427270167740061879158020019531",
+          "equity_weight": "0.94717481124203029008157272983225993812084197998047"
+        },
+        "terminal_growth": "0.0492",
+        "capital_bridge": {
+          "cash": "20935000000",
+          "non_operating_assets": "40000000000",
+          "debt": "51067000000",
+          "preferred_stock": "1000000000",
+          "lease_liabilities": "66594000000",
+          "non_controlling_interest": "1000000000",
+          "diluted_shares": "7532000000"
+        },
+        "bank": null
+      }
+    },
+    {
+      "ordinal_label": "服務情境 2",
+      "note": "ordinal UI label，不代表 Bear/Bull 或機率身分",
+      "input_digest": "fa46cdf95d9731c4eba188fd87f53c8822579e2d5195b17f845f915498d7f10c",
+      "result_hash": "5098d0a7d76fe3b49e427d15c95aa1eb502f5224cbe6196982204c77d27ca836",
+      "per_share_value": "138.05370157362898203312277250177009420683861054799",
+      "intrinsic_value": "1066740952059.4311441699396631211775179362419437043",
+      "quality_status": "provisional",
+      "assumptions": {
+        "forecast": {
+          "base_revenue": "331839000000",
+          "revenue_growth": [
+            "0.16130268348441552309797546607728134538929576120257",
+            "0.12904214678753241847838037286182507631143660896206",
+            "0.096781610090649313858785279646368807233577456721542",
+            "0.064521073393766209239190186430912538155718304481028",
+            "0.032260536696883104619595093215456269077859152240514"
+          ],
+          "operating_margin": [
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163"
+          ],
+          "reinvestment_rate": [
+            "0.60",
+            "0.60",
+            "0.60",
+            "0.60",
+            "0.60"
+          ]
+        },
+        "wacc": {
+          "risk_free_rate": "0.0492",
+          "beta": "1.27664817807817509986989534809254109859466552734375",
+          "equity_risk_premium": "0.044600000000000001",
+          "pre_tax_cost_of_debt": "0.05291300000000000169908531688633956946432590484619140625",
+          "tax_rate": "0.18558965461557597438523501365980830337605227270572",
+          "debt_weight": "0.052825188757969709918427270167740061879158020019531",
+          "equity_weight": "0.94717481124203029008157272983225993812084197998047"
+        },
+        "terminal_growth": "0.0492",
+        "capital_bridge": {
+          "cash": "20935000000",
+          "non_operating_assets": "10000000000",
+          "debt": "81067000000",
+          "preferred_stock": "5000000000",
+          "lease_liabilities": "66594000000",
+          "non_controlling_interest": "5000000000",
+          "diluted_shares": "7727000000"
+        },
+        "bank": null
+      }
+    },
+    {
+      "ordinal_label": "服務情境 3",
+      "note": "ordinal UI label，不代表 Bear/Bull 或機率身分",
+      "input_digest": "8c2ea9e5e5d3825f2879dc627cb99d7a6de98043c12223f482567cac70f395a5",
+      "result_hash": "2118fff4bebd34fef465958e27bfc61be17ee783e445d9741e4cd0e55aea7893",
+      "per_share_value": "315.24080461050651640708953202115066593728915285277",
+      "intrinsic_value": "2360207904118.8622883398793262423550358724838874087",
+      "quality_status": "provisional",
+      "assumptions": {
+        "forecast": {
+          "base_revenue": "331839000000",
+          "revenue_growth": [
+            "0.16130268348441552309797546607728134538929576120257",
+            "0.12904214678753241847838037286182507631143660896206",
+            "0.096781610090649313858785279646368807233577456721542",
+            "0.064521073393766209239190186430912538155718304481028",
+            "0.032260536696883104619595093215456269077859152240514"
+          ],
+          "operating_margin": [
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163",
+            "0.45682358074353595379392372231170279398114587197163"
+          ],
+          "reinvestment_rate": [
+            "0.20",
+            "0.20",
+            "0.20",
+            "0.20",
+            "0.20"
+          ]
+        },
+        "wacc": {
+          "risk_free_rate": "0.0492",
+          "beta": "1.27664817807817509986989534809254109859466552734375",
+          "equity_risk_premium": "0.044600000000000001",
+          "pre_tax_cost_of_debt": "0.05291300000000000169908531688633956946432590484619140625",
+          "tax_rate": "0.18558965461557597438523501365980830337605227270572",
+          "debt_weight": "0.052825188757969709918427270167740061879158020019531",
+          "equity_weight": "0.94717481124203029008157272983225993812084197998047"
+        },
+        "terminal_growth": "0.0492",
+        "capital_bridge": {
+          "cash": "20935000000",
+          "non_operating_assets": "60000000000",
+          "debt": "41067000000",
+          "preferred_stock": "0",
+          "lease_liabilities": "66594000000",
+          "non_controlling_interest": "0",
+          "diluted_shares": "7487000000"
+        },
+        "bank": null
+      }
+    }
+  ],
+  "conditional_quote": {
+    "issuer_id": "0000789019",
+    "security_id": "MSFT",
+    "currency": "USD",
+    "price": "484.5199890136719",
+    "source_id": "yahoo-chart-daily-close",
+    "source_uri": "https://query2.finance.yahoo.com/v8/finance/chart/MSFT?period1=1795150800&period2=1795237200&interval=1d&events=div,splits,capitalGains",
+    "source_version": "yahoo-us-equity-latest-completed-daily-close-capture-v1",
+    "terms_reference": "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html",
+    "content_hash": "710b2e1f0be8ed82ad7880587e0397262e48b58f6f41fd9c3e003e1e167947cd",
+    "as_of": "2026-11-20T05:00:00Z",
+    "available_at": "2026-11-23T05:50:58.205875Z",
+    "captured_at": "2026-11-23T05:50:58.205875Z"
+  },
+  "conditional_quote_note": "上游 retained conditional preparation input。未投影到現行 report model；不將其視為即時現價，不在本研究原型添加 upside。",
+  "conditional_capital_status": "provisional_conditional_hypotheses",
+  "conditional_capital_policy": {
+    "protocol": "conditional-capital-hypotheses-v1",
+    "interpretation": "conditional_hypotheses_not_estimates_or_bounds",
+    "complete_capital_claims": false,
+    "complete_award_inventory": false,
+    "unknowns": [
+      "preferred_claims",
+      "convertible_instruments",
+      "other_share_classes",
+      "complete_award_inventory",
+      "per_strike_inventory",
+      "compensation_allocation",
+      "current_interest_bearing_debt",
+      "non_operating_assets",
+      "noncontrolling_interests"
+    ],
+    "limitations": [
+      "These explicit joint what-if assumptions are neither calibrated estimates, probabilities nor proven economic bounds. Base is a named scenario and does not mean most likely.",
+      "MSFT 2026 original 6d702db7b014494aa5c352f5bd9034cffcff003052c6379f0e82ed65775deb9b does not establish full nonoperating asset, current debt, noncontrolling, preferred, convertible, other-class or award inventory. Unknowns remain unknown; scenario amounts never become observations.",
+      "Nonoperating asset hypotheses exclude cash and operating assets. Current debt hypotheses exclude noncurrent debt, finance leases and separately hypothesized additional convertible claims. The original discloses current long-term debt of 9.227 billion; all declared total-current-debt hypotheses exceed this partial component.",
+      "Unresolved PSU conditions/maxima, stock-award compensation allocation, pending ESPP and deferred units are covered only by hypothetical incremental award shares. Authorization pools are not outstanding awards; no complete inventory or exact treasury-stock dilution is claimed."
+    ]
+  },
+  "conditional_scenario_names": {
+    "capital": [
+      "base",
+      "downside",
+      "upside"
+    ],
+    "operating": [
+      "base",
+      "downside",
+      "upside"
+    ]
+  },
+  "limitations": [
+    "結果為 provisional、uncalibrated、條件假設，不是未來股價概率。",
+    "沒有 individual MC draws，sensitivity={}，dominant_drivers=[]。",
+    "84 facts/20 normalized fields 不代表完整三大報表。",
+    "Year 1–5 為 forecast ordinal；不擅自推算公曆標籤。"
+  ],
+  "revision": {
+    "artifact_id": "c32c434b-f13d-40de-9b9e-43f68a1803fe",
+    "run_id": "37ffd3e4-e29c-4eba-a809-20c336f214d9",
+    "per_share_value": "168.92316962973986376214271505310878928165576150584",
+    "intrinsic_value": "1272329313651.2006538564589297800154008694311956620",
+    "quantiles": {
+      "p05": "141.57124272793601389959621076367348046065397087225",
+      "p50": "165.37191333836261456716162940400004671825148128127",
+      "p95": "189.07567612386557742679949774582590647273329379870",
+      "lower": "141.57124272793601389959621076367348046065397087225",
+      "median": "165.37191333836261456716162940400004671825148128127",
+      "upper": "189.07567612386557742679949774582590647273329379870"
+    },
+    "original_terminal_growth": "0.0492",
+    "applied_terminal_growth": "0.025",
+    "quality_status": "provisional"
+  }
+}

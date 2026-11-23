@@ -1,0 +1,6 @@
+ts	phase	decision	why	evidence	result
+2026-11-23T09:33:23.382393+00:00	research	使用保留MSFT artifact而不重跑估值	真實資料已存在且可與公開驗收比對	sample.json; current-state.md	已核對raw與來源hash
+2026-11-23T09:33:23.382890+00:00	semantics	保留conditional quote存在但排除現價與upside	上游輸入不等於正式report quote呈現契約	current-state.md#容易誤讀的界線	不把不存在契約說成不存在資料
+2026-11-23T09:33:23.382898+00:00	prototype	比較連續章節A與任務分頁B	同一資料和閱讀任務才可比較資訊組織	prototype.template.html; walkthrough.md	推薦A為專家判斷
+2026-11-23T09:33:23.382901+00:00	responsive	520px以下改單欄並在600px以下用分位文字替代小SVG	初稿小圖文字與窄容器掃讀不佳	screenshots/b-dark-320.jpg; browser-observations.json	最終16點無整頁水平溢出
+2026-11-23T09:33:23.382906+00:00	verification	保留copy、反向focus及200%zoom為未驗證	可見觀察不支持宣稱全部通過	browser-observations.json; walkthrough.md	後續F11/F19/F20驗收
