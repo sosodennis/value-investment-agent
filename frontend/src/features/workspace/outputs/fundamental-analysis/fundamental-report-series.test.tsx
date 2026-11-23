@@ -49,6 +49,9 @@ describe('Fundamental series reading', () => {
         const onSelectEvidence = vi.fn();
         render(<ValuationForecast report={report} onSelectEvidence={onSelectEvidence} />);
         const chart = screen.getByRole('figure', { name: 'Revenue trend' });
+        const curves = [...chart.querySelectorAll('path.recharts-line-curve')].map((path) => path.getAttribute('d'));
+        expect(curves.length).toBeGreaterThan(0);
+        expect(curves.join(''), 'Isolated Year 1 and Year 3 points have no connecting line').not.toMatch(/[LC]/);
         const chartControls = within(chart);
         expect(chartControls.getAllByRole('button')).toHaveLength(2);
         expect(chartControls.queryByRole('button', { name: /Year 2/ })).toBeNull();
