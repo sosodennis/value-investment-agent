@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from 'react';
-import { Activity, CircleAlert, Loader2, Menu, Play, RotateCcw, Square, Wifi, WifiOff } from 'lucide-react';
+import { Activity, CircleAlert, Loader2, Menu, Play, RotateCcw, Square, Wifi, WifiOff, X } from 'lucide-react';
 import { useArtifact } from '@/hooks/useArtifact';
 import { parseFundamentalArtifact } from '@/types/agents/artifact-parsers';
 import { useAgent } from '@/hooks/useAgent';
@@ -17,7 +17,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { WorkspaceRouteIntent } from './workspace-route-intent';
 import { buildAutomaticValuationRequest, buildFundamentalRevisionRequest } from './valuation-request';
@@ -227,7 +227,24 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex items-center gap-2 min-[1440px]:hidden">
                         <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
-                        <Sheet open={mobileEvidenceOpen} onOpenChange={handleMobileEvidenceOpenChange}><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" closeLabel="Close evidence inspector" aria-describedby={undefined} className="w-[min(24rem,94vw)] p-0"><SheetTitle className="sr-only">Evidence details</SheetTitle><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} /></SheetContent></Sheet>
+                        <Sheet open={mobileEvidenceOpen} onOpenChange={handleMobileEvidenceOpenChange}>
+                            <SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger>
+                            <SheetContent side="right" showCloseButton={false} aria-describedby={undefined} className="w-[min(24rem,94vw)] p-0">
+                                <SheetTitle className="sr-only">Evidence details</SheetTitle>
+                                <EvidenceInspector
+                                    items={evidenceItems}
+                                    selected={selectedEvidence}
+                                    onSelect={handleSelectEvidence}
+                                    headerAction={
+                                        <SheetClose asChild>
+                                            <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Close evidence inspector">
+                                                <X aria-hidden="true" className="size-4" />
+                                            </Button>
+                                        </SheetClose>
+                                    }
+                                />
+                            </SheetContent>
+                        </Sheet>
                     </div>
                     <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>
