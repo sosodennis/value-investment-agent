@@ -1770,6 +1770,9 @@ class ForecastAssumptionOverridesV1(StrictModel):
     revenue_growth: tuple[Decimal, ...] | None = None
     operating_margin: tuple[Decimal, ...] | None = None
     reinvestment_rate: tuple[Decimal, ...] | None = None
+    timeline: ForecastTimelineV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class WaccAssumptionOverridesV1(StrictModel):

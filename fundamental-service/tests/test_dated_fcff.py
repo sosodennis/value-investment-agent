@@ -217,3 +217,54 @@ def test_source_plan_uses_explicit_dated_pin_and_keeps_legacy_configuration_byte
         AutomaticSourcePlanConfigurationV1.model_validate(
             {**old.model_dump(), "model_version": "transition_fcff_dcf-v3"}
         )
+
+
+@pytest.mark.parametrize("model_id", ["fcff_dcf", "transition_fcff_dcf"])
+def test_policy_validation_transport_retains_prepared_forecast_timeline(model_id):
+    from fastapi.testclient import TestClient
+
+    from fundamental_service.app import create_app
+    from fundamental_service.policies import (
+        PolicyRecordV1,
+        PolicyRegistry,
+        initial_policy_records,
+    )
+    from fundamental_service.testsupport import auth_headers, make_internal_envelope
+
+    request = dated_request(model_id)
+    policy_payload = initial_policy_records()[0].model_dump(exclude={"policy_digest"})
+    policy_payload.update(
+        policy_id=f"{model_id}-dated-transport-policy",
+        model_id=model_id,
+        model_version=request.model_version,
+    )
+    policy = PolicyRecordV1.model_validate(
+        {**policy_payload, "policy_digest": sha256_digest(policy_payload)}
+    )
+    client = TestClient(
+        create_app(
+            policy_registry=PolicyRegistry(
+                models=executable_model_specs(), policies=(policy,)
+            )
+        )
+    )
+    payload = request.model_dump(mode="json")
+    payload["policy_id"] = policy.policy_id
+    payload["input_digest"] = None
+    response = client.post(
+        "/v1/valuation/validate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert (
+        result["input"]["assumptions"]["forecast"]["timeline"]
+        == payload["assumptions"]["forecast"]["timeline"]
+    )
+    assert (
+        result["policy_resolution"]["precedence"]["assumptions.forecast.timeline"]
+        == "caller"
+    )
+    assert result["quality_status"] == "unsupported"
+    assert "MODEL_RELEASE_EVIDENCE_MISSING" in result["issue_codes"]
