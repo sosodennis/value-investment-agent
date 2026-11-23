@@ -127,6 +127,7 @@ describe('useAgent operation identity', () => {
         await waitFor(() => expect(result.current.error).toBe('Snapshot recovery failed.'));
         expect(outcome).toEqual({ kind: 'started', threadId: 'thread-1', runId: 'started-run' });
         expect(result.current.workflow?.runId).toBe('started-run');
+        expect(result.current.connectionState).toBe('closed');
         expect(result.current.isLoading).toBe(false);
     });
 

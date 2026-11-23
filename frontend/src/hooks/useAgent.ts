@@ -140,6 +140,7 @@ export function useAgent(assistantId = 'agent') {
             setIsLoading(false);
             void attachStream(threadId, snapshot, operation, run.run_id).catch((error: unknown) => {
                 if (isCurrentOperation(operation) && !isAbortError(error)) {
+                    setConnection('closed');
                     setError(toError(error, 'Failed to stream workflow run.'));
                 }
             });
@@ -150,7 +151,7 @@ export function useAgent(assistantId = 'agent') {
             setError(message);
             return { kind: 'error', message };
         } finally { if (isCurrentOperation(operation)) setIsLoading(false); }
-    }, [addUserMessage, attachStream, beginOperation, hydrateWorkflow, initSession, isCurrentOperation, setError, setRun, state.threadId]);
+    }, [addUserMessage, attachStream, beginOperation, hydrateWorkflow, initSession, isCurrentOperation, setConnection, setError, setRun, state.threadId]);
 
     const submitCommand = useCallback(async (interaction: WorkflowInteraction, response: InteractionResponse) => {
         const currentInteraction = state.workflow?.interactions.get(interaction.identity.interaction_id);
