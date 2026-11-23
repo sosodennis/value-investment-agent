@@ -73,7 +73,7 @@ class ConditionalReinvestmentRecipeV1(_ReinvestmentModel):
 
     @model_validator(mode="after")
     def explicit_supported_assumptions(self) -> ConditionalReinvestmentRecipeV1:
-        if self.model_version != f"{self.model_id}-v2":
+        if self.model_version not in {f"{self.model_id}-v2", f"{self.model_id}-v3"}:
             raise ValueError("forward hypotheses require the supported FCFF model")
         if any(len(text.strip()) < 40 for text in self.limitations):
             raise ValueError("forward hypotheses require explicit limitations")

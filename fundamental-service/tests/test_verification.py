@@ -113,7 +113,17 @@ def test_release_gate_replays_positive_and_explicit_abstention_cases():
     assert report["report_digest"] == run_release_gate(FIXTURE)["report_digest"]
 
 
-def test_transition_challenger_requires_filed_operating_evidence():
+@pytest.mark.parametrize(
+    "scope,quality",
+    (
+        ("verified-deterministic-v1", QualityStatus.VERIFIED),
+        ("conditional-arithmetic-v1", QualityStatus.PROVISIONAL),
+    ),
+)
+@pytest.mark.parametrize("include_literal", (False, True))
+def test_transition_arithmetic_does_not_infer_evidence_from_fact_ids(
+    scope, quality, include_literal
+):
     manifest, cases = load_cohort_manifest(FIXTURE)
     transition = next(
         case
@@ -121,17 +131,29 @@ def test_transition_challenger_requires_filed_operating_evidence():
         if case.model_id == "transition_fcff_dcf" and case.kind == "positive"
     )
     request = request_for_case(manifest, transition)
-    missing = request.model_copy(
-        update={
-            "historical_facts": tuple(
-                fact
-                for fact in request.historical_facts
-                if fact != "filed_operating_evidence"
-            )
-        }
+    fact_ids = tuple(
+        f"source-fact-{index:064x}" for index in range(len(request.historical_facts))
     )
-    with pytest.raises(VerificationRefusal, match="filed operating evidence"):
-        independent_calculate(missing)
+    if include_literal:
+        fact_ids = (*fact_ids, "filed_operating_evidence")
+    request = request.model_copy(
+        update={
+            "historical_facts": fact_ids,
+            "quality": request.quality.model_copy(update={"status": quality}),
+            "provenance": request.provenance.model_copy(update={"fact_ids": fact_ids}),
+        }
+    ).with_digest()
+
+    reference = independent_calculate(request, scope=scope)
+
+    assert (
+        compare_artifact(
+            reference,
+            calculate(request, allow_provisional=quality is QualityStatus.PROVISIONAL),
+        )
+        == ()
+    )
+    assert request.quality.status is quality
 
 
 def test_first_critical_node_mismatch_is_reported():

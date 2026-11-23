@@ -34,12 +34,12 @@ def project_enterprise_nodes(
     historical_fact_ids: tuple[str, ...],
 ) -> tuple[CalculationNodeV1, ...]:
     """Evaluate the existing DCF subgraph without an equity bridge or share price."""
-    if wacc.debt_weight + wacc.equity_weight != Decimal("1"):
+    if wacc.debt_weight + wacc.equity_weight != Decimal(1):
         raise OperatingProjectionError(
             "WACC_WEIGHTS_INVALID", "capital weights must sum to one"
         )
     cost_equity = wacc.risk_free_rate + wacc.beta * wacc.equity_risk_premium
-    after_tax_debt = wacc.pre_tax_cost_of_debt * (Decimal("1") - wacc.tax_rate)
+    after_tax_debt = wacc.pre_tax_cost_of_debt * (Decimal(1) - wacc.tax_rate)
     wacc_value = wacc.equity_weight * cost_equity + wacc.debt_weight * after_tax_debt
     if wacc_value <= terminal_growth or wacc_value <= 0:
         raise OperatingProjectionError(
@@ -74,41 +74,97 @@ def project_enterprise_nodes(
         ),
     ]
     nodes.append(operating_nodes[0])
-    present_value = Decimal("0")
-    last_fcff = Decimal("0")
+    present_value = Decimal(0)
+    last_fcff = Decimal(0)
     for index in range(1, len(forecast.revenue_growth) + 1):
         revenue_node, fcff_node = operating_nodes[2 * index - 1 : 2 * index + 1]
         fcff = fcff_node.value
         assert fcff is not None
-        discounted = fcff / ((Decimal("1") + wacc_value) ** index)
+        period = (
+            forecast.timeline.periods[index - 1]
+            if forecast.timeline is not None
+            else None
+        )
+        included = (
+            fcff
+            if period is None
+            else fcff * Decimal(period.included_days) / Decimal(period.full_period_days)
+        )
+        exponent = (
+            Decimal(index)
+            if period is None
+            else Decimal(period.discount_days) / Decimal(365)
+        )
+        discounted = included / ((Decimal(1) + wacc_value) ** exponent)
         present_value += discounted
         last_fcff = fcff
         nodes.extend(
             (
                 revenue_node,
                 fcff_node,
+                *(
+                    ()
+                    if period is None
+                    else (
+                        _node(
+                            f"included_fcff_{index}",
+                            "fcff * included_days / full_period_days",
+                            included,
+                            "currency",
+                            (
+                                f"fcff_{index}",
+                                f"assumptions.forecast.timeline.periods[{index - 1}]",
+                            ),
+                        ),
+                    )
+                ),
                 _node(
                     f"discounted_fcff_{index}",
-                    "fcff / (1 + wacc)^period",
+                    "fcff / (1 + wacc)^period"
+                    if period is None
+                    else "included_fcff / (1 + wacc)^(discount_days / 365)",
                     discounted,
                     "currency",
-                    (f"fcff_{index}", "wacc"),
+                    (
+                        f"fcff_{index}" if period is None else f"included_fcff_{index}",
+                        "wacc",
+                        *(
+                            (f"assumptions.forecast.timeline.periods[{index - 1}]",)
+                            if period is not None
+                            else ()
+                        ),
+                    ),
                 ),
             )
         )
     terminal_value = (
-        last_fcff * (Decimal("1") + terminal_growth) / (wacc_value - terminal_growth)
+        last_fcff * (Decimal(1) + terminal_growth) / (wacc_value - terminal_growth)
     )
-    terminal_pv = terminal_value / (
-        (Decimal("1") + wacc_value) ** len(forecast.revenue_growth)
+    terminal_exponent = (
+        Decimal(len(forecast.revenue_growth))
+        if forecast.timeline is None
+        else Decimal(forecast.timeline.periods[-1].discount_days) / Decimal(365)
     )
+    terminal_pv = terminal_value / ((Decimal(1) + wacc_value) ** terminal_exponent)
     nodes.append(
         _node(
             "discounted_terminal_value",
-            "terminal_value / (1 + wacc)^forecast_periods",
+            "terminal_value / (1 + wacc)^forecast_periods"
+            if forecast.timeline is None
+            else "terminal_value / (1 + wacc)^(terminal_discount_days / 365)",
             terminal_pv,
             "currency",
-            ("terminal_value", "wacc"),
+            (
+                "terminal_value",
+                "wacc",
+                *(
+                    (
+                        f"assumptions.forecast.timeline.periods[{len(forecast.revenue_growth) - 1}]",
+                    )
+                    if forecast.timeline is not None
+                    else ()
+                ),
+            ),
         )
     )
     enterprise = present_value + terminal_pv

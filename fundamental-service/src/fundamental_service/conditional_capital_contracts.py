@@ -153,7 +153,7 @@ class ConditionalCapitalRecipeV1(_CapitalModel):
 
     @model_validator(mode="after")
     def supported_hypotheses(self) -> ConditionalCapitalRecipeV1:
-        if self.model_version != f"{self.model_id}-v2":
+        if self.model_version not in {f"{self.model_id}-v2", f"{self.model_id}-v3"}:
             raise ValueError(
                 "conditional capital requires the supported FCFF model version"
             )
@@ -219,7 +219,7 @@ class ConditionalCapitalPolicyV1(_CapitalModel):
 
     @model_validator(mode="after")
     def policy_keeps_unknowns_and_sensitivity(self) -> ConditionalCapitalPolicyV1:
-        if self.model_version != f"{self.model_id}-v2":
+        if self.model_version not in {f"{self.model_id}-v2", f"{self.model_id}-v3"}:
             raise ValueError(
                 "conditional capital requires the supported FCFF model version"
             )

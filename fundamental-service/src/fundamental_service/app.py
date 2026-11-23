@@ -63,6 +63,7 @@ from .market_reference import MarketReferenceProviderPort
 from .source_admission import SourceUsePolicyV1
 from .source_use_deployment import load_runtime_source_use_policy
 from .governance import ModelInventory
+from .model_release_deployment import load_model_release_deployment
 from .conditional_revision import RevisionActor
 from .interface.transport import (
     EmptyOperationInputV1,
@@ -99,6 +100,8 @@ from .policies import (
     MetadataPolicyRepository,
     PolicyRecordV1,
     PolicyRegistry,
+    dated_model_specs,
+    executable_model_specs,
     expansion_model_specs,
     expansion_policy_records,
     initial_model_specs,
@@ -233,7 +236,7 @@ def create_app(
             )
         if policy_registry is None:
             policy_registry = PolicyRegistry(
-                models=(*initial_model_specs(), *expansion_model_specs()),
+                models=(*executable_model_specs(), *expansion_model_specs()),
                 policies=(*initial_policy_records(), *expansion_policy_records()),
             )
     metrics = OperationalMetrics()
@@ -270,7 +273,15 @@ def create_app(
             try:
                 metadata_store.start()
                 if policy_registry is not None:
-                    for model in (*initial_model_specs(), *expansion_model_specs()):
+                    for model in (
+                        *initial_model_specs(),
+                        *expansion_model_specs(),
+                        *(
+                            model_inventory.advertised()
+                            if model_inventory is not None
+                            else ()
+                        ),
+                    ):
                         metadata_store.publish_model(
                             model,
                             model_id=model.model_id,
@@ -1270,8 +1281,14 @@ def create_runtime_app() -> FastAPI:
     )
     trust_roots_value = os.getenv("FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE")
     model_inventory = ModelInventory.from_deployment_file(
-        expansion_model_specs(),
+        (*dated_model_specs(), *expansion_model_specs()),
         Path(trust_roots_value) if trust_roots_value else None,
+    )
+    model_release_path = os.getenv("FUNDAMENTAL_MODEL_RELEASE_DEPLOYMENT_FILE")
+    promoted_models = (
+        load_model_release_deployment(Path(model_release_path), model_inventory)
+        if model_release_path
+        else ()
     )
     content_store = PostgresContentStore(root / "content", metadata_store)
     taxonomy_cache_dir = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR")
@@ -1332,6 +1349,7 @@ def create_runtime_app() -> FastAPI:
         require_metadata=True,
         model_inventory=model_inventory,
         policy_registry=PolicyRegistry(
+            models=promoted_models,
             model_repository=MetadataModelRepository(metadata_store),
             repository=MetadataPolicyRepository(metadata_store),
         ),

@@ -1,7 +1,7 @@
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 import { exactNumber, type ExactNumber, type FundamentalFactModel, type FundamentalReportModel, type FundamentalValuationModel } from './fundamental-report-model';
 
-export type ReportSeriesPoint = { label: string; value: ExactNumber | null; evidence: EvidenceSelection | null };
+export type ReportSeriesPoint = { label: string; period?: string; value: ExactNumber | null; evidence: EvidenceSelection | null };
 export type ReportSeries = { id: string; label: string; currency: string; points: ReportSeriesPoint[] };
 export type HistoricalSeries =
     | { kind: 'comparable'; series: ReportSeries; periods: string[] }
@@ -19,13 +19,17 @@ const HISTORY_FIELDS = [
 ];
 
 export function projectForecastSeries(report: FundamentalValuationModel): ReportSeries[] {
-    return FORECAST_FIELDS.map((field) => ({
+    const periods = report.base.forecastTimeline.kind === 'dated' ? report.base.forecastTimeline.timeline.periods : null;
+    const fields = periods ? [FORECAST_FIELDS[0], FORECAST_FIELDS[1], { id: 'included_fcff', label: 'Future FCFF included' }, FORECAST_FIELDS[2]] : FORECAST_FIELDS;
+    return fields.map((field) => ({
         ...field,
+        label: periods && field.id === 'discounted_fcff' ? 'Discounted future FCFF' : field.label,
         currency: report.currency ?? '',
-        points: Array.from({ length: 5 }, (_, index) => {
+        points: Array.from({ length: periods?.length ?? 5 }, (_, index) => {
             const node = report.base.nodes.find((item) => item.id === `${field.id}_${index + 1}`);
             const usable = node?.semantic.kind === 'money' && node.semantic.currency === report.currency;
-            return { label: `Year ${index + 1}`, value: usable ? node.value : null, evidence: node?.evidence ?? null };
+            const period = periods?.[index];
+            return { label: period ? `${period.period_end.slice(0, 4)}E` : `Year ${index + 1}`, period: period ? `Year ending ${period.period_end}` : undefined, value: usable ? node.value : null, evidence: node?.evidence ?? null };
         }),
     }));
 }

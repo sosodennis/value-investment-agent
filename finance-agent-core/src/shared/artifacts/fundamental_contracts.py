@@ -5,7 +5,15 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    SerializeAsAny,
+    model_validator,
+)
+from pydantic.experimental.missing_sentinel import MISSING
 
 CanonicalDecimal = Annotated[
     str,
@@ -380,6 +388,53 @@ class FundamentalPolicyResolutionV1(BaseModel):
     input_digest: str
 
 
+class FundamentalForecastPeriodV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ordinal: int = Field(ge=1)
+    period_start: date
+    period_end: date
+    included_start: date
+    cash_flow_date: date
+    full_period_days: int = Field(ge=365, le=366)
+    included_days: int = Field(ge=1, le=366)
+    discount_days: int = Field(ge=1)
+
+
+class FundamentalForecastTimelineV1(BaseModel):
+    """Lossless display metadata supplied and validated by Fundamental Service."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy_version: Literal["fcff-uniform-accrual-period-end-act365f-v1"]
+    calendar_basis: Literal["source-fixed-month-day", "source-month-end"]
+    label_basis: Literal["period-end-year"]
+    valuation_date: date
+    source_period_start: date
+    source_period_end: date
+    source_revenue_fact_id: str = Field(min_length=1)
+    calendar_fact_ids: tuple[str, ...] = Field(min_length=3, max_length=3)
+    periods: tuple[FundamentalForecastPeriodV1, ...] = Field(
+        min_length=1, max_length=10
+    )
+
+
+class FundamentalForecastAssumptionsProjectionV1(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+
+    timeline: FundamentalForecastTimelineV1 | None | MISSING = MISSING
+
+
+class FundamentalCalculationAssumptionsV1(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+
+    forecast: SerializeAsAny[
+        FundamentalForecastAssumptionsProjectionV1 | None | MISSING
+    ] = MISSING
+
+
 class FundamentalCalculationResultV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     contract_version: Literal["fundamental.v1"]
@@ -393,7 +448,7 @@ class FundamentalCalculationResultV1(BaseModel):
     intrinsic_value: CanonicalDecimal | None = None
     per_share_value: CanonicalDecimal | None = None
     nodes: tuple[FundamentalCalculationNodeV1, ...] = ()
-    assumptions: dict[str, JsonValue]
+    assumptions: FundamentalCalculationAssumptionsV1
     policy_id: str | None = None
     model_version: str
     policy_version: str | None = None

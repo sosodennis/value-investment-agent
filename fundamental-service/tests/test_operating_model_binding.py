@@ -25,7 +25,7 @@ from test_operating_scenarios import request
 
 INVALID_VERSIONS = (
     ("unimplemented-v999", "unimplemented-v999"),
-    ("fcff_dcf-v3", "transition_fcff_dcf-v2"),
+    ("fcff_dcf-v999", "transition_fcff_dcf-v2"),
     ("fcff_dcf-v2", "transition_fcff_dcf-v1"),
     ("transition_fcff_dcf-v2", "fcff_dcf-v2"),
 )
@@ -139,7 +139,7 @@ def test_runner_input_validation_fails_before_forecast_publication(
 
 
 @pytest.mark.parametrize("model", ("fcff_dcf", "transition_fcff_dcf"))
-@pytest.mark.parametrize("version", ("unimplemented-v999", "fcff_dcf-v3"))
+@pytest.mark.parametrize("version", ("unimplemented-v999", "fcff_dcf-v999"))
 def test_operating_forecast_and_calculator_reject_unexecutable_versions(model, version):
     with pytest.raises(OperatingProjectionError) as operating:
         prepare(operating_facts(), model_id=model, model_version=version)
@@ -166,7 +166,7 @@ def test_specifications_must_match_the_executed_graph_and_numerical_policy(
     specs = initial_model_specs()
     monkeypatch.setattr(
         operating_projection,
-        "initial_model_specs",
+        "executable_model_specs",
         lambda: tuple(spec.model_copy(update=change) for spec in specs),
     )
     with pytest.raises(ValidationError, match="differs from the executable"):

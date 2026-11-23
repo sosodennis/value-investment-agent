@@ -18,7 +18,7 @@ from .data_releases import (
     DataReleaseManifestV1,
 )
 from .conditional_reinvestment_release import reinvestment_release_requirements
-from .policies import initial_model_specs
+from .policies import executable_model_specs
 from .serialization import canonical_bytes
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
@@ -62,7 +62,7 @@ def automatic_release_model(
     model_id, model_version, _ = next(iter(bindings))
     if not any(
         model.model_id == model_id and model.model_version == model_version
-        for model in initial_model_specs()
+        for model in executable_model_specs()
     ):
         raise DataReleaseError(
             "DATA_RELEASE_AUTOMATIC_MODEL_MISMATCH",
@@ -237,7 +237,7 @@ def valuation_input_requirements(
     )
     if policy.requirements_profile_digest != profile.digest or not any(
         model.model_id == model_id and model.model_version == policy.model_version
-        for model in initial_model_specs()
+        for model in executable_model_specs()
     ):
         raise DataReleaseError(
             "DATA_RELEASE_VALUATION_INPUT_POLICY_MISMATCH",

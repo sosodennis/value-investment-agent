@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 import hashlib
-from string import Formatter
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import UTC, date, datetime
+from string import Formatter
 from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, TypeAdapter, model_validator
 
 from .automatic_mapping import automatic_mapping_policy_digest
+from .automatic_market_policy import AutomaticMarketPolicyPolicyV1
 from .automatic_source_mapping import AutomaticSecIngestionRequestV1
 from .classification_crosswalk import ClassificationCrosswalkPolicyV1
+from .command_artifacts import EvidenceArtifactStore
 from .conditional_capital_contracts import ConditionalCapitalRecipeV1
 from .conditional_reinvestment_contracts import ConditionalReinvestmentRecipeV1
-from .command_artifacts import EvidenceArtifactStore
 from .contracts import (
     FiscalPeriodSelectorV1,
     IdentityV1,
@@ -26,26 +27,26 @@ from .contracts import (
     StrictModel,
 )
 from .data_releases import ArtifactRefV1
-from .issuer_country_crosswalk import CountryCrosswalkPolicyV1
 from .issuer_classification import IssuerClassificationRequestV1
+from .issuer_country_crosswalk import CountryCrosswalkPolicyV1
 from .issuer_identity import original_history_identity_key
 from .issuer_market_policy_plan import IssuerMarketReferencePlanPolicyV1
 from .issuer_market_preparation import (
     AutomaticMarketPolicyIdentityV1,
     IssuerMarketPreparationRequestV1,
 )
-from .automatic_market_policy import AutomaticMarketPolicyPolicyV1
 from .market_source_selection import DailyMarketRatePolicyV1
+from .original_preparation import OriginalPreparation, OriginalPreparationReads
+from .policies import ModelSpecV1, executable_model_specs
 from .public_acquisition import PublicSourceAcquisitionRequestV1
 from .public_admission import PublicSourceAdmissionRequestV1
-from .original_preparation import OriginalPreparation, OriginalPreparationReads
 from .quote_admission import QUOTE_METRIC
 from .quote_source_plan import AutomaticDailyQuoteRequestTemplateV1
-from .policies import ModelSpecV1, initial_model_specs
-from .source_plan_contracts import AutomaticSourcePreparationPlanV1
 from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
+from .source_plan_contracts import AutomaticSourcePreparationPlanV1
+from .terminal_growth import TerminalGrowthPlanV1
 from .valuation_requirements import (
     composite_working_capital_requirements_profile,
     source_preparation_requirements_profile,
@@ -60,7 +61,6 @@ from .working_capital_preparation import (
     WorkingCapitalExclusionRecipeV1,
     WorkingCapitalPeriodRecipeV1,
 )
-from .terminal_growth import TerminalGrowthPlanV1
 
 
 class AutomaticWorkingCapitalRecipeTemplateV1(StrictModel):
@@ -319,6 +319,9 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
         "automatic-source-plan-configuration-v1"
     )
     model_id: InitialModelId
+    model_version: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
     release_profile_id: str = Field(min_length=1, max_length=128)
     coverage_profile: str = Field(min_length=1, max_length=128)
     evaluator_id: str = Field(min_length=1, max_length=128)
@@ -342,6 +345,12 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
 
     @model_validator(mode="after")
     def supported_model(self) -> AutomaticSourcePlanConfigurationV1:
+        if not any(
+            (model.model_id, model.model_version)
+            == (self.model_id, self.resolved_model_version)
+            for model in executable_model_specs()
+        ):
+            raise ValueError("source plan requires an exact supported model version")
         source_preparation_requirements_profile(
             self.model_id,
             composite_inputs=self.working_capital_recipe_template is not None,
@@ -359,6 +368,7 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
         ):
             if conditional is not None and (
                 conditional.model_id != self.model_id
+                or conditional.model_version != self.resolved_model_version
                 or conditional.mapping_version != self.mapping_version
             ):
                 raise ValueError(
@@ -369,6 +379,10 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
                 self.model_id, operating_only=False
             )
         return self
+
+    @property
+    def resolved_model_version(self) -> str:
+        return self.model_version or f"{self.model_id}-v2"
 
     @property
     def digest(self) -> str:
@@ -573,8 +587,9 @@ class OriginalSourcePlan:
             )
             model = next(
                 model
-                for model in initial_model_specs()
-                if model.model_id == configuration.model_id
+                for model in executable_model_specs()
+                if (model.model_id, model.model_version)
+                == (configuration.model_id, configuration.resolved_model_version)
             )
             runtime = prepared.request.runtime
             ingestions = []

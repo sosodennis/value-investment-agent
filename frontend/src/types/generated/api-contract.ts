@@ -1926,6 +1926,13 @@ export interface components {
              */
             valuation_timestamp: string;
         };
+        /** FundamentalCalculationAssumptionsV1 */
+        FundamentalCalculationAssumptionsV1: {
+            /** Forecast */
+            forecast?: components["schemas"]["FundamentalForecastAssumptionsProjectionV1"] | null;
+        } & {
+            [key: string]: components["schemas"]["JsonValue"];
+        };
         /** FundamentalCalculationNodeV1 */
         FundamentalCalculationNodeV1: {
             /** Formula */
@@ -1950,10 +1957,7 @@ export interface components {
              * @default []
              */
             artifact_references: components["schemas"]["FundamentalServiceEvidenceReferenceV1"][];
-            /** Assumptions */
-            assumptions: {
-                [key: string]: components["schemas"]["JsonValue"];
-            };
+            assumptions: components["schemas"]["FundamentalCalculationAssumptionsV1"];
             /**
              * Calculation Status
              * @enum {string}
@@ -2339,6 +2343,86 @@ export interface components {
         FundamentalFiscalPeriodV1: {
             /** Fiscal Year */
             fiscal_year: number;
+        };
+        /** FundamentalForecastAssumptionsProjectionV1 */
+        FundamentalForecastAssumptionsProjectionV1: {
+            /** Timeline */
+            timeline?: components["schemas"]["FundamentalForecastTimelineV1"] | null;
+        } & {
+            [key: string]: components["schemas"]["JsonValue"];
+        };
+        /** FundamentalForecastPeriodV1 */
+        FundamentalForecastPeriodV1: {
+            /**
+             * Cash Flow Date
+             * Format: date
+             */
+            cash_flow_date: string;
+            /** Discount Days */
+            discount_days: number;
+            /** Full Period Days */
+            full_period_days: number;
+            /** Included Days */
+            included_days: number;
+            /**
+             * Included Start
+             * Format: date
+             */
+            included_start: string;
+            /** Ordinal */
+            ordinal: number;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+        };
+        /**
+         * FundamentalForecastTimelineV1
+         * @description Lossless display metadata supplied and validated by Fundamental Service.
+         */
+        FundamentalForecastTimelineV1: {
+            /**
+             * Calendar Basis
+             * @enum {string}
+             */
+            calendar_basis: "source-fixed-month-day" | "source-month-end";
+            /** Calendar Fact Ids */
+            calendar_fact_ids: string[];
+            /**
+             * Label Basis
+             * @constant
+             */
+            label_basis: "period-end-year";
+            /** Periods */
+            periods: components["schemas"]["FundamentalForecastPeriodV1"][];
+            /**
+             * Policy Version
+             * @constant
+             */
+            policy_version: "fcff-uniform-accrual-period-end-act365f-v1";
+            /**
+             * Source Period End
+             * Format: date
+             */
+            source_period_end: string;
+            /**
+             * Source Period Start
+             * Format: date
+             */
+            source_period_start: string;
+            /** Source Revenue Fact Id */
+            source_revenue_fact_id: string;
+            /**
+             * Valuation Date
+             * Format: date
+             */
+            valuation_date: string;
         };
         /** FundamentalForwardEvidenceBudgetPolicyV1 */
         FundamentalForwardEvidenceBudgetPolicyV1: {

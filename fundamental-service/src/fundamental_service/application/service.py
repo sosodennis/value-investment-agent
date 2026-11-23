@@ -173,6 +173,9 @@ from ..conditional_reinvestment_release import (
 )
 
 
+from ..forecast_timeline import ForecastTimelineError, verify_forecast_timeline_sources
+
+
 class UncertaintyRequestV1(ValuationInputV1):
     """Valuation input with caller-owned uncertainty controls."""
 
@@ -490,6 +493,20 @@ class FundamentalApplication:
                     retryable=False,
                 )
             facts.append(fact)
+        forecast = value.assumptions.forecast
+        if forecast is not None and forecast.timeline is not None:
+            try:
+                verify_forecast_timeline_sources(
+                    forecast.timeline,
+                    facts,
+                    valuation_timestamp=value.valuation_context.valuation_timestamp,
+                    horizon=len(forecast.revenue_growth),
+                    base_revenue=forecast.base_revenue,
+                )
+            except ForecastTimelineError as error:
+                raise ServiceError(
+                    error.code, str(error), status_code=422, retryable=False
+                ) from error
         release_manifest = self._data_release_manifest(
             value.valuation_context.data_release_manifest_digest
         )
@@ -1053,6 +1070,16 @@ class FundamentalApplication:
             issues.append("MODEL_NOT_ACTIVE")
         if model.release_manifest is None:
             issues.append("MODEL_RELEASE_EVIDENCE_MISSING")
+        if value.model_version == f"{value.model_id}-v3" and (
+            self.model_inventory is None
+            or not any(
+                (current.model_id, current.model_version)
+                == (value.model_id, value.model_version)
+                and current == model
+                for current in self.model_inventory.advertised()
+            )
+        ):
+            issues.append("MODEL_RELEASE_EVIDENCE_MISSING")
         return tuple(issues)
 
     def _require_released_calculator_model(self, value: ValuationInputV1) -> None:
@@ -1490,6 +1517,12 @@ class FundamentalApplication:
         assert manifest is not None
         try:
             self._verify_current_release_artifacts(manifest, deadline_at=deadline_at)
+            release_model = automatic_release_model(manifest)
+            if release_model is not None and release_model.model_id != request.model_id:
+                raise DataReleaseError(
+                    "DATA_RELEASE_AUTOMATIC_MODEL_MISMATCH",
+                    "preparation must use the exact model bound by its release",
+                )
         except DataReleaseError as error:
             raise ServiceError(
                 error.code, str(error), status_code=422, retryable=False
@@ -1523,7 +1556,11 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
-        model_version = f"{request.model_id}-v2"
+        model_version = (
+            release_model.model_version
+            if release_model is not None
+            else f"{request.model_id}-v2"
+        )
         policy = None
         if self.policy_registry is not None:
             try:

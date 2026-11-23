@@ -23,12 +23,12 @@ from .contracts import (
     StrictModel,
 )
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
-from .original_issuer import IssuerOperatingSourceV1
 from .operating_projection import (
     OperatingProjectionError,
     project_operating_nodes,
     resolve_operating_model,
 )
+from .original_issuer import IssuerOperatingSourceV1
 from .serialization import sha256_digest
 from .valuation_preparation import (
     FORECAST_COMPOSER_VERSION,
@@ -344,13 +344,18 @@ def _prepare(
                     update={"working_capital_inputs": working_capital_inputs}
                 )
             if metrics.quality_status is not QualityStatus.ABSTAIN:
-                forecast = compose_forecast_assumptions(history, metrics)
+                forecast = compose_forecast_assumptions(
+                    history,
+                    metrics,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    dated=model_version == f"{model_id}-v3",
+                )
                 taxes = tuple(
                     metric.value
                     for metric in metrics.metrics
                     if metric.metric_id == "normalized_tax_rate"
                 )
-                tax_rate = sum(taxes, Decimal("0")) / Decimal(len(taxes))
+                tax_rate = sum(taxes, Decimal(0)) / Decimal(len(taxes))
                 nodes = project_operating_nodes(
                     forecast,
                     tax_rate=tax_rate,

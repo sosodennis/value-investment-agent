@@ -22,6 +22,7 @@ from .serialization import is_digest, sha256_digest
 from .accounting_roles import AccountingRoleEvidenceV1, accounting_reported_decimals
 from .dqc_applicability import DqcFilingContextV1, DqcRuleApplicabilityV1
 from .inline_xbrl import InlineDocumentInputV1, InlineDocumentSetInputV1
+from .forecast_timeline_contracts import ForecastTimelineV1
 
 _MANIFEST_STRINGS = TypeAdapter(tuple[str, ...])
 
@@ -1308,6 +1309,22 @@ class ForecastAssumptionsV1(StrictModel):
     revenue_growth: tuple[Decimal, ...] = Field(min_length=1)
     operating_margin: tuple[Decimal, ...] = Field(min_length=1)
     reinvestment_rate: tuple[Decimal, ...] = Field(min_length=1)
+    timeline: ForecastTimelineV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @model_validator(mode="after")
+    def timeline_matches_horizon(self) -> ForecastAssumptionsV1:
+        if self.timeline is not None and not (
+            len(self.timeline.periods)
+            == len(self.revenue_growth)
+            == len(self.operating_margin)
+            == len(self.reinvestment_rate)
+        ):
+            raise ValueError(
+                "dated schedule and forecast arrays must have equal length"
+            )
+        return self
 
 
 class WaccAssumptionsV1(StrictModel):
@@ -1753,6 +1770,9 @@ class ForecastAssumptionOverridesV1(StrictModel):
     revenue_growth: tuple[Decimal, ...] | None = None
     operating_margin: tuple[Decimal, ...] | None = None
     reinvestment_rate: tuple[Decimal, ...] | None = None
+    timeline: ForecastTimelineV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class WaccAssumptionOverridesV1(StrictModel):

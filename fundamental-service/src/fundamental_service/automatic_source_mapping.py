@@ -31,7 +31,7 @@ from .ingestion_mapping import (
     IngestionMappingResolverPort,
     ValidatedOriginalV1,
 )
-from .policies import initial_model_specs
+from .policies import executable_model_specs
 from .public_acquisition import PublicSourceCutoffV1
 from .parser_action_evidence import require_parser_action_evidence
 from .parser_action_identity import ParserBuildChecks
@@ -80,7 +80,7 @@ class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
             or set(self.required_fields) != set(profile.required_fact_fields)
             or not any(
                 m.model_id == self.model_id and m.model_version == self.model_version
-                for m in initial_model_specs()
+                for m in executable_model_specs()
             )
         ):
             raise ValueError(

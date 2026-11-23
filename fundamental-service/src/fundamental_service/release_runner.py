@@ -88,6 +88,7 @@ from .policies import (
     PolicyError,
     FilesystemPolicyRepository,
     initial_model_specs,
+    executable_model_specs,
 )
 from .source_admission import SourceUsePolicyV1
 from .source_admission_evidence import load_release_source_admissions
@@ -1266,7 +1267,7 @@ def main(argv: list[str] | None = None) -> int:
             source_use_policy=source_use_policy,
             policy_registry=PolicyRegistry(
                 repository=FilesystemPolicyRepository(args.policies_root),
-                models=initial_model_specs(),
+                models=executable_model_specs(),
             )
             if args.policies_root
             else None,

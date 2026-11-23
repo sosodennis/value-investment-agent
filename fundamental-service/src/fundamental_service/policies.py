@@ -6,7 +6,7 @@ import os
 import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal, Protocol, TypeVar
@@ -912,8 +912,8 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
         "golden_cohort": "fundamental-engineering-cohort-v1",
         "challenger": "independent-verification-v1",
         "independent_validator": "fundamental-service-validator",
-        "approval_date": datetime(2026, 1, 1, tzinfo=timezone.utc),
-        "review_date": datetime(2026, 12, 31, tzinfo=timezone.utc),
+        "approval_date": datetime(2026, 1, 1, tzinfo=UTC),
+        "review_date": datetime(2026, 12, 31, tzinfo=UTC),
         "release_manifest": "release-fundamental-v1",
         "retirement_trigger": "blocking-reconciliation-or-expired-review",
         "rollback_policy": "restore-last-promoted-release-manifest",
@@ -939,6 +939,38 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
             }
         ),
     )
+
+
+def dated_model_specs() -> tuple[ModelSpecV1, ...]:
+    """Unreleased dated successors; deployment must promote their own evidence."""
+
+    return tuple(
+        ModelSpecV1.model_validate(
+            {
+                **model.model_dump(),
+                "model_version": f"{model.model_id}-v3",
+                "lifecycle": "exploratory",
+                "formula_graph": "calculator-v3-dated-fcff",
+                "numerical_policy": "decimal-50-dated-uniform-fcff-act365f-v1",
+                "assumption_policy": "fcff-uniform-accrual-period-end-act365f-v1",
+                "calibration_required_for_promotion": False,
+                "source_register": (*model.source_register, "sec-submissions"),
+                "required_release_gates": tuple(
+                    gate
+                    for gate in model.required_release_gates
+                    if gate != "calibration-oos"
+                ),
+                "approval_date": None,
+                "review_date": None,
+                "release_manifest": None,
+            }
+        )
+        for model in initial_model_specs()
+    )
+
+
+def executable_model_specs() -> tuple[ModelSpecV1, ...]:
+    return (*initial_model_specs(), *dated_model_specs())
 
 
 def expansion_model_specs() -> tuple[ModelSpecV1, ...]:

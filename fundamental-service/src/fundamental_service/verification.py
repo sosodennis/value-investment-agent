@@ -13,6 +13,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC
 from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import Any, Literal
@@ -56,7 +57,7 @@ class NodeTolerance:
     relative: Decimal
 
 
-DEFAULT_CURRENCY_TOLERANCE = NodeTolerance(Decimal("1"), Decimal("1e-9"))
+DEFAULT_CURRENCY_TOLERANCE = NodeTolerance(Decimal(1), Decimal("1e-9"))
 PER_SHARE_TOLERANCE = NodeTolerance(Decimal("0.000001"), Decimal("1e-9"))
 RATE_TOLERANCE = NodeTolerance(Decimal("1e-12"), Decimal("1e-9"))
 
@@ -124,18 +125,14 @@ def independent_calculate(
         raise VerificationRefusal(
             "MODEL_UNSUPPORTED", "model is outside the V1 profile"
         )
-    if request.model_version != f"{request.model_id}-v2":
+    if request.model_version not in {
+        f"{request.model_id}-v2",
+        f"{request.model_id}-v3",
+    }:
         raise VerificationRefusal(
-            "MODEL_VERSION_UNSUPPORTED", "the current FCFF graph requires model v2"
+            "MODEL_VERSION_UNSUPPORTED",
+            "the FCFF graph requires an exact executable version",
         )
-    if request.model_id == "transition_fcff_dcf" and (
-        "filed_operating_evidence" not in request.historical_facts
-    ):
-        raise VerificationRefusal(
-            "TRANSITION_EVIDENCE_MISSING",
-            "guarded transition DCF requires filed operating evidence",
-        )
-
     assumptions = request.assumptions
     wacc = assumptions.wacc
     growth = assumptions.terminal_growth
@@ -145,7 +142,7 @@ def independent_calculate(
         raise VerificationRefusal(
             "ASSUMPTIONS_INCOMPLETE", "complete FCFF assumptions are required"
         )
-    if wacc.debt_weight + wacc.equity_weight != Decimal("1"):
+    if wacc.debt_weight + wacc.equity_weight != Decimal(1):
         raise VerificationRefusal(
             "WACC_WEIGHTS_INVALID", "capital weights do not sum to one"
         )
@@ -153,7 +150,7 @@ def independent_calculate(
     with localcontext() as context:
         context.prec = 50
         cost_equity = wacc.risk_free_rate + wacc.beta * wacc.equity_risk_premium
-        after_tax_debt = wacc.pre_tax_cost_of_debt * (Decimal("1") - wacc.tax_rate)
+        after_tax_debt = wacc.pre_tax_cost_of_debt * (Decimal(1) - wacc.tax_rate)
         weighted_wacc = (
             wacc.equity_weight * cost_equity + wacc.debt_weight * after_tax_debt
         )
@@ -164,6 +161,22 @@ def independent_calculate(
         ):
             raise VerificationRefusal(
                 "DISCOUNT_RATE_INVALID", "WACC must exceed terminal growth and zero"
+            )
+        dated = request.model_version == f"{request.model_id}-v3"
+        timeline = forecast.timeline
+        if dated != (timeline is not None):
+            raise VerificationRefusal(
+                "FORECAST_TIMING_POLICY_MISMATCH",
+                "model version and dated schedule do not agree",
+            )
+        if (
+            timeline is not None
+            and timeline.valuation_date
+            != request.valuation_context.valuation_timestamp.astimezone(UTC).date()
+        ):
+            raise VerificationRefusal(
+                "FORECAST_VALUATION_DATE_MISMATCH",
+                "timeline valuation date differs from the request",
             )
         if forecast.base_revenue is None or forecast.base_revenue <= 0:
             raise VerificationRefusal(
@@ -210,8 +223,8 @@ def independent_calculate(
             ),
         ]
         revenue = forecast.base_revenue
-        present_value = Decimal("0")
-        last_fcff = Decimal("0")
+        present_value = Decimal(0)
+        last_fcff = Decimal(0)
         for period, (revenue_growth, margin, reinvestment) in enumerate(
             zip(
                 forecast.revenue_growth,
@@ -220,14 +233,30 @@ def independent_calculate(
             ),
             start=1,
         ):
-            revenue = revenue * (Decimal("1") + revenue_growth)
+            revenue = revenue * (Decimal(1) + revenue_growth)
             fcff = (
                 revenue
                 * margin
-                * (Decimal("1") - wacc.tax_rate)
-                * (Decimal("1") - reinvestment)
+                * (Decimal(1) - wacc.tax_rate)
+                * (Decimal(1) - reinvestment)
             )
-            discounted = fcff / ((Decimal("1") + weighted_wacc) ** period)
+            timing = None
+            if timeline is None:
+                included = fcff
+                exponent = Decimal(period)
+            else:
+                timing = timeline.periods[period - 1]
+                annual_days = Decimal(
+                    (timing.period_end - timing.period_start).days + 1
+                )
+                future_days = Decimal(
+                    (timing.period_end - timing.included_start).days + 1
+                )
+                included = fcff * future_days / annual_days
+                exponent = Decimal(
+                    (timing.cash_flow_date - timeline.valuation_date).days
+                ) / Decimal(365)
+            discounted = included / ((Decimal(1) + weighted_wacc) ** exponent)
             present_value += discounted
             last_fcff = fcff
             nodes.extend(
@@ -246,28 +275,78 @@ def independent_calculate(
                         "currency",
                         (f"revenue_{period}",),
                     ),
+                    *(
+                        ()
+                        if timing is None
+                        else (
+                            _node(
+                                f"included_fcff_{period}",
+                                "fcff * included_days / full_period_days",
+                                included,
+                                "currency",
+                                (
+                                    f"fcff_{period}",
+                                    f"assumptions.forecast.timeline.periods[{period - 1}]",
+                                ),
+                            ),
+                        )
+                    ),
                     _node(
                         f"discounted_fcff_{period}",
-                        "fcff / (1 + wacc)^period",
+                        "fcff / (1 + wacc)^period"
+                        if timing is None
+                        else "included_fcff / (1 + wacc)^(discount_days / 365)",
                         discounted,
                         "currency",
-                        (f"fcff_{period}", "wacc"),
+                        (
+                            f"fcff_{period}"
+                            if timing is None
+                            else f"included_fcff_{period}",
+                            "wacc",
+                            *(
+                                (
+                                    f"assumptions.forecast.timeline.periods[{period - 1}]",
+                                )
+                                if timing is not None
+                                else ()
+                            ),
+                        ),
                     ),
                 )
             )
 
-        terminal_value = last_fcff * (Decimal("1") + growth) / (weighted_wacc - growth)
+        terminal_value = last_fcff * (Decimal(1) + growth) / (weighted_wacc - growth)
+        terminal_exponent = (
+            Decimal(len(forecast.revenue_growth))
+            if timeline is None
+            else Decimal(
+                (timeline.periods[-1].cash_flow_date - timeline.valuation_date).days
+            )
+            / Decimal(365)
+        )
         terminal_pv = terminal_value / (
-            (Decimal("1") + weighted_wacc) ** len(forecast.revenue_growth)
+            (Decimal(1) + weighted_wacc) ** terminal_exponent
         )
         nodes.extend(
             (
                 _node(
                     "discounted_terminal_value",
-                    "terminal_value / (1 + wacc)^forecast_periods",
+                    "terminal_value / (1 + wacc)^forecast_periods"
+                    if timeline is None
+                    else "terminal_value / (1 + wacc)^(terminal_discount_days / 365)",
                     terminal_pv,
                     "currency",
-                    ("terminal_value", "wacc"),
+                    (
+                        "terminal_value",
+                        "wacc",
+                        *(
+                            (
+                                f"assumptions.forecast.timeline.periods[{len(forecast.revenue_growth) - 1}]",
+                            )
+                            if timeline is not None
+                            else ()
+                        ),
+                    ),
                 ),
                 _node(
                     "terminal_value",
@@ -335,7 +414,7 @@ def _within(actual: Decimal, expected: Decimal, tolerance: NodeTolerance) -> boo
     if not actual.is_finite() or not expected.is_finite():
         return False
     difference = abs(actual - expected)
-    scale = max(abs(actual), abs(expected), Decimal("1"))
+    scale = max(abs(actual), abs(expected), Decimal(1))
     return difference <= max(tolerance.absolute, tolerance.relative * scale)
 
 
@@ -459,7 +538,7 @@ def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
             "assumptions": assumptions.model_copy(
                 update={
                     "capital_bridge": bridge.model_copy(
-                        update={"cash": bridge.cash + Decimal("1")}
+                        update={"cash": bridge.cash + Decimal(1)}
                     )
                 }
             )
@@ -473,7 +552,7 @@ def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
             "assumptions": assumptions.model_copy(
                 update={
                     "capital_bridge": bridge.model_copy(
-                        update={"debt": bridge.debt + Decimal("1")}
+                        update={"debt": bridge.debt + Decimal(1)}
                     )
                 }
             )
@@ -487,7 +566,7 @@ def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
             "assumptions": assumptions.model_copy(
                 update={
                     "capital_bridge": bridge.model_copy(
-                        update={"diluted_shares": bridge.diluted_shares * Decimal("2")}
+                        update={"diluted_shares": bridge.diluted_shares * Decimal(2)}
                     )
                 }
             )
@@ -496,7 +575,7 @@ def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
     transformed = independent_calculate(doubled_shares)
     if not _within(
         transformed.per_share_value,
-        baseline.per_share_value / Decimal("2"),
+        baseline.per_share_value / Decimal(2),
         PER_SHARE_TOLERANCE,
     ):
         checks.append("share_scale_metamorphic")
@@ -665,11 +744,11 @@ def make_report(
 
 
 __all__ = [
-    "CohortCase",
     "DEFAULT_CURRENCY_TOLERANCE",
+    "PER_SHARE_TOLERANCE",
+    "CohortCase",
     "IndependentNode",
     "IndependentResult",
-    "PER_SHARE_TOLERANCE",
     "VerificationRefusal",
     "compare_artifact",
     "independent_calculate",

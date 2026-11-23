@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { parseFundamentalServiceArtifact } from '@/types/agents/fundamental-service-facts';
 import { projectFundamentalReport } from './fundamental-report-model';
 import { projectForecastSeries, projectHistoricalSeries } from './fundamental-report-series';
-import { calculation, canonicalFact, factsOnlyReport, reference, valuationReport } from './fundamental-report.test-fixtures';
+import { calculation, canonicalFact, datedCalculation, factsOnlyReport, reference, valuationReport } from './fundamental-report.test-fixtures';
 import { ValuationForecast, ValuationHistory } from './valuation-series';
 import { FinancialFactsTable } from './financial-facts-table';
 
@@ -33,6 +33,60 @@ describe('Fundamental series reading', () => {
     });
     afterAll(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
     afterEach(cleanup);
+    it('uses saved period-ending years across charts, values and evidence while distinguishing included FCFF', () => {
+        const source = valuationReport({ service_result: datedCalculation() });
+        const report = project(source);
+        if (report.kind !== 'valuation') throw new Error('Expected valuation.');
+        const series = projectForecastSeries(report);
+        expect(series[0].points.map((point) => point.label)).toEqual(['2027E', '2028E', '2029E', '2030E', '2031E']);
+        expect(series.find((item) => item.id === 'included_fcff')?.points[0].value?.raw).toBe('60000000000');
+        const onSelectEvidence = vi.fn();
+        render(<ValuationForecast report={report} onSelectEvidence={onSelectEvidence} />);
+        expect(screen.queryByText('Year 1')).toBeNull();
+        expect(screen.queryByText('FY2027')).toBeNull();
+        screen.getByText(/This assumption does not use observed year-to-date cash flows/);
+        screen.getByText(/annual Gordon growth approximation/);
+        const chart = within(screen.getByRole('figure', { name: 'Revenue trend' }));
+        fireEvent.focus(chart.getByRole('button', { name: /^Inspect Revenue · 2027E/ }));
+        expect(chart.getByRole('status').textContent).toContain('Year ending 2027-06-30');
+        const table = within(screen.getByRole('region', { name: 'Forecast annual values' }));
+        table.getByRole('columnheader', { name: 'Future FCFF included' });
+        table.getByRole('columnheader', { name: 'Discounted future FCFF' });
+        fireEvent.click(table.getByRole('button', { name: 'Inspect Calculation · included_fcff_1' }));
+        expect(onSelectEvidence).toHaveBeenCalledWith(expect.objectContaining({
+            value: '60000000000', resultHash: report.base.binding.resultHash,
+            period: '2026-07-01 → 2027-06-30; included 2026-11-24 → 2027-06-30; settlement 2027-06-30',
+            assumptionMethod: 'fcff-uniform-accrual-period-end-act365f-v1',
+        }));
+        fireEvent.click(screen.getByText('Forecast periods and included coverage'));
+        screen.getByText('2026-07-01 → 2027-06-30 · included 2026-11-24 → 2027-06-30 (219/365 days)');
+    });
+
+    it.each(['missing', 'old-model', 'invalid-date', 'invalid-ordinal', 'wrong-valuation'])('rejects incompatible or malformed timeline %s', (mutation) => {
+        const result = datedCalculation();
+        const timeline = result.assumptions.forecast?.timeline;
+        if (!timeline) throw new Error('Expected dated fixture.');
+        if (mutation === 'missing') delete result.assumptions.forecast?.timeline;
+        if (mutation === 'old-model') result.model_version = 'fcff_dcf-v2';
+        if (mutation === 'invalid-date') timeline.periods[0].period_end = '2027-02-30';
+        if (mutation === 'invalid-ordinal') timeline.periods[0].ordinal = 2;
+        if (mutation === 'wrong-valuation') timeline.valuation_date = '2026-11-24';
+        expect(() => project(valuationReport({ service_result: result }))).toThrow(TypeError);
+    });
+
+    it('preserves opaque assumptions and legacy ordinal labels on a later system date', () => {
+        const result = calculation({ assumptions: { forecast: { base_revenue: '1000000.0000000000001' }, retained: null } });
+        const source = valuationReport({ service_result: result });
+        const original = JSON.stringify(source);
+        vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2045-01-01T00:00:00Z'));
+        const report = project(source);
+        if (report.kind !== 'valuation') throw new Error('Expected valuation.');
+        expect(report.base.forecastTimeline).toEqual({ kind: 'ordinal' });
+        expect(projectForecastSeries(report)[0].points.map((point) => point.label)).toEqual(['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5']);
+        expect(JSON.stringify(source)).toBe(original);
+        expect(JSON.parse(report.base.assumptionsJson)).toEqual(result.assumptions);
+        vi.mocked(Date.now).mockRestore();
+    });
     it('uses supplied forecast nodes and leaves a missing middle year as a gap with exact evidence', () => {
         const source = valuationReport();
         const node = calculation().nodes[0];

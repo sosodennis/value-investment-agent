@@ -44,6 +44,7 @@ export type FundamentalFactModel = {
     evidence: EvidenceSelection;
 };
 type CalculationModel = {
+    forecastTimeline: { kind: 'ordinal' } | { kind: 'dated'; timeline: Contracts['FundamentalForecastTimelineV1'] };
     assumptionsJson: string;
     binding: Binding;
     status: Calculation['calculation_status'];
@@ -247,28 +248,39 @@ function factModel(fact: Fact, snapshotId: string, snapshotDigest: string, ident
 }
 
 function calculationModel(result: Calculation, currency: string, identity: FundamentalReportIdentity, scope: string): CalculationModel {
+    const timeline = result.assumptions.forecast?.timeline;
     return {
+        forecastTimeline: timeline == null ? { kind: 'ordinal' } : { kind: 'dated', timeline },
         assumptionsJson: JSON.stringify(result.assumptions, null, 2),
         binding: binding(result), status: result.calculation_status, quality: result.quality_status,
         equity: amount(result.intrinsic_value, currency, 'equity-total', result, identity, scope),
         perShare: amount(result.per_share_value, currency, 'per-share', result, identity, scope),
         evaluatedAt: result.evaluated_at, valuationDate: result.valuation_timestamp,
         issueCodes: result.issue_codes, missingEvidence: result.missing_evidence,
-        nodes: result.nodes.map((node) => ({
-            id: node.node_id, value: node.value == null ? null : exactNumber(node.value),
-            semantic: nodeNumberSemantic(node.node_id, node.unit, currency),
-            unit: node.unit, formula: node.formula, inputs: node.inputs,
-            evidence: {
-                id: evidenceKey(identity, 'node', `${scope}:${result.result_hash}:${node.node_id}`), title: `Calculation · ${node.node_id}`,
-                value: node.value ?? 'Unavailable', unit: node.unit,
-                displayValue: node.value == null ? 'Unavailable' : formatReportNumber(node.value, nodeNumberSemantic(node.node_id, node.unit, currency)),
-                formula: node.formula, source: [...node.trace.source_refs, ...node.trace.source_uris].join(', '),
-                ...evidenceIdentity(identity),
-                capturedAt: node.trace.captured_at ?? undefined, availableAt: node.trace.available_at ?? undefined,
-                snapshotId: result.snapshot_id, dataQuality: result.quality_status,
-                inputDigest: result.input_digest, resultHash: result.result_hash, inputs: node.inputs,
-            },
-        })),
+        nodes: result.nodes.map((node) => {
+            const ordinal = /^(?:revenue|fcff|included_fcff|discounted_fcff)_(\d+)$/.exec(node.node_id)?.[1];
+            const period = ordinal === undefined ? null : timeline?.periods.find((item) => item.ordinal === Number(ordinal));
+            return {
+                id: node.node_id, value: node.value == null ? null : exactNumber(node.value),
+                semantic: nodeNumberSemantic(node.node_id, node.unit, currency),
+                unit: node.unit, formula: node.formula, inputs: node.inputs,
+                evidence: {
+                    id: evidenceKey(identity, 'node', `${scope}:${result.result_hash}:${node.node_id}`), title: `Calculation · ${node.node_id}`,
+                    value: node.value ?? 'Unavailable', unit: node.unit,
+                    displayValue: node.value == null ? 'Unavailable' : formatReportNumber(node.value, nodeNumberSemantic(node.node_id, node.unit, currency)),
+                    formula: node.formula, source: [...node.trace.source_refs, ...node.trace.source_uris].join(', '),
+                    ...evidenceIdentity(identity),
+                    capturedAt: node.trace.captured_at ?? undefined, availableAt: node.trace.available_at ?? undefined,
+                    snapshotId: result.snapshot_id, dataQuality: result.quality_status,
+                    inputDigest: result.input_digest, resultHash: result.result_hash, inputs: node.inputs,
+                    ...(period ? {
+                        period: `${period.period_start} → ${period.period_end}; included ${period.included_start} → ${period.period_end}; settlement ${period.cash_flow_date}`,
+                        assumptionMethod: timeline?.policy_version,
+                        rationale: `Uniform annual FCFF accrual, settled at period end. Included ${period.included_days}/${period.full_period_days} days; discounted ${period.discount_days} days using ACT/365F. Calendar anchor ${timeline?.source_revenue_fact_id}.`,
+                    } : {}),
+                },
+            };
+        }),
         evidenceReferences: result.artifact_references,
     };
 }

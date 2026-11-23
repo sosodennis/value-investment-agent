@@ -128,3 +128,31 @@ export function preparationOutcome(status: 'requires_input' | 'abstained' | 'uns
     };
 }
 export const reference = { artifact_id: 'report-1', download_url: '/api/v1/artifacts/report-1?run_id=run-1', type: 'financial_reports' };
+
+export function forecastTimeline(): Contracts['FundamentalForecastTimelineV1'] {
+    return {
+        policy_version: 'fcff-uniform-accrual-period-end-act365f-v1', calendar_basis: 'source-month-end', label_basis: 'period-end-year',
+        valuation_date: '2026-11-23', source_period_start: '2025-07-01', source_period_end: '2026-06-30',
+        source_revenue_fact_id: 'revenue-2026', calendar_fact_ids: ['revenue-2024', 'revenue-2025', 'revenue-2026'],
+        periods: [2027, 2028, 2029, 2030, 2031].map((year, index) => ({
+            ordinal: index + 1, period_start: `${year - 1}-07-01`, period_end: `${year}-06-30`,
+            included_start: index === 0 ? '2026-11-24' : `${year - 1}-07-01`, cash_flow_date: `${year}-06-30`,
+            full_period_days: year === 2028 ? 366 : 365, included_days: index === 0 ? 219 : year === 2028 ? 366 : 365,
+            discount_days: [219, 585, 950, 1315, 1680][index],
+        })),
+    };
+}
+
+export function datedCalculation(): Contracts['FundamentalCalculationResultV1'] {
+    const node = calculation().nodes[0];
+    return calculation({
+        calculation_version: 'calculator-v3-dated-fcff', model_version: 'fcff_dcf-v3',
+        assumptions: { forecast: { timeline: forecastTimeline(), base_revenue: '300000000000.0000000000001' }, opaque: { preserved: null } },
+        nodes: [
+            { ...node, node_id: 'revenue_1', value: '331839000000', unit: 'currency' },
+            { ...node, node_id: 'fcff_1', value: '100000000000', unit: 'currency' },
+            { ...node, node_id: 'included_fcff_1', value: '60000000000', unit: 'currency', formula: 'fcff * included_days / full_period_days' },
+            { ...node, node_id: 'discounted_fcff_1', value: '55000000000', unit: 'currency', formula: 'included_fcff / (1 + wacc)^(discount_days / 365)' },
+        ],
+    });
+}

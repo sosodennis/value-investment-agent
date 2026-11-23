@@ -42,6 +42,33 @@ development-only fixture at this path by default. Set
 `FUNDAMENTAL_MODEL_TRUST_ROOTS_HOST_FILE` to replace that host file for local
 verification. Never use the development fixture as a production trust root.
 
+To enable a reviewed dated FCFF release, mount its bundle read-only and set
+`FUNDAMENTAL_MODEL_RELEASE_DEPLOYMENT_FILE` to the container path. Use protocol
+`fundamental-model-release-deployment-v1`, with a `releases` array. Each entry
+contains `evidence` as `ModelReleaseEvidenceV1` and `artifact_files` as a map
+from every declared artifact ID to its relative path inside the bundle folder.
+Absolute paths and resolved paths outside that folder refuse startup.
+
+Configure the corresponding verifier in `FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE`.
+Pin the exact source revision and executed verification-suite digest. The
+loader checks retained bytes, source registration, gate reports, signatures,
+approval, and expiry before it advertises either v3 model. An active metadata
+record alone cannot authorize a v3 calculation.
+
+For an explicitly uncalibrated first release, supply the five engineering gates
+declared by the v3 model. Supply no calibration report or calibration window.
+Keep calibration inactive. Models that require calibration retain their OOS
+gates. Enforce the canonical cohort counts and source, challenger, replay, and
+independent-review requirements in the trusted workflow before signing.
+Unit-test attestations are not release evidence. A local engineering approval
+does not establish production approval or forecast accuracy.
+
+Pin the source-plan configuration to the same exact v3 version. Rebuild and
+sign a new data release with consistent capital, reinvestment, and working
+capital bindings. Never edit a retained signed release or rename a v2 result
+to v3. To withdraw the v3 deployment, remove the bundle setting and restart the
+isolated service. Re-enable it only after the required checks pass again.
+
 Every `/v1/` operation requires `Authorization: Bearer <FUNDAMENTAL_SERVICE_TOKEN>`
 and a signed `internal.v1` context in the `{context, input}` body envelope. The
 context binds the `fundamental-service` audience, `finance-agent-core` issuer,
