@@ -6,7 +6,7 @@ import {
 import {
     FundamentalAnalysisOutput,
 } from './outputs/fundamental-analysis/fundamental-analysis-output';
-import type { FundamentalEvidenceInventory } from './outputs/fundamental-analysis/fundamental-report-model';
+import type { FundamentalEvidenceInventory, FundamentalReportModel } from './outputs/fundamental-analysis/fundamental-report-model';
 import {
     GenericAgentOutput,
 } from './outputs/shared/GenericAgentOutput';
@@ -31,6 +31,7 @@ type WorkspaceOutputPanelProps = {
     resolvedTicker?: string | null;
     status: AgentStatus;
     onSelectEvidence?: (item: EvidenceSelection) => void;
+    onReportReady?: (report: FundamentalReportModel) => void;
     onEvidenceInventory?: (inventory: FundamentalEvidenceInventory) => void;
     selectedEvidenceId?: string | null;
     revisionControl?: FundamentalRevisionControl;
@@ -43,6 +44,7 @@ export function WorkspaceOutputPanel({
     status,
     onSelectEvidence,
     onEvidenceInventory,
+    onReportReady,
     selectedEvidenceId,
     threadId,
     runId,
@@ -64,6 +66,7 @@ export function WorkspaceOutputPanel({
                     status={status}
                     onSelectEvidence={onSelectEvidence}
                     onEvidenceInventory={onEvidenceInventory}
+                    onReportReady={onReportReady}
                     threadId={threadId}
                     runId={runId}
                     revisionControl={revisionControl}

@@ -64,7 +64,7 @@ describe('Fundamental report', () => {
             kind: 'financial_reports', version: 'v1', produced_by: 'fundamental_analysis', created_at: '2026-11-23T00:00:00Z',
             data: { ticker: 'EXAMPLE', model_type: 'fcff_dcf', status: 'done', financial_reports: [], fundamental_service: source },
         }), { status: 200 })));
-        await act(async () => render(<SWRConfig value={{ provider: () => new Map() }}><FundamentalAnalysisOutput reference={reference} resolvedTicker="EXAMPLE" status="done" threadId="thread-1" runId="run-1" revisionControl={mode === 'history' ? { kind: 'read-only', reason: 'Historical reports are read-only.' } : { kind: 'available', isPending: false, pendingSource: null, onRecalculate: vi.fn() }} /></SWRConfig>));
+        await act(async () => render(<SWRConfig value={{ provider: () => new Map() }}><FundamentalAnalysisOutput reference={reference} resolvedTicker="EXAMPLE" status="done" threadId="thread-1" runId="run-1" revisionControl={mode === 'history' ? { kind: 'read-only', reason: 'Historical reports are read-only.' } : { kind: 'available', isPending: false, attempt: null, onRecalculate: vi.fn() }} /></SWRConfig>));
         await screen.findByText(mode === 'history' ? 'Historical reports are read-only.' : 'Revised and manual reports are read-only. Start from an original automatic report for one revision.');
         expect(screen.queryByLabelText('Terminal growth (%)')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Recalculate' })).toBeNull();

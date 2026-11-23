@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from 'react';
 import { Activity, CircleAlert, Loader2, Menu, Play, RotateCcw, Square, Wifi, WifiOff } from 'lucide-react';
+import { useArtifact } from '@/hooks/useArtifact';
+import { parseFundamentalArtifact } from '@/types/agents/artifact-parsers';
 import { useAgent } from '@/hooks/useAgent';
 import { AGENT_CONFIGS } from '@/config/agents';
 import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents';
@@ -22,8 +24,9 @@ import { buildAutomaticValuationRequest, buildFundamentalRevisionRequest } from 
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { EvidenceInspector, EvidenceInspectorTrigger, buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { adaptAgentOutput } from '@/types/agents/output-adapter';
-import { fundamentalReportSourceKey, type FundamentalEvidenceInventory } from './outputs/fundamental-analysis/fundamental-report-model';
-import type { FundamentalRevision, FundamentalRevisionControl, FundamentalRevisionSource } from './outputs/fundamental-analysis/valuation-revision';
+import { fundamentalReportSourceKey, projectFundamentalReport, type FundamentalReportModel, type FundamentalEvidenceInventory } from './outputs/fundamental-analysis/fundamental-report-model';
+import { assessRevisionResult, revisionAttemptReducer } from './outputs/fundamental-analysis/valuation-revision-result';
+import type { FundamentalRevision, FundamentalRevisionControl } from './outputs/fundamental-analysis/valuation-revision';
 
 type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; initialPrompt?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
 const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
@@ -47,10 +50,11 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [ticker, setTicker] = useState(initialTicker?.toUpperCase() ?? '');
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
-    const [selectedEvidenceState, setSelectedEvidenceState] = useState<{ threadId: string | null; runId: string | null; id: string } | null>(null);
+    const [selectedEvidenceState, setSelectedEvidenceState] = useState<{ threadId: string | null; runId: string | null; id: string; displayValue?: string } | null>(null);
     const [fundamentalEvidenceInventory, setFundamentalEvidenceInventory] = useState<FundamentalEvidenceInventory | null>(null);
     const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
-    const [retainedFundamental, setRetainedFundamental] = useState<{ source: FundamentalRevisionSource; output: StandardAgentOutput; operationId: string; pending: boolean } | null>(null);
+    const [retainedFundamental, dispatchRevision] = useReducer(revisionAttemptReducer, null);
+    const [loadedFundamental, setLoadedFundamental] = useState<FundamentalReportModel | null>(null);
     const revisionOperation = useRef<string | null>(null);
     const mobileEvidenceReturnFocus = useRef<HTMLElement | null>(null);
     const autoStarted = useRef(false);
@@ -73,10 +77,52 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         const agentId = activeTab === 'activity' ? selectedAgentId ?? preferredAgentId : activeTab;
         return agents.find((item) => item.id === agentId) ?? null;
     }, [activeTab, agents, preferredAgentId, selectedAgentId]);
-    const previousFundamental = retainedFundamental?.source.thread_id === agent.threadId ? retainedFundamental : null;
-    const reportOutputs = useMemo(() => previousFundamental && !agent.agentOutputs.fundamental_analysis
-        ? { ...agent.agentOutputs, fundamental_analysis: previousFundamental.output }
+    const previousFundamental = retainedFundamental?.revision.source.thread_id === agent.threadId ? retainedFundamental : null;
+    const reportOutputs = useMemo(() => previousFundamental
+        ? { ...agent.agentOutputs, fundamental_analysis: previousFundamental.kind === 'accepted' ? previousFundamental.currentOutput : previousFundamental.previousOutput }
         : agent.agentOutputs, [agent.agentOutputs, previousFundamental]);
+    const candidateOutput = previousFundamental?.kind === 'awaiting-result' ? agent.agentOutputs.fundamental_analysis : null;
+    const candidateReference = candidateOutput?.reference ?? null;
+    const candidateArtifact = useArtifact(candidateReference, parseFundamentalArtifact, 'fundamental_revision.artifact', 'financial_reports');
+    useEffect(() => {
+        if (!retainedFundamental || retainedFundamental.kind !== 'awaiting-result' || revisionOperation.current !== retainedFundamental.operationId) return;
+        if (agent.threadId !== retainedFundamental.revision.source.thread_id) return;
+        if (agent.runId !== retainedFundamental.expectedRunId) {
+            if (agent.runId !== retainedFundamental.revision.source.run_id) {
+                revisionOperation.current = null;
+                dispatchRevision({ type: 'failed', operationId: retainedFundamental.operationId, code: 'REVISION_SOURCE_CHANGED', message: 'The active run changed before the revision result was confirmed.' });
+            }
+            return;
+        }
+        const fail = (code: string, message: string) => {
+            revisionOperation.current = null;
+            dispatchRevision({ type: 'failed', operationId: retainedFundamental.operationId, code, message });
+        };
+        if (candidateArtifact.error) {
+            fail('REVISION_ARTIFACT_ERROR', candidateArtifact.error instanceof Error ? candidateArtifact.error.message : 'The new report could not be parsed.');
+            return;
+        }
+        if (candidateArtifact.data && !candidateArtifact.data.fundamental_service) {
+            fail('REVISION_RESULT_UNCONFIRMED', 'The returned artifact contains no canonical Fundamental report.');
+            return;
+        }
+        if (candidateArtifact.data?.fundamental_service && candidateReference && candidateOutput) {
+            const candidate = projectFundamentalReport({ artifact: candidateArtifact.data.fundamental_service, reference: candidateReference, threadId: agent.threadId, ticker: candidateArtifact.data.ticker ?? ticker });
+            const outcome = assessRevisionResult({ attempt: retainedFundamental, candidate, expectedRunId: retainedFundamental.expectedRunId });
+            revisionOperation.current = null;
+            dispatchRevision(outcome.kind === 'accepted'
+                ? { type: 'accepted', operationId: retainedFundamental.operationId, currentOutput: candidateOutput, currentReport: outcome.report }
+                : { type: 'failed', operationId: retainedFundamental.operationId, code: outcome.code, message: outcome.message });
+        } else if (!candidateReference && !agent.isLoading && !isActive && agent.workflow && ['completed', 'failed', 'cancelled'].includes(agent.workflow.runStatus)) {
+            fail('REVISION_RESULT_UNAVAILABLE', 'The run ended without a new Fundamental report. The previous result and draft are retained.');
+        }
+    }, [agent.isLoading, agent.runId, agent.threadId, agent.workflow, candidateArtifact.data, candidateArtifact.error, candidateOutput, candidateReference, isActive, retainedFundamental, ticker]);
+    useEffect(() => {
+        if (retainedFundamental && (retainedFundamental.revision.source.thread_id !== agent.threadId || isHistoryRoute || (retainedFundamental.kind === 'accepted' && retainedFundamental.currentReport.identity.runId !== agent.runId))) {
+            revisionOperation.current = null;
+            dispatchRevision({ type: 'cleared' });
+        }
+    }, [agent.runId, agent.threadId, isHistoryRoute, retainedFundamental]);
     const evidenceItems = useMemo(() => {
         if (!evidenceAgent) return [];
         const output = reportOutputs[evidenceAgent.id] ?? null;
@@ -88,15 +134,16 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
             : items;
     }, [reportOutputs, agent.threadId, evidenceAgent, fundamentalEvidenceInventory]);
     const currentRunId = agent.runId ?? null;
-    const selectedEvidence = selectedEvidenceState?.threadId === agent.threadId && selectedEvidenceState?.runId === currentRunId
+    const selectedItem = selectedEvidenceState?.threadId === agent.threadId && selectedEvidenceState?.runId === currentRunId
         ? evidenceItems.find((item) => item.id === selectedEvidenceState.id) ?? null
         : null;
+    const selectedEvidence = selectedItem ? { ...selectedItem, displayValue: selectedEvidenceState?.displayValue ?? selectedItem.displayValue } : null;
     const revisionControl: FundamentalRevisionControl = isHistoryRoute
         ? { kind: 'read-only', reason: 'Historical reports are read-only.' }
-        : { kind: 'available', isPending: isLoading || isActive || previousFundamental?.pending === true, pendingSource: previousFundamental?.pending ? previousFundamental.source : null, onRecalculate: recalculateFromFundamental };
+        : { kind: 'available', isPending: isLoading || isActive || previousFundamental?.kind === 'starting' || previousFundamental?.kind === 'awaiting-result', attempt: previousFundamental, onRecalculate: recalculateFromFundamental };
 
     function handleSelectEvidence(item: EvidenceSelection) {
-        setSelectedEvidenceState({ threadId: agent.threadId, runId: currentRunId, id: item.id });
+        setSelectedEvidenceState({ threadId: agent.threadId, runId: currentRunId, id: item.id, displayValue: item.displayValue });
         if (typeof window !== 'undefined' && window.innerWidth < 1440 && !mobileEvidenceOpen) {
             const activeElement = document.activeElement;
             mobileEvidenceReturnFocus.current = activeElement instanceof HTMLElement
@@ -111,7 +158,11 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         if (!open) {
             const returnFocus = mobileEvidenceReturnFocus.current;
             mobileEvidenceReturnFocus.current = null;
-            window.setTimeout(() => returnFocus?.focus(), 0);
+            window.setTimeout(() => {
+                const fallback = document.querySelector<HTMLElement>('article[aria-label="Fundamental valuation report"] h2');
+                if (returnFocus?.isConnected) returnFocus.focus();
+                else if (fallback) { fallback.tabIndex = -1; fallback.focus(); }
+            }, 0);
         }
     }
 
@@ -132,29 +183,34 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         if (routeIntent.kind !== 'new-analysis' || !symbol || agent.isLoading) return;
         setTicker(symbol);
         revisionOperation.current = null;
-        setRetainedFundamental(null);
+        dispatchRevision({ type: 'cleared' });
         setSelectedEvidenceState(null);
         void agent.sendMessage(`Valuate ${symbol}`, true, buildAutomaticValuationRequest());
     }
 
     async function recalculateFromFundamental(revision: FundamentalRevision, sourceTicker: string) {
-        const output = agent.agentOutputs.fundamental_analysis;
+        const output = previousFundamental?.kind === 'failed' ? previousFundamental.previousOutput : agent.agentOutputs.fundamental_analysis;
+        const report = previousFundamental?.kind === 'failed' ? previousFundamental.previousReport : loadedFundamental;
         if (isHistoryRoute || agent.isLoading || isActive || revisionOperation.current) throw new Error('A valuation run is already active or this report is read-only.');
-        if (revision.source.thread_id !== agent.threadId || revision.source.run_id !== agent.runId || output?.reference?.artifact_id !== revision.source.artifact_id) throw new Error('The saved valuation source changed. Review the current report before recalculating.');
+        if (revision.source.thread_id !== agent.threadId || revision.source.run_id !== agent.runId || output?.reference?.artifact_id !== revision.source.artifact_id || report?.kind !== 'valuation' || report.identity.preparationDigest !== revision.source.preparation_digest || report.identity.runId !== revision.source.run_id) throw new Error('The saved valuation source changed. Review the current report before recalculating.');
         const operationId = crypto.randomUUID();
         revisionOperation.current = operationId;
         setSelectedEvidenceState(null);
-        setRetainedFundamental({ source: revision.source, output, operationId, pending: true });
+        const retained = { operationId, revision, previousOutput: output, previousReport: report };
+        dispatchRevision({ type: 'started', attempt: { ...retained, kind: 'starting' } });
         try {
             const result = await agent.sendMessage(`Recalculate ${sourceTicker} valuation from its saved report`, false, buildFundamentalRevisionRequest(revision));
             if (revisionOperation.current !== operationId) return;
             if (result.kind === 'error') throw new Error(result.message);
             if (result.kind === 'superseded') throw new Error('Recalculation was interrupted. The saved report is unchanged.');
-        } finally {
+            if (result.threadId !== revision.source.thread_id || result.runId === revision.source.run_id) throw new Error('The new run identity does not match this revision request.');
+            dispatchRevision({ type: 'run-started', operationId, expectedRunId: result.runId });
+        } catch (error) {
             if (revisionOperation.current === operationId) {
                 revisionOperation.current = null;
-                setRetainedFundamental((previous) => previous?.operationId === operationId ? { ...previous, pending: false } : previous);
+                dispatchRevision({ type: 'failed', operationId, code: 'REVISION_REQUEST_FAILED', message: error instanceof Error ? error.message : 'The revision request failed.' });
             }
+            throw error;
         }
     }
 
@@ -168,7 +224,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex items-center gap-2 min-[1440px]:hidden">
                         <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
-                        <Sheet open={mobileEvidenceOpen} onOpenChange={handleMobileEvidenceOpenChange}><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" className="w-[min(24rem,94vw)] p-0"><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} /></SheetContent></Sheet>
+                        <Sheet open={mobileEvidenceOpen} onOpenChange={handleMobileEvidenceOpenChange}><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" closeLabel="Close evidence inspector" aria-describedby={undefined} className="w-[min(24rem,94vw)] p-0"><SheetTitle className="sr-only">Evidence details</SheetTitle><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} /></SheetContent></Sheet>
                     </div>
                     <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>
@@ -203,7 +259,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel threadId={agent.threadId} runId={agent.runId} tab={item.id} outputs={reportOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} onEvidenceInventory={setFundamentalEvidenceInventory} selectedEvidenceId={selectedEvidence?.id} revisionControl={revisionControl} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel threadId={agent.threadId} runId={agent.runId} tab={item.id} outputs={reportOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} onEvidenceInventory={setFundamentalEvidenceInventory} onReportReady={setLoadedFundamental} selectedEvidenceId={selectedEvidence?.id} revisionControl={revisionControl} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>
@@ -338,7 +394,7 @@ function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
     </Card>;
 }
 
-export function ReportPanel({ threadId, runId, tab, outputs, statuses, ticker, onSelectEvidence, onEvidenceInventory, selectedEvidenceId, revisionControl }: {
+export function ReportPanel({ threadId, runId, tab, outputs, statuses, ticker, onSelectEvidence, onEvidenceInventory, onReportReady, selectedEvidenceId, revisionControl }: {
     threadId?: string | null;
     runId?: string | null;
     tab: Exclude<ReportTab, 'activity'>;
@@ -346,6 +402,7 @@ export function ReportPanel({ threadId, runId, tab, outputs, statuses, ticker, o
     statuses: Record<string, AgentStatus>;
     ticker: string;
     onSelectEvidence?: (item: EvidenceSelection) => void;
+    onReportReady?: (report: FundamentalReportModel) => void;
     onEvidenceInventory?: (inventory: FundamentalEvidenceInventory) => void;
     selectedEvidenceId?: string | null;
     revisionControl?: FundamentalRevisionControl;
@@ -362,5 +419,5 @@ export function ReportPanel({ threadId, runId, tab, outputs, statuses, ticker, o
         role: config.role,
         status,
     };
-    return <WorkspaceOutputPanel threadId={threadId} runId={runId} agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} onEvidenceInventory={onEvidenceInventory} selectedEvidenceId={selectedEvidenceId} revisionControl={revisionControl} />;
+    return <WorkspaceOutputPanel threadId={threadId} runId={runId} agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} onEvidenceInventory={onEvidenceInventory} onReportReady={onReportReady} selectedEvidenceId={selectedEvidenceId} revisionControl={revisionControl} />;
 }

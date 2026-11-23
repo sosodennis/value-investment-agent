@@ -40,6 +40,7 @@ type RevisionAction = { sourceKey: string } & (
     | { type: 'draft-invalid'; errors: FieldErrors }
     | { type: 'recalculation-started'; operationId: string }
     | { type: 'recalculation-submitted'; operationId: string }
+    | { type: 'recalculation-result-failed'; message: string }
     | { type: 'recalculation-failed'; operationId: string; message: string }
 );
 
@@ -117,6 +118,8 @@ export function valuationRevisionReducer(
                 state.recalculation.operationId === action.operationId
                 ? { ...state, recalculation: { kind: 'submitted' } }
                 : state;
+        case 'recalculation-result-failed':
+            return { ...state, recalculation: { kind: 'error', message: action.message } };
         case 'recalculation-failed':
             return state.recalculation.kind === 'pending' &&
                 state.recalculation.operationId === action.operationId
