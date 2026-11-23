@@ -157,8 +157,9 @@ export async function openInspector(page: Page, button: Locator, raw: string): P
 }
 
 export async function verifyTechnicalIdentity(inspector: Locator, captured: CapturedReport, expected: string[]): Promise<void> {
-    const summary = inspector.getByText('Technical identity', { exact: true });
-    const technical = inspector.locator('details').filter({ has: summary });
+    const technical = inspector.locator('details:has(> summary:text-is("Technical identity"))');
+    const summary = technical.locator(':scope > summary');
+    await expect(technical).toHaveCount(1);
     if (await technical.getAttribute('open') === null) await summary.click();
     await expect(technical).toContainText(captured.threadId);
     await expect(technical).toContainText(captured.runId);
