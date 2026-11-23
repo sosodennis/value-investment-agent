@@ -41,8 +41,33 @@ describe('Fundamental artifact boundary', () => {
             },
         });
         source.valuation_trace.fact_ids = [];
-        source.hashes.source_content_hashes = [];
         expect(parseFundamentalServiceArtifact(source)).toEqual(source);
+    });
+    it('retains the complete calculation source scope with repeated non-fact sources', () => {
+        const source = uncertaintyReport();
+        const hashes = [sourceHash, '1'.repeat(64), '1'.repeat(64), '2'.repeat(64)];
+        source.valuation_trace.source_content_hashes = hashes;
+        source.hashes.source_content_hashes = [...hashes];
+        expect(parseFundamentalServiceArtifact(source)).toEqual(source);
+    });
+    it.each([
+        { hashes: [sourceHash, '1'.repeat(64)] },
+        { hashes: ['1'.repeat(64), sourceHash, '1'.repeat(64)] },
+    ])('rejects a changed calculation source hash sequence $hashes', ({ hashes }) => {
+        const source = uncertaintyReport();
+        source.valuation_trace.source_content_hashes = [sourceHash, '1'.repeat(64), '1'.repeat(64)];
+        source.hashes.source_content_hashes = hashes;
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/hashes.source_content_hashes identity mismatch/);
+    });
+    it('rejects calculation evidence that omits a selected fact source', () => {
+        const source = valuationReport();
+        source.hashes.source_content_hashes = source.valuation_trace.source_content_hashes = ['1'.repeat(64)];
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/missing a selected fact source hash/);
+    });
+    it('rejects additional source hashes in the facts-only scope', () => {
+        const source = factsOnlyReport();
+        source.hashes.source_content_hashes.push('1'.repeat(64));
+        expect(() => parseFundamentalServiceArtifact(source)).toThrow(/hashes.source_content_hashes identity mismatch/);
     });
     it('preserves missing, boolean and nonnumeric text facts with period, unit and provenance', () => {
         const source = factsOnlyReport();

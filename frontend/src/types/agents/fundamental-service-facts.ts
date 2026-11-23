@@ -576,7 +576,15 @@ function assertFactBinding(artifact: Extract<FundamentalServiceArtifact, { proje
     assertSame(`${context}.facts.fact_ids`, [...facts.fact_ids].sort(), factIds);
     assertSame(`${context}.hashes.snapshot_manifest_digest`, artifact.hashes.snapshot_manifest_digest, facts.snapshot_manifest_digest);
     assertSame(`${context}.hashes.data_release_manifest_digest`, artifact.hashes.data_release_manifest_digest ?? null, facts.data_release_manifest_digest ?? null);
-    assertSame(`${context}.hashes.source_content_hashes`, [...artifact.hashes.source_content_hashes].sort(), [...new Set(facts.facts.map((fact) => fact.source.content_hash))].sort());
+    const factSourceHashes = [...new Set(facts.facts.map((fact) => fact.source.content_hash))].sort();
+    if (artifact.projection_type === 'facts_only') {
+        assertSame(`${context}.hashes.source_content_hashes`, [...artifact.hashes.source_content_hashes].sort(), factSourceHashes);
+    } else {
+        assertSame(`${context}.hashes.source_content_hashes`, artifact.hashes.source_content_hashes, artifact.valuation_trace.source_content_hashes);
+        if (factSourceHashes.some((hash) => !artifact.hashes.source_content_hashes.includes(hash))) {
+            throw new TypeError(`${context}.valuation_trace is missing a selected fact source hash.`);
+        }
+    }
 }
 
 export function parseFundamentalAutomaticPreparation(value: unknown, context = 'fundamental.automatic_preparation'): FundamentalAutomaticPreparation {
