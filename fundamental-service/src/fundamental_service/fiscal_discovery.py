@@ -201,9 +201,17 @@ def _timing_issue(
     return None
 
 
+def _preferred_originals(
+    originals: set[tuple[str, str]],
+) -> set[tuple[str, str]]:
+    return {original for original in originals if original[0] == "10-K"} or originals
+
+
 def select_fiscal_filings(
     request: FiscalDiscoveryRequestV1,
     sources: Iterable[tuple[str, SecRecentFilingsV1]],
+    *,
+    target_accession: str | None = None,
 ) -> FiscalSelectionV1:
     records: dict[tuple[str, str], tuple[dict[str, object], set[str]]] = {}
     for source_digest, rows in sources:
@@ -248,6 +256,7 @@ def select_fiscal_filings(
     eligible: list[FiscalFilingV1] = []
     global_issues: set[str] = set()
     amendments_by_period: dict[date, list[str]] = defaultdict(list)
+    originals_by_period: dict[date, set[tuple[str, str]]] = defaultdict(set)
     in_scope_periods: set[date] = set()
 
     for (accession, digest), (record, source_digests) in sorted(records.items()):
@@ -282,6 +291,8 @@ def select_fiscal_filings(
                 ):
                     raise ValueError("SEC report period follows its filing")
                 in_scope_periods.add(report_period_end)
+                if not is_amendment:
+                    originals_by_period[report_period_end].add((base_form, accession))
                 if is_amendment:
                     issue_codes.add("FISCAL_AMENDMENT_SCOPE_UNKNOWN")
                     amendments_by_period[report_period_end].append(accession)
@@ -327,6 +338,26 @@ def select_fiscal_filings(
     latest_by_period: dict[date, list[FiscalFilingV1]] = defaultdict(list)
     for filing in eligible:
         latest_by_period[filing.report_period_end].append(filing)
+    if target_accession is not None:
+        matches = [
+            filing for filing in eligible if filing.accession_number == target_accession
+        ]
+        if len(matches) != 1:
+            global_issues.add("FISCAL_CANDIDATE_INELIGIBLE")
+        else:
+            target = matches[0]
+            period = target.report_period_end
+            if amendments_by_period.get(period):
+                global_issues.add("FISCAL_AMENDMENT_SCOPE_UNKNOWN")
+            if _preferred_originals(originals_by_period[period]) != {
+                (target.form, target_accession)
+            }:
+                global_issues.add("FISCAL_REPORT_PERIOD_CONFLICT")
+        return FiscalSelectionV1(
+            candidates=tuple(candidates),
+            selected=tuple(matches) if not global_issues else (),
+            issue_codes=tuple(sorted(global_issues)),
+        )
     target_periods = tuple(sorted(in_scope_periods, reverse=True)[:8])
     selected: list[FiscalFilingV1] = []
     if len(target_periods) < 8:
@@ -339,16 +370,22 @@ def select_fiscal_filings(
         if not period_filings:
             global_issues.add("FISCAL_LATEST_PERIOD_UNAVAILABLE")
             continue
-        annual = [item for item in period_filings if item.form == "10-K"]
-        chosen = (
-            annual
-            if annual
-            else [item for item in period_filings if item.form == "10-Q"]
-        )
-        if len(chosen) != 1:
+        preferred = _preferred_originals(originals_by_period[period_end])
+        if len(preferred) != 1:
             global_issues.add("FISCAL_REPORT_PERIOD_CONFLICT")
             continue
-        selected.append(chosen[0])
+        chosen = next(
+            (
+                item
+                for item in period_filings
+                if (item.form, item.accession_number) in preferred
+            ),
+            None,
+        )
+        if chosen is None:
+            global_issues.add("FISCAL_LATEST_PERIOD_UNAVAILABLE")
+            continue
+        selected.append(chosen)
     return FiscalSelectionV1(
         candidates=tuple(candidates),
         selected=tuple(selected) if not global_issues else (),
@@ -365,6 +402,13 @@ class _CapturedPage:
     source: FiscalSourceCaptureV1
     record: ArtifactRecordV1 | None = None
     payload: bytes | None = None
+
+
+@dataclass(frozen=True)
+class _VerifiedDiscovery:
+    evidence: FiscalDiscoveryEvidenceV1
+    records: tuple[tuple[str, ArtifactRecordV1 | None], ...]
+    target: FiscalSelectionV1 | None
 
 
 class FiscalDiscovery:
@@ -467,6 +511,8 @@ class FiscalDiscovery:
         self,
         request: FiscalDiscoveryRequestV1,
         pages: tuple[_CapturedPage, ...],
+        *,
+        target_accession: str | None = None,
     ) -> FiscalSelectionV1:
         sources = tuple(page.source for page in pages)
         if not sources or sources[0].filename != f"CIK{request.cik}.json":
@@ -511,7 +557,13 @@ class FiscalDiscovery:
         )
         if not earliest_dates or min(earliest_dates) > lower_bound:
             issues.add("FISCAL_HISTORY_COVERAGE_INCOMPLETE")
-        selection = select_fiscal_filings(request, decoded_sources)
+        selection = (
+            select_fiscal_filings(request, decoded_sources)
+            if target_accession is None
+            else select_fiscal_filings(
+                request, decoded_sources, target_accession=target_accession
+            )
+        )
         issues.update(selection.issue_codes)
         return FiscalSelectionV1(
             candidates=selection.candidates,
@@ -551,14 +603,41 @@ class FiscalDiscovery:
         record = self._current_record(artifact_id, check_deadline)
         if record is None:
             raise SnapshotError("ARTIFACT_NOT_FOUND", "fiscal discovery is unavailable")
-        return self._read(artifact_id, record, check_deadline)
+        return self._read(artifact_id, record, check_deadline).evidence
+
+    def read_for_validation(
+        self, artifact_id: str, accession_number: str, *, deadline_at: datetime
+    ) -> tuple[
+        FiscalDiscoveryRequestV1,
+        FiscalFilingV1,
+        tuple[tuple[str, ArtifactRecordV1 | None], ...],
+    ]:
+        check_deadline = partial(self._before_deadline, deadline_at)
+        record = self._current_record(artifact_id, check_deadline)
+        if record is None:
+            raise SnapshotError("ARTIFACT_NOT_FOUND", "fiscal discovery is unavailable")
+        verified = self._read(
+            artifact_id, record, check_deadline, target_accession=accession_number
+        )
+        if (
+            verified.evidence.is_retry_attempt
+            or verified.target is None
+            or not verified.target.selected
+        ):
+            raise SnapshotError(
+                "FISCAL_CANDIDATE_INELIGIBLE",
+                "retained fiscal discovery could not select this accession",
+            )
+        return verified.evidence.request, verified.target.selected[0], verified.records
 
     def _read(
         self,
         artifact_id: str,
         record: ArtifactRecordV1,
         check_deadline: Callable[[], datetime],
-    ) -> FiscalDiscoveryEvidenceV1:
+        *,
+        target_accession: str | None = None,
+    ) -> _VerifiedDiscovery:
         try:
             check_deadline()
             raw = self._artifacts.read(artifact_id)
@@ -622,6 +701,13 @@ class FiscalDiscovery:
                 raise ValueError(
                     "fiscal source selection differs from retained submissions"
                 )
+            target = (
+                self._assess(
+                    evidence.request, tuple(pages), target_accession=target_accession
+                )
+                if target_accession is not None
+                else None
+            )
             self._assert_current(records, check_deadline)
         except SecSourceError:
             raise
@@ -630,7 +716,7 @@ class FiscalDiscovery:
                 "FISCAL_DISCOVERY_INVALID",
                 "retained fiscal discovery failed verification",
             ) from error
-        return evidence
+        return _VerifiedDiscovery(evidence, tuple(records.items()), target)
 
     def _completed(
         self,
@@ -641,7 +727,7 @@ class FiscalDiscovery:
         record = self._current_record(artifact_id, check_deadline)
         if record is None:
             return None
-        previous = self._read(artifact_id, record, check_deadline)
+        previous = self._read(artifact_id, record, check_deadline).evidence
         if previous.request != request:
             raise SnapshotError("FISCAL_DISCOVERY_INVALID", "request digest collision")
         check_deadline()

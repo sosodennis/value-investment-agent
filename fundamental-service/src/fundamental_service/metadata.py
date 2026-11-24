@@ -13,8 +13,8 @@ import hashlib
 import json
 import sys
 import tempfile
-from concurrent.futures import Future
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future, wait
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,7 +24,8 @@ from threading import Event, Lock, Thread
 from typing import Any, BinaryIO, Literal
 from uuid import uuid4
 
-from sqlalchemy import bindparam, text
+from sqlalchemy import bindparam, event, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from .contracts import (
@@ -53,7 +54,12 @@ from .facts import (
 )
 from .original_issuer import IssuerOperatingSourceV1
 from .policies import ModelSpecV1, PolicyRecordV1
-from .replay import ArtifactPublicationV1, ArtifactRecordV1
+from .replay import (
+    ArtifactPublicationDeadlineExceeded,
+    ArtifactPublicationV1,
+    ArtifactRecordV1,
+    check_publication_budget,
+)
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError, SnapshotRepository
 
@@ -88,11 +94,16 @@ class _AsyncRunner:
         self._ready.set()
         self._loop.run_forever()
 
-    def run(self, coroutine: Any) -> Any:
+    def run(self, coroutine: Any, *, publication_timeout: float | None = None) -> Any:
         if not self._thread.is_alive():
             raise RuntimeError("database event loop is unavailable")
         future: Future[Any] = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
-        return future.result(timeout=15)
+        if publication_timeout is None:
+            return future.result(timeout=15)
+        if wait((future,), timeout=publication_timeout).done:
+            return future.result()
+        future.cancel()
+        raise ArtifactPublicationDeadlineExceeded()
 
     def close(self) -> None:
         if self._thread.is_alive():
@@ -1474,38 +1485,54 @@ class PostgresMetadataStore:
                 },
             )
 
-    def publish_artifact(self, record: ArtifactRecordV1) -> bool:
+    def publish_artifact(
+        self,
+        record: ArtifactRecordV1,
+        *,
+        publication_budget: Callable[[], float] | None = None,
+    ) -> bool:
         self._require_ready()
-        return bool(self._runner.run(self._publish_artifact(record)))
-
-    async def _publish_artifact(self, record: ArtifactRecordV1) -> bool:
-        async with self._runner._engine.begin() as connection:
-            existing = (
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT content_hash, media_type, dependency_hashes, "
-                            "status, retention FROM fundamental.artifact_references "
-                            "WHERE artifact_id=:artifact_id"
-                        ),
-                        {"artifact_id": record.artifact_id},
-                    )
-                )
-                .mappings()
-                .first()
+        remaining = check_publication_budget(publication_budget)
+        return bool(
+            self._runner.run(
+                self._publish_artifact(record, publication_budget),
+                publication_timeout=remaining,
             )
-            if existing is not None:
-                if (
-                    existing["content_hash"] != record.content_hash
-                    or existing["media_type"] != record.media_type
-                    or tuple(existing["dependency_hashes"]) != record.dependency_hashes
-                    or existing["status"] != record.status
-                    or existing["retention"] != record.retention
-                ):
-                    raise SnapshotError(
-                        "ARTIFACT_ID_REUSED", "artifact IDs are immutable"
-                    )
-                return False
+        )
+
+    async def _publish_artifact(
+        self, record: ArtifactRecordV1, publication_budget: Callable[[], float] | None
+    ) -> bool:
+        def check_commit_deadline(_connection: Connection) -> None:
+            check_publication_budget(publication_budget)
+
+        timeout = asyncio.timeout(check_publication_budget(publication_budget))
+        try:
+            async with timeout:
+                async with self._runner._engine.begin() as connection:
+                    if publication_budget is not None:
+                        event.listen(
+                            connection.sync_connection, "commit", check_commit_deadline
+                        )
+                    wrote = await self._put_artifact_reference(connection, record)
+                    check_publication_budget(publication_budget)
+        except TimeoutError:
+            if timeout.expired():
+                raise ArtifactPublicationDeadlineExceeded() from None
+            raise
+        return wrote
+
+    async def _put_artifact_reference(
+        self, connection: AsyncConnection, record: ArtifactRecordV1
+    ) -> bool:
+        reference_query = text(
+            "SELECT content_hash, media_type, dependency_hashes, "
+            "status, retention FROM fundamental.artifact_references "
+            "WHERE artifact_id=:artifact_id"
+        )
+        key = {"artifact_id": record.artifact_id}
+        existing = (await connection.execute(reference_query, key)).mappings().first()
+        if existing is None:
             inserted = await connection.execute(
                 text(
                     "INSERT INTO fundamental.artifact_references"
@@ -1516,7 +1543,7 @@ class PostgresMetadataStore:
                     "ON CONFLICT (artifact_id) DO NOTHING RETURNING artifact_id"
                 ),
                 {
-                    "artifact_id": record.artifact_id,
+                    **key,
                     "content_hash": record.content_hash,
                     "media_type": record.media_type,
                     "dependency_hashes": json.dumps(record.dependency_hashes),
@@ -1524,29 +1551,21 @@ class PostgresMetadataStore:
                     "retention": record.retention,
                 },
             )
+            wrote = inserted.scalar_one_or_none() is not None
             existing = (
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT content_hash, media_type, dependency_hashes, "
-                            "status, retention FROM fundamental.artifact_references "
-                            "WHERE artifact_id=:artifact_id"
-                        ),
-                        {"artifact_id": record.artifact_id},
-                    )
-                )
-                .mappings()
-                .first()
+                (await connection.execute(reference_query, key)).mappings().first()
             )
-            if existing is None or (
-                existing["content_hash"] != record.content_hash
-                or existing["media_type"] != record.media_type
-                or tuple(existing["dependency_hashes"]) != record.dependency_hashes
-                or existing["status"] != record.status
-                or existing["retention"] != record.retention
-            ):
-                raise SnapshotError("ARTIFACT_ID_REUSED", "artifact IDs are immutable")
-            return inserted.scalar_one_or_none() is not None
+        else:
+            wrote = False
+        if existing is None or (
+            existing["content_hash"] != record.content_hash
+            or existing["media_type"] != record.media_type
+            or tuple(existing["dependency_hashes"]) != record.dependency_hashes
+            or existing["status"] != record.status
+            or existing["retention"] != record.retention
+        ):
+            raise SnapshotError("ARTIFACT_ID_REUSED", "artifact IDs are immutable")
+        return wrote
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecordV1:
         self._require_ready()
@@ -1909,6 +1928,7 @@ class PostgresArtifactStore:
         *,
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
+        publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
         return self.put_bytes_with_receipt(
             artifact_id,
@@ -1916,6 +1936,7 @@ class PostgresArtifactStore:
             dependency_hashes,
             media_type=media_type,
             retention=retention,
+            publication_budget=publication_budget,
         )
 
     def put_bytes_with_receipt(
@@ -1926,6 +1947,7 @@ class PostgresArtifactStore:
         *,
         media_type: str = "application/octet-stream",
         retention: Literal["evidence", "operational_cache"] = "evidence",
+        publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
         content_hash = hashlib.sha256(payload).hexdigest()
         record = ArtifactRecordV1(
@@ -1948,9 +1970,12 @@ class PostgresArtifactStore:
                     "ARTIFACT_BYTES_UNAVAILABLE",
                     "published artifact bytes failed verification",
                 )
+            check_publication_budget(publication_budget)
             return ArtifactPublicationV1(artifact=previous, wrote=False)
         self._content.put(payload, media_type=media_type)
-        wrote = self._metadata.publish_artifact(record)
+        wrote = self._metadata.publish_artifact(
+            record, publication_budget=publication_budget
+        )
         return ArtifactPublicationV1(artifact=record, wrote=wrote)
 
     def get(self, artifact_id: str) -> ArtifactRecordV1:

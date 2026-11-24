@@ -135,6 +135,29 @@ def test_newest_unsupported_filing_does_not_fall_back_to_old_periods():
     assert "FISCAL_RUNTIME_INCOMPATIBLE" in latest.issue_codes
 
 
+def test_catalog_and_validation_refuse_old_original_when_current_period_conflicts():
+    originals = eight_periods()
+    older = str(originals[-1]["accessionNumber"])
+    unsupported = row(
+        date(2023, 9, 30),
+        accessionNumber="0000950170-24-999991",
+        filingDate="2024-02-01",
+        acceptanceDateTime="2024-02-01T16:00:00Z",
+        isXBRL=0,
+    )
+    values = (*originals, unsupported)
+    page = [(sha256_digest(values), rows(*values))]
+    catalog = select_fiscal_filings(request(), page)
+    target = select_fiscal_filings(request(), page, target_accession=older)
+
+    assert catalog.selected == target.selected == ()
+    assert (
+        catalog.issue_codes == target.issue_codes == ("FISCAL_REPORT_PERIOD_CONFLICT",)
+    )
+    assert catalog.candidates == target.candidates
+    assert catalog.candidates[-1].issue_codes == ("FISCAL_XBRL_UNAVAILABLE",)
+
+
 def test_unresolved_amendment_for_selected_period_refuses_without_fallback():
     original = eight_periods()
     amendment = row(

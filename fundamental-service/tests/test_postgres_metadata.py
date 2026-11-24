@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import multiprocessing
@@ -18,8 +19,9 @@ from uuid import uuid4
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncTransaction
 
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
@@ -60,6 +62,7 @@ from fundamental_service.metadata import (
 )
 from fundamental_service.operations import OperationsConfig
 from fundamental_service.policies import PolicyRecordV1, initial_model_specs
+from fundamental_service.replay import ArtifactPublicationDeadlineExceeded
 from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.snapshots import SnapshotError
@@ -1202,6 +1205,185 @@ def test_artifact_publication_is_concurrent_and_hash_verified(
     with pytest.raises(SnapshotError):
         publish()
     assert path.read_bytes() == b"tampered"
+
+
+@pytest.mark.parametrize(
+    "when", ["after_insert", "before_commit", "during_sql", "during_commit_wait"]
+)
+def test_artifact_publication_rolls_back_when_deadline_expires(
+    metadata, tmp_path, monkeypatch, when
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    artifact_id = f"artifact-deadline-{uuid4().hex}"
+    payload = {"value": "immutable"}
+    now = datetime.now(UTC)
+    short_budget = when in {"during_sql", "during_commit_wait"}
+    deadline = now + (timedelta(seconds=1) if short_budget else timedelta(minutes=1))
+    execute = AsyncConnection.execute
+    exit_transaction = AsyncTransaction.__aexit__
+    inserted = False
+    commit_wait_cancelled = False
+
+    async def expire_after_insert(connection, statement, parameters=None, **kwargs):
+        nonlocal now, inserted
+        result = await execute(connection, statement, parameters, **kwargs)
+        if (
+            str(statement).startswith("INSERT INTO fundamental.artifact_references")
+            and parameters
+            and parameters["artifact_id"] == artifact_id
+        ):
+            assert result.rowcount == 1
+            inserted = True
+            if when == "after_insert":
+                now = deadline
+            elif when == "during_sql":
+                await execute(connection, text("SELECT pg_sleep(5)"))
+        return result
+
+    async def expire_before_commit(transaction, exc_type, exc_value, traceback):
+        nonlocal now, commit_wait_cancelled
+        if when == "before_commit" and inserted and exc_type is None:
+            now = deadline
+        elif when == "during_commit_wait" and inserted and exc_type is None:
+            try:
+                await execute(transaction.connection, text("SELECT pg_sleep(5)"))
+            except asyncio.CancelledError:
+                commit_wait_cancelled = True
+                raise
+            now = deadline
+        return await exit_transaction(transaction, exc_type, exc_value, traceback)
+
+    def remaining():
+        return (deadline - now).total_seconds()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncConnection, "execute", expire_after_insert)
+        patch.setattr(AsyncTransaction, "__aexit__", expire_before_commit)
+        if when == "during_commit_wait":
+            run = metadata._runner.run
+
+            def run_with_legacy_wait(coroutine, **kwargs):
+                return run(coroutine)
+
+            patch.setattr(metadata._runner, "run", run_with_legacy_wait)
+        try:
+            artifacts.put_with_receipt(
+                artifact_id, payload, publication_budget=remaining
+            )
+        except ArtifactPublicationDeadlineExceeded as expired:
+            assert expired.code == "REQUEST_DEADLINE_EXCEEDED"
+        else:
+            persisted = artifacts.get(artifact_id)
+            pytest.fail(f"expired publication committed metadata: {persisted}")
+    assert inserted
+    if when == "during_commit_wait":
+        assert commit_wait_cancelled, "the pre-commit SQL wait ran past the deadline"
+    with pytest.raises(SnapshotError) as missing:
+        artifacts.get(artifact_id)
+    assert missing.value.code == "ARTIFACT_NOT_FOUND"
+
+    deadline += timedelta(minutes=1)
+    published = artifacts.put_with_receipt(
+        artifact_id, payload, publication_budget=remaining
+    )
+    assert published.wrote
+    assert artifacts.read(artifact_id) == b'{"value":"immutable"}'
+
+    now = deadline
+    with pytest.raises(ArtifactPublicationDeadlineExceeded):
+        artifacts.put_with_receipt(artifact_id, payload, publication_budget=remaining)
+    deadline += timedelta(minutes=1)
+    assert (
+        artifacts.put_with_receipt(
+            artifact_id, payload, publication_budget=remaining
+        ).artifact
+        == published.artifact
+    )
+    assert not artifacts.put_with_receipt(
+        artifact_id, payload, publication_budget=remaining
+    ).wrote
+
+
+def test_artifact_publication_bridge_cancels_exhausted_wait(
+    metadata, tmp_path, monkeypatch
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    artifact_id = f"artifact-bridge-deadline-{uuid4().hex}"
+    payload = {"value": "immutable"}
+    exit_transaction = AsyncTransaction.__aexit__
+    submit = asyncio.run_coroutine_threadsafe
+    submitted = None
+    entered_commit_wait = Event()
+    release_event_loop = Event()
+    event_loop_wait_expired = Event()
+    commit_wait_cancelled = Event()
+    connection_returned = Event()
+
+    def track_submission(coroutine, loop):
+        nonlocal submitted
+        submitted = submit(coroutine, loop)
+        return submitted
+
+    async def block_before_commit(transaction, exc_type, exc_value, traceback):
+        if exc_type is None and not entered_commit_wait.is_set():
+            result = await transaction.connection.execute(
+                text(
+                    "SELECT 1 FROM fundamental.artifact_references "
+                    "WHERE artifact_id=:artifact_id"
+                ),
+                {"artifact_id": artifact_id},
+            )
+            if result.scalar_one_or_none() is not None:
+                entered_commit_wait.set()
+                if not release_event_loop.wait(timeout=5):
+                    event_loop_wait_expired.set()
+                try:
+                    await asyncio.sleep(0)
+                except asyncio.CancelledError:
+                    commit_wait_cancelled.set()
+                    raise
+        return await exit_transaction(transaction, exc_type, exc_value, traceback)
+
+    def track_checkin(*args):
+        if entered_commit_wait.is_set():
+            connection_returned.set()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(asyncio, "run_coroutine_threadsafe", track_submission)
+        patch.setattr(AsyncTransaction, "__aexit__", block_before_commit)
+        pool = metadata._runner._engine.sync_engine.pool
+        event.listen(pool, "checkin", track_checkin)
+        deadline = time.monotonic() + 1
+        try:
+            try:
+                with pytest.raises(ArtifactPublicationDeadlineExceeded) as expired:
+                    artifacts.put_with_receipt(
+                        artifact_id,
+                        payload,
+                        publication_budget=lambda: deadline - time.monotonic(),
+                    )
+                assert expired.value.code == "REQUEST_DEADLINE_EXCEEDED"
+                assert entered_commit_wait.is_set()
+                assert not event_loop_wait_expired.is_set(), (
+                    "the synchronous caller waited for the blocked event loop"
+                )
+                assert submitted is not None and submitted.cancelled()
+            finally:
+                release_event_loop.set()
+            assert commit_wait_cancelled.wait(timeout=5)
+            assert connection_returned.wait(timeout=5)
+        finally:
+            event.remove(pool, "checkin", track_checkin)
+
+    with pytest.raises(SnapshotError) as missing:
+        artifacts.get(artifact_id)
+    assert missing.value.code == "ARTIFACT_NOT_FOUND"
+    assert artifacts.put_with_receipt(artifact_id, payload).wrote
+    assert not artifacts.put_with_receipt(artifact_id, payload).wrote
 
 
 @pytest.mark.parametrize("fault", ("status", "dependency", "missing"))
