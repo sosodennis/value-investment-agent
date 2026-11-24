@@ -257,6 +257,8 @@ def automatic_mapping_policy_digest() -> str:
                     "statement_contracts.py",
                     "annual_statements.py",
                     "statement_issuer_scope.py",
+                    "issuer_classification.py",
+                    "sec_classification_source.py",
                     "registered_investment_assets.py",
                     "registered_noncontrolling_equity.py",
                     "registered_liability_residuals.py",

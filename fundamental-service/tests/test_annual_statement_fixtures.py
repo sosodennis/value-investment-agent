@@ -163,6 +163,58 @@ def retained_root():
 
 
 @pytest.mark.parametrize(
+    "filing", COHORT["filings"], ids=lambda row: row["accession_number"]
+)
+def test_original_submission_classification_preserves_real_publication_dates(
+    filing, retained_root
+):
+    from fundamental_service.sec_classification_source import (
+        SEC_CLASSIFICATION_PROFILE,
+        SEC_CLASSIFICATION_SOURCE,
+        SEC_CLASSIFICATION_TERMS,
+        SecSubmissionClassificationProvider,
+    )
+    from fundamental_service.source_evidence import RetainedSourceV1
+
+    source = next(
+        row for row in filing["source_records"] if row["uri"].endswith(".txt")
+    )
+    raw = _content(retained_root, source)
+    observation = SecSubmissionClassificationProvider().reproduce_classification(
+        sources=(
+            RetainedSourceV1(
+                source_id=SEC_CLASSIFICATION_SOURCE,
+                uri=source["uri"],
+                source_version=SEC_CLASSIFICATION_PROFILE,
+                terms_reference=SEC_CLASSIFICATION_TERMS,
+                content=raw,
+                captured_at=datetime.fromisoformat(source["captured_at"]),
+            ),
+        )
+    )
+    assert observation.issuer_id == filing["issuer_id"]
+    assert observation.accession_number == filing["accession_number"]
+    assert observation.accepted_at == datetime.fromisoformat(filing["accepted_at"])
+    assert observation.available_at >= observation.accepted_at
+    assert observation.artifacts[0].content_sha256 == source["content_hash"]
+    attributes = {
+        attribute.role: attribute.value for attribute in observation.attributes
+    }
+    assert (
+        attributes["industry_code"]
+        == {"0000320193": "3571", "0000789019": "7372"}[filing["issuer_id"]]
+    )
+    if filing["accession_number"] == "0000320193-23-000106":
+        assert observation.available_at == datetime.fromisoformat(
+            "2023-11-03T04:00:00Z"
+        )
+    if filing["accession_number"] == "0001564590-20-034944":
+        assert observation.available_at == datetime.fromisoformat(
+            "2020-09-18T04:00:00Z"
+        )
+
+
+@pytest.mark.parametrize(
     "filing", GOLDEN["filings"], ids=lambda row: row["accession_number"]
 )
 def test_golden_matches_retained_original_primary_statement_without_production_parser(
