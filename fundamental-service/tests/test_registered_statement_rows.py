@@ -73,6 +73,9 @@ def registered_case(tmp_path, monkeypatch):
                 ),
             ),
         ),
+        us_gaap_namespace=next(
+            f.namespace_uri for f in original.report.facts if f.concept == CASH
+        ),
     )
     monkeypatch.setitem(
         rows.PRIMARY_STATEMENTS,
@@ -186,6 +189,7 @@ def test_registered_primary_scope_hash_is_the_retained_original(retained_root, f
         parser_input = archive.read(filing["primary_document"])
     assert hashlib.sha256(parser_input).hexdigest() == scope.parser_input_hash
     document = html.fromstring(raw)
+    assert document.get("xmlns:us-gaap") == scope.us_gaap_namespace
     contexts = {
         node.get("id"): node
         for node in document.iter()

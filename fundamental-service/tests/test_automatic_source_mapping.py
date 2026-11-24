@@ -232,6 +232,7 @@ def statement_source_case(tmp_path, monkeypatch, *, sic="SOFTWARE [7372]"):
                     "net_change_in_cash",
                 )
             ),
+            us_gaap_namespace=revenue_facts[0].namespace_uri,
         ),
     )
     accession = original.source.accession_number

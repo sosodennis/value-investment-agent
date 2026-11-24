@@ -843,3 +843,35 @@ artifacts are not rewritten. It does not include the
 separate #361 lease/composer-version/provider changes. A precision34 migration
 requires its own versioned numerical policy and evidence; the former target
 table contradicted the model inventory's released50-digit policy.
+
+## 主要年度三表
+
+`fundamental-prepare-statements` 沿用 annual discovery、original preparation、SEC ingestion、canonical facts、mapping approval、release canary 與 compare-and-swap activation。它不執行 Agent 或估值，也不取得報價與市場資料。初期 source scope 限已核對的 Apple／Microsoft 原版 10-K；唯一 registry 保存原文與 canonical parser hashes、實際 US-GAAP namespace、年度期間及主表 locator，不保存報表金額。
+
+先以正式 image 與相同資源設定讀取 runtime pins：
+
+```sh
+python -m fundamental_service.statement_preparation_runner \
+  --source-revision "$IMPLEMENTATION_COMMIT" --print-runtime-pins
+```
+
+使用輸出的 `mapping_policy_digest` 配置既有 automatic mapping evaluator；使用 `verification_suite_digest` 配置既有 release verifier。`statement_profile` 必須完整放進 `AutomaticStatementReleasePolicyV1` 部署 JSON。`validation_profile_digests` 使用輸出中已配置的 V18／V31 runtime digest，排序並去重。此 policy 不含估值 model 或 market policy。Trust roots 仍由 `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE` 載入；兩個 private key 皆須為各自部署角色的 Ed25519 PEM。
+
+```sh
+python -m fundamental_service.statement_preparation_runner \
+  --cik 0000320193 --cutoff-at 2024-11-02T00:00:00Z \
+  --source-revision "$IMPLEMENTATION_COMMIT" --original-count 5 \
+  --mapping-evaluator-id "$MAPPING_EVALUATOR_ID" \
+  --mapping-version annual-statements-v1 \
+  --mapping-private-key /run/keys/statement-mapping.pem \
+  --release-policy /run/config/statement-release-policy.json \
+  --release-private-key /run/keys/statement-release.pem \
+  --actor "$OPERATOR_SUBJECT" --organization "$ORGANIZATION_ID" \
+  --activate --expected-revision 0 --timeout-seconds 7200
+```
+
+組織須同時通過既有 SEC acquisition、release publish 與 activation 授權。未提供 `--activate` 時只發佈 immutable candidate 並以正式 application read 讀回。輸出包含 discovery、original preparation、candidate refs 和 `response.data_release_manifest_digest`；workspace 以 signed `POST /v1/data/annual-statements`、該 digest 與相同 cutoff 讀取。Artifact body 不包含 enclosing manifest digest。
+
+同一份 discovery 固定全部 originals，再按每份原件的實際 US-GAAP namespace 選唯一 configured catalog。V18 的 `FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH` 與 V31 catalog 分開。每份 original 保留自己的完整 runtime、validation 結果及失敗原因，年度失敗不以較舊方便原件替代。不同 source revision 或新 capture 產生新 evidence identity；既有正式 adapter 僅在自己的 retained receipt 規則成立時重用 bytes。
+
+重跑相同 retained inputs 與版本會重用 publication；新原文 hash、parser input、profile、mapping 或 executable pin 需形成新輸入。Registry 外原件、金融 SIC、錯 namespace、缺 validation、cutoff 不符及資料毀損均具名拒絕。五年度為 coverage 目標，`supported_history_threshold` 維持 null。正式成功仍須核對服務數字、每格來源、partial 結果與 workspace 行為。

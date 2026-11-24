@@ -52,11 +52,27 @@ def require_registered_primary_statement_scope(
         or original.source.content_hash != scope.raw_content_hash
         or original.source.parser_input_hash != scope.parser_input_hash
         or original.report.source_content_hash != scope.parser_input_hash
+        or {
+            fact.namespace_uri
+            for fact in original.report.facts
+            if fact.concept.startswith("us-gaap:")
+        }
+        != {scope.us_gaap_namespace}
     ):
         raise DataReleaseError(
             "STATEMENT_ORIGINAL_SCOPE_MISMATCH",
             "reviewed original raw and canonical parser inputs differ",
         )
+
+
+def registered_statement_namespace(cik: str, accession_number: str) -> str:
+    scope = PRIMARY_STATEMENTS.get((cik, accession_number))
+    if scope is None:
+        raise DataReleaseError(
+            "STATEMENT_ORIGINAL_SCOPE_UNREVIEWED",
+            "annual statement runtime selection requires a reviewed original source namespace",
+        )
+    return scope.us_gaap_namespace
 
 
 def statement_cash_basis(

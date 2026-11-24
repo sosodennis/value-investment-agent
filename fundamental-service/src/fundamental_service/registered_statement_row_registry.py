@@ -20,6 +20,7 @@ class PrimaryStatementScope:
     cash_effect_concept: str | None
     parser_input_hash: str
     locators: tuple[PrimaryStatementRowLocator, ...]
+    us_gaap_namespace: str
 
     def concept_for(self, row_id: str) -> str | None:
         if row_id == "revenue":
@@ -88,6 +89,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2020-01-31",
     ),
     ("0000320193", "0000320193-21-000105"): PrimaryStatementScope(
         "c21f651f9bb94b1d78944a9e91a263bcead4b417131ae797a46fee37d4d452b0",
@@ -143,6 +145,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2021-01-31",
     ),
     ("0000320193", "0000320193-22-000108"): PrimaryStatementScope(
         "b93dafe086e54e1e6bccffc5cd31bc9443b69ef3157a7b7e0d9dedef2ef61385",
@@ -198,6 +201,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2022",
     ),
     ("0000320193", "0000320193-23-000106"): PrimaryStatementScope(
         "c53b281e007596cfc861f3ad72e8eddcdce2908c8c51e4cc67d9555aaf83b568",
@@ -223,6 +227,7 @@ PRIMARY_STATEMENTS = {
                 "net_change_in_cash", 26, 40, ("c-1", "c-20", "c-21")
             ),
         ),
+        "http://fasb.org/us-gaap/2023",
     ),
     ("0000320193", "0000320193-24-000123"): PrimaryStatementScope(
         "40c460d3eed32c7394fe651374bb2a6c43f5082098d1a32d5e7516d50110b0bb",
@@ -248,6 +253,7 @@ PRIMARY_STATEMENTS = {
                 "net_change_in_cash", 26, 40, ("c-1", "c-19", "c-20")
             ),
         ),
+        "http://fasb.org/us-gaap/2024",
     ),
     ("0000320193", "0000320193-25-000079"): PrimaryStatementScope(
         "96d412db63c241eeae57639bf03e040d774ed991442733c9a140e89739abbe8d",
@@ -273,6 +279,7 @@ PRIMARY_STATEMENTS = {
                 "net_change_in_cash", 26, 39, ("c-1", "c-18", "c-19")
             ),
         ),
+        "http://fasb.org/us-gaap/2025",
     ),
     ("0000320193", "0000320193-26-000026"): PrimaryStatementScope(
         "502cdd211c5335ef05b94f58e84bedb6cf5d58489c934feb92d77d194998cdbd",
@@ -298,6 +305,7 @@ PRIMARY_STATEMENTS = {
                 "net_change_in_cash", 26, 39, ("c-1", "c-17", "c-18")
             ),
         ),
+        "http://fasb.org/us-gaap/2026",
     ),
     ("0000789019", "0000950170-23-035122"): PrimaryStatementScope(
         "5ac3868026e907cd8316298af5bd88b095ed0f1dd6b5580b507bcb9fe2cfc6dd",
@@ -363,6 +371,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2023",
     ),
     ("0000789019", "0000950170-24-087843"): PrimaryStatementScope(
         "321fd42528989d20b979a438c1fd185260e45e4c902a9089524aad1e6146f65d",
@@ -428,6 +437,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2023",
     ),
     ("0000789019", "0000950170-25-100235"): PrimaryStatementScope(
         "bd12d1d000a291b2169e28cfc9e56dc38a7f3a8ef0ff78706c3df7fe042e5698",
@@ -493,6 +503,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2024",
     ),
     ("0000789019", "0001193125-26-323660"): PrimaryStatementScope(
         "e4289989cfa36551f347a28312cb21ac4ca272816e03c90c11b0673862dc0a0d",
@@ -558,6 +569,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2025",
     ),
     ("0000789019", "0001564590-20-034944"): PrimaryStatementScope(
         "99d1dfdd564d8e7cc42fa9c6c3b44c0bc131fece7e6638f28e24ec7cb49faa7a",
@@ -623,6 +635,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2020-01-31",
     ),
     ("0000789019", "0001564590-21-039151"): PrimaryStatementScope(
         "0168b995b37d463102f295f989710294eb61b98db1636a9384ea1ccc276dddcb",
@@ -688,6 +701,7 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2020-01-31",
     ),
     ("0000789019", "0001564590-22-026876"): PrimaryStatementScope(
         "2732aabedd18ec1709b1b0f9144d4e99fee4e3788453626f4efa01b9cbc2b749",
@@ -753,5 +767,6 @@ PRIMARY_STATEMENTS = {
                 ),
             ),
         ),
+        "http://fasb.org/us-gaap/2022",
     ),
 }
