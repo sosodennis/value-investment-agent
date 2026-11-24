@@ -79,6 +79,21 @@ _HTML_SUBMISSION_PADDING_RULE = (
     "after its exact terminal Akamai script is removed; retain the submission "
     "hash and every archive padding offset and hash as independent byte proof"
 )
+_HTML_CRLF_POLICY_ID = "sec-edgar-submission-html-crlf-v1"
+_HTML_CRLF_RULE = (
+    "use the unchanged accession-matched ZIP HTML only when replacing every "
+    "CRLF with LF reproduces both the complete submission document and the "
+    "indexed direct response after its unique terminal Akamai script is removed; "
+    "retain all source hashes and the archive CRLF count"
+)
+_HTML_INTERTAG_LF_POLICY_ID = "sec-edgar-submission-html-crlf-intertag-lf-v1"
+_HTML_INTERTAG_LF_RULE = (
+    "use the unchanged accession-matched ZIP HTML only when replacing every "
+    "CRLF with LF and deleting the recorded LF bytes between parsed HTML tags "
+    "reproduces both the complete submission document and the indexed direct "
+    "response after its unique terminal Akamai script is removed; retain all "
+    "source hashes, the archive CRLF count and every deleted intertag LF offset"
+)
 _MAX_STAGED_GRAPHICS_BYTES = 32 * 1024 * 1024
 _XML_LINE_END_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-v1"
 _XML_LINE_END_RULE = (
@@ -239,6 +254,187 @@ def _digest(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def _submission_html_hash(
+    *,
+    raw_response: FilingIntegritySource,
+    archive_index: FilingIntegritySource,
+    member_name: str,
+    content: bytes,
+    submission_source: FilingIntegritySource | None,
+) -> str | None:
+    accession = raw_response.accession_number
+    if (
+        submission_source is None
+        or not accession
+        or re.fullmatch(r"[0-9]{10}-[0-9]{2}-[0-9]{6}", accession) is None
+        or submission_source.accession_number != accession
+        or submission_source.uri
+        != archive_index.uri.rsplit("/", 1)[0] + f"/{accession}.txt"
+        or not re.match(
+            rb"<SEC-DOCUMENT>" + re.escape(accession.encode()) + rb"\.txt[\s:]",
+            submission_source.content,
+        )
+    ):
+        return None
+    try:
+        documents = dict(submission_html_documents(submission_source.content))
+    except InlineDocumentSetError:
+        return None
+    if documents.get(member_name) != content:
+        return None
+    return _digest(submission_source.content)
+
+
+class _IntertagLineParser(HTMLParser):
+    def __init__(self, content: bytes) -> None:
+        super().__init__(convert_charrefs=False)
+        self.content = content
+        self.line_starts = [0, *(match.end() for match in re.finditer(b"\n", content))]
+        self.tag_starts: set[int] = set()
+        self.tag_ends: set[int] = set()
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self.line_starts[line - 1] + column
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        start = self._offset()
+        text = self.get_starttag_text()
+        assert text is not None
+        self.tag_starts.add(start)
+        self.tag_ends.add(start + len(text))
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.handle_starttag(tag, attrs)
+
+    def handle_endtag(self, tag: str) -> None:
+        start = self._offset()
+        self.tag_starts.add(start)
+        self.tag_ends.add(self.content.index(b">", start) + 1)
+
+
+def _intertag_lf_removals(member: bytes, direct: bytes) -> tuple[int, ...] | None:
+    member_offset = direct_offset = 0
+    removed = []
+    while member_offset < len(member) and direct_offset < len(direct):
+        if member[member_offset] == direct[direct_offset]:
+            member_offset += 1
+            direct_offset += 1
+        elif member[member_offset - 1 : member_offset + 2] == b">\n<":
+            removed.append(member_offset)
+            member_offset += 1
+        else:
+            return None
+    if member_offset != len(member) or direct_offset != len(direct) or not removed:
+        return None
+    parser = _IntertagLineParser(member)
+    parser.feed(member.decode("latin-1"))
+    parser.close()
+    if any(
+        offset not in parser.tag_ends or offset + 1 not in parser.tag_starts
+        for offset in removed
+    ):
+        return None
+    return tuple(removed)
+
+
+def _html_line_representation(
+    *,
+    raw_response: FilingIntegritySource,
+    archive_index: FilingIntegritySource,
+    archive: FilingIntegritySource,
+    member_name: str,
+    member: bytes,
+    declared_size: int,
+    submission_source: FilingIntegritySource | None,
+) -> SecIntegrityAssessment | None:
+    raw = raw_response.content
+    if (
+        not raw_response.uri.endswith((".htm", ".html"))
+        or raw_response.uri != archive_index.uri.rsplit("/", 1)[0] + "/" + member_name
+        or dict(raw_response.response_headers).get("x-akamai-transformed") != "0 - 0 -"
+        or b"\r\n" not in member
+        or b"\r" in member.replace(b"\r\n", b"")
+        or b"\r" in raw
+    ):
+        return None
+    match = _EDGE_SCRIPT_AT_END.search(raw)
+    if match is None or raw.count(match.group("script")) != 1:
+        return None
+    script_start, script_end = match.span("script")
+    direct = raw[:script_start] + raw[script_end:]
+    if len(direct) != declared_size or not direct.endswith(
+        (b"</body></html>\n", b"</body>\n</html>\n")
+    ):
+        return None
+    line_ended_member = member.replace(b"\r\n", b"\n")
+    removed = (
+        ()
+        if line_ended_member == direct
+        else _intertag_lf_removals(line_ended_member, direct)
+    )
+    if removed is None:
+        return None
+    submission_hash = _submission_html_hash(
+        raw_response=raw_response,
+        archive_index=archive_index,
+        member_name=member_name,
+        content=direct,
+        submission_source=submission_source,
+    )
+    if submission_hash is None:
+        return None
+    policy_id, rule = (
+        (_HTML_INTERTAG_LF_POLICY_ID, _HTML_INTERTAG_LF_RULE)
+        if removed
+        else (_HTML_CRLF_POLICY_ID, _HTML_CRLF_RULE)
+    )
+    raw_hash = _digest(raw)
+    index_hash = _digest(archive_index.content)
+    archive_hash = _digest(archive.content)
+    member_hash = _digest(member)
+    return SecIntegrityAssessment(
+        relation="normalized",
+        normalized_content=member,
+        declared_primary_size=declared_size,
+        archive_member_name=member_name,
+        archive_member=member,
+        raw_content_hash=raw_hash,
+        archive_index_hash=index_hash,
+        archive_hash=archive_hash,
+        archive_member_hash=member_hash,
+        normalized_content_hash=member_hash,
+        removed_ranges=(
+            RemovedByteRangeV1(
+                start=script_start,
+                end=script_end,
+                content_hash=_digest(match.group("script")),
+            ),
+        ),
+        normalization_policy_id=policy_id,
+        normalization_rule_signature=sha256_digest(
+            {
+                "policy_id": policy_id,
+                "rule": rule,
+                "accession": raw_response.accession_number,
+                "primary_document": member_name,
+                "declared_size": declared_size,
+                "required_header": ("x-akamai-transformed", "0 - 0 -"),
+                "script_shape": _EDGE_SCRIPT_AT_END.pattern.decode("ascii"),
+                "raw_content_hash": raw_hash,
+                "archive_index_hash": index_hash,
+                "archive_hash": archive_hash,
+                "archive_member_hash": member_hash,
+                "submission_content_hash": submission_hash,
+                "archive_crlf_count": member.count(b"\r\n"),
+                "lf_member_deleted_intertag_lf_offsets": removed,
+            }
+        ),
+        normalization_reason=rule,
+        submission_content_hash=submission_hash,
+    )
+
+
 def _html_tag_line_padding(
     *,
     raw_response: FilingIntegritySource,
@@ -290,27 +486,15 @@ def _html_tag_line_padding(
 
     submission_hash = None
     if needs_submission:
-        accession = raw_response.accession_number
-        if (
-            submission_source is None
-            or not accession
-            or re.fullmatch(r"[0-9]{10}-[0-9]{2}-[0-9]{6}", accession) is None
-            or submission_source.accession_number != accession
-            or submission_source.uri
-            != archive_index.uri.rsplit("/", 1)[0] + f"/{accession}.txt"
-            or not re.match(
-                rb"<SEC-DOCUMENT>" + re.escape(accession.encode()) + rb"\.txt[\s:]",
-                submission_source.content,
-            )
-        ):
+        submission_hash = _submission_html_hash(
+            raw_response=raw_response,
+            archive_index=archive_index,
+            member_name=member_name,
+            content=without_script,
+            submission_source=submission_source,
+        )
+        if submission_hash is None:
             return None
-        try:
-            documents = dict(submission_html_documents(submission_source.content))
-        except InlineDocumentSetError:
-            return None
-        if documents.get(member_name) != without_script:
-            return None
-        submission_hash = _digest(submission_source.content)
 
     raw_hash = _digest(raw)
     index_hash = _digest(archive_index.content)
@@ -383,7 +567,8 @@ def assess_filing_response(
     Versioned rules cover a terminal Akamai script/final LF and the exact
     XML 1.0 CRLF/LF, terminal LF and their exact combined representation
     differences. They reconstruct the original accession-matched archive bytes.
-    HTML tag-line padding has a separate exact archive reconstruction rule.
+    HTML tag-line padding and submission-proven line representations have
+    separate exact archive reconstruction rules.
     Every other mismatch blocks.
     """
     try:
@@ -561,6 +746,17 @@ def assess_filing_response(
             ),
             normalization_reason=rule,
         )
+    html_representation = _html_line_representation(
+        raw_response=raw_response,
+        archive_index=archive_index,
+        archive=archive,
+        member_name=member_name,
+        member=member,
+        declared_size=declared_size,
+        submission_source=submission_source,
+    )
+    if html_representation is not None:
+        return html_representation
     html_padding = _html_tag_line_padding(
         raw_response=raw_response,
         archive_index=archive_index,
