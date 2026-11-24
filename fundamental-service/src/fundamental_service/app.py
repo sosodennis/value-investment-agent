@@ -24,6 +24,11 @@ from starlette.concurrency import run_in_threadpool
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
+from .original_preparation import OriginalPreparation
+from .statement_contracts import (
+    AnnualStatementsReadRequestV1,
+    AnnualStatementsReadResponseV1,
+)
 from .valuation_diagnostics import (
     ValuationDiagnosticSink,
     diagnostic_error_code,
@@ -219,6 +224,7 @@ def create_app(
     macro_providers: tuple[MacroSeriesProviderPort, ...] | None = None,
     reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
     source_use_policy: SourceUsePolicyV1 | None = None,
+    statement_originals: OriginalPreparation | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -250,6 +256,7 @@ def create_app(
         config=runtime_config,
         metrics=metrics,
         metadata_store=metadata_store,
+        statement_originals=statement_originals,
         require_metadata=require_metadata,
         policy_registry=policy_registry,
         model_inventory=model_inventory,
@@ -638,6 +645,34 @@ def create_app(
     @app.get("/v1/data/snapshots/{snapshot_id}", response_model=None)
     async def get_snapshot(request: Request, snapshot_id: str) -> JSONResponse:
         return success_response(request, application.snapshot(snapshot_id))
+
+    @app.post(
+        "/v1/data/annual-statements",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            AnnualStatementsReadResponseV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/FundamentalAnnualStatementsRequestEnvelopeV1"
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def get_annual_statements(request: Request) -> JSONResponse:
+        value = decode_input(request, AnnualStatementsReadRequestV1)
+        result = await run_valuation_operation(
+            request,
+            application.read_annual_statements,
+            value,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
 
     @app.get(
         "/v1/data/facts",
@@ -1222,6 +1257,10 @@ def create_app(
                 TypedFundamentalRequestEnvelopeV1[SecIngestionRequestV1],
             ),
             (
+                "FundamentalAnnualStatementsRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[AnnualStatementsReadRequestV1],
+            ),
+            (
                 "FundamentalIdentityResolutionRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[IdentityResolutionRequestV1],
             ),
@@ -1326,6 +1365,10 @@ def create_runtime_app() -> FastAPI:
         dqc_ruleset_sha256=dqc_ruleset_sha256,
         dqc_ruleset_catalog_path=os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH")
         or None,
+        dqc_v18_ruleset_catalog_path=os.getenv(
+            "FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH"
+        )
+        or None,
         historical_dqc_dir=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR") or None,
         historical_dqc_sha256=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256")
         or None,
@@ -1354,6 +1397,9 @@ def create_runtime_app() -> FastAPI:
             repository=MetadataPolicyRepository(metadata_store),
         ),
         sec_acquisition=sec_acquisition,
+        statement_originals=sec_acquisition.original_preparation()
+        if sec_acquisition is not None
+        else None,
         identity_resolution=identity_resolution,
         source_use_policy=source_use_policy,
     )

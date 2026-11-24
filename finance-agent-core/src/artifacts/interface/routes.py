@@ -21,6 +21,9 @@ async def get_artifact(
     artifact_id: str,
     principal: Principal = Depends(require_current_user),
     run_id: str | None = Query(default=None, min_length=1),
+    expected_thread_id: str | None = Query(
+        default=None, min_length=1, alias="thread_id"
+    ),
     artifacts: ArtifactService = Depends(build_default_artifact_service),
 ) -> JSONResponse:
     if run_id is not None:
@@ -28,7 +31,9 @@ async def get_artifact(
             run_id=run_id,
             organization_id=principal.organization_id,
         )
-        if thread_id is None:
+        if thread_id is None or (
+            expected_thread_id is not None and expected_thread_id != thread_id
+        ):
             raise _not_found()
         if not await get_ownership_service().owns(
             user_id=principal.user_id,
@@ -56,7 +61,9 @@ async def get_artifact(
             raise _not_found()
     else:
         thread_id = await artifacts.get_artifact_thread_id(artifact_id)
-        if thread_id is None:
+        if thread_id is None or (
+            expected_thread_id is not None and expected_thread_id != thread_id
+        ):
             raise _not_found()
         if not await artifacts.belongs_to_organization(
             thread_id=thread_id,

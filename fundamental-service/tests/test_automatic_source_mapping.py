@@ -5,29 +5,46 @@ from dataclasses import replace
 
 import pytest
 from pydantic import ValidationError
+import fundamental_service.registered_statement_rows as statement_rows
+from fundamental_service.registered_statement_row_registry import (
+    PrimaryStatementScope,
+    PrimaryStatementRowLocator,
+)
 
 from fundamental_service.automatic_mapping import automatic_mapping_policy_digest
-from fundamental_service.automatic_mapping_batch import AutomaticMappingBatchDecisionV1
+from fundamental_service.automatic_mapping_batch import (
+    AutomaticMappingBatchDecisionV1,
+    StatementMappingBatchDecisionV1,
+)
 from fundamental_service.automatic_source_mapping import (
     AutomaticSecIngestionRequestV1,
+    AutomaticStatementSecIngestionRequestV1,
     AutomaticSourceMappingAuthority,
 )
-from fundamental_service.contracts import SecCapturedSourceEvidenceV1, SourceRole
+from fundamental_service.contracts import (
+    IdentityV1,
+    SecCapturedSourceEvidenceV1,
+    SourceRole,
+)
 from fundamental_service.ingestion_mapping import ValidatedOriginalV1
 from fundamental_service.data_releases import DataReleaseError
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import FilesystemContentStore
+from fundamental_service.statement_profiles import (
+    annual_statement_profile,
+    statement_executable_digest,
+)
 from fundamental_service.valuation_requirements import (
     source_preparation_requirements_profile,
     valuation_requirements_profile,
 )
-from test_automatic_mapping import EVALUATOR, MACHINE_KEY, REVISION
+from test_automatic_mapping import EVALUATOR, MACHINE_KEY, REVISION, case
 from test_automatic_mapping_security import security_case
 from test_issuer_operating_release import inventory
 
 
-def source_case(tmp_path):
-    single, artifacts, roots = security_case(tmp_path / "source")
+def source_case(tmp_path, *, mapping_case=security_case):
+    single, artifacts, roots, *_ = mapping_case(tmp_path / "source")
     profile = valuation_requirements_profile("fcff_dcf")
     request = AutomaticSecIngestionRequestV1(
         contract_version="fundamental.v1",
@@ -124,6 +141,217 @@ def test_optional_original_reference_preserves_existing_pinned_request_identity(
     assert canonical_bytes(request) == canonical_bytes(
         request.model_dump(exclude={"original_preparation"})
     )
+
+
+def statement_mapping_case(tmp_path):
+    initial, *_ = case(tmp_path / "markers")
+    marker = next(
+        f for f in initial.original.report.facts if f.concept == "dei:DocumentType"
+    )
+    extra = tuple(
+        marker.model_copy(update={"concept": concept, "value": value})
+        for concept, value in {
+            "dei:EntityIncorporationStateCountryCode": "DE",
+            "dei:TradingSymbol": "EXAMPLE",
+            "dei:Security12bTitle": "Common Stock",
+        }.items()
+    )
+    single, artifacts, roots, _ = case(tmp_path / "statement", extra=extra)
+    identity = IdentityV1(
+        issuer_id=single.original.source.cik,
+        issuer_name=single.original.identity.issuer_name,
+        domicile="US",
+        reporting_basis="us-gaap",
+        currency="USD",
+        security_id="EXAMPLE",
+        share_class="Common Stock",
+    )
+    return single.model_copy(update={"security_identity": identity}), artifacts, roots
+
+
+def statement_source_case(tmp_path, monkeypatch, *, sic="SOFTWARE [7372]"):
+    request, authority, validated, artifacts, mappings = source_case(
+        tmp_path, mapping_case=statement_mapping_case
+    )
+    profile = annual_statement_profile(executable_digest=statement_executable_digest())
+    payload = request.model_dump(
+        exclude={
+            "protocol",
+            "model_id",
+            "model_version",
+            "requirements_digest",
+            "original_preparation",
+            "public_source_cutoff",
+        }
+    )
+    statement_request = AutomaticStatementSecIngestionRequestV1.model_validate(
+        payload
+        | {
+            "statement_profile": profile,
+            "required_fields": tuple(row.row_id for row in profile.rows),
+            "coverage_profile": profile.profile_id,
+            "supplemental_filing_policy": None,
+            "original_preparation": {
+                "artifact_id": "synthetic-original-preparation",
+                "content_hash": "b" * 64,
+                "media_type": "application/json",
+                "role": "sec-original-preparation-v1",
+            },
+        }
+    )
+    original = validated.original
+    revenue_facts = tuple(
+        f for f in original.report.facts if f.concept == "us-gaap:Revenues"
+    )
+    monkeypatch.setitem(
+        statement_rows.PRIMARY_STATEMENTS,
+        (original.source.cik, original.source.accession_number),
+        PrimaryStatementScope(
+            raw_content_hash=original.source.content_hash,
+            annual_periods=tuple(
+                sorted({(f.period_start, f.period_end) for f in revenue_facts})
+            ),
+            revenue_concept="us-gaap:Revenues",
+            cash_balance_concept="us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+            cash_change_concept="us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect",
+            cash_effect_concept=None,
+            parser_input_hash=original.source.parser_input_hash,
+            locators=tuple(
+                PrimaryStatementRowLocator(
+                    role,
+                    1,
+                    2,
+                    tuple(sorted({f.context_id for f in revenue_facts}))
+                    if role == "revenue"
+                    else (),
+                )
+                for role in (
+                    "revenue",
+                    "cash_flow_beginning_balance",
+                    "cash_flow_ending_balance",
+                    "net_change_in_cash",
+                )
+            ),
+            us_gaap_namespace=revenue_facts[0].namespace_uri,
+        ),
+    )
+    accession = original.source.accession_number
+    cik = original.source.cik
+    raw = (
+        f"<SEC-DOCUMENT>{accession}.txt : 20260201\n"
+        f"<SEC-HEADER>{accession}.hdr.sgml : 20260201\n"
+        "<ACCEPTANCE-DATETIME>20260201000000\n"
+        f"ACCESSION NUMBER: {accession}\nCONFORMED SUBMISSION TYPE: 10-K\n"
+        f"CONFORMED PERIOD OF REPORT: {original.report_period_end:%Y%m%d}\n"
+        "FILED AS OF DATE: 20260201\nDATE AS OF CHANGE: 20260201\n"
+        f"FILER:\nCOMPANY DATA:\nCENTRAL INDEX KEY: {cik}\n"
+        f"STANDARD INDUSTRIAL CLASSIFICATION: {sic}\nSTATE OF INCORPORATION: WA\n"
+        "FILING VALUES:\nFORM TYPE: 10-K\n</SEC-HEADER>\n<DOCUMENT>\n"
+    ).encode()
+    media_type = "text/plain"
+    digest = authority.content.put(raw, media_type=media_type)
+    source = SecCapturedSourceEvidenceV1(
+        source_id="sec-filing-submission",
+        uri=(
+            f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
+            f"{accession.replace('-', '')}/{accession}.txt"
+        ),
+        role=SourceRole.FILING,
+        media_type=media_type,
+        http_status=200,
+        available_at=original.source.available_at,
+        captured_at=original.source.captured_at,
+        accession_number=accession,
+        form="10-K",
+        received_size=len(raw),
+        content_hash=digest,
+    )
+    return (
+        statement_request,
+        authority,
+        replace(validated, captured_sources=(*validated.captured_sources, source)),
+        artifacts,
+        mappings,
+    )
+
+
+def test_statement_source_maps_partial_rows_without_market_or_award_requirements(
+    tmp_path,
+    monkeypatch,
+):
+    request, authority, validated, artifacts, mappings = statement_source_case(
+        tmp_path, monkeypatch
+    )
+    result = authority.resolver_for(request).resolve(validated)
+    decision = StatementMappingBatchDecisionV1.model_validate_json(
+        artifacts.read(result.evidence_ref)
+    )
+    assert len(decision.roles) == 25
+    assert result.mappings and mappings
+    assert result.missing_fields and result.issues
+    assert request.supplemental_filing_policy is None
+    assert all(
+        not role.normalized_field.startswith("equity_award") for role in decision.roles
+    )
+    before = inventory(artifacts.root)
+    assert authority.resolver_for(request).resolve(validated) == result
+    assert inventory(artifacts.root) == before
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"required_fields": ("revenue",)},
+        {"supplemental_filing_policy": "sec-equity-award-proxy.v2"},
+        {"coverage_profile": "automatic-fcff-v1"},
+        {"identity_basis": "current-sec-ticker-v1"},
+        {"filing": {"forms": ("10-K",)}},
+        {"model_id": "fcff_dcf"},
+    ],
+)
+def test_statement_source_rejects_scope_or_valuation_inputs(
+    tmp_path, monkeypatch, changes
+):
+    request, *_ = statement_source_case(tmp_path, monkeypatch)
+    with pytest.raises(ValidationError):
+        AutomaticStatementSecIngestionRequestV1.model_validate(
+            request.model_dump() | changes
+        )
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_statement_source_refuses_financial_or_unclassified_original(
+    tmp_path, monkeypatch, missing
+):
+    request, authority, validated, _, mappings = statement_source_case(
+        tmp_path, monkeypatch, sic="BANK [6021]"
+    )
+    if missing:
+        validated = replace(validated, captured_sources=validated.captured_sources[:-1])
+    with pytest.raises(DataReleaseError) as error:
+        authority.resolver_for(request).resolve(validated)
+    assert error.value.code == (
+        "STATEMENT_ISSUER_CLASSIFICATION_UNAVAILABLE"
+        if missing
+        else "STATEMENT_FINANCIAL_ISSUER_UNSUPPORTED"
+    )
+    assert not mappings
+
+
+def test_statement_source_refuses_unreviewed_original_before_mapping_publication(
+    tmp_path, monkeypatch
+):
+    request, authority, validated, _, mappings = statement_source_case(
+        tmp_path, monkeypatch
+    )
+    monkeypatch.delitem(
+        statement_rows.PRIMARY_STATEMENTS,
+        (validated.original.source.cik, validated.original.source.accession_number),
+    )
+    with pytest.raises(DataReleaseError) as error:
+        authority.resolver_for(request).resolve(validated)
+    assert error.value.code == "STATEMENT_ORIGINAL_SCOPE_UNREVIEWED"
+    assert not mappings
 
 
 @pytest.mark.parametrize("policy", [None, "sec-equity-award-proxy.v1"])

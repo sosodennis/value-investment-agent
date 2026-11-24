@@ -81,6 +81,11 @@ async def test_fresh_database_migration_completes_idempotently() -> None:
     result = await run_history_migration(batch_size=2)
     assert result.completed
     assert result.batches_processed == 0
+    from src.infrastructure.migrations.thread_ownership import (
+        run_thread_ownership_migration,
+    )
+
+    await run_thread_ownership_migration()
     await assert_migrations_complete()
 
     repeated = await run_history_migration(batch_size=2)

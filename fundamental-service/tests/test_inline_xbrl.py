@@ -447,6 +447,7 @@ def test_ingestion_and_release_bind_every_document_and_manifest(
             filed_at=now,
             accession_number=accession,
             form="10-K",
+            filing_date=now.date() if source_id == "sec-filing-submission" else None,
             declared_size=len(raw),
             received_size=len(raw),
             response_headers=(("content-length", str(len(raw))),),
@@ -687,3 +688,72 @@ def test_ingestion_and_release_bind_every_document_and_manifest(
         s.source_id == "sec-inline-document" for s in prepared.snapshot.source_records
     )
     assert prepared.snapshot.sec_integrity_evidence == integrity
+
+    from fundamental_service.ingestion_mapping import ValidatedOriginalV1
+    from fundamental_service.original_issuer import (
+        OriginalOperatingSourceV1,
+        evaluate_original_issuer,
+    )
+    from fundamental_service.original_preparation import OriginalValidationRuntimeV1
+
+    original = evaluate_original_issuer(
+        validated.parser_report,
+        source=OriginalOperatingSourceV1(
+            cik="0000000001",
+            accession_number=accession,
+            uri=validated.source.uri,
+            content_hash=integrity.raw_content_hash,
+            parser_input_hash=integrity.parser_input_hash,
+            form="10-K",
+            available_at=now,
+            captured_at=now,
+            http_status=200,
+        ),
+        decision_at=now,
+    )
+    bundle = ValidatedOriginalV1(
+        identity=prepared.snapshot.identity,
+        original=original,
+        integrity=integrity,
+        captured_sources=validated.captured_sources,
+        primary_media_type=validated.source.media_type,
+    )
+    runtime = OriginalValidationRuntimeV1(
+        declared_source_revision="0" * 40,
+        taxonomy_manifest_id="synthetic-taxonomy",
+        taxonomy_version=validated.parser_report.taxonomy_version,
+        taxonomy_cache_sha256=validated.parser_report.taxonomy_cache_hash,
+        validation_profile_digest=validated.parser_report.validation_profile_digest,
+        validation_profile_id=validated.parser_report.validation_profile.profile_id,
+        supported_filing_years=(2026,),
+        supported_filing_forms=("10-K",),
+        source_max_response_bytes=24_000_000,
+        source_max_submission_bytes=120_000_000,
+        python_version="3.12",
+        pydantic_version="2",
+    )
+    acquisition = object.__new__(SecAcquisitionUseCase)
+    acquisition.content_store = content
+    restored = acquisition._restore_original_sources(
+        bundle, runtime, filing_date=now.date()
+    )
+    assert {item.source_id for item in restored} >= {
+        "sec-filing-submission",
+        "sec-taxonomy",
+        "sec-inline-document",
+    }
+    assert len(restored) == len(validated.captured_sources)
+    for source, retained in zip(restored, validated.captured_sources, strict=True):
+        assert hashlib.sha256(source.content).hexdigest() == retained.content_hash
+        for name in type(retained).model_fields:
+            if name != "content_hash":
+                assert getattr(source, name) == getattr(retained, name), name
+        assert source.filing_date == (
+            now.date() if source.source_id == "sec-filing-submission" else None
+        )
+        assert source.filing_version == retained.accession_number
+        assert not source.is_amendment
+        if source.source_id == "sec-taxonomy":
+            assert source.taxonomy_manifest_id == runtime.taxonomy_manifest_id
+            assert source.received_size == len(archive_bytes)
+            assert source.received_size != len(source.content)

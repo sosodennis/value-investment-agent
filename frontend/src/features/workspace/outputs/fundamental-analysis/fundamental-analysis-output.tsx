@@ -1,4 +1,7 @@
-import { useEffect, useId, useMemo, type ReactNode } from 'react';
+import { AnnualStatementsReader } from './annual-statements-reader';
+import { AnnualStatementsTable } from './annual-statements-table';
+import { projectAnnualStatements } from './annual-statements-model';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useArtifact } from '@/hooks/useArtifact';
@@ -10,6 +13,7 @@ import { FinancialFactsTable } from './financial-facts-table';
 import { FundamentalReportLoading } from './fundamental-report-loading';
 import { FundamentalReportSources } from './fundamental-report-sources';
 import {
+    fundamentalReportSourceKey,
     buildFundamentalEvidenceInventory,
     projectFundamentalReport,
     type FundamentalEvidenceInventory,
@@ -35,7 +39,28 @@ export type FundamentalAnalysisOutputProps = {
     revisionControl?: FundamentalRevisionControl;
 };
 
-export function FundamentalAnalysisOutput({
+export function FundamentalAnalysisOutput(props: FundamentalAnalysisOutputProps) {
+    return <FundamentalOutputWithStatements key={props.threadId ?? 'unbound'} {...props} />;
+}
+
+function FundamentalOutputWithStatements(props: FundamentalAnalysisOutputProps) {
+    const [valuationInventory, setValuationInventory] = useState<FundamentalEvidenceInventory | null>(null);
+    const [statementItems, setStatementItems] = useState<EvidenceSelection[]>([]);
+    const sourceKey = fundamentalReportSourceKey({ threadId: props.threadId, reference: props.reference });
+    const reportStatementItems = useCallback((items: EvidenceSelection[]) => setStatementItems(items), []);
+    const onInventory = props.onEvidenceInventory;
+    useEffect(() => {
+        onInventory?.({ sourceKey, items: [
+            ...(valuationInventory?.sourceKey === sourceKey ? valuationInventory.items : []), ...statementItems,
+        ] });
+    }, [onInventory, sourceKey, statementItems, valuationInventory]);
+    return <div className="min-w-0 space-y-5">
+        <AnnualStatementsReader threadId={props.threadId ?? null} ticker={props.resolvedTicker} onSelectEvidence={props.onSelectEvidence} onEvidenceItems={reportStatementItems} />
+        {(props.reference || props.status !== 'idle') && <FundamentalValuationOutput {...props} onEvidenceInventory={setValuationInventory} />}
+    </div>;
+}
+
+function FundamentalValuationOutput({
     reference,
     resolvedTicker,
     status,
@@ -70,13 +95,19 @@ export function FundamentalAnalysisOutput({
                 : null,
         [artifact.data, artifactId, artifactUrl, resolvedTicker, threadId],
     );
+    const annualReport = useMemo(() => artifact.data?.annual_statements ? projectAnnualStatements({
+        response: artifact.data.annual_statements,
+        reference, threadId,
+        companyName: artifact.data.company_name, ticker: artifact.data.ticker,
+    }) : null, [artifact.data, reference, threadId]);
     useEffect(() => { if (report) onReportReady?.(report); }, [onReportReady, report]);
     useEffect(() => {
-        if (!report || !onEvidenceInventory) return;
-        const inventory = buildFundamentalEvidenceInventory(report);
+        if (!onEvidenceInventory) return;
+        const inventory = report ? buildFundamentalEvidenceInventory(report) : { sourceKey: fundamentalReportSourceKey({ threadId, reference }), items: [] };
+        if (annualReport) inventory.items.push(...annualReport.evidence);
         if (attempt?.kind === 'accepted') inventory.items.push(...buildFundamentalEvidenceInventory(attempt.previousReport).items);
         onEvidenceInventory(inventory);
-    }, [attempt, onEvidenceInventory, report]);
+    }, [annualReport, attempt, onEvidenceInventory, reference, report, threadId]);
     if (artifact.isLoading) return <FundamentalReportLoading title="Loading Fundamental report" />;
     if (artifact.error && !artifact.data)
         return (
@@ -89,6 +120,7 @@ export function FundamentalAnalysisOutput({
             />
         );
     if (!report) {
+        if (annualReport) return <AnnualStatementsTable report={annualReport} onSelectEvidence={onSelectEvidence} />;
         if (status === 'running' || status === 'attention')
             return <FundamentalReportLoading title="Processing financials…" />;
         return (
@@ -151,6 +183,7 @@ export function FundamentalAnalysisOutput({
                     </AlertDescription>
                 </Alert>
             )}
+            {annualReport && <AnnualStatementsTable report={annualReport} onSelectEvidence={onSelectEvidence} />}
             <FundamentalReport
                 report={report}
                 onSelectEvidence={onSelectEvidence}

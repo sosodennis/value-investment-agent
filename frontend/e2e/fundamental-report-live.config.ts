@@ -4,7 +4,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
     testDir: '.',
-    testMatch: ['fundamental-report.live.spec.ts', 'fundamental-report-live.retained.spec.ts', 'fundamental-report-reading.live.spec.ts'],
+    testMatch: ['fundamental-report.live.spec.ts', 'fundamental-report-live.retained.spec.ts', 'fundamental-report-reading.live.spec.ts', 'annual-statements.live.spec.ts'],
     outputDir: process.env.FUNDAMENTAL_LIVE_OUTPUT_DIR ?? join(tmpdir(), 'fundamental-report-live'),
     fullyParallel: false,
     workers: 1,

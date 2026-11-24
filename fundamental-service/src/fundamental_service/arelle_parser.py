@@ -17,7 +17,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Iterable
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from importlib.metadata import PackageNotFoundError, version
@@ -44,7 +44,13 @@ from .inline_xbrl import (
     inline_document_metadata,
     read_inline_document_input,
 )
-from .dqc_rulesets import DqcRulesetCatalogV1
+from .dqc_rulesets import (
+    DQC_V18_CONSTANTS_MARKER,
+    DQC_V18_PROFILE_ID,
+    DQC_V18_RULESETS,
+    DqcRulesetCatalogV1,
+)
+from .dqc_resource_packages import activate_v18_package
 from .dqc_applicability import (
     DqcFilingContextV1,
     DqcRuleApplicabilityV1,
@@ -286,10 +292,12 @@ class ArelleValidationProfileV1(BaseModel):
         if self.efm_profile != "efm-strict-all-years":
             raise ValueError("SEC validation requires strict all-years EFM")
         historical = historical_profile(self.profile_id)
+        compiled_version = "v18" if self.profile_id == DQC_V18_PROFILE_ID else "v31.0.3"
         if self.dqc_applicability_digest is not None and (
             historical is not None
             or self.validation_mode != "sec-efm-dqc"
-            or self.dqc_applicability_digest != dqc_applicability_policy_digest()
+            or self.dqc_applicability_digest
+            != dqc_applicability_policy_digest(compiled_version)
         ):
             raise ValueError(
                 "DQC applicability policy requires the pinned modern profile"
@@ -298,6 +306,17 @@ class ArelleValidationProfileV1(BaseModel):
             historical is not None or self.validation_mode != "sec-efm-dqc"
         ):
             raise ValueError("DQC taxonomy catalogs require modern SEC validation")
+        if self.dqc_ruleset_catalog is not None and (
+            self.dqc_ruleset_catalog.dqc_version != compiled_version
+        ):
+            raise ValueError("DQC catalog version must match its validation profile")
+        if self.profile_id == DQC_V18_PROFILE_ID and (
+            self.validation_mode != "sec-efm-dqc"
+            or self.dqc_ruleset_catalog is None
+            or self.dqc_ruleset_sha256
+            not in {digest for _, digest in DQC_V18_RULESETS.values()}
+        ):
+            raise ValueError("V18 validation requires its exact pinned full catalog")
         if (self.historical_dqc_axis_config is not None) != bool(
             historical and historical.axis_config_sha256
         ):
@@ -305,7 +324,8 @@ class ArelleValidationProfileV1(BaseModel):
                 "historical DQC axis config must match its selected profile"
             )
         if (
-            self.dqc_version != (historical.dqc_version if historical else "v31.0.3")
+            self.dqc_version
+            != (historical.dqc_version if historical else compiled_version)
             or self.xule_version != "30055"
         ):
             raise ValueError("SEC validation profile versions are not pinned")
@@ -489,7 +509,7 @@ class ArelleParseReportV1(BaseModel):
             or context is not None
             and (
                 self.validation_profile.validation_mode != "sec-efm-dqc"
-                or self.validation_profile.dqc_version != "v31.0.3"
+                or self.validation_profile.dqc_version != context.dqc_version
                 or self.validation_profile.dqc_applicability_digest
                 != context.policy_digest
                 or markers != (context.evidence_marker(),)
@@ -1054,6 +1074,7 @@ def _parse_in_process(
             )
 
     manager = None
+    validation_resources = ExitStack()
     findings: tuple[ArelleFindingV1, ...] = ()
     validation_engines: tuple[str, ...] = ()
     validation_evidence: tuple[str, ...] = ()
@@ -1064,6 +1085,9 @@ def _parse_in_process(
             from arelle.RuntimeOptions import RuntimeOptions
 
             controller = CntlrCmdLine(disable_persistent_config=True)
+            controller.webCache.workOffline = True
+            if taxonomy_cache_dir is not None:
+                controller.webCache.cacheDir = str(taxonomy_cache_dir)
             plugin_root = _validation_plugin_root(profile)
             controller._pluginManager._pluginBase = str(plugin_root) + os.sep
             xule_plugin = controller._pluginManager.addPluginModule("xule")
@@ -1118,7 +1142,12 @@ def _parse_in_process(
                 profile.efm_release == "26.3"
                 and profile.efm_validation_version == "1.26.3"
             ):
-                diagnostic_plugin = Path(__file__).with_name("dqc_diagnostic_plugin.py")
+                v18_diagnostics = profile.profile_id == DQC_V18_PROFILE_ID
+                diagnostic_plugin = Path(__file__).with_name(
+                    "dqc_severity_plugin.py"
+                    if v18_diagnostics
+                    else "dqc_diagnostic_plugin.py"
+                )
                 name = str(diagnostic_plugin)
                 loaded_plugin = controller._pluginManager.addPluginModule(name)
                 if loaded_plugin is None:
@@ -1128,7 +1157,11 @@ def _parse_in_process(
                 controller.preloadedPlugins[name] = loaded_plugin
                 plugin_names.append(name)
                 diagnostic_evidence = (
-                    "dqc-0090-bound-diagnostics-v2:"
+                    (
+                        "dqc-rule-severity-preserved-v1:"
+                        if v18_diagnostics
+                        else "dqc-0090-bound-diagnostics-v2:"
+                    )
                     + hashlib.sha256(diagnostic_plugin.read_bytes()).hexdigest(),
                 )
                 controller._pluginManager.pluginMethodsForClasses.clear()
@@ -1152,12 +1185,27 @@ def _parse_in_process(
                     plugin_names.append(name)
                 controller._pluginManager.pluginMethodsForClasses.clear()
             controller.startLogging(logHandler=LogToXmlHandler(controller))
+            v18_constants = None
+            if profile.profile_id == DQC_V18_PROFILE_ID:
+                v18_constants = plugin_root / "v18-no-precomputed-constants.json"
+                v18_constants.write_bytes(b"{}")
+                diagnostic_evidence += (DQC_V18_CONSTANTS_MARKER,)
+                assert profile.dqc_ruleset_path is not None
+                package_marker = validation_resources.enter_context(
+                    activate_v18_package(controller.packages, profile.dqc_ruleset_path)
+                )
+                diagnostic_evidence += (package_marker,)
             options = RuntimeOptions(
                 pluginOptions={
                     "xule_rule_set": str(profile.dqc_ruleset_path),
                     "xule_multi": False,
-                    "xule_bypass_packages": False,
+                    "xule_bypass_packages": v18_constants is not None,
                     "xule_cache_size_bytes": 32 * 1024 * 1024,
+                    **(
+                        {"xule_args_file": str(v18_constants)}
+                        if v18_constants is not None
+                        else {}
+                    ),
                     **(
                         {
                             "fundamental_dqc_ruleset_catalog": profile.dqc_ruleset_catalog.model_dump_json()
@@ -1435,8 +1483,11 @@ def _parse_in_process(
         ) from error
     finally:
         close = getattr(manager, "close", None)
-        if callable(close):
-            close()
+        try:
+            if callable(close):
+                close()
+        finally:
+            validation_resources.close()
 
 
 def parse_filing_offline(

@@ -104,13 +104,18 @@ class SecSubmissionClassificationProvider:
             raise _invalid("SEC classification acceptance time is not unambiguous")
         filed = _day(_field(header, "FILED AS OF DATE"))
         changed = _day(_field(header, "DATE AS OF CHANGE"))
+        document_day = _day(match[2])
         if (
-            _day(match[2]) != changed
-            or _day(match[3]) != changed
-            or not accepted.date() <= filed <= changed
+            document_day != _day(match[3])
+            or not accepted.date() <= filed <= document_day
+            or not accepted.date() <= changed <= document_day
         ):
             raise _invalid("SEC classification publication dates conflict")
-        available = max(accepted, datetime.combine(filed, time.min, _NEW_YORK))
+        available = max(
+            accepted,
+            datetime.combine(filed, time.min, _NEW_YORK),
+            datetime.combine(document_day, time.min, _NEW_YORK),
+        )
         if changed > accepted.date():
             # A corrected header cannot be claimed to exist at original acceptance.
             available = max(

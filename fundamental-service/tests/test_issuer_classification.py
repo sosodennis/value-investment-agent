@@ -102,6 +102,7 @@ def test_sec_original_header_reproduces_pit_claims_with_exact_provenance():
     first = reproduce_issuer_classification(
         provider, request=request(), sources=(original,)
     )
+
     repeated = reproduce_issuer_classification(
         provider, request=request(), sources=(original,), expected=first
     )
@@ -132,6 +133,80 @@ def test_sec_original_header_reproduces_pit_claims_with_exact_provenance():
             "source_artifacts": first.source_artifacts,
         }
     )
+
+
+@pytest.mark.parametrize(
+    "accepted,filed,changed,outer,available",
+    [
+        (
+            "20241101180827",
+            "20241104",
+            "20241101",
+            "20241104",
+            datetime(2024, 11, 4, 5, tzinfo=UTC),
+        ),
+        (
+            "20241101060136",
+            "20241101",
+            "20241115",
+            "20241115",
+            datetime(2024, 11, 16, 5, tzinfo=UTC),
+        ),
+        (
+            "20241101060136",
+            "20241101",
+            "20241114",
+            "20241115",
+            datetime(2024, 11, 15, 5, tzinfo=UTC),
+        ),
+    ],
+)
+def test_submission_dates_keep_next_filing_day_and_corrected_header_unavailable_until_known(
+    accepted, filed, changed, outer, available
+):
+    source = sec_submission(accepted=accepted)
+    content = source.content.replace(b" : 20241101", b" : " + outer.encode())
+    content = content.replace(
+        b"FILED AS OF DATE:\t\t20241101", b"FILED AS OF DATE:\t\t" + filed.encode()
+    )
+    content = content.replace(
+        b"DATE AS OF CHANGE:\t\t20241101", b"DATE AS OF CHANGE:\t\t" + changed.encode()
+    )
+    source = replace(source, content=content)
+    result = reproduce_issuer_classification(
+        SecSubmissionClassificationProvider(), request=request(), sources=(source,)
+    )
+    assert result.status == "matched"
+    assert result.observation.available_at == available
+    earlier = reproduce_issuer_classification(
+        SecSubmissionClassificationProvider(),
+        request=request(valuation_at=available.replace(hour=available.hour - 1)),
+        sources=(source,),
+    )
+    assert earlier.status == "refused"
+    assert earlier.issue_codes == ("ISSUER_CLASSIFICATION_NOT_AVAILABLE",)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (b".hdr.sgml : 20241101", b".hdr.sgml : 20241102"),
+        (b"FILED AS OF DATE:\t\t20241101", b"FILED AS OF DATE:\t\t20241031"),
+        (b"DATE AS OF CHANGE:\t\t20241101", b"DATE AS OF CHANGE:\t\t20241031"),
+        (b"FILED AS OF DATE:\t\t20241101", b"FILED AS OF DATE:\t\t20241102"),
+        (b"DATE AS OF CHANGE:\t\t20241101", b"DATE AS OF CHANGE:\t\t20241102"),
+    ],
+)
+def test_submission_rejects_conflicting_envelope_and_publication_dates(old, new):
+    source = sec_submission()
+    result = reproduce_issuer_classification(
+        SecSubmissionClassificationProvider(),
+        request=request(),
+        sources=(replace(source, content=source.content.replace(old, new)),),
+    )
+    assert result.status == "refused"
+    assert result.observation is None
+    assert "SEC_CLASSIFICATION_HEADER_INVALID" in result.issue_codes
 
 
 @pytest.mark.parametrize(

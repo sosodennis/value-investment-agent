@@ -4,6 +4,8 @@ from .arelle_parser import ArelleParseReportV1
 from .historical_dqc import historical_profile
 from .snapshots import SnapshotError
 from .dqc_applicability import DqcFilingContextV1
+from .dqc_rulesets import DQC_V18_CONSTANTS_MARKER, DQC_V18_PROFILE_ID
+from .dqc_resource_packages import V18_PACKAGE_MARKER, V18_PACKAGE_SHA256
 
 
 def bind_dqc_filing_context(
@@ -50,6 +52,14 @@ def require_sec_validation_evidence(report: ArelleParseReportV1) -> None:
         raise SnapshotError(
             "OFFLINE_NETWORK_ATTEMPT",
             "SEC parser report records a network attempt",
+        )
+    if report.validation_profile.profile_id == DQC_V18_PROFILE_ID and not {
+        DQC_V18_CONSTANTS_MARKER,
+        f"{V18_PACKAGE_MARKER}:{V18_PACKAGE_SHA256}",
+    }.issubset(report.validation_evidence):
+        raise SnapshotError(
+            "VALIDATION_EVIDENCE_MISSING",
+            "V18 official source constants or resource package evidence is missing",
         )
     catalog = report.validation_profile.dqc_ruleset_catalog
     if catalog is not None:

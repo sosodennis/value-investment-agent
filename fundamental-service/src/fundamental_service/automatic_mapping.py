@@ -64,16 +64,25 @@ from .registered_revenue import (
     registered_revenue_concept,
     select_registered_revenue,
 )
+from .registered_statement_rows import (
+    CASH_STATEMENT_ROLES,
+    has_registered_primary_statement_scope,
+    PrimaryStatementScopeEvidenceV1,
+    primary_statement_scope_evidence,
+    registered_primary_concept,
+    select_primary_statement_observations,
+)
 from .mapping_input_storage import MappingInputReader, resolve_mapping_input
 from .mapping_input_identity import MappingInputDigests
 from .serialization import sha256_digest
 from .sec_rebuild import parsed_facts_to_candidates
 from .snapshots import SnapshotError
 from .standard_accounting_representations import standard_accounting_representation
+from .statement_profiles import statement_row_definitions
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v42"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v42"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v45"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v45"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -205,6 +214,19 @@ _RULES = {
     ),
 }
 
+for _row in statement_row_definitions():
+    if _row.row_id == "revenue":
+        continue
+    _previous = _RULES.get(_row.row_id)
+    _concepts = tuple(
+        dict.fromkeys((*(_previous.concepts if _previous else ()), *_row.concepts))
+    )
+    _RULES[_row.row_id] = DirectMappingRule(
+        _concepts[0],
+        "annual" if _row.value_period_role == "duration" else "instant",
+        alternative_concepts=_concepts[1:],
+    )
+
 
 def automatic_mapping_policy_digest() -> str:
     """Pin executable policy dependencies as well as the explicit rule table."""
@@ -229,6 +251,14 @@ def automatic_mapping_policy_digest() -> str:
                     "registered_depreciation.py",
                     "registered_capital_expenditure.py",
                     "registered_revenue.py",
+                    "registered_statement_rows.py",
+                    "registered_statement_row_registry.py",
+                    "statement_profiles.py",
+                    "statement_contracts.py",
+                    "annual_statements.py",
+                    "statement_issuer_scope.py",
+                    "issuer_classification.py",
+                    "sec_classification_source.py",
                     "registered_investment_assets.py",
                     "registered_noncontrolling_equity.py",
                     "registered_liability_residuals.py",
@@ -256,6 +286,7 @@ def automatic_mapping_policy_digest() -> str:
                     "original_issuer.py",
                     "regulatory_validation.py",
                     "sec_integrity.py",
+                    "sec_html_representation_registry.py",
                     "serialization.py",
                     "taxonomy_evidence.py",
                 )
@@ -377,6 +408,8 @@ def automatic_mapping_proposal(
         concept = registered_depreciation_concept(original)
     if normalized_field == "revenue" and original is not None:
         concept = registered_revenue_concept(original) or concept
+    if normalized_field in CASH_STATEMENT_ROLES and original is not None:
+        concept = registered_primary_concept(original, normalized_field) or concept
     payload = {
         "contract_version": "fundamental.v1",
         "source_concept": concept,
@@ -410,6 +443,11 @@ def automatic_mapping_proposals(
         if rule is not None and primary.source_concept == rule.concept
         else (primary.source_concept,)
     )
+    if (
+        normalized_field in CASH_STATEMENT_ROLES
+        and registered_primary_concept(original, normalized_field) is not None
+    ):
+        concepts = (primary.source_concept,)
     representation = standard_accounting_representation(
         original, normalized_field, input_digests=input_digests
     )
@@ -484,6 +522,9 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     eligible_observation_digests: tuple[str, ...]
     rejected_observations: tuple[MappingObservationRejectionV1, ...]
     mapping: CanonicalMappingV1 | None
+    primary_statement_scope: PrimaryStatementScopeEvidenceV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def decision_is_coherent(self) -> AutomaticMappingDecisionV1:
@@ -663,6 +704,10 @@ def evaluate_automatic_mapping(
         proposal.normalized_field == "revenue"
         and proposal.source_concept == CONTRACT_REVENUE
     )
+    registered_cash = (
+        proposal.normalized_field in CASH_STATEMENT_ROLES
+        and has_registered_primary_statement_scope(original)
+    )
     adjusted = depreciation and proposal.source_concept == ADJUSTED_DEPRECIATION
     investment_assets = (
         proposal.normalized_field in INVESTMENT_ASSET_ROLES
@@ -703,6 +748,7 @@ def evaluate_automatic_mapping(
         )
         or proposal.accounting_rules is not None
         or proposal.observation_scope is not None
+        or proposal.security_scope is not None
         or proposal.status != "provisional"
     ):
         reasons.add("MAPPING_AUTOMATIC_RULE_UNSUPPORTED")
@@ -870,11 +916,39 @@ def evaluate_automatic_mapping(
             )
             for fact, reason in revenue.rejected
         )
+    if registered_cash:
+        cash = select_primary_statement_observations(
+            original, proposal.normalized_field
+        )
+        reasons.update(cash.reason_codes)
+        primary_concept = registered_primary_concept(
+            original, proposal.normalized_field
+        )
+        if primary_concept is not None and primary_concept != proposal.source_concept:
+            reasons.add("MAPPING_STATEMENT_ROW_CONCEPT_MISMATCH")
+        assert rule is not None
+        for fact in cash.selected:
+            reason = _observation_rejection(fact, request, rule)
+            if reason is None:
+                selected.append(fact)
+            else:
+                rejected.append(
+                    MappingObservationRejectionV1(
+                        observation_digest=sha256_digest(fact), reason_code=reason
+                    )
+                )
+        rejected.extend(
+            MappingObservationRejectionV1(
+                observation_digest=sha256_digest(fact), reason_code=reason
+            )
+            for fact, reason in cash.rejected
+        )
     specialized = (
         disclosed
         or depreciation
         or capital_expenditure
         or registered_revenue
+        or registered_cash
         or investment_assets
         or noncontrolling_equity
         or liability_residual
@@ -924,7 +998,7 @@ def evaluate_automatic_mapping(
     for fact in () if computed else selected:
         key = (fact.period_start, fact.period_end, fact.instant)
         periods.setdefault(key, set()).add(Decimal(fact.value))
-    if rule is not None and len(rule.concepts) > 1:
+    if rule is not None and len(rule.concepts) > 1 and not registered_cash:
         alternatives = (
             fact
             for fact in original.report.facts
@@ -975,6 +1049,10 @@ def evaluate_automatic_mapping(
             ),
             "observation_scope": scope,
         }
+        if proposal.normalized_field in {
+            row.row_id for row in statement_row_definitions()
+        }:
+            payload["security_scope"] = "issuer"
         if computed:
             anchor = DEPRECIATION
             if disclosed or option_cost:
@@ -1016,6 +1094,9 @@ def evaluate_automatic_mapping(
         ),
         rejected_observations=tuple(rejected),
         mapping=mapping,
+        primary_statement_scope=primary_statement_scope_evidence(
+            original, proposal.normalized_field
+        ),
     )
 
 

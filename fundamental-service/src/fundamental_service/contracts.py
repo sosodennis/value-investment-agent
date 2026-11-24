@@ -1198,7 +1198,9 @@ class SecSourceRequestV1(StrictModel):
     filing: SecFilingSelectorV1
     parser_version: Literal["2.47.4"]
     validation_profile_id: Literal[
-        "sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"
+        "sec-efm-us-dqc-v31.0.3",
+        "sec-efm-us-dqc-v18-xule30055-build-v1",
+        "sec-efm-us-dqc-v1.0.0-historical",
     ]
     taxonomy_manifest_id: str = Field(min_length=1, max_length=128)
     taxonomy_version: str = Field(min_length=1, max_length=128)

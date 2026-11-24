@@ -1,3 +1,4 @@
+import type { AnnualStatements } from './annual-statements';
 import type { FundamentalServiceArtifact } from './fundamental-service-facts';
 
 export interface Provenance {
@@ -137,6 +138,7 @@ export interface FundamentalAnalysisSuccess {
     reasoning: string;
     financial_reports: FinancialReport[];
     fundamental_service?: FundamentalServiceArtifact;
+    annual_statements?: AnnualStatements;
     forward_signals?: ForwardSignal[];
     valuation_diagnostics?: FundamentalValuationDiagnostics;
     status: 'done';

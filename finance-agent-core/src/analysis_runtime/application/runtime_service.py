@@ -158,8 +158,14 @@ class AnalysisRuntimeService:
                     f"analysis runtime shutdown had {len(errors)} error(s)"
                 ) from errors[0]
 
-    async def _check_owner(self, *, principal_id: str, thread_id: str) -> None:
-        if not await self.owner.owns(principal_id=principal_id, thread_id=thread_id):
+    async def _check_owner(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> None:
+        if not await self.owner.owns(
+            principal_id=principal_id,
+            thread_id=thread_id,
+            organization_id=organization_id,
+        ):
             raise ThreadNotFoundError("thread was not found")
 
     async def start(
@@ -178,6 +184,7 @@ class AnalysisRuntimeService:
             if not await self.owner.claim(
                 principal_id=principal_id,
                 thread_id=thread_id,
+                organization_id=organization_id,
             ):
                 raise ThreadNotFoundError("thread was not found")
             if thread_id in self._tasks and not self._tasks[thread_id].done():
@@ -228,7 +235,11 @@ class AnalysisRuntimeService:
                 raise RuntimeError("analysis runtime is shutting down")
             if not idempotency_key.strip():
                 raise RetryNotAvailableError("Idempotency-Key is required")
-            await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+            await self._check_owner(
+                principal_id=principal_id,
+                thread_id=thread_id,
+                organization_id=organization_id,
+            )
             request_hash = hashlib.sha256(
                 json.dumps(
                     {
@@ -293,7 +304,9 @@ class AnalysisRuntimeService:
             if self._closing or self._closed:
                 raise RuntimeError("analysis runtime is shutting down")
             await self._check_owner(
-                principal_id=principal_id, thread_id=identity.thread_id
+                principal_id=principal_id,
+                thread_id=identity.thread_id,
+                organization_id=organization_id,
             )
             task = self._tasks.get(identity.thread_id)
             if task and not task.done():
@@ -420,7 +433,11 @@ class AnalysisRuntimeService:
         run_id: str,
         organization_id: str = "unscoped",
     ) -> None:
-        await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+        await self._check_owner(
+            principal_id=principal_id,
+            thread_id=thread_id,
+            organization_id=organization_id,
+        )
         task = self._tasks.get(thread_id)
         async with self._subscription_gate:
             events = await self.repository.cancel_run_with_interaction(
@@ -448,7 +465,11 @@ class AnalysisRuntimeService:
         run_id: str | None = None,
         organization_id: str = "unscoped",
     ) -> WorkflowSnapshot:
-        await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+        await self._check_owner(
+            principal_id=principal_id,
+            thread_id=thread_id,
+            organization_id=organization_id,
+        )
         if run_id is None:
             run = await self.repository.get_run(thread_id=thread_id)
             if run is None or run.organization_id != organization_id:
@@ -494,7 +515,11 @@ class AnalysisRuntimeService:
         limit: int | None = None,
         organization_id: str = "unscoped",
     ) -> ReplayPage:
-        await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+        await self._check_owner(
+            principal_id=principal_id,
+            thread_id=thread_id,
+            organization_id=organization_id,
+        )
         run = await self.repository.get_run(thread_id=thread_id)
         if run is None or run.organization_id != organization_id:
             raise ThreadNotFoundError("thread was not found")
@@ -513,7 +538,11 @@ class AnalysisRuntimeService:
         limit: int | None = None,
         organization_id: str = "unscoped",
     ) -> tuple[ReplayPage, RuntimeSubscriber]:
-        await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+        await self._check_owner(
+            principal_id=principal_id,
+            thread_id=thread_id,
+            organization_id=organization_id,
+        )
         async with self._subscription_gate:
             replay = await self.replay(
                 principal_id=principal_id,

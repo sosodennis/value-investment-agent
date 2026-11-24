@@ -15,6 +15,7 @@ from .automatic_mapping_batch import (
     AutomaticMappingBatchDecisionV1,
     AutomaticMappingBatchRequestV1,
 )
+from .automatic_source_mapping import original_selection_at
 from .command_artifacts import EvidenceArtifactStore
 from .conditional_capital_contracts import ConditionalCapitalPolicyV1
 from .conditional_reinvestment_contracts import ConditionalReinvestmentPolicyV1
@@ -162,7 +163,7 @@ def assemble_preparation_release(
             or request.original.source.cik != ingestion.cik
             or request.original.source.accession_number
             != ingestion.filing.accession_number
-            or request.original.decision_at != ingestion.valuation_timestamp
+            or request.original.decision_at != original_selection_at(ingestion)
             or request.security_identity != ingestion.identity
         ):
             raise DataReleaseError(

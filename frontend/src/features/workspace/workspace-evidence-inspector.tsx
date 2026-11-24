@@ -51,6 +51,21 @@ export interface EvidenceSelection {
     unit?: string;
     scale?: number;
     issueCodes?: string[];
+    statementId?: string;
+    cellId?: string;
+    rowId?: string;
+    periodId?: string;
+    selectedVersionId?: string;
+    statementRelease?: string;
+    statementCutoff?: string;
+    contextId?: string;
+    selectionKind?: string;
+    sourceReportPeriodEnd?: string;
+    mappingDigest?: string;
+    cashBasis?: string;
+    candidateFactIds?: string[];
+    rejectedCandidates?: string[];
+    statementEvidence?: string;
 }
 
 export function buildEvidenceItems(agent: AgentInfo, viewModel: AgentOutputViewModel): EvidenceSelection[] {
@@ -197,6 +212,9 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     {copy.kind === 'failed' && copy.target === 'display' && <Textarea ref={displayField} aria-label="Displayed value for manual copy" readOnly value={item.displayValue ?? item.value} rows={2} className="mt-2 font-mono text-xs" />}
                 </div>
                 <dl className="grid gap-2 text-xs">
+                    <EvidenceField label="Selection" value={item.selectionKind?.replaceAll('_', ' ')} />
+                    <EvidenceField label="Source report end" value={item.sourceReportPeriodEnd} />
+                    <EvidenceField label="Cash definition" value={item.cashBasis?.replaceAll('_', ' ')} />
                     <EvidenceField label="Source" value={item.source} />
                     <EvidenceField label="Citation" value={item.citation} />
                     <EvidenceField label="License" value={item.licenseReference} />
@@ -216,6 +234,10 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Source scale" value={item.scale === undefined ? undefined : String(item.scale)} />
                     <EvidenceField label="Issue codes" value={formatIssueCodes(item)} />
                 </dl>
+                {item.statementEvidence && <details className="min-w-0 rounded-md border px-3 py-2 text-xs">
+                    <summary className="cursor-pointer font-medium">Complete statement selection evidence</summary>
+                    <Textarea aria-label="Statement cell and candidate evidence" readOnly value={item.statementEvidence} rows={12} className="mt-3 font-mono text-xs" />
+                </details>}
                 <details className="min-w-0 rounded-md border px-3 py-2 text-xs">
                     <summary className="cursor-pointer font-medium">Technical identity</summary>
                     <dl className="mt-3 grid gap-2">
@@ -226,6 +248,17 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Original automatic preparation digest" value={item.originalPreparationDigest} />
                     <EvidenceField label="Input digest" value={item.inputDigest} />
                     <EvidenceField label="Result hash" value={item.resultHash} />
+                    <EvidenceField label="Statement" value={item.statementId} />
+                    <EvidenceField label="Statement cutoff" value={item.statementCutoff} />
+                    <EvidenceField label="Statement release" value={item.statementRelease} />
+                    <EvidenceField label="Cell" value={item.cellId} />
+                    <EvidenceField label="Row" value={item.rowId} />
+                    <EvidenceField label="Period identity" value={item.periodId} />
+                    <EvidenceField label="Selected version" value={item.selectedVersionId} />
+                    <EvidenceField label="Context ID" value={item.contextId} />
+                    <EvidenceField label="Mapping digest" value={item.mappingDigest} />
+                    <EvidenceField label="Candidate facts" value={item.candidateFactIds?.join(', ')} />
+                    <EvidenceField label="Rejected candidates" value={item.rejectedCandidates?.join('; ')} />
                     <EvidenceField label="Fact ID" value={item.factId} />
                     <EvidenceField label="Filed at" value={factMetadataValue(item, item.filedAt)} />
                     <EvidenceField label="Available at" value={factMetadataValue(item, item.availableAt)} />

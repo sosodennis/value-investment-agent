@@ -256,6 +256,7 @@ class SqlAlchemyOwnershipRepository:
         resource_type: str,
         resource_id: str,
         user_id: str,
+        organization_id: str | None = None,
     ) -> bool:
         async with AsyncSessionLocal() as session:
             existing_result = await session.execute(
@@ -265,12 +266,16 @@ class SqlAlchemyOwnershipRepository:
             )
             existing = existing_result.scalar_one_or_none()
             if existing is not None:
-                return existing.user_id == user_id
+                return existing.user_id == user_id and (
+                    organization_id is None
+                    or existing.organization_id == organization_id
+                )
             session.add(
                 OwnedResourceModel(
                     resource_type=resource_type,
                     resource_id=resource_id,
                     user_id=user_id,
+                    organization_id=organization_id,
                 )
             )
             try:
@@ -283,7 +288,14 @@ class SqlAlchemyOwnershipRepository:
                     .where(OwnedResourceModel.resource_id == resource_id)
                 )
                 existing = result.scalar_one_or_none()
-                return existing is not None and existing.user_id == user_id
+                return (
+                    existing is not None
+                    and existing.user_id == user_id
+                    and (
+                        organization_id is None
+                        or existing.organization_id == organization_id
+                    )
+                )
         return True
 
     async def owner_of(
@@ -291,13 +303,18 @@ class SqlAlchemyOwnershipRepository:
         *,
         resource_type: str,
         resource_id: str,
+        organization_id: str | None = None,
     ) -> str | None:
         async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(OwnedResourceModel.user_id)
-                .where(OwnedResourceModel.resource_type == resource_type)
-                .where(OwnedResourceModel.resource_id == resource_id)
+            statement = select(OwnedResourceModel.user_id).where(
+                OwnedResourceModel.resource_type == resource_type,
+                OwnedResourceModel.resource_id == resource_id,
             )
+            if organization_id is not None:
+                statement = statement.where(
+                    OwnedResourceModel.organization_id == organization_id
+                )
+            result = await session.execute(statement)
             return result.scalar_one_or_none()
 
     async def list_owned_ids(

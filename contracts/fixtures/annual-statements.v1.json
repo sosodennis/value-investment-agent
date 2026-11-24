@@ -1,0 +1,2559 @@
+{
+  "contract_version": "fundamental.annual-statements.v1",
+  "data_release_manifest_digest": "a4d451ec23463726f72c43d64c710968f6b602cd653b4de8adee1b556240a829",
+  "statements": {
+    "contract_version": "fundamental.annual-statements.v1",
+    "statement_id": "cb5372c2f70cdf802ede8f1f4b0051eb0714867fbe7a0795048e9a54c34e2f0e",
+    "input_digest": "c96c6d5be8d08a12e7b5cdc1b207fa6b2430974c86803d8891675e76fd992c20",
+    "scope": {
+      "issuer_id": "0000000001",
+      "security_id": null,
+      "security_scope": "issuer",
+      "entity_scope": "consolidated",
+      "currency": "USD",
+      "unit": "USD",
+      "consolidation_scope": "consolidated"
+    },
+    "cutoff_at": "2024-12-01T00:00:00Z",
+    "profile": {
+      "profile_id": "us-gaap-nonfinancial-annual-v1",
+      "contract_version": "fundamental.annual-statements.v1",
+      "rows": [
+        {
+          "row_id": "revenue",
+          "statement": "income_statement",
+          "label": "Revenue",
+          "value_period_role": "duration",
+          "concepts": [
+            "us-gaap:revenue"
+          ],
+          "sign_policy": "reported_signed_decimal_v1"
+        },
+        {
+          "row_id": "net_income",
+          "statement": "income_statement",
+          "label": "Net income",
+          "value_period_role": "duration",
+          "concepts": [
+            "us-gaap:net_income"
+          ],
+          "sign_policy": "reported_signed_decimal_v1"
+        },
+        {
+          "row_id": "total_assets",
+          "statement": "balance_sheet",
+          "label": "Total assets",
+          "value_period_role": "period_end",
+          "concepts": [
+            "us-gaap:total_assets"
+          ],
+          "sign_policy": "reported_signed_decimal_v1"
+        },
+        {
+          "row_id": "inventory",
+          "statement": "balance_sheet",
+          "label": "Inventory",
+          "value_period_role": "period_end",
+          "concepts": [
+            "us-gaap:inventory"
+          ],
+          "sign_policy": "reported_signed_decimal_v1"
+        },
+        {
+          "row_id": "operating_cash_flow",
+          "statement": "cash_flow",
+          "label": "Operating cash flow",
+          "value_period_role": "duration",
+          "concepts": [
+            "us-gaap:operating_cash_flow"
+          ],
+          "sign_policy": "reported_signed_decimal_v1"
+        },
+        {
+          "row_id": "investing_cash_flow",
+          "statement": "cash_flow",
+          "label": "Investing cash flow",
+          "value_period_role": "duration",
+          "concepts": [
+            "us-gaap:investing_cash_flow"
+          ],
+          "sign_policy": "reported_signed_decimal_v1"
+        }
+      ],
+      "selection_policy": "canonical-pit-exact-row-key-v1",
+      "reconciliation_policy": "reported-decimals-half-unit-sum-v1",
+      "comparability_policy": "actual-annual-periods-no-annualization-v1",
+      "executable_digest": "910b1739d68db5624812a1a1de9e5da44d8418ca920ffe7416b77f9af1603d31",
+      "history_coverage_target": 5,
+      "supported_history_threshold": null
+    },
+    "tables": [
+      {
+        "statement": "income_statement",
+        "columns": [
+          {
+            "period_id": "22c61e4c4c6f08c6526998e7c1ca9b5b610fffec5dd2b597a417c7b6635fe29c",
+            "fiscal_label": "FY2023",
+            "period": {
+              "kind": "duration",
+              "period_start": "2022-09-25",
+              "period_end": "2023-09-30"
+            },
+            "duration_days": 371,
+            "calendar": "53_week"
+          },
+          {
+            "period_id": "f4710be549b9825f354ac098799bbfd4e2eecc861716eb82f8a34975c8d3fb29",
+            "fiscal_label": "FY2024",
+            "period": {
+              "kind": "duration",
+              "period_start": "2023-10-01",
+              "period_end": "2024-09-28"
+            },
+            "duration_days": 364,
+            "calendar": "52_week"
+          }
+        ],
+        "rows": [
+          {
+            "definition": {
+              "row_id": "revenue",
+              "statement": "income_statement",
+              "label": "Revenue",
+              "value_period_role": "duration",
+              "concepts": [
+                "us-gaap:revenue"
+              ],
+              "sign_policy": "reported_signed_decimal_v1"
+            },
+            "cells": [
+              {
+                "status": "reported",
+                "cell_id": "2011842086075fc5a99f29c2b8a8caff7676bdcdab8a76377293ee30dd073500",
+                "row_id": "revenue",
+                "period_id": "22c61e4c4c6f08c6526998e7c1ca9b5b610fffec5dd2b597a417c7b6635fe29c",
+                "selected_version_id": "a7717ab08b2ac62ff5fb344fe936d57c137d2bec420616d77a8f82cd4a49d81b",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "1af4078938a3e562a357d7499de85472ced4a6ddc9fc2df3e4359a696a5f9cd3",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:revenue",
+                  "normalized_field": "revenue",
+                  "value": "9007199254740993.125",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": "2022-09-25",
+                  "period_end": "2023-09-30",
+                  "instant": null,
+                  "context": {
+                    "concept_qname": "us-gaap:revenue",
+                    "period_type": "duration",
+                    "start_date": "2022-09-25",
+                    "end_date": "2023-09-30",
+                    "instant": null,
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-revenueFY2023"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2023-10-31T00:00:00Z",
+                  "available_at": "2023-10-31T00:00:00Z",
+                  "filed_at": "2023-10-31T00:00:00Z",
+                  "captured_at": "2023-10-31T00:00:00Z",
+                  "accession_number": "0000000001-23-000001",
+                  "filing_version": "0000000001-23-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-23-000001",
+                    "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+                    "source_role": "filing",
+                    "captured_at": "2023-10-31T00:00:00Z",
+                    "available_at": "2023-10-31T00:00:00Z",
+                    "filed_at": "2023-10-31T00:00:00Z",
+                    "accession_number": "0000000001-23-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-revenue",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2023",
+                "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+                "mapping_digest": "3457b8c0993d8ca0706c2047a1128457b523709d260bfb88c5df79c09386fe5c",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-revenue",
+                    "content_hash": "6a33e9c99639d1d07fb1244decbb6b9129fc96c252f3e540b33bbc883990ad08",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2023-09-30",
+                "candidate_fact_ids": [
+                  "1af4078938a3e562a357d7499de85472ced4a6ddc9fc2df3e4359a696a5f9cd3"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              },
+              {
+                "status": "reported",
+                "cell_id": "8bb9149ceaa77de3a4e676a3eb64a6fc4a6db05015133c03b846624be66352e3",
+                "row_id": "revenue",
+                "period_id": "f4710be549b9825f354ac098799bbfd4e2eecc861716eb82f8a34975c8d3fb29",
+                "selected_version_id": "3af6256bf3e394ee1631eb1e34f235b4a022919c122a04fff377ac01dad5bd13",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "bf4396710935820ffcdb443f9e4732749ec84f10e529e42f9ab16879d4993d76",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:revenue",
+                  "normalized_field": "revenue",
+                  "value": "9007199254740993.125",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": "2023-10-01",
+                  "period_end": "2024-09-28",
+                  "instant": null,
+                  "context": {
+                    "concept_qname": "us-gaap:revenue",
+                    "period_type": "duration",
+                    "start_date": "2023-10-01",
+                    "end_date": "2024-09-28",
+                    "instant": null,
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-revenueFY2024"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2024-10-31T00:00:00Z",
+                  "available_at": "2024-10-31T00:00:00Z",
+                  "filed_at": "2024-10-31T00:00:00Z",
+                  "captured_at": "2024-10-31T00:00:00Z",
+                  "accession_number": "0000000001-24-000001",
+                  "filing_version": "0000000001-24-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-24-000001",
+                    "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+                    "source_role": "filing",
+                    "captured_at": "2024-10-31T00:00:00Z",
+                    "available_at": "2024-10-31T00:00:00Z",
+                    "filed_at": "2024-10-31T00:00:00Z",
+                    "accession_number": "0000000001-24-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-revenue",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2024",
+                "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+                "mapping_digest": "3457b8c0993d8ca0706c2047a1128457b523709d260bfb88c5df79c09386fe5c",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-revenue",
+                    "content_hash": "6a33e9c99639d1d07fb1244decbb6b9129fc96c252f3e540b33bbc883990ad08",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2024-09-28",
+                "candidate_fact_ids": [
+                  "bf4396710935820ffcdb443f9e4732749ec84f10e529e42f9ab16879d4993d76"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              }
+            ]
+          },
+          {
+            "definition": {
+              "row_id": "net_income",
+              "statement": "income_statement",
+              "label": "Net income",
+              "value_period_role": "duration",
+              "concepts": [
+                "us-gaap:net_income"
+              ],
+              "sign_policy": "reported_signed_decimal_v1"
+            },
+            "cells": [
+              {
+                "status": "reported",
+                "cell_id": "72863396481bc1778732031dcea65f702411a8387ef1e7de36e2edcc29c931ed",
+                "row_id": "net_income",
+                "period_id": "22c61e4c4c6f08c6526998e7c1ca9b5b610fffec5dd2b597a417c7b6635fe29c",
+                "selected_version_id": "2492df76e2985c14d1133ac9817e1717763e4c66d5dc3b40a6c20aafaade42cf",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "2afd3693fd047ce6c8664ab775e415c9fb58bcc24a7f2d95fec09a4208a4af7a",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:net_income",
+                  "normalized_field": "net_income",
+                  "value": "0",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": "2022-09-25",
+                  "period_end": "2023-09-30",
+                  "instant": null,
+                  "context": {
+                    "concept_qname": "us-gaap:net_income",
+                    "period_type": "duration",
+                    "start_date": "2022-09-25",
+                    "end_date": "2023-09-30",
+                    "instant": null,
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-net_incomeFY2023"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2023-10-31T00:00:00Z",
+                  "available_at": "2023-10-31T00:00:00Z",
+                  "filed_at": "2023-10-31T00:00:00Z",
+                  "captured_at": "2023-10-31T00:00:00Z",
+                  "accession_number": "0000000001-23-000001",
+                  "filing_version": "0000000001-23-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-23-000001",
+                    "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+                    "source_role": "filing",
+                    "captured_at": "2023-10-31T00:00:00Z",
+                    "available_at": "2023-10-31T00:00:00Z",
+                    "filed_at": "2023-10-31T00:00:00Z",
+                    "accession_number": "0000000001-23-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-net_income",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2023",
+                "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+                "mapping_digest": "54503b1c69c636fd6a79b65186d24908448c5b5aed48847ee6e95fd3f87fd1ca",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-net_income",
+                    "content_hash": "66193578ea1ac7602ad290619500b08566964f947905a5486ec53bfc8d43045c",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2023-09-30",
+                "candidate_fact_ids": [
+                  "2afd3693fd047ce6c8664ab775e415c9fb58bcc24a7f2d95fec09a4208a4af7a"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              },
+              {
+                "status": "reported",
+                "cell_id": "957adfec56601a25b43313d93473c184012cf6215dee9325c68f881e5c8e196a",
+                "row_id": "net_income",
+                "period_id": "f4710be549b9825f354ac098799bbfd4e2eecc861716eb82f8a34975c8d3fb29",
+                "selected_version_id": "f3694ea9eec852353ec428b2054b00df9f32b7e4161cc08db61ef8cd825e6607",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "13d69ef5aef1ae1c00a2dfe7fd42db76985184c287522fdb6e8b0ffd6dd6f6d3",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:net_income",
+                  "normalized_field": "net_income",
+                  "value": "0",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": "2023-10-01",
+                  "period_end": "2024-09-28",
+                  "instant": null,
+                  "context": {
+                    "concept_qname": "us-gaap:net_income",
+                    "period_type": "duration",
+                    "start_date": "2023-10-01",
+                    "end_date": "2024-09-28",
+                    "instant": null,
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-net_incomeFY2024"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2024-10-31T00:00:00Z",
+                  "available_at": "2024-10-31T00:00:00Z",
+                  "filed_at": "2024-10-31T00:00:00Z",
+                  "captured_at": "2024-10-31T00:00:00Z",
+                  "accession_number": "0000000001-24-000001",
+                  "filing_version": "0000000001-24-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-24-000001",
+                    "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+                    "source_role": "filing",
+                    "captured_at": "2024-10-31T00:00:00Z",
+                    "available_at": "2024-10-31T00:00:00Z",
+                    "filed_at": "2024-10-31T00:00:00Z",
+                    "accession_number": "0000000001-24-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-net_income",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2024",
+                "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+                "mapping_digest": "54503b1c69c636fd6a79b65186d24908448c5b5aed48847ee6e95fd3f87fd1ca",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-net_income",
+                    "content_hash": "66193578ea1ac7602ad290619500b08566964f947905a5486ec53bfc8d43045c",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2024-09-28",
+                "candidate_fact_ids": [
+                  "13d69ef5aef1ae1c00a2dfe7fd42db76985184c287522fdb6e8b0ffd6dd6f6d3"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "statement": "balance_sheet",
+        "columns": [
+          {
+            "period_id": "c1fd766fb80f028e648b7ecac851c0bad58a65bcc5a6504c1e2ee6125f23cb4f",
+            "fiscal_label": "FY2023",
+            "period": {
+              "kind": "instant",
+              "instant": "2023-09-30"
+            },
+            "duration_days": null,
+            "calendar": "53_week"
+          },
+          {
+            "period_id": "fb603b0083db5e58a8b0227cb5e2b4137aada3636722a2f7a02b6d9a0079ed54",
+            "fiscal_label": "FY2024",
+            "period": {
+              "kind": "instant",
+              "instant": "2024-09-28"
+            },
+            "duration_days": null,
+            "calendar": "52_week"
+          }
+        ],
+        "rows": [
+          {
+            "definition": {
+              "row_id": "total_assets",
+              "statement": "balance_sheet",
+              "label": "Total assets",
+              "value_period_role": "period_end",
+              "concepts": [
+                "us-gaap:total_assets"
+              ],
+              "sign_policy": "reported_signed_decimal_v1"
+            },
+            "cells": [
+              {
+                "status": "reported",
+                "cell_id": "46923ea9d85cab6a6dd4a9f654dff6da6988a32edd93bb105948fe027d2cc7ee",
+                "row_id": "total_assets",
+                "period_id": "c1fd766fb80f028e648b7ecac851c0bad58a65bcc5a6504c1e2ee6125f23cb4f",
+                "selected_version_id": "c86772de9df533bb0c94b8786598379a8ed10f717de986daa2f34fa96da0ffe5",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "d088de7d6b97a6b2917a343a39a69b142394269bb95cdb57da76fb923134f578",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:total_assets",
+                  "normalized_field": "total_assets",
+                  "value": "1000",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": null,
+                  "period_end": "2023-09-30",
+                  "instant": "2023-09-30",
+                  "context": {
+                    "concept_qname": "us-gaap:total_assets",
+                    "period_type": "instant",
+                    "start_date": null,
+                    "end_date": null,
+                    "instant": "2023-09-30",
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-total_assetsFY2023"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2023-10-31T00:00:00Z",
+                  "available_at": "2023-10-31T00:00:00Z",
+                  "filed_at": "2023-10-31T00:00:00Z",
+                  "captured_at": "2023-10-31T00:00:00Z",
+                  "accession_number": "0000000001-23-000001",
+                  "filing_version": "0000000001-23-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-23-000001",
+                    "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+                    "source_role": "filing",
+                    "captured_at": "2023-10-31T00:00:00Z",
+                    "available_at": "2023-10-31T00:00:00Z",
+                    "filed_at": "2023-10-31T00:00:00Z",
+                    "accession_number": "0000000001-23-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-total_assets",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2023",
+                "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+                "mapping_digest": "fe85410af61affb592bb6cae927bbf0c3685256b96f96651846babd070e2ad59",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-total_assets",
+                    "content_hash": "416024eaceecbeadae1992589a326d075b465850519661e12b7605f07d99b54c",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2023-09-30",
+                "candidate_fact_ids": [
+                  "d088de7d6b97a6b2917a343a39a69b142394269bb95cdb57da76fb923134f578"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              },
+              {
+                "status": "reported",
+                "cell_id": "9fd035e990fd73687c88181e1fe72ab486608f0d111294fd6da8ea12b3e0f80e",
+                "row_id": "total_assets",
+                "period_id": "fb603b0083db5e58a8b0227cb5e2b4137aada3636722a2f7a02b6d9a0079ed54",
+                "selected_version_id": "48a92645eb624ab01ec94da6b1fbf9d43e537ae8e35b8c9c05d4c7f15f5f87a4",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "7ad7090a7cd70aff3857ef112c288f7952d920bdebbd9496e325d77cc3d39cf4",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:total_assets",
+                  "normalized_field": "total_assets",
+                  "value": "1000",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": null,
+                  "period_end": "2024-09-28",
+                  "instant": "2024-09-28",
+                  "context": {
+                    "concept_qname": "us-gaap:total_assets",
+                    "period_type": "instant",
+                    "start_date": null,
+                    "end_date": null,
+                    "instant": "2024-09-28",
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-total_assetsFY2024"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2024-10-31T00:00:00Z",
+                  "available_at": "2024-10-31T00:00:00Z",
+                  "filed_at": "2024-10-31T00:00:00Z",
+                  "captured_at": "2024-10-31T00:00:00Z",
+                  "accession_number": "0000000001-24-000001",
+                  "filing_version": "0000000001-24-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-24-000001",
+                    "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+                    "source_role": "filing",
+                    "captured_at": "2024-10-31T00:00:00Z",
+                    "available_at": "2024-10-31T00:00:00Z",
+                    "filed_at": "2024-10-31T00:00:00Z",
+                    "accession_number": "0000000001-24-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-total_assets",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2024",
+                "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+                "mapping_digest": "fe85410af61affb592bb6cae927bbf0c3685256b96f96651846babd070e2ad59",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-total_assets",
+                    "content_hash": "416024eaceecbeadae1992589a326d075b465850519661e12b7605f07d99b54c",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2024-09-28",
+                "candidate_fact_ids": [
+                  "7ad7090a7cd70aff3857ef112c288f7952d920bdebbd9496e325d77cc3d39cf4"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              }
+            ]
+          },
+          {
+            "definition": {
+              "row_id": "inventory",
+              "statement": "balance_sheet",
+              "label": "Inventory",
+              "value_period_role": "period_end",
+              "concepts": [
+                "us-gaap:inventory"
+              ],
+              "sign_policy": "reported_signed_decimal_v1"
+            },
+            "cells": [
+              {
+                "status": "unavailable",
+                "cell_id": "f7279afb240ae4f8a2bfce43aa2e853d618f2a44a50c71570aadebc62f2f3e39",
+                "row_id": "inventory",
+                "period_id": "c1fd766fb80f028e648b7ecac851c0bad58a65bcc5a6504c1e2ee6125f23cb4f",
+                "missing": {
+                  "status": "unresolved",
+                  "reason": "Original filing could not be parsed with the retained taxonomy."
+                },
+                "quality_status": "degraded",
+                "issue_codes": [
+                  "PARSER_RESOURCE_UNAVAILABLE"
+                ],
+                "evidence_refs": [
+                  {
+                    "artifact_id": "missing-inventory",
+                    "content_hash": "75b00f68524f62c27aed1965ec8cb52645ec5f675fd5ad046fd67da924eb40df",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "candidate_fact_ids": [],
+                "rejected_candidates": []
+              },
+              {
+                "status": "unavailable",
+                "cell_id": "f6bc2d0b14b509be3ad86206d0c76b6ec83be42a96ef9781948539d7d2fc088b",
+                "row_id": "inventory",
+                "period_id": "fb603b0083db5e58a8b0227cb5e2b4137aada3636722a2f7a02b6d9a0079ed54",
+                "missing": {
+                  "status": "unresolved",
+                  "reason": "Original filing could not be parsed with the retained taxonomy."
+                },
+                "quality_status": "degraded",
+                "issue_codes": [
+                  "PARSER_RESOURCE_UNAVAILABLE"
+                ],
+                "evidence_refs": [
+                  {
+                    "artifact_id": "missing-inventory",
+                    "content_hash": "75b00f68524f62c27aed1965ec8cb52645ec5f675fd5ad046fd67da924eb40df",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "candidate_fact_ids": [],
+                "rejected_candidates": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "statement": "cash_flow",
+        "columns": [
+          {
+            "period_id": "f52a94ab914e6edfdf2d9c8c3aaf905dd1e14fa9220e34c59a931db2636f84be",
+            "fiscal_label": "FY2023",
+            "period": {
+              "kind": "duration",
+              "period_start": "2022-09-25",
+              "period_end": "2023-09-30"
+            },
+            "duration_days": 371,
+            "calendar": "53_week"
+          },
+          {
+            "period_id": "42db10f79132d48f0abba1f167cd2df673a702bcc78c09a95dcb06cc43e643e9",
+            "fiscal_label": "FY2024",
+            "period": {
+              "kind": "duration",
+              "period_start": "2023-10-01",
+              "period_end": "2024-09-28"
+            },
+            "duration_days": 364,
+            "calendar": "52_week"
+          }
+        ],
+        "rows": [
+          {
+            "definition": {
+              "row_id": "operating_cash_flow",
+              "statement": "cash_flow",
+              "label": "Operating cash flow",
+              "value_period_role": "duration",
+              "concepts": [
+                "us-gaap:operating_cash_flow"
+              ],
+              "sign_policy": "reported_signed_decimal_v1"
+            },
+            "cells": [
+              {
+                "status": "reported",
+                "cell_id": "41d154ede402599b57cbb3668842a526f107455f63f3556568f38b844a5a32ea",
+                "row_id": "operating_cash_flow",
+                "period_id": "f52a94ab914e6edfdf2d9c8c3aaf905dd1e14fa9220e34c59a931db2636f84be",
+                "selected_version_id": "a65ed40b1177470e1af664c8dd93c9ad81d1372d9ca198dfbd1656c4d9ee0de1",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "44a6f8502d140e81bd2df9583f1418ec883e605da8560bfc7dfa652c97ece512",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:operating_cash_flow",
+                  "normalized_field": "operating_cash_flow",
+                  "value": "1000",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": "2022-09-25",
+                  "period_end": "2023-09-30",
+                  "instant": null,
+                  "context": {
+                    "concept_qname": "us-gaap:operating_cash_flow",
+                    "period_type": "duration",
+                    "start_date": "2022-09-25",
+                    "end_date": "2023-09-30",
+                    "instant": null,
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-operating_cash_flowFY2023"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2023-10-31T00:00:00Z",
+                  "available_at": "2023-10-31T00:00:00Z",
+                  "filed_at": "2023-10-31T00:00:00Z",
+                  "captured_at": "2023-10-31T00:00:00Z",
+                  "accession_number": "0000000001-23-000001",
+                  "filing_version": "0000000001-23-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-23-000001",
+                    "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+                    "source_role": "filing",
+                    "captured_at": "2023-10-31T00:00:00Z",
+                    "available_at": "2023-10-31T00:00:00Z",
+                    "filed_at": "2023-10-31T00:00:00Z",
+                    "accession_number": "0000000001-23-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-operating_cash_flow",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2023",
+                "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+                "mapping_digest": "923c092cf519799af0aa2e79ee845108d6ae37d2b84484e665607ec297cc4774",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-operating_cash_flow",
+                    "content_hash": "aa803b2f5006e8c38bb7b672b981b2c23b09090aaf7e9477a4647dd2562767ad",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2023-09-30",
+                "candidate_fact_ids": [
+                  "44a6f8502d140e81bd2df9583f1418ec883e605da8560bfc7dfa652c97ece512"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              },
+              {
+                "status": "reported",
+                "cell_id": "dba5dbf39a1ec1b9c981ba3f0cb258234fd5e23b126e85251cf2f155a3b704df",
+                "row_id": "operating_cash_flow",
+                "period_id": "42db10f79132d48f0abba1f167cd2df673a702bcc78c09a95dcb06cc43e643e9",
+                "selected_version_id": "1f7c9eeef84a8335102656e38b06a7a2a7fe4b3dfb1aaa86d02135e18eec2ee1",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "c9530b66be34a846690b2ca7fc2dae61ae3b07e5e11e466ab9258bccb5b08564",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:operating_cash_flow",
+                  "normalized_field": "operating_cash_flow",
+                  "value": "1000",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": "2023-10-01",
+                  "period_end": "2024-09-28",
+                  "instant": null,
+                  "context": {
+                    "concept_qname": "us-gaap:operating_cash_flow",
+                    "period_type": "duration",
+                    "start_date": "2023-10-01",
+                    "end_date": "2024-09-28",
+                    "instant": null,
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-operating_cash_flowFY2024"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2024-10-31T00:00:00Z",
+                  "available_at": "2024-10-31T00:00:00Z",
+                  "filed_at": "2024-10-31T00:00:00Z",
+                  "captured_at": "2024-10-31T00:00:00Z",
+                  "accession_number": "0000000001-24-000001",
+                  "filing_version": "0000000001-24-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-24-000001",
+                    "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+                    "source_role": "filing",
+                    "captured_at": "2024-10-31T00:00:00Z",
+                    "available_at": "2024-10-31T00:00:00Z",
+                    "filed_at": "2024-10-31T00:00:00Z",
+                    "accession_number": "0000000001-24-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-operating_cash_flow",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2024",
+                "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+                "mapping_digest": "923c092cf519799af0aa2e79ee845108d6ae37d2b84484e665607ec297cc4774",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-operating_cash_flow",
+                    "content_hash": "aa803b2f5006e8c38bb7b672b981b2c23b09090aaf7e9477a4647dd2562767ad",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2024-09-28",
+                "candidate_fact_ids": [
+                  "c9530b66be34a846690b2ca7fc2dae61ae3b07e5e11e466ab9258bccb5b08564"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              }
+            ]
+          },
+          {
+            "definition": {
+              "row_id": "investing_cash_flow",
+              "statement": "cash_flow",
+              "label": "Investing cash flow",
+              "value_period_role": "duration",
+              "concepts": [
+                "us-gaap:investing_cash_flow"
+              ],
+              "sign_policy": "reported_signed_decimal_v1"
+            },
+            "cells": [
+              {
+                "status": "reported",
+                "cell_id": "05f643f1c05b79258235e71659b8fc2c4fb9be7fdbb7de220083ab44d37f55dc",
+                "row_id": "investing_cash_flow",
+                "period_id": "f52a94ab914e6edfdf2d9c8c3aaf905dd1e14fa9220e34c59a931db2636f84be",
+                "selected_version_id": "28aa83a82d95d849d490c2941c7e65186258974f47850e9a501d3b79863b252d",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "15b9ef82d398d14b229124142e51c422203eeaf489abbdc920d8c3a2621d11d3",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:investing_cash_flow",
+                  "normalized_field": "investing_cash_flow",
+                  "value": "-450.25",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": "2022-09-25",
+                  "period_end": "2023-09-30",
+                  "instant": null,
+                  "context": {
+                    "concept_qname": "us-gaap:investing_cash_flow",
+                    "period_type": "duration",
+                    "start_date": "2022-09-25",
+                    "end_date": "2023-09-30",
+                    "instant": null,
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-investing_cash_flowFY2023"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2023-10-31T00:00:00Z",
+                  "available_at": "2023-10-31T00:00:00Z",
+                  "filed_at": "2023-10-31T00:00:00Z",
+                  "captured_at": "2023-10-31T00:00:00Z",
+                  "accession_number": "0000000001-23-000001",
+                  "filing_version": "0000000001-23-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-23-000001",
+                    "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+                    "source_role": "filing",
+                    "captured_at": "2023-10-31T00:00:00Z",
+                    "available_at": "2023-10-31T00:00:00Z",
+                    "filed_at": "2023-10-31T00:00:00Z",
+                    "accession_number": "0000000001-23-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-investing_cash_flow",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2023",
+                "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+                "mapping_digest": "c487748005cabf3ea31b86f5135983bb50594dcd77fa665668c0e5d741084a4f",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-investing_cash_flow",
+                    "content_hash": "93d188bd24961b630e487c39f698c24512811365b74494b58a711899546ffd39",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2023-09-30",
+                "candidate_fact_ids": [
+                  "15b9ef82d398d14b229124142e51c422203eeaf489abbdc920d8c3a2621d11d3"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              },
+              {
+                "status": "reported",
+                "cell_id": "7c7e3053f9474ce33626fe77eb3ec0480e6fd2f0da3754f3c806a40bf569ce4b",
+                "row_id": "investing_cash_flow",
+                "period_id": "42db10f79132d48f0abba1f167cd2df673a702bcc78c09a95dcb06cc43e643e9",
+                "selected_version_id": "67589ca65420d86ef2eb98022d4ea6c21c91d89d874a7d23922088301bb5a1bb",
+                "fact": {
+                  "contract_version": "fundamental.v1",
+                  "fact_id": "95338c0e1ed37acf06b3a842d8059cedafa62971ed72a3799ebd783de1d82080",
+                  "issuer_id": "0000000001",
+                  "security_id": null,
+                  "concept": "us-gaap:investing_cash_flow",
+                  "normalized_field": "investing_cash_flow",
+                  "value": "-450.25",
+                  "unit": "USD",
+                  "scale": 0,
+                  "currency": "USD",
+                  "period_start": "2023-10-01",
+                  "period_end": "2024-09-28",
+                  "instant": null,
+                  "context": {
+                    "concept_qname": "us-gaap:investing_cash_flow",
+                    "period_type": "duration",
+                    "start_date": "2023-10-01",
+                    "end_date": "2024-09-28",
+                    "instant": null,
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "dimensions": [],
+                    "entity_scope": "consolidated",
+                    "consolidation_scope": "consolidated",
+                    "context_id": "context-investing_cash_flowFY2024"
+                  },
+                  "security_scope": "issuer",
+                  "as_of": "2024-10-31T00:00:00Z",
+                  "available_at": "2024-10-31T00:00:00Z",
+                  "filed_at": "2024-10-31T00:00:00Z",
+                  "captured_at": "2024-10-31T00:00:00Z",
+                  "accession_number": "0000000001-24-000001",
+                  "filing_version": "0000000001-24-000001",
+                  "is_amendment": false,
+                  "amends_accession": null,
+                  "supersedes_accession": null,
+                  "amendment_scope": null,
+                  "decimals": null,
+                  "taxonomy_version": "us-gaap-2024",
+                  "source": {
+                    "source_url": "https://filings.example.test/0000000001-24-000001",
+                    "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+                    "source_role": "filing",
+                    "captured_at": "2024-10-31T00:00:00Z",
+                    "available_at": "2024-10-31T00:00:00Z",
+                    "filed_at": "2024-10-31T00:00:00Z",
+                    "accession_number": "0000000001-24-000001",
+                    "parser_version": "test-parser-v1",
+                    "taxonomy_version": "us-gaap-2024",
+                    "terms_reference": "synthetic-contract-fixture"
+                  },
+                  "quality": "verified",
+                  "issue_codes": [],
+                  "mapping_decision_id": "mapping-investing_cash_flow",
+                  "mapping_confidence": "high",
+                  "rejected_candidates": [],
+                  "rejected_candidate_reasons": [],
+                  "point_in_time_policy": null,
+                  "selection_reason": null
+                },
+                "snapshot_id": "snapshot-FY2024",
+                "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+                "mapping_digest": "c487748005cabf3ea31b86f5135983bb50594dcd77fa665668c0e5d741084a4f",
+                "mapping_evidence_refs": [
+                  {
+                    "artifact_id": "mapping-investing_cash_flow",
+                    "content_hash": "93d188bd24961b630e487c39f698c24512811365b74494b58a711899546ffd39",
+                    "media_type": "application/json",
+                    "role": "statement-test-evidence"
+                  }
+                ],
+                "cash_basis": null,
+                "selection_reason": "Original annual fact available at cutoff.",
+                "selection_kind": "original",
+                "source_report_period_end": "2024-09-28",
+                "candidate_fact_ids": [
+                  "95338c0e1ed37acf06b3a842d8059cedafa62971ed72a3799ebd783de1d82080"
+                ],
+                "rejected_candidates": [],
+                "quality_status": "verified"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "source_outcomes": [
+      {
+        "kind": "available",
+        "accession_number": "0000000001-23-000001",
+        "available_at": "2023-10-31T00:00:00Z",
+        "report_period_end": "2023-09-30",
+        "outcome_ref": {
+          "artifact_id": "0000000001-23-000001",
+          "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+          "media_type": "application/json",
+          "role": "statement-test-evidence"
+        },
+        "fact_ids": [
+          "1af4078938a3e562a357d7499de85472ced4a6ddc9fc2df3e4359a696a5f9cd3",
+          "2afd3693fd047ce6c8664ab775e415c9fb58bcc24a7f2d95fec09a4208a4af7a",
+          "d088de7d6b97a6b2917a343a39a69b142394269bb95cdb57da76fb923134f578",
+          "44a6f8502d140e81bd2df9583f1418ec883e605da8560bfc7dfa652c97ece512",
+          "15b9ef82d398d14b229124142e51c422203eeaf489abbdc920d8c3a2621d11d3"
+        ]
+      },
+      {
+        "kind": "available",
+        "accession_number": "0000000001-24-000001",
+        "available_at": "2024-10-31T00:00:00Z",
+        "report_period_end": "2024-09-28",
+        "outcome_ref": {
+          "artifact_id": "0000000001-24-000001",
+          "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+          "media_type": "application/json",
+          "role": "statement-test-evidence"
+        },
+        "fact_ids": [
+          "bf4396710935820ffcdb443f9e4732749ec84f10e529e42f9ab16879d4993d76",
+          "13d69ef5aef1ae1c00a2dfe7fd42db76985184c287522fdb6e8b0ffd6dd6f6d3",
+          "7ad7090a7cd70aff3857ef112c288f7952d920bdebbd9496e325d77cc3d39cf4",
+          "c9530b66be34a846690b2ca7fc2dae61ae3b07e5e11e466ab9258bccb5b08564",
+          "95338c0e1ed37acf06b3a842d8059cedafa62971ed72a3799ebd783de1d82080"
+        ]
+      }
+    ],
+    "candidate_evidence": [
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "1af4078938a3e562a357d7499de85472ced4a6ddc9fc2df3e4359a696a5f9cd3",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:revenue",
+          "normalized_field": "revenue",
+          "value": "9007199254740993.125",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "instant": null,
+          "context": {
+            "concept_qname": "us-gaap:revenue",
+            "period_type": "duration",
+            "start_date": "2022-09-25",
+            "end_date": "2023-09-30",
+            "instant": null,
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-revenueFY2023"
+          },
+          "security_scope": "issuer",
+          "as_of": "2023-10-31T00:00:00Z",
+          "available_at": "2023-10-31T00:00:00Z",
+          "filed_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "accession_number": "0000000001-23-000001",
+          "filing_version": "0000000001-23-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-23-000001",
+            "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+            "source_role": "filing",
+            "captured_at": "2023-10-31T00:00:00Z",
+            "available_at": "2023-10-31T00:00:00Z",
+            "filed_at": "2023-10-31T00:00:00Z",
+            "accession_number": "0000000001-23-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-revenue",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-revenue",
+          "source_concept": "us-gaap:revenue",
+          "normalized_field": "revenue",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-23-000001",
+          "uri": "https://filings.example.test/0000000001-23-000001",
+          "role": "filing",
+          "available_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-23-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2023",
+        "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-revenue",
+            "content_hash": "6a33e9c99639d1d07fb1244decbb6b9129fc96c252f3e540b33bbc883990ad08",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "bf4396710935820ffcdb443f9e4732749ec84f10e529e42f9ab16879d4993d76",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:revenue",
+          "normalized_field": "revenue",
+          "value": "9007199254740993.125",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "instant": null,
+          "context": {
+            "concept_qname": "us-gaap:revenue",
+            "period_type": "duration",
+            "start_date": "2023-10-01",
+            "end_date": "2024-09-28",
+            "instant": null,
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-revenueFY2024"
+          },
+          "security_scope": "issuer",
+          "as_of": "2024-10-31T00:00:00Z",
+          "available_at": "2024-10-31T00:00:00Z",
+          "filed_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "accession_number": "0000000001-24-000001",
+          "filing_version": "0000000001-24-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-24-000001",
+            "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+            "source_role": "filing",
+            "captured_at": "2024-10-31T00:00:00Z",
+            "available_at": "2024-10-31T00:00:00Z",
+            "filed_at": "2024-10-31T00:00:00Z",
+            "accession_number": "0000000001-24-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-revenue",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-revenue",
+          "source_concept": "us-gaap:revenue",
+          "normalized_field": "revenue",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-24-000001",
+          "uri": "https://filings.example.test/0000000001-24-000001",
+          "role": "filing",
+          "available_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-24-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2024",
+        "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-revenue",
+            "content_hash": "6a33e9c99639d1d07fb1244decbb6b9129fc96c252f3e540b33bbc883990ad08",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "2afd3693fd047ce6c8664ab775e415c9fb58bcc24a7f2d95fec09a4208a4af7a",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:net_income",
+          "normalized_field": "net_income",
+          "value": "0",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "instant": null,
+          "context": {
+            "concept_qname": "us-gaap:net_income",
+            "period_type": "duration",
+            "start_date": "2022-09-25",
+            "end_date": "2023-09-30",
+            "instant": null,
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-net_incomeFY2023"
+          },
+          "security_scope": "issuer",
+          "as_of": "2023-10-31T00:00:00Z",
+          "available_at": "2023-10-31T00:00:00Z",
+          "filed_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "accession_number": "0000000001-23-000001",
+          "filing_version": "0000000001-23-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-23-000001",
+            "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+            "source_role": "filing",
+            "captured_at": "2023-10-31T00:00:00Z",
+            "available_at": "2023-10-31T00:00:00Z",
+            "filed_at": "2023-10-31T00:00:00Z",
+            "accession_number": "0000000001-23-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-net_income",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-net_income",
+          "source_concept": "us-gaap:net_income",
+          "normalized_field": "net_income",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-23-000001",
+          "uri": "https://filings.example.test/0000000001-23-000001",
+          "role": "filing",
+          "available_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-23-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2023",
+        "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-net_income",
+            "content_hash": "66193578ea1ac7602ad290619500b08566964f947905a5486ec53bfc8d43045c",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "13d69ef5aef1ae1c00a2dfe7fd42db76985184c287522fdb6e8b0ffd6dd6f6d3",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:net_income",
+          "normalized_field": "net_income",
+          "value": "0",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "instant": null,
+          "context": {
+            "concept_qname": "us-gaap:net_income",
+            "period_type": "duration",
+            "start_date": "2023-10-01",
+            "end_date": "2024-09-28",
+            "instant": null,
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-net_incomeFY2024"
+          },
+          "security_scope": "issuer",
+          "as_of": "2024-10-31T00:00:00Z",
+          "available_at": "2024-10-31T00:00:00Z",
+          "filed_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "accession_number": "0000000001-24-000001",
+          "filing_version": "0000000001-24-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-24-000001",
+            "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+            "source_role": "filing",
+            "captured_at": "2024-10-31T00:00:00Z",
+            "available_at": "2024-10-31T00:00:00Z",
+            "filed_at": "2024-10-31T00:00:00Z",
+            "accession_number": "0000000001-24-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-net_income",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-net_income",
+          "source_concept": "us-gaap:net_income",
+          "normalized_field": "net_income",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-24-000001",
+          "uri": "https://filings.example.test/0000000001-24-000001",
+          "role": "filing",
+          "available_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-24-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2024",
+        "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-net_income",
+            "content_hash": "66193578ea1ac7602ad290619500b08566964f947905a5486ec53bfc8d43045c",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "d088de7d6b97a6b2917a343a39a69b142394269bb95cdb57da76fb923134f578",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:total_assets",
+          "normalized_field": "total_assets",
+          "value": "1000",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": null,
+          "period_end": "2023-09-30",
+          "instant": "2023-09-30",
+          "context": {
+            "concept_qname": "us-gaap:total_assets",
+            "period_type": "instant",
+            "start_date": null,
+            "end_date": null,
+            "instant": "2023-09-30",
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-total_assetsFY2023"
+          },
+          "security_scope": "issuer",
+          "as_of": "2023-10-31T00:00:00Z",
+          "available_at": "2023-10-31T00:00:00Z",
+          "filed_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "accession_number": "0000000001-23-000001",
+          "filing_version": "0000000001-23-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-23-000001",
+            "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+            "source_role": "filing",
+            "captured_at": "2023-10-31T00:00:00Z",
+            "available_at": "2023-10-31T00:00:00Z",
+            "filed_at": "2023-10-31T00:00:00Z",
+            "accession_number": "0000000001-23-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-total_assets",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-total_assets",
+          "source_concept": "us-gaap:total_assets",
+          "normalized_field": "total_assets",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-23-000001",
+          "uri": "https://filings.example.test/0000000001-23-000001",
+          "role": "filing",
+          "available_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-23-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2023",
+        "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-total_assets",
+            "content_hash": "416024eaceecbeadae1992589a326d075b465850519661e12b7605f07d99b54c",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "7ad7090a7cd70aff3857ef112c288f7952d920bdebbd9496e325d77cc3d39cf4",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:total_assets",
+          "normalized_field": "total_assets",
+          "value": "1000",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": null,
+          "period_end": "2024-09-28",
+          "instant": "2024-09-28",
+          "context": {
+            "concept_qname": "us-gaap:total_assets",
+            "period_type": "instant",
+            "start_date": null,
+            "end_date": null,
+            "instant": "2024-09-28",
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-total_assetsFY2024"
+          },
+          "security_scope": "issuer",
+          "as_of": "2024-10-31T00:00:00Z",
+          "available_at": "2024-10-31T00:00:00Z",
+          "filed_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "accession_number": "0000000001-24-000001",
+          "filing_version": "0000000001-24-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-24-000001",
+            "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+            "source_role": "filing",
+            "captured_at": "2024-10-31T00:00:00Z",
+            "available_at": "2024-10-31T00:00:00Z",
+            "filed_at": "2024-10-31T00:00:00Z",
+            "accession_number": "0000000001-24-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-total_assets",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-total_assets",
+          "source_concept": "us-gaap:total_assets",
+          "normalized_field": "total_assets",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-24-000001",
+          "uri": "https://filings.example.test/0000000001-24-000001",
+          "role": "filing",
+          "available_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-24-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2024",
+        "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-total_assets",
+            "content_hash": "416024eaceecbeadae1992589a326d075b465850519661e12b7605f07d99b54c",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "44a6f8502d140e81bd2df9583f1418ec883e605da8560bfc7dfa652c97ece512",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:operating_cash_flow",
+          "normalized_field": "operating_cash_flow",
+          "value": "1000",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "instant": null,
+          "context": {
+            "concept_qname": "us-gaap:operating_cash_flow",
+            "period_type": "duration",
+            "start_date": "2022-09-25",
+            "end_date": "2023-09-30",
+            "instant": null,
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-operating_cash_flowFY2023"
+          },
+          "security_scope": "issuer",
+          "as_of": "2023-10-31T00:00:00Z",
+          "available_at": "2023-10-31T00:00:00Z",
+          "filed_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "accession_number": "0000000001-23-000001",
+          "filing_version": "0000000001-23-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-23-000001",
+            "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+            "source_role": "filing",
+            "captured_at": "2023-10-31T00:00:00Z",
+            "available_at": "2023-10-31T00:00:00Z",
+            "filed_at": "2023-10-31T00:00:00Z",
+            "accession_number": "0000000001-23-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-operating_cash_flow",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-operating_cash_flow",
+          "source_concept": "us-gaap:operating_cash_flow",
+          "normalized_field": "operating_cash_flow",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-23-000001",
+          "uri": "https://filings.example.test/0000000001-23-000001",
+          "role": "filing",
+          "available_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-23-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2023",
+        "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-operating_cash_flow",
+            "content_hash": "aa803b2f5006e8c38bb7b672b981b2c23b09090aaf7e9477a4647dd2562767ad",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "c9530b66be34a846690b2ca7fc2dae61ae3b07e5e11e466ab9258bccb5b08564",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:operating_cash_flow",
+          "normalized_field": "operating_cash_flow",
+          "value": "1000",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "instant": null,
+          "context": {
+            "concept_qname": "us-gaap:operating_cash_flow",
+            "period_type": "duration",
+            "start_date": "2023-10-01",
+            "end_date": "2024-09-28",
+            "instant": null,
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-operating_cash_flowFY2024"
+          },
+          "security_scope": "issuer",
+          "as_of": "2024-10-31T00:00:00Z",
+          "available_at": "2024-10-31T00:00:00Z",
+          "filed_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "accession_number": "0000000001-24-000001",
+          "filing_version": "0000000001-24-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-24-000001",
+            "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+            "source_role": "filing",
+            "captured_at": "2024-10-31T00:00:00Z",
+            "available_at": "2024-10-31T00:00:00Z",
+            "filed_at": "2024-10-31T00:00:00Z",
+            "accession_number": "0000000001-24-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-operating_cash_flow",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-operating_cash_flow",
+          "source_concept": "us-gaap:operating_cash_flow",
+          "normalized_field": "operating_cash_flow",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-24-000001",
+          "uri": "https://filings.example.test/0000000001-24-000001",
+          "role": "filing",
+          "available_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-24-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2024",
+        "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-operating_cash_flow",
+            "content_hash": "aa803b2f5006e8c38bb7b672b981b2c23b09090aaf7e9477a4647dd2562767ad",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "15b9ef82d398d14b229124142e51c422203eeaf489abbdc920d8c3a2621d11d3",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:investing_cash_flow",
+          "normalized_field": "investing_cash_flow",
+          "value": "-450.25",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": "2022-09-25",
+          "period_end": "2023-09-30",
+          "instant": null,
+          "context": {
+            "concept_qname": "us-gaap:investing_cash_flow",
+            "period_type": "duration",
+            "start_date": "2022-09-25",
+            "end_date": "2023-09-30",
+            "instant": null,
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-investing_cash_flowFY2023"
+          },
+          "security_scope": "issuer",
+          "as_of": "2023-10-31T00:00:00Z",
+          "available_at": "2023-10-31T00:00:00Z",
+          "filed_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "accession_number": "0000000001-23-000001",
+          "filing_version": "0000000001-23-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-23-000001",
+            "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+            "source_role": "filing",
+            "captured_at": "2023-10-31T00:00:00Z",
+            "available_at": "2023-10-31T00:00:00Z",
+            "filed_at": "2023-10-31T00:00:00Z",
+            "accession_number": "0000000001-23-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-investing_cash_flow",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-investing_cash_flow",
+          "source_concept": "us-gaap:investing_cash_flow",
+          "normalized_field": "investing_cash_flow",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-23-000001",
+          "uri": "https://filings.example.test/0000000001-23-000001",
+          "role": "filing",
+          "available_at": "2023-10-31T00:00:00Z",
+          "captured_at": "2023-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "61f1fc07178a3c98232a70fab28f1ad4be75344395aa32881e1eb780f48e2f74",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-23-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2023",
+        "snapshot_manifest_digest": "6e29e1702672ee79c98285146efe231fc1160ba590b9d83d7fad37f2680e23c1",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-investing_cash_flow",
+            "content_hash": "93d188bd24961b630e487c39f698c24512811365b74494b58a711899546ffd39",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      },
+      {
+        "fact": {
+          "contract_version": "fundamental.v1",
+          "fact_id": "95338c0e1ed37acf06b3a842d8059cedafa62971ed72a3799ebd783de1d82080",
+          "issuer_id": "0000000001",
+          "security_id": null,
+          "concept": "us-gaap:investing_cash_flow",
+          "normalized_field": "investing_cash_flow",
+          "value": "-450.25",
+          "unit": "USD",
+          "scale": 0,
+          "currency": "USD",
+          "period_start": "2023-10-01",
+          "period_end": "2024-09-28",
+          "instant": null,
+          "context": {
+            "concept_qname": "us-gaap:investing_cash_flow",
+            "period_type": "duration",
+            "start_date": "2023-10-01",
+            "end_date": "2024-09-28",
+            "instant": null,
+            "unit_qname": "iso4217:USD",
+            "measure": "iso4217:USD",
+            "dimensions": [],
+            "entity_scope": "consolidated",
+            "consolidation_scope": "consolidated",
+            "context_id": "context-investing_cash_flowFY2024"
+          },
+          "security_scope": "issuer",
+          "as_of": "2024-10-31T00:00:00Z",
+          "available_at": "2024-10-31T00:00:00Z",
+          "filed_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "accession_number": "0000000001-24-000001",
+          "filing_version": "0000000001-24-000001",
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "decimals": null,
+          "taxonomy_version": "us-gaap-2024",
+          "source": {
+            "source_url": "https://filings.example.test/0000000001-24-000001",
+            "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+            "source_role": "filing",
+            "captured_at": "2024-10-31T00:00:00Z",
+            "available_at": "2024-10-31T00:00:00Z",
+            "filed_at": "2024-10-31T00:00:00Z",
+            "accession_number": "0000000001-24-000001",
+            "parser_version": "test-parser-v1",
+            "taxonomy_version": "us-gaap-2024",
+            "terms_reference": "synthetic-contract-fixture"
+          },
+          "quality": "verified",
+          "issue_codes": [],
+          "mapping_decision_id": "mapping-investing_cash_flow",
+          "mapping_confidence": "high",
+          "rejected_candidates": [],
+          "rejected_candidate_reasons": [],
+          "point_in_time_policy": null,
+          "selection_reason": null
+        },
+        "mapping": {
+          "contract_version": "fundamental.v1",
+          "decision_id": "mapping-investing_cash_flow",
+          "source_concept": "us-gaap:investing_cash_flow",
+          "normalized_field": "investing_cash_flow",
+          "mapping_version": "synthetic-mapping-v1",
+          "anchor_concept": null,
+          "confidence": "high",
+          "evidence_refs": [],
+          "reviewer": null,
+          "reviewed_at": null,
+          "status": "approved"
+        },
+        "source": {
+          "source_id": "0000000001-24-000001",
+          "uri": "https://filings.example.test/0000000001-24-000001",
+          "role": "filing",
+          "available_at": "2024-10-31T00:00:00Z",
+          "captured_at": "2024-10-31T00:00:00Z",
+          "publication_at": null,
+          "http_status": 200,
+          "media_type": "application/xhtml+xml",
+          "terms_reference": "synthetic-contract-fixture",
+          "content_hash": "dce2f4295fc0396a84822ec1b489f415262bec648299ae70b327a6768bc5a074",
+          "parser_input_hash": null,
+          "parser_version": "test-parser-v1",
+          "accession_number": "0000000001-24-000001",
+          "form": null,
+          "filing_date": null,
+          "filed_at": null,
+          "filing_version": null,
+          "is_amendment": false,
+          "amends_accession": null,
+          "supersedes_accession": null,
+          "amendment_scope": null,
+          "taxonomy_manifest_id": null,
+          "response_headers": [],
+          "declared_size": null,
+          "received_size": null,
+          "point_in_time_relevant": true
+        },
+        "snapshot_id": "snapshot-FY2024",
+        "snapshot_manifest_digest": "67fd40c2c28710860942155f23dc546726705b99b21ffa6473dadddca5c1e882",
+        "mapping_evidence_refs": [
+          {
+            "artifact_id": "mapping-investing_cash_flow",
+            "content_hash": "93d188bd24961b630e487c39f698c24512811365b74494b58a711899546ffd39",
+            "media_type": "application/json",
+            "role": "statement-test-evidence"
+          }
+        ],
+        "cash_basis": null
+      }
+    ],
+    "coverage": [
+      {
+        "period_id": "22c61e4c4c6f08c6526998e7c1ca9b5b610fffec5dd2b597a417c7b6635fe29c",
+        "statement": "income_statement",
+        "fiscal_label": "FY2023",
+        "reported_rows": 2,
+        "declared_rows": 2,
+        "unavailable_row_ids": []
+      },
+      {
+        "period_id": "f4710be549b9825f354ac098799bbfd4e2eecc861716eb82f8a34975c8d3fb29",
+        "statement": "income_statement",
+        "fiscal_label": "FY2024",
+        "reported_rows": 2,
+        "declared_rows": 2,
+        "unavailable_row_ids": []
+      },
+      {
+        "period_id": "c1fd766fb80f028e648b7ecac851c0bad58a65bcc5a6504c1e2ee6125f23cb4f",
+        "statement": "balance_sheet",
+        "fiscal_label": "FY2023",
+        "reported_rows": 1,
+        "declared_rows": 2,
+        "unavailable_row_ids": [
+          "inventory"
+        ]
+      },
+      {
+        "period_id": "fb603b0083db5e58a8b0227cb5e2b4137aada3636722a2f7a02b6d9a0079ed54",
+        "statement": "balance_sheet",
+        "fiscal_label": "FY2024",
+        "reported_rows": 1,
+        "declared_rows": 2,
+        "unavailable_row_ids": [
+          "inventory"
+        ]
+      },
+      {
+        "period_id": "f52a94ab914e6edfdf2d9c8c3aaf905dd1e14fa9220e34c59a931db2636f84be",
+        "statement": "cash_flow",
+        "fiscal_label": "FY2023",
+        "reported_rows": 2,
+        "declared_rows": 2,
+        "unavailable_row_ids": []
+      },
+      {
+        "period_id": "42db10f79132d48f0abba1f167cd2df673a702bcc78c09a95dcb06cc43e643e9",
+        "statement": "cash_flow",
+        "fiscal_label": "FY2024",
+        "reported_rows": 2,
+        "declared_rows": 2,
+        "unavailable_row_ids": []
+      }
+    ],
+    "comparability": [
+      {
+        "earlier_period_id": "22c61e4c4c6f08c6526998e7c1ca9b5b610fffec5dd2b597a417c7b6635fe29c",
+        "later_period_id": "f4710be549b9825f354ac098799bbfd4e2eecc861716eb82f8a34975c8d3fb29",
+        "status": "limited",
+        "issue_codes": [
+          "ANNUAL_DURATION_DIFFERENT"
+        ],
+        "affected_row_ids": []
+      },
+      {
+        "earlier_period_id": "c1fd766fb80f028e648b7ecac851c0bad58a65bcc5a6504c1e2ee6125f23cb4f",
+        "later_period_id": "fb603b0083db5e58a8b0227cb5e2b4137aada3636722a2f7a02b6d9a0079ed54",
+        "status": "limited",
+        "issue_codes": [
+          "ANNUAL_DURATION_DIFFERENT"
+        ],
+        "affected_row_ids": []
+      },
+      {
+        "earlier_period_id": "f52a94ab914e6edfdf2d9c8c3aaf905dd1e14fa9220e34c59a931db2636f84be",
+        "later_period_id": "42db10f79132d48f0abba1f167cd2df673a702bcc78c09a95dcb06cc43e643e9",
+        "status": "limited",
+        "issue_codes": [
+          "ANNUAL_DURATION_DIFFERENT"
+        ],
+        "affected_row_ids": []
+      }
+    ],
+    "reconciliations": [
+      {
+        "statement": "income_statement",
+        "period_id": "22c61e4c4c6f08c6526998e7c1ca9b5b610fffec5dd2b597a417c7b6635fe29c",
+        "check_id": "test-reconciliation",
+        "status": "unresolved",
+        "severity": "warning",
+        "expression": "Service supplied reconciliation evidence",
+        "input_fact_ids": [],
+        "difference": null,
+        "tolerance": null,
+        "issue_codes": [
+          "INPUT_UNAVAILABLE"
+        ],
+        "policy_version": "reported-decimals-half-unit-sum-v1"
+      },
+      {
+        "statement": "income_statement",
+        "period_id": "f4710be549b9825f354ac098799bbfd4e2eecc861716eb82f8a34975c8d3fb29",
+        "check_id": "test-reconciliation",
+        "status": "unresolved",
+        "severity": "warning",
+        "expression": "Service supplied reconciliation evidence",
+        "input_fact_ids": [],
+        "difference": null,
+        "tolerance": null,
+        "issue_codes": [
+          "INPUT_UNAVAILABLE"
+        ],
+        "policy_version": "reported-decimals-half-unit-sum-v1"
+      },
+      {
+        "statement": "balance_sheet",
+        "period_id": "c1fd766fb80f028e648b7ecac851c0bad58a65bcc5a6504c1e2ee6125f23cb4f",
+        "check_id": "test-reconciliation",
+        "status": "unresolved",
+        "severity": "warning",
+        "expression": "Service supplied reconciliation evidence",
+        "input_fact_ids": [],
+        "difference": null,
+        "tolerance": null,
+        "issue_codes": [
+          "INPUT_UNAVAILABLE"
+        ],
+        "policy_version": "reported-decimals-half-unit-sum-v1"
+      },
+      {
+        "statement": "balance_sheet",
+        "period_id": "fb603b0083db5e58a8b0227cb5e2b4137aada3636722a2f7a02b6d9a0079ed54",
+        "check_id": "test-reconciliation",
+        "status": "unresolved",
+        "severity": "warning",
+        "expression": "Service supplied reconciliation evidence",
+        "input_fact_ids": [],
+        "difference": null,
+        "tolerance": null,
+        "issue_codes": [
+          "INPUT_UNAVAILABLE"
+        ],
+        "policy_version": "reported-decimals-half-unit-sum-v1"
+      },
+      {
+        "statement": "cash_flow",
+        "period_id": "f52a94ab914e6edfdf2d9c8c3aaf905dd1e14fa9220e34c59a931db2636f84be",
+        "check_id": "test-reconciliation",
+        "status": "unresolved",
+        "severity": "warning",
+        "expression": "Service supplied reconciliation evidence",
+        "input_fact_ids": [],
+        "difference": null,
+        "tolerance": null,
+        "issue_codes": [
+          "INPUT_UNAVAILABLE"
+        ],
+        "policy_version": "reported-decimals-half-unit-sum-v1"
+      },
+      {
+        "statement": "cash_flow",
+        "period_id": "42db10f79132d48f0abba1f167cd2df673a702bcc78c09a95dcb06cc43e643e9",
+        "check_id": "test-reconciliation",
+        "status": "unresolved",
+        "severity": "warning",
+        "expression": "Service supplied reconciliation evidence",
+        "input_fact_ids": [],
+        "difference": null,
+        "tolerance": null,
+        "issue_codes": [
+          "INPUT_UNAVAILABLE"
+        ],
+        "policy_version": "reported-decimals-half-unit-sum-v1"
+      }
+    ],
+    "quality_status": "degraded",
+    "valuation_eligibility": "not_evaluated"
+  }
+}

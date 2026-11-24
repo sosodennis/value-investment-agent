@@ -6,7 +6,7 @@ import hashlib
 import json
 import platform
 import re
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
@@ -19,11 +19,20 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
 from .annual_discovery_service import AnnualDiscovery, AnnualDiscoveryArtifacts
-from .dqc_rulesets import DqcRulesetCatalogV1
+from .dqc_rulesets import DQC_V18_PROFILE_ID, DqcRulesetCatalogV1
 from .dqc_applicability import dqc_applicability_policy_digest
 from .automatic_source_mapping import (
     AutomaticSecIngestionRequestV1,
+    AutomaticStatementSecIngestionRequestV1,
+    AutomaticSourceRequestV1,
     AutomaticSourceMappingAuthority,
+    original_selection_at,
+)
+from .automatic_mapping_batch import (
+    AutomaticMappingBatchDecisionV1,
+    AutomaticMappingBatchRequestV1,
+    StatementMappingBatchDecisionV1,
+    StatementMappingBatchRequestV1,
 )
 from .contracts import (
     IdentityResolutionRequestV1,
@@ -43,6 +52,8 @@ from .data_releases import ArtifactRefV1, DataReleaseError
 from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .historical_dqc import historical_profile
 from .ingestion import SecIngestionService
+from .ingestion_mapping import ValidatedOriginalV1
+from .mapping_input_storage import read_mapping_batch_input
 from .parser_actions import postgres_parser_actions
 from .parser_action_identity import ParserBuildChecks
 from .inline_xbrl import (
@@ -64,6 +75,7 @@ from .original_preparation import (
     OriginalValidationEvidenceV1,
     OriginalValidationRequestV1,
     OriginalValidationRuntimeV1,
+    StatementOriginalPreparationRequestV1,
 )
 from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
 from .public_acquisition import read_public_source_acquisition
@@ -125,10 +137,17 @@ class SecAcquisitionSettings:
     historical_dqc_dir: Path | None = None
     historical_dqc_sha256: str | None = None
     dqc_ruleset_catalog: DqcRulesetCatalogV1 | None = None
+    dqc_v18_ruleset_catalog: DqcRulesetCatalogV1 | None = None
 
     def __post_init__(self) -> None:
         if self.dqc_ruleset_catalog is not None:
+            if self.dqc_ruleset_catalog.dqc_version != "v31.0.3":
+                raise ValueError("modern SEC catalog requires DQC v31.0.3")
             self.dqc_ruleset_catalog.verify_files()
+        if self.dqc_v18_ruleset_catalog is not None:
+            if self.dqc_v18_ruleset_catalog.dqc_version != "v18":
+                raise ValueError("V18 SEC catalog requires DQC v18")
+            self.dqc_v18_ruleset_catalog.verify_files()
         if (self.historical_dqc_dir is None) != (self.historical_dqc_sha256 is None):
             raise ValueError(
                 "historical DQC source and hash must be configured together"
@@ -228,6 +247,13 @@ class _OriginalPackage:
     dts_filenames: tuple[str, ...]
     archive_filename: str
     inline_documents: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _PreparedFiling:
+    filing: _SelectedFiling
+    validated: ValidatedOriginalV1
+    sources: tuple[CapturedSource, ...]
 
 
 class SecIdentityResolutionUseCase:
@@ -526,6 +552,19 @@ class SecAcquisitionUseCase:
 
     def _profile_for_id(self, profile_id: str) -> ArelleValidationProfileV1:
         historical = historical_profile(profile_id)
+        v18 = profile_id == DQC_V18_PROFILE_ID
+        catalog = (
+            self.settings.dqc_v18_ruleset_catalog
+            if v18
+            else self.settings.dqc_ruleset_catalog
+        )
+        if v18 and catalog is None:
+            raise ServiceError(
+                "VALIDATION_RESOURCES_UNAVAILABLE",
+                "full DQC V18 catalog is not configured",
+                status_code=503,
+                retryable=False,
+            )
         if historical and self.settings.historical_dqc_dir is None:
             raise ServiceError(
                 "VALIDATION_RESOURCES_UNAVAILABLE",
@@ -533,22 +572,28 @@ class SecAcquisitionUseCase:
                 status_code=503,
                 retryable=False,
             )
+        default_binding = catalog.bindings[0] if v18 and catalog is not None else None
+        dqc_version = (
+            historical.dqc_version if historical else "v18" if v18 else "v31.0.3"
+        )
         return ArelleValidationProfileV1(
             profile_id=profile_id,
             validation_mode="sec-efm-dqc",
             edgar_plugin_dir=self.settings.edgar_plugin_dir,
             xule_plugin_dir=self.settings.xule_plugin_dir,
-            dqc_ruleset_path=self.settings.dqc_ruleset_path,
+            dqc_ruleset_path=default_binding.path
+            if default_binding is not None
+            else self.settings.dqc_ruleset_path,
             edgar_plugin_sha256=self.settings.edgar_plugin_sha256,
             xule_plugin_sha256=self.settings.xule_plugin_sha256,
-            dqc_ruleset_sha256=self.settings.dqc_ruleset_sha256,
-            dqc_ruleset_catalog=self.settings.dqc_ruleset_catalog
-            if not historical
-            else None,
-            dqc_version=historical.dqc_version if historical else "v31.0.3",
+            dqc_ruleset_sha256=default_binding.sha256
+            if default_binding is not None
+            else self.settings.dqc_ruleset_sha256,
+            dqc_ruleset_catalog=catalog if not historical else None,
+            dqc_version=dqc_version,
             dqc_applicability_digest=None
             if historical
-            else dqc_applicability_policy_digest(),
+            else dqc_applicability_policy_digest(dqc_version),
             historical_dqc_dir=self.settings.historical_dqc_dir if historical else None,
             historical_dqc_sha256=self.settings.historical_dqc_sha256
             if historical
@@ -567,7 +612,10 @@ class SecAcquisitionUseCase:
             "supported_filing_years": self.settings.supported_filing_years,
             "supported_filing_forms": self.settings.supported_filing_forms,
         }
-        if isinstance(request, AutomaticSecIngestionRequestV1):
+        if isinstance(
+            request,
+            (AutomaticSecIngestionRequestV1, AutomaticStatementSecIngestionRequestV1),
+        ):
             payload["automatic_mapping_authority"] = (
                 self._automatic_authority().runtime_pin(request)
             )
@@ -598,7 +646,9 @@ class SecAcquisitionUseCase:
         *,
         declared_source_revision: str,
         validation_profile_id: Literal[
-            "sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"
+            "sec-efm-us-dqc-v31.0.3",
+            "sec-efm-us-dqc-v18-xule30055-build-v1",
+            "sec-efm-us-dqc-v1.0.0-historical",
         ] = "sec-efm-us-dqc-v31.0.3",
     ) -> OriginalValidationRuntimeV1:
         profile = self._profile_for_id(validation_profile_id)
@@ -797,7 +847,7 @@ class SecAcquisitionUseCase:
             is_inline_xbrl=annual.is_inline_xbrl,
         )
 
-    def _original_preparation(self) -> OriginalPreparation:
+    def original_preparation(self) -> OriginalPreparation:
         if self.capture_store is None:
             raise SnapshotError("SEC_CAPTURE_STORE_UNAVAILABLE", "evidence unavailable")
         return OriginalPreparation(
@@ -819,7 +869,7 @@ class SecAcquisitionUseCase:
         if self.capture_store is None:
             yield
             return
-        scope = OriginalPreparationReads(self._original_preparation())
+        scope = OriginalPreparationReads(self.original_preparation())
         token = self._original_reads.set(scope)
         try:
             yield
@@ -834,9 +884,12 @@ class SecAcquisitionUseCase:
             scope.verify()
 
     def _prepared_filing(
-        self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
-    ) -> _SelectedFiling | None:
-        if not isinstance(request, AutomaticSecIngestionRequestV1):
+        self, request: SecIngestionRequestV1 | AutomaticSourceRequestV1
+    ) -> _PreparedFiling | None:
+        if not isinstance(
+            request,
+            (AutomaticSecIngestionRequestV1, AutomaticStatementSecIngestionRequestV1),
+        ):
             return None
         reference = request.original_preparation
         if reference is None:
@@ -847,11 +900,11 @@ class SecAcquisitionUseCase:
                 "original evidence store is unavailable",
             )
         scope = self._original_reads.get()
-        originals = scope.owner if scope is not None else self._original_preparation()
+        originals = scope.owner if scope is not None else self.original_preparation()
         if originals.reference(reference.artifact_id, reference.role) != reference:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "reference differs")
         cutoff = request.public_source_cutoff
-        selection_at = request.valuation_timestamp
+        selection_at = original_selection_at(request)
         if cutoff is not None:
             for capture in cutoff.captures:
                 if (
@@ -865,11 +918,8 @@ class SecAcquisitionUseCase:
                     raise SnapshotError(
                         "CURRENT_CAPTURE_MISMATCH", "current capture differs"
                     )
-            selection_at = cutoff.requested_at
         if scope is None:
-            # A direct API acquisition is its own independent operation.
-            with self.evidence_operation():
-                return self._prepared_filing(request)
+            raise RuntimeError("prepared acquisition requires an evidence operation")
         prepared, item, validation = scope.filing(
             reference.artifact_id, request.filing.accession_number or ""
         )
@@ -877,10 +927,26 @@ class SecAcquisitionUseCase:
             declared_source_revision=request.source_revision,
             validation_profile_id=request.validation_profile_id,
         )
+        if isinstance(
+            prepared.request, StatementOriginalPreparationRequestV1
+        ) and not isinstance(request, AutomaticStatementSecIngestionRequestV1):
+            raise SnapshotError(
+                "ORIGINAL_PREPARATION_PURPOSE_MISMATCH",
+                "statement original preparation cannot authorize valuation ingestion",
+            )
         if (
-            prepared.issue_codes
-            or prepared.retryable
-            or prepared.request.runtime != runtime
+            (
+                prepared.issue_codes
+                and not isinstance(request, AutomaticStatementSecIngestionRequestV1)
+            )
+            or item.issue_codes
+            or (
+                prepared.retryable
+                and not isinstance(request, AutomaticStatementSecIngestionRequestV1)
+            )
+            or validation.retryable
+            or prepared.request.runtime_for(request.filing.accession_number or "")
+            != runtime
             or request.parser_version != runtime.arelle_version
             or request.taxonomy_manifest_id != runtime.taxonomy_manifest_id
             or request.taxonomy_version != runtime.taxonomy_version
@@ -898,33 +964,168 @@ class SecAcquisitionUseCase:
             or original_history_identity_key(item.identity, policy)
             != original_history_identity_key(request.identity, policy)
             or original.filing.filing_date
-            < request.valuation_timestamp.date()
-            - timedelta(days=request.filing.lookback_days)
+            < selection_at.date() - timedelta(days=request.filing.lookback_days)
         ):
             raise SnapshotError(
                 "ORIGINAL_PREPARATION_INVALID", "pinned original scope differs"
             )
-        return self._catalog_filing(original)
+        if (
+            validation.original is None
+            or validation.integrity is None
+            or validation.primary_media_type is None
+        ):
+            raise SnapshotError(
+                "ORIGINAL_PREPARATION_INVALID", "prepared validation is incomplete"
+            )
+        validated = ValidatedOriginalV1(
+            identity=request.identity,
+            original=validation.original,
+            integrity=validation.integrity,
+            captured_sources=validation.captured_sources,
+            primary_media_type=validation.primary_media_type,
+        )
+        return _PreparedFiling(
+            filing=self._catalog_filing(original),
+            validated=validated,
+            sources=self._restore_original_sources(
+                validated, runtime, filing_date=original.filing.filing_date
+            ),
+        )
+
+    def _restore_original_sources(
+        self,
+        validated: ValidatedOriginalV1,
+        runtime: OriginalValidationRuntimeV1,
+        *,
+        filing_date: date,
+    ) -> tuple[CapturedSource, ...]:
+        sources = []
+        by_uri = {item.uri: item for item in validated.captured_sources}
+        for retained in validated.captured_sources:
+            content = self.content_store.get(
+                retained.content_hash, media_type=retained.media_type
+            )
+            if hashlib.sha256(content).hexdigest() != retained.content_hash:
+                raise SnapshotError(
+                    "ORIGINAL_PREPARATION_INVALID", "retained source bytes differ"
+                )
+            response = (
+                by_uri[retained.uri.split("#member=", 1)[0]]
+                if retained.source_id == "sec-taxonomy"
+                else retained
+            )
+            response_content = (
+                self.content_store.get(
+                    response.content_hash, media_type=response.media_type
+                )
+                if response is not retained
+                else content
+            )
+            if len(response_content) != retained.received_size:
+                raise SnapshotError(
+                    "ORIGINAL_PREPARATION_INVALID", "retained response size differs"
+                )
+            sources.append(
+                CapturedSource(
+                    source_id=retained.source_id,
+                    uri=retained.uri,
+                    role=retained.role,
+                    content=content,
+                    media_type=retained.media_type,
+                    http_status=retained.http_status,
+                    available_at=retained.available_at,
+                    captured_at=retained.captured_at,
+                    publication_at=retained.publication_at,
+                    accession_number=retained.accession_number,
+                    form=retained.form,
+                    filing_date=(
+                        filing_date
+                        if retained.source_id == "sec-filing-submission"
+                        else None
+                    ),
+                    filed_at=retained.filed_at,
+                    filing_version=retained.accession_number,
+                    taxonomy_manifest_id=(
+                        runtime.taxonomy_manifest_id
+                        if retained.source_id == "sec-taxonomy"
+                        else None
+                    ),
+                    response_headers=retained.response_headers,
+                    declared_size=retained.declared_size,
+                    received_size=retained.received_size,
+                )
+            )
+        return tuple(sources)
 
     def retained_acquisition(
-        self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
+        self, request: SecIngestionRequestV1 | AutomaticSourceRequestV1
     ) -> SecIngestionResponseV1 | None:
         """Read a completed exact-runtime acquisition without provider/parser I/O."""
+        if self.capture_store is not None and self._original_reads.get() is None:
+            with self.evidence_operation():
+                return self._retained_acquisition(request)
+        return self._retained_acquisition(request)
+
+    def _retained_acquisition(
+        self, request: SecIngestionRequestV1 | AutomaticSourceRequestV1
+    ) -> SecIngestionResponseV1 | None:
         payload = self._runtime_key_payload(request, self._validation_profile(request))
-        self._prepared_filing(request)
-        return self.metadata.get_sec_ingestion(
+        prepared = self._prepared_filing(request)
+        result = self.metadata.get_sec_ingestion(
             sha256_digest(payload), expected_acquisition_payload=payload
         )
+        self._verify_retained_original(result, prepared, request)
+        self.verify_original_boundary()
+        return result
 
     def execute(
         self,
-        request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1,
+        request: SecIngestionRequestV1 | AutomaticSourceRequestV1,
         *,
         caller_principal: str,
         organization_id: str,
         correlation_id: str,
         deadline_at: datetime,
         audit_reuse: bool = True,
+    ) -> SecIngestionResponseV1:
+        try:
+            if organization_id not in self.authorized_organizations:
+                return self._execute(
+                    request,
+                    caller_principal=caller_principal,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    deadline_at=deadline_at,
+                    audit_reuse=audit_reuse,
+                )
+            operation = (
+                self.evidence_operation()
+                if self._original_reads.get() is None
+                else nullcontext()
+            )
+            with operation:
+                return self._execute(
+                    request,
+                    caller_principal=caller_principal,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    deadline_at=deadline_at,
+                    audit_reuse=audit_reuse,
+                )
+        except SnapshotError as error:
+            raise ServiceError(
+                error.code, error.message, status_code=422, retryable=error.retryable
+            ) from error
+
+    def _execute(
+        self,
+        request: SecIngestionRequestV1 | AutomaticSourceRequestV1,
+        *,
+        caller_principal: str,
+        organization_id: str,
+        correlation_id: str,
+        deadline_at: datetime,
+        audit_reuse: bool,
     ) -> SecIngestionResponseV1:
         validation_profile = self._validation_profile(request)
         key_payload = self._runtime_key_payload(request, validation_profile)
@@ -980,6 +1181,7 @@ class SecAcquisitionUseCase:
             acquisition_key, expected_acquisition_payload=key_payload
         )
         if existing is not None:
+            self._verify_retained_original(existing, prepared_filing, request)
             return self._reuse_response(
                 existing,
                 acquisition_key=acquisition_key,
@@ -1011,6 +1213,7 @@ class SecAcquisitionUseCase:
                 expected_acquisition_payload=key_payload,
             )
             if existing is not None:
+                self._verify_retained_original(existing, prepared_filing, request)
                 return self._reuse_response(
                     existing,
                     acquisition_key=acquisition_key,
@@ -1132,6 +1335,7 @@ class SecAcquisitionUseCase:
         correlation_id: str,
         audit_reuse: bool,
     ) -> SecIngestionResponseV1:
+        self.verify_original_boundary()
         if audit_reuse:
             self.metadata.publish_source_audit(
                 acquisition_key=acquisition_key,
@@ -1151,6 +1355,67 @@ class SecAcquisitionUseCase:
             }
         )
 
+    def _verify_retained_original(
+        self,
+        result: SecIngestionResponseV1 | None,
+        prepared: _PreparedFiling | None,
+        request: SecIngestionRequestV1 | AutomaticSourceRequestV1,
+    ) -> None:
+        if result is None or prepared is None:
+            return
+        if self.capture_store is None or result.mapping_evidence_ref is None:
+            raise SnapshotError(
+                "ORIGINAL_PREPARATION_INVALID", "retained original mapping is absent"
+            )
+        record = self.capture_store.get(result.mapping_evidence_ref)
+        raw = self.capture_store.read(record.artifact_id)
+        if (
+            record.status != "valid"
+            or record.retention != "evidence"
+            or hashlib.sha256(raw).hexdigest() != record.content_hash
+        ):
+            raise SnapshotError(
+                "ORIGINAL_PREPARATION_INVALID", "retained original mapping differs"
+            )
+        batch_input: StatementMappingBatchRequestV1 | AutomaticMappingBatchRequestV1
+        if isinstance(request, AutomaticStatementSecIngestionRequestV1):
+            batch = StatementMappingBatchDecisionV1.model_validate_json(raw)
+            _, batch_input = read_mapping_batch_input(
+                batch.input_digest,
+                StatementMappingBatchRequestV1,
+                artifacts=self.capture_store,
+            )
+        else:
+            automatic_batch = AutomaticMappingBatchDecisionV1.model_validate_json(raw)
+            _, batch_input = read_mapping_batch_input(
+                automatic_batch.input_digest,
+                AutomaticMappingBatchRequestV1,
+                artifacts=self.capture_store,
+            )
+        if (
+            batch_input.original != prepared.validated.original
+            or batch_input.integrity != prepared.validated.integrity
+            or batch_input.security_identity != prepared.validated.identity
+            or any(
+                SecIngestionSourceV1(
+                    source_id=source.source_id,
+                    uri=source.uri,
+                    role=source.role,
+                    content_hash=source.content_hash,
+                    accession_number=source.accession_number,
+                    available_at=source.available_at,
+                    captured_at=source.captured_at,
+                    filed_at=source.filed_at,
+                )
+                not in result.source_evidence
+                for source in prepared.validated.captured_sources
+            )
+        ):
+            raise SnapshotError(
+                "ORIGINAL_PREPARATION_INVALID",
+                "retained acquisition differs from the exact prepared original",
+            )
+
     @contextmanager
     def _capture_lock(self, key: str) -> Iterator[None]:
         lease = self.metadata.try_acquire_ingestion_lock(key)
@@ -1167,7 +1432,7 @@ class SecAcquisitionUseCase:
 
     def _acquire_and_publish(
         self,
-        request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1,
+        request: SecIngestionRequestV1 | AutomaticSourceRequestV1,
         *,
         acquisition_key: str,
         key_payload: dict[str, object],
@@ -1176,7 +1441,7 @@ class SecAcquisitionUseCase:
         correlation_id: str,
         deadline_at: datetime,
         validation_profile: ArelleValidationProfileV1,
-        prepared_filing: _SelectedFiling | None = None,
+        prepared_filing: _PreparedFiling | None = None,
     ) -> SecIngestionResponseV1:
         original_reads = self._original_reads.get()
         mapping_resolver = (
@@ -1186,7 +1451,13 @@ class SecAcquisitionUseCase:
                 if original_reads is not None
                 else None,
             )
-            if isinstance(request, AutomaticSecIngestionRequestV1)
+            if isinstance(
+                request,
+                (
+                    AutomaticSecIngestionRequestV1,
+                    AutomaticStatementSecIngestionRequestV1,
+                ),
+            )
             else None
         )
         adapter = self.adapter
@@ -1217,12 +1488,16 @@ class SecAcquisitionUseCase:
             submissions_source.content, media_type=submissions_source.media_type
         )
         submissions = self._decode_submissions(submissions_source.content, request)
-        filing = prepared_filing or self._select_filing(
-            submissions,
-            request.filing,
-            request.valuation_timestamp,
-            supported_filing_years=self.settings.supported_filing_years,
-            supported_filing_forms=self.settings.supported_filing_forms,
+        filing = (
+            prepared_filing.filing
+            if prepared_filing is not None
+            else self._select_filing(
+                submissions,
+                request.filing,
+                request.valuation_timestamp,
+                supported_filing_years=self.settings.supported_filing_years,
+                supported_filing_forms=self.settings.supported_filing_forms,
+            )
         )
         supplemental_sources, supplemental_issues = self._capture_award_proxy_sources(
             request,
@@ -1245,69 +1520,111 @@ class SecAcquisitionUseCase:
                 content=self.content_store,
                 capture_lock=self._capture_lock,
             )
-        package = self._capture_original_package(
-            adapter=adapter, cik=request.cik, filing=filing, deadline_at=deadline_at
-        )
-        index_source = package.index_source
-        submission_source = package.submission_source
-        xbrl_entrypoint = package.xbrl_entrypoint
-        dts_filenames = package.dts_filenames
-        filing_archive_filename = package.archive_filename
-        mappings = (
-            self._resolve_mappings(request)
-            if isinstance(request, SecIngestionRequestV1)
-            else ()
-        )
-        captured_at = (
-            max(
+        if prepared_filing is not None:
+            captured_at = max(
                 item.captured_at or item.available_at
-                for item in (submissions_source, index_source, *supplemental_sources)
+                for item in (
+                    submissions_source,
+                    *prepared_filing.sources,
+                    *supplemental_sources,
+                )
             )
-            if isinstance(adapter, RetainedSecSourceAdapter)
-            else datetime.now(UTC)
-        )
-        preparation = self.ingestion.prepare_filing(
-            build_checks=original_reads.builds if original_reads is not None else None,
-            parser_delivery_revision=request.source_revision
-            if isinstance(request, AutomaticSecIngestionRequestV1)
-            else None,
-            source_adapter=adapter,
-            identity=request.identity,
-            identity_basis=request.identity_basis,
-            identity_ticker=request.ticker,
-            cik=request.cik,
-            accession_number=filing.accession_number,
-            primary_document=xbrl_entrypoint,
-            filing_archive_filename=filing_archive_filename,
-            filed_at=filing.accepted_at,
-            filing_date=filing.filing_date,
-            accepted_at=filing.accepted_at,
-            captured_at=captured_at,
-            valuation_timestamp=request.valuation_timestamp,
-            fiscal_period_selector=request.fiscal_period_selector,
-            parser_version=request.parser_version,
-            policy_version=request.policy_version,
-            taxonomy_manifest_id=request.taxonomy_manifest_id,
-            taxonomy_version=request.taxonomy_version,
-            acquisition_key=acquisition_key,
-            taxonomy_cache_dir=self.settings.taxonomy_cache_dir,
-            mappings=mappings,
-            mapping_resolver=mapping_resolver,
-            reference_sources=(
-                submissions_source,
-                index_source,
-                *supplemental_sources,
-            ),
-            additional_issues=supplemental_issues,
-            submission_source=submission_source,
-            dts_filenames=dts_filenames,
-            inline_documents=package.inline_documents,
-            profile=validation_profile,
-            form=filing.form,
-            is_amendment=filing.is_amendment,
-            amendment_scope="unknown" if filing.is_amendment else None,
-            deadline_at=deadline_at,
-        )
+            if mapping_resolver is None or request.ticker is None:
+                raise SnapshotError(
+                    "MAPPING_RESOLUTION_MODE_INVALID",
+                    "prepared original requires automatic mapping",
+                )
+            preparation = self.ingestion.prepare_original(
+                validated=prepared_filing.validated,
+                sources=prepared_filing.sources,
+                identity_ticker=request.ticker,
+                captured_at=captured_at,
+                valuation_timestamp=request.valuation_timestamp,
+                fiscal_period_selector=request.fiscal_period_selector,
+                parser_version=request.parser_version,
+                policy_version=request.policy_version,
+                taxonomy_manifest_id=request.taxonomy_manifest_id,
+                acquisition_key=acquisition_key,
+                mapping_resolver=mapping_resolver,
+                reference_sources=(submissions_source, *supplemental_sources),
+                additional_issues=supplemental_issues,
+            )
+        else:
+            package = self._capture_original_package(
+                adapter=adapter, cik=request.cik, filing=filing, deadline_at=deadline_at
+            )
+            index_source = package.index_source
+            submission_source = package.submission_source
+            xbrl_entrypoint = package.xbrl_entrypoint
+            dts_filenames = package.dts_filenames
+            filing_archive_filename = package.archive_filename
+            mappings = (
+                self._resolve_mappings(request)
+                if isinstance(request, SecIngestionRequestV1)
+                else ()
+            )
+            captured_at = (
+                max(
+                    item.captured_at or item.available_at
+                    for item in (
+                        submissions_source,
+                        index_source,
+                        *supplemental_sources,
+                    )
+                )
+                if isinstance(adapter, RetainedSecSourceAdapter)
+                else datetime.now(UTC)
+            )
+            preparation = self.ingestion.prepare_filing(
+                build_checks=original_reads.builds
+                if original_reads is not None
+                else None,
+                parser_delivery_revision=request.source_revision
+                if isinstance(
+                    request,
+                    (
+                        AutomaticSecIngestionRequestV1,
+                        AutomaticStatementSecIngestionRequestV1,
+                    ),
+                )
+                else None,
+                source_adapter=adapter,
+                identity=request.identity,
+                identity_basis=request.identity_basis,
+                identity_ticker=request.ticker,
+                cik=request.cik,
+                accession_number=filing.accession_number,
+                primary_document=xbrl_entrypoint,
+                filing_archive_filename=filing_archive_filename,
+                filed_at=filing.accepted_at,
+                filing_date=filing.filing_date,
+                accepted_at=filing.accepted_at,
+                captured_at=captured_at,
+                valuation_timestamp=request.valuation_timestamp,
+                fiscal_period_selector=request.fiscal_period_selector,
+                parser_version=request.parser_version,
+                policy_version=request.policy_version,
+                taxonomy_manifest_id=request.taxonomy_manifest_id,
+                taxonomy_version=request.taxonomy_version,
+                acquisition_key=acquisition_key,
+                taxonomy_cache_dir=self.settings.taxonomy_cache_dir,
+                mappings=mappings,
+                mapping_resolver=mapping_resolver,
+                reference_sources=(
+                    submissions_source,
+                    index_source,
+                    *supplemental_sources,
+                ),
+                additional_issues=supplemental_issues,
+                submission_source=submission_source,
+                dts_filenames=dts_filenames,
+                inline_documents=package.inline_documents,
+                profile=validation_profile,
+                form=filing.form,
+                is_amendment=filing.is_amendment,
+                amendment_scope="unknown" if filing.is_amendment else None,
+                deadline_at=deadline_at,
+            )
         if (
             preparation.parser_report.taxonomy_cache_hash
             != self.settings.taxonomy_cache_sha256
@@ -1343,8 +1660,15 @@ class SecAcquisitionUseCase:
         status: Literal["created", "degraded", "abstain"]
         if required_missing:
             issue_codes.add("REQUIRED_FACTS_UNAVAILABLE")
-            status = "abstain"
-            quality = QualityStatus.ABSTAIN
+            if (
+                isinstance(request, AutomaticStatementSecIngestionRequestV1)
+                and preparation.facts
+            ):
+                status = "degraded"
+                quality = QualityStatus.PROVISIONAL
+            else:
+                status = "abstain"
+                quality = QualityStatus.ABSTAIN
         elif (
             not set(request.required_fields) <= verified_fields
             or preparation.snapshot.coverage_status is not QualityStatus.VERIFIED
@@ -1378,8 +1702,7 @@ class SecAcquisitionUseCase:
             correlation_id=correlation_id,
         )
         self._require_before_deadline(deadline_at)
-        if original_reads is not None:
-            original_reads.builds.verify()
+        self.verify_original_boundary()
         return self.metadata.publish_sec_ingestion(
             acquisition_key=acquisition_key,
             acquisition_payload=key_payload,
@@ -2223,6 +2546,7 @@ def build_runtime_sec_acquisition(
     historical_dqc_dir: str | None = None,
     historical_dqc_sha256: str | None = None,
     dqc_ruleset_catalog_path: str | None = None,
+    dqc_v18_ruleset_catalog_path: str | None = None,
 ) -> SecAcquisitionUseCase | None:
     values = (
         service_token,
@@ -2261,6 +2585,11 @@ def build_runtime_sec_acquisition(
             Path(dqc_ruleset_catalog_path).read_bytes()
         )
         if dqc_ruleset_catalog_path
+        else None,
+        dqc_v18_ruleset_catalog=DqcRulesetCatalogV1.model_validate_json(
+            Path(dqc_v18_ruleset_catalog_path).read_bytes()
+        )
+        if dqc_v18_ruleset_catalog_path
         else None,
     )
     adapter = SecEdgarSourceAdapter(

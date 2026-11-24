@@ -451,11 +451,19 @@ async def test_completed_output_references_survive_later_run_and_restart() -> No
         owned_thread_id = thread_id
 
         class Owner:
-            async def owns(self, *, principal_id: str, thread_id: str) -> bool:
+            async def owns(
+                self, *, principal_id: str, thread_id: str, organization_id: str
+            ) -> bool:
                 return principal_id == owner_id and thread_id == owned_thread_id
 
-            async def claim(self, *, principal_id: str, thread_id: str) -> bool:
-                return await self.owns(principal_id=principal_id, thread_id=thread_id)
+            async def claim(
+                self, *, principal_id: str, thread_id: str, organization_id: str
+            ) -> bool:
+                return await self.owns(
+                    principal_id=principal_id,
+                    thread_id=thread_id,
+                    organization_id=organization_id,
+                )
 
         service = AnalysisRuntimeService(
             repository=SqlAlchemyActivityRepository(), owner=Owner(), runner=object()

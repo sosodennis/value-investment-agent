@@ -1,3 +1,4 @@
+import { parseAnnualStatements } from './annual-statements';
 import {
     DebateHistoryMessage,
     DebateResult,
@@ -3538,6 +3539,7 @@ export const parseFundamentalArtifact = (
         reasoning: reasoning ?? '',
         financial_reports: parsed.financial_reports,
         ...(serviceProjection ? { fundamental_service: serviceProjection } : {}),
+        ...(record.annual_statements == null ? {} : { annual_statements: parseAnnualStatements(record.annual_statements, `${context}.annual_statements`) }),
         ...(forwardSignals ? { forward_signals: forwardSignals } : {}),
         ...(valuationDiagnostics
             ? { valuation_diagnostics: valuationDiagnostics }

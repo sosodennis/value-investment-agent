@@ -200,6 +200,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fundamental/annual-statements/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog */
+        get: operations["catalog_api_v1_fundamental_annual_statements_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fundamental/annual-statements/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read */
+        post: operations["read_api_v1_fundamental_annual_statements_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fundamental/forward-evidence/research": {
         parameters: {
             query?: never;
@@ -1131,6 +1165,145 @@ export interface components {
             /** Why It Matters Now */
             why_it_matters_now: string;
         };
+        /** AnnualStatementArtifactResponse */
+        AnnualStatementArtifactResponse: {
+            reference: components["schemas"]["ArtifactReference"];
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** AnnualStatementCatalogEntry */
+        AnnualStatementCatalogEntry: {
+            /** Company Name */
+            company_name: string;
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Issuer Id */
+            issuer_id: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** AnnualStatementCatalogResponse */
+        AnnualStatementCatalogResponse: {
+            /** Entries */
+            entries: components["schemas"]["AnnualStatementCatalogEntry"][];
+        };
+        /** AnnualStatementExistingThreadReadIntent */
+        AnnualStatementExistingThreadReadIntent: {
+            /** Issuer Id */
+            issuer_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "existing_thread";
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** AnnualStatementNewThreadReadIntent */
+        AnnualStatementNewThreadReadIntent: {
+            /**
+             * Creation Id
+             * Format: uuid
+             */
+            creation_id: string;
+            /** Issuer Id */
+            issuer_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "new_thread";
+        };
+        /** AnnualStatementReadErrorResponse */
+        AnnualStatementReadErrorResponse: {
+            detail: components["schemas"]["AnnualStatementReadFailure"];
+        };
+        /** AnnualStatementReadFailure */
+        AnnualStatementReadFailure: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Retryable */
+            retryable: boolean;
+        };
+        /** AnnualStatementsReadResponseV1 */
+        AnnualStatementsReadResponseV1: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.annual-statements.v1";
+            /** Data Release Manifest Digest */
+            data_release_manifest_digest: string;
+            statements: components["schemas"]["AnnualStatementsV1"];
+        };
+        /** AnnualStatementsV1 */
+        AnnualStatementsV1: {
+            /** Candidate Evidence */
+            candidate_evidence: components["schemas"]["StatementFactEvidenceV1"][];
+            /** Comparability */
+            comparability: components["schemas"]["StatementComparabilityV1"][];
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.annual-statements.v1";
+            /** Coverage */
+            coverage: components["schemas"]["StatementCoverageV1"][];
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Input Digest */
+            input_digest: string;
+            profile: components["schemas"]["StatementProfileV1"];
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /** Reconciliations */
+            reconciliations: components["schemas"]["StatementReconciliationV1"][];
+            scope: components["schemas"]["StatementScopeV1"];
+            /** Source Outcomes */
+            source_outcomes: (components["schemas"]["StatementAvailableSourceV1"] | components["schemas"]["StatementUnavailableSourceV1"])[];
+            /** Statement Id */
+            statement_id: string;
+            /** Tables */
+            tables: components["schemas"]["StatementTableV1"][];
+            /**
+             * Valuation Eligibility
+             * @default not_evaluated
+             * @constant
+             */
+            valuation_eligibility: "not_evaluated";
+        };
+        /**
+         * ArtifactReference
+         * @description Pointer to a large artifact stored by the artifact capability.
+         */
+        ArtifactReference: {
+            /**
+             * Artifact Id
+             * @description UUID of the artifact in the store
+             */
+            artifact_id: string;
+            /**
+             * Download Url
+             * @description API endpoint to fetch the artifact (e.g., /api/v1/artifacts/{id})
+             */
+            download_url: string;
+            /**
+             * Type
+             * @description Artifact type identifier (e.g., 'financial_report', 'news_analysis')
+             */
+            type: string;
+        };
         /** ArtifactRefsModel */
         ArtifactRefsModel: {
             /** Alerts Id */
@@ -1593,6 +1766,24 @@ export interface components {
             /** User Id */
             user_id: string;
         };
+        /** DurationStatementPeriodV1 */
+        DurationStatementPeriodV1: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "duration";
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+        };
         /** EvidenceBreakoutSignalModel */
         EvidenceBreakoutSignalModel: {
             /** Confidence */
@@ -1712,6 +1903,7 @@ export interface components {
         };
         /** FinancialReportsArtifactData */
         FinancialReportsArtifactData: {
+            annual_statements?: components["schemas"]["AnnualStatementsReadResponseV1"] | null;
             /** Company Name */
             company_name?: string | null;
             /** Diagnostics */
@@ -3393,6 +3585,19 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** InstantStatementPeriodV1 */
+        InstantStatementPeriodV1: {
+            /**
+             * Instant
+             * Format: date
+             */
+            instant: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "instant";
+        };
         /** InteractionIdentity */
         InteractionIdentity: {
             /** Activity Id */
@@ -4269,6 +4474,58 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** ReportedStatementCellV1 */
+        ReportedStatementCellV1: {
+            /** Candidate Fact Ids */
+            candidate_fact_ids: string[];
+            /** Cash Basis */
+            cash_basis: ("cash_and_equivalents" | "cash_equivalents_and_restricted_cash") | null;
+            /** Cell Id */
+            cell_id: string;
+            fact: components["schemas"]["StatementNumericFactV1"];
+            /** Mapping Digest */
+            mapping_digest: string;
+            /** Mapping Evidence Refs */
+            mapping_evidence_refs: components["schemas"]["StatementArtifactRefV1"][];
+            /** Period Id */
+            period_id: string;
+            /**
+             * Quality Status
+             * @default verified
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /** Rejected Candidates */
+            rejected_candidates: components["schemas"]["FundamentalCandidateRejectionV1"][];
+            /**
+             * Row Id
+             * @enum {string}
+             */
+            row_id: "revenue" | "cost_of_revenue" | "gross_profit" | "operating_income" | "income_before_tax" | "income_tax_expense" | "net_income" | "cash_and_equivalents" | "operating_current_receivables" | "inventory" | "current_assets" | "property_plant_and_equipment" | "total_assets" | "operating_current_payables" | "current_liabilities" | "total_liabilities" | "total_equity" | "liabilities_and_equity" | "operating_cash_flow" | "investing_cash_flow" | "financing_cash_flow" | "effect_of_exchange_rates_on_cash" | "net_change_in_cash" | "cash_flow_beginning_balance" | "cash_flow_ending_balance";
+            /** Selected Version Id */
+            selected_version_id: string;
+            /**
+             * Selection Kind
+             * @enum {string}
+             */
+            selection_kind: "original" | "amended" | "later_comparative";
+            /** Selection Reason */
+            selection_reason: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Snapshot Manifest Digest */
+            snapshot_manifest_digest: string;
+            /**
+             * Source Report Period End
+             * Format: date
+             */
+            source_report_period_end: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "reported";
+        };
         /** ResumeRequest */
         ResumeRequest: {
             identity: components["schemas"]["InteractionIdentity"];
@@ -4448,6 +4705,513 @@ export interface components {
             name: string;
             /** Reliability Score */
             reliability_score: number;
+        };
+        /** StatementArtifactRefV1 */
+        StatementArtifactRefV1: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Media Type */
+            media_type: string;
+            /** Role */
+            role: string;
+        };
+        /** StatementAvailableSourceV1 */
+        StatementAvailableSourceV1: {
+            /** Accession Number */
+            accession_number: string;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /** Fact Ids */
+            fact_ids: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "available";
+            outcome_ref: components["schemas"]["StatementArtifactRefV1"];
+            /**
+             * Report Period End
+             * Format: date
+             */
+            report_period_end: string;
+        };
+        /** StatementColumnV1 */
+        StatementColumnV1: {
+            /**
+             * Calendar
+             * @enum {string}
+             */
+            calendar: "52_week" | "53_week" | "calendar_year" | "other" | "unresolved";
+            /** Duration Days */
+            duration_days: number | null;
+            /** Fiscal Label */
+            fiscal_label: string;
+            /** Period */
+            period: components["schemas"]["DurationStatementPeriodV1"] | components["schemas"]["InstantStatementPeriodV1"] | components["schemas"]["UnresolvedStatementPeriodV1"];
+            /** Period Id */
+            period_id: string;
+        };
+        /** StatementComparabilityV1 */
+        StatementComparabilityV1: {
+            /**
+             * Affected Row Ids
+             * @default []
+             */
+            affected_row_ids: ("revenue" | "cost_of_revenue" | "gross_profit" | "operating_income" | "income_before_tax" | "income_tax_expense" | "net_income" | "cash_and_equivalents" | "operating_current_receivables" | "inventory" | "current_assets" | "property_plant_and_equipment" | "total_assets" | "operating_current_payables" | "current_liabilities" | "total_liabilities" | "total_equity" | "liabilities_and_equity" | "operating_cash_flow" | "investing_cash_flow" | "financing_cash_flow" | "effect_of_exchange_rates_on_cash" | "net_change_in_cash" | "cash_flow_beginning_balance" | "cash_flow_ending_balance")[];
+            /** Earlier Period Id */
+            earlier_period_id: string;
+            /** Issue Codes */
+            issue_codes: string[];
+            /** Later Period Id */
+            later_period_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "comparable" | "limited" | "not_comparable";
+        };
+        /** StatementCoverageV1 */
+        StatementCoverageV1: {
+            /** Declared Rows */
+            declared_rows: number;
+            /** Fiscal Label */
+            fiscal_label: string;
+            /** Period Id */
+            period_id: string;
+            /** Reported Rows */
+            reported_rows: number;
+            /**
+             * Statement
+             * @enum {string}
+             */
+            statement: "income_statement" | "balance_sheet" | "cash_flow";
+            /** Unavailable Row Ids */
+            unavailable_row_ids: ("revenue" | "cost_of_revenue" | "gross_profit" | "operating_income" | "income_before_tax" | "income_tax_expense" | "net_income" | "cash_and_equivalents" | "operating_current_receivables" | "inventory" | "current_assets" | "property_plant_and_equipment" | "total_assets" | "operating_current_payables" | "current_liabilities" | "total_liabilities" | "total_equity" | "liabilities_and_equity" | "operating_cash_flow" | "investing_cash_flow" | "financing_cash_flow" | "effect_of_exchange_rates_on_cash" | "net_change_in_cash" | "cash_flow_beginning_balance" | "cash_flow_ending_balance")[];
+        };
+        /** StatementFactEvidenceV1 */
+        StatementFactEvidenceV1: {
+            /** Cash Basis */
+            cash_basis?: ("cash_and_equivalents" | "cash_equivalents_and_restricted_cash") | null;
+            fact: components["schemas"]["FundamentalCanonicalFactV1"];
+            mapping: components["schemas"]["StatementMappingV1"];
+            /**
+             * Mapping Evidence Refs
+             * @default []
+             */
+            mapping_evidence_refs: components["schemas"]["StatementArtifactRefV1"][];
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Snapshot Manifest Digest */
+            snapshot_manifest_digest: string;
+            source: components["schemas"]["StatementSourceRecordV1"];
+        };
+        /** StatementMappingV1 */
+        StatementMappingV1: {
+            /** Accounting Rules */
+            accounting_rules?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Anchor Concept */
+            anchor_concept?: string | null;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "high" | "medium" | "low" | "unresolved";
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Decision Id */
+            decision_id: string;
+            /**
+             * Evidence Refs
+             * @default []
+             */
+            evidence_refs: string[];
+            /** Mapping Version */
+            mapping_version: string;
+            /** Normalized Field */
+            normalized_field: string;
+            /** Observation Scope */
+            observation_scope?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewer */
+            reviewer?: string | null;
+            /** Security Scope */
+            security_scope?: "issuer" | null;
+            /** Source Concept */
+            source_concept: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "approved" | "provisional" | "ambiguous" | "rejected";
+        };
+        /** StatementNumericFactV1 */
+        StatementNumericFactV1: {
+            /** Accession Number */
+            accession_number?: string | null;
+            /** Accounting Evidence */
+            accounting_evidence?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Amendment Scope */
+            amendment_scope?: ("valuation_relevant" | "unrelated" | "unknown") | null;
+            /** Amends Accession */
+            amends_accession?: string | null;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Concept */
+            concept: string;
+            context: components["schemas"]["FundamentalXbrlContextV1"];
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /** Currency */
+            currency?: string | null;
+            /** Decimals */
+            decimals?: number | null;
+            /** Fact Id */
+            fact_id: string;
+            /** Filed At */
+            filed_at?: string | null;
+            /** Filing Version */
+            filing_version?: string | null;
+            /** Instant */
+            instant?: string | null;
+            /**
+             * Is Amendment
+             * @default false
+             */
+            is_amendment: boolean;
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /** Issuer Id */
+            issuer_id: string;
+            /** Mapping Confidence */
+            mapping_confidence?: ("high" | "medium" | "low" | "unresolved") | null;
+            /** Mapping Decision Id */
+            mapping_decision_id?: string | null;
+            /** Normalized Field */
+            normalized_field: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /** Period Start */
+            period_start?: string | null;
+            /** Point In Time Policy */
+            point_in_time_policy?: string | null;
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Rejected Candidate Reasons
+             * @default []
+             */
+            rejected_candidate_reasons: components["schemas"]["FundamentalCandidateRejectionV1"][];
+            /**
+             * Rejected Candidates
+             * @default []
+             */
+            rejected_candidates: string[];
+            /** Scale */
+            scale: number;
+            /** Security Id */
+            security_id?: string | null;
+            /** Security Scope */
+            security_scope?: string | null;
+            /** Selection Reason */
+            selection_reason?: string | null;
+            source: components["schemas"]["FundamentalSourceProvenanceV1"];
+            /** Supersedes Accession */
+            supersedes_accession?: string | null;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Unit */
+            unit: string;
+            /** Value */
+            value: string;
+        };
+        /** StatementProfileV1 */
+        StatementProfileV1: {
+            /**
+             * Comparability Policy
+             * @constant
+             */
+            comparability_policy: "actual-annual-periods-no-annualization-v1";
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.annual-statements.v1";
+            /** Executable Digest */
+            executable_digest: string;
+            /**
+             * History Coverage Target
+             * @default 5
+             * @constant
+             */
+            history_coverage_target: 5;
+            /**
+             * Profile Id
+             * @constant
+             */
+            profile_id: "us-gaap-nonfinancial-annual-v1";
+            /**
+             * Reconciliation Policy
+             * @constant
+             */
+            reconciliation_policy: "reported-decimals-half-unit-sum-v1";
+            /** Rows */
+            rows: components["schemas"]["StatementRowDefinitionV1"][];
+            /**
+             * Selection Policy
+             * @constant
+             */
+            selection_policy: "canonical-pit-exact-row-key-v1";
+            /** Supported History Threshold */
+            supported_history_threshold?: null;
+        };
+        /** StatementReconciliationV1 */
+        StatementReconciliationV1: {
+            /** Check Id */
+            check_id: string;
+            /** Difference */
+            difference: string | null;
+            /** Expression */
+            expression: string;
+            /** Input Fact Ids */
+            input_fact_ids: string[];
+            /** Issue Codes */
+            issue_codes: string[];
+            /** Period Id */
+            period_id: string;
+            /**
+             * Policy Version
+             * @constant
+             */
+            policy_version: "reported-decimals-half-unit-sum-v1";
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warning" | "error" | "fatal";
+            /**
+             * Statement
+             * @enum {string}
+             */
+            statement: "income_statement" | "balance_sheet" | "cash_flow";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "rounding" | "unresolved" | "not_applicable" | "failed";
+            /** Tolerance */
+            tolerance: string | null;
+        };
+        /** StatementRowDefinitionV1 */
+        StatementRowDefinitionV1: {
+            /** Concepts */
+            concepts: string[];
+            /** Label */
+            label: string;
+            /**
+             * Row Id
+             * @enum {string}
+             */
+            row_id: "revenue" | "cost_of_revenue" | "gross_profit" | "operating_income" | "income_before_tax" | "income_tax_expense" | "net_income" | "cash_and_equivalents" | "operating_current_receivables" | "inventory" | "current_assets" | "property_plant_and_equipment" | "total_assets" | "operating_current_payables" | "current_liabilities" | "total_liabilities" | "total_equity" | "liabilities_and_equity" | "operating_cash_flow" | "investing_cash_flow" | "financing_cash_flow" | "effect_of_exchange_rates_on_cash" | "net_change_in_cash" | "cash_flow_beginning_balance" | "cash_flow_ending_balance";
+            /**
+             * Sign Policy
+             * @default reported_signed_decimal_v1
+             * @constant
+             */
+            sign_policy: "reported_signed_decimal_v1";
+            /**
+             * Statement
+             * @enum {string}
+             */
+            statement: "income_statement" | "balance_sheet" | "cash_flow";
+            /**
+             * Value Period Role
+             * @enum {string}
+             */
+            value_period_role: "duration" | "period_end" | "day_before_period_start";
+        };
+        /** StatementRowV1 */
+        StatementRowV1: {
+            /** Cells */
+            cells: (components["schemas"]["ReportedStatementCellV1"] | components["schemas"]["UnavailableStatementCellV1"])[];
+            definition: components["schemas"]["StatementRowDefinitionV1"];
+        };
+        /** StatementScopeV1 */
+        StatementScopeV1: {
+            /**
+             * Consolidation Scope
+             * @default consolidated
+             * @constant
+             */
+            consolidation_scope: "consolidated";
+            /** Currency */
+            currency: string;
+            /** Entity Scope */
+            entity_scope: string;
+            /** Issuer Id */
+            issuer_id: string;
+            /** Security Id */
+            security_id: string | null;
+            /** Security Scope */
+            security_scope: string;
+            /** Unit */
+            unit: string;
+        };
+        /** StatementSourceRecordV1 */
+        StatementSourceRecordV1: {
+            /** Accession Number */
+            accession_number?: string | null;
+            /** Amendment Scope */
+            amendment_scope?: ("valuation_relevant" | "unrelated" | "unknown") | null;
+            /** Amends Accession */
+            amends_accession?: string | null;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Declared Size */
+            declared_size?: number | null;
+            /** Filed At */
+            filed_at?: string | null;
+            /** Filing Date */
+            filing_date?: string | null;
+            /** Filing Version */
+            filing_version?: string | null;
+            /** Form */
+            form?: string | null;
+            /** Http Status */
+            http_status: number;
+            /**
+             * Is Amendment
+             * @default false
+             */
+            is_amendment: boolean;
+            /** Media Type */
+            media_type: string;
+            /** Parser Input Hash */
+            parser_input_hash?: string | null;
+            /** Parser Version */
+            parser_version: string;
+            /**
+             * Point In Time Relevant
+             * @default true
+             */
+            point_in_time_relevant: boolean;
+            /** Publication At */
+            publication_at?: string | null;
+            /** Received Size */
+            received_size?: number | null;
+            /**
+             * Response Headers
+             * @default []
+             */
+            response_headers: [
+                string,
+                string
+            ][];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "filing" | "company_facts" | "taxonomy" | "acquisition" | "macro" | "market" | "reference";
+            /** Source Id */
+            source_id: string;
+            /** Supersedes Accession */
+            supersedes_accession?: string | null;
+            /** Taxonomy Manifest Id */
+            taxonomy_manifest_id?: string | null;
+            /** Terms Reference */
+            terms_reference: string;
+            /** Uri */
+            uri: string;
+        };
+        /** StatementTableV1 */
+        StatementTableV1: {
+            /** Columns */
+            columns: components["schemas"]["StatementColumnV1"][];
+            /** Rows */
+            rows: components["schemas"]["StatementRowV1"][];
+            /**
+             * Statement
+             * @enum {string}
+             */
+            statement: "income_statement" | "balance_sheet" | "cash_flow";
+        };
+        /** StatementUnavailableSourceV1 */
+        StatementUnavailableSourceV1: {
+            /** Accession Number */
+            accession_number: string;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /** Issue Codes */
+            issue_codes: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unavailable";
+            missing: components["schemas"]["FundamentalMissingValueV1"];
+            outcome_ref: components["schemas"]["StatementArtifactRefV1"];
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Report Period End
+             * Format: date
+             */
+            report_period_end: string;
         };
         /** StructureConfluenceSummaryModel */
         StructureConfluenceSummaryModel: {
@@ -5713,6 +6477,58 @@ export interface components {
         TraceableFieldModel: {
             [key: string]: unknown;
         };
+        /** UnavailableStatementCellV1 */
+        UnavailableStatementCellV1: {
+            /**
+             * Candidate Fact Ids
+             * @default []
+             */
+            candidate_fact_ids: string[];
+            /** Cell Id */
+            cell_id: string;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["StatementArtifactRefV1"][];
+            /** Issue Codes */
+            issue_codes: string[];
+            missing: components["schemas"]["FundamentalMissingValueV1"];
+            /** Period Id */
+            period_id: string;
+            /**
+             * Quality Status
+             * @enum {string}
+             */
+            quality_status: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
+            /**
+             * Rejected Candidates
+             * @default []
+             */
+            rejected_candidates: components["schemas"]["FundamentalCandidateRejectionV1"][];
+            /**
+             * Row Id
+             * @enum {string}
+             */
+            row_id: "revenue" | "cost_of_revenue" | "gross_profit" | "operating_income" | "income_before_tax" | "income_tax_expense" | "net_income" | "cash_and_equivalents" | "operating_current_receivables" | "inventory" | "current_assets" | "property_plant_and_equipment" | "total_assets" | "operating_current_payables" | "current_liabilities" | "total_liabilities" | "total_equity" | "liabilities_and_equity" | "operating_cash_flow" | "investing_cash_flow" | "financing_cash_flow" | "effect_of_exchange_rates_on_cash" | "net_change_in_cash" | "cash_flow_beginning_balance" | "cash_flow_ending_balance";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "unavailable";
+        };
+        /** UnresolvedStatementPeriodV1 */
+        UnresolvedStatementPeriodV1: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unresolved";
+            missing: components["schemas"]["FundamentalMissingValueV1"];
+            /**
+             * Reported Period End
+             * Format: date
+             */
+            reported_period_end: string;
+            source_outcome_ref: components["schemas"]["StatementArtifactRefV1"];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -5997,6 +6813,7 @@ export interface operations {
         parameters: {
             query?: {
                 run_id?: string | null;
+                thread_id?: string | null;
             };
             header?: never;
             path: {
@@ -6365,6 +7182,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_api_v1_fundamental_annual_statements_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementCatalogResponse"];
+                };
+            };
+        };
+    };
+    read_api_v1_fundamental_annual_statements_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnualStatementExistingThreadReadIntent"] | components["schemas"]["AnnualStatementNewThreadReadIntent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementArtifactResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
+                };
+            };
+            /** @description Request Timeout */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
                 };
             };
         };

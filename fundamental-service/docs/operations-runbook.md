@@ -219,6 +219,14 @@ User-Agent are absent. The runtime recomputes every directory/file hash and
 rejects a request whose taxonomy or validation pins do not match. Do not mount
 the test taxonomy or validation fixtures as production evidence.
 
+For mixed annual histories, mount both reviewed catalogs and all their ruleset
+files read-only at the paths declared inside each catalog. Set
+`FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH` for V31 and
+`FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH` for the official-source V18 build.
+The SEC ingestion overlay passes both settings to the service; an additional
+deployment overlay must provide the catalog and ruleset mounts. Each original
+retains its own validation profile and exact DTS namespace binding.
+
 The provider returns only a typed snapshot reference, manifest digest,
 canonical fact IDs, source hashes, filing metadata, quality, missing evidence,
 and version pins. Filing bytes stay in the Fundamental content-addressed
@@ -835,3 +843,39 @@ artifacts are not rewritten. It does not include the
 separate #361 lease/composer-version/provider changes. A precision34 migration
 requires its own versioned numerical policy and evidence; the former target
 table contradicted the model inventory's released50-digit policy.
+
+## 主要年度三表
+
+`fundamental-prepare-statements` 沿用 annual discovery、original preparation、SEC ingestion、canonical facts、mapping approval、release canary 與 compare-and-swap activation。它不執行 Agent 或估值，也不取得報價與市場資料。初期 source scope 限已核對的 Apple／Microsoft 原版 10-K；唯一 registry 保存原文與 canonical parser hashes、實際 US-GAAP namespace、年度期間及主表 locator，不保存報表金額。
+
+先以正式 image 與相同資源設定讀取 runtime pins：
+
+```sh
+python -m fundamental_service.statement_preparation_runner \
+  --source-revision "$IMPLEMENTATION_COMMIT" --print-runtime-pins
+```
+
+使用輸出的 `mapping_policy_digest` 配置既有 automatic mapping evaluator；使用 `verification_suite_digest` 配置既有 release verifier。`statement_profile` 必須完整放進 `AutomaticStatementReleasePolicyV1` 部署 JSON。`validation_profile_digests` 使用輸出中已配置的 V18／V31 runtime digest，排序並去重。此 policy 不含估值 model 或 market policy。Trust roots 仍由 `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE` 載入；兩個 private key 皆須為各自部署角色的 Ed25519 PEM。
+
+```sh
+python -m fundamental_service.statement_preparation_runner \
+  --cik 0000320193 --cutoff-at 2024-11-02T00:00:00Z \
+  --source-revision "$IMPLEMENTATION_COMMIT" --original-count 5 \
+  --mapping-evaluator-id "$MAPPING_EVALUATOR_ID" \
+  --mapping-version annual-statements-v1 \
+  --mapping-private-key /run/keys/statement-mapping.pem \
+  --release-policy /run/config/statement-release-policy.json \
+  --release-private-key /run/keys/statement-release.pem \
+  --actor "$OPERATOR_SUBJECT" --organization "$ORGANIZATION_ID" \
+  --activate --expected-revision 0 --timeout-seconds 7200
+```
+
+組織須同時通過既有 SEC acquisition、release publish 與 activation 授權。未提供 `--activate` 時只發佈 immutable candidate 並以正式 application read 讀回。輸出包含 discovery、original preparation、candidate refs 和 `response.data_release_manifest_digest`；workspace 以 signed `POST /v1/data/annual-statements`、該 digest 與相同 cutoff 讀取。Artifact body 不包含 enclosing manifest digest。
+
+同一份 discovery 固定全部 originals，再按每份原件的實際 US-GAAP namespace 選唯一 configured catalog。V18 的 `FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH` 與 V31 catalog 分開。每份 original 保留自己的完整 runtime、validation 結果及失敗原因，年度失敗不以較舊方便原件替代。不同 source revision 或新 capture 產生新 evidence identity；既有正式 adapter 僅在自己的 retained receipt 規則成立時重用 bytes。
+
+原件 security selection 預設使用 DEI v6，歷史 DEI namespace 仍須與同份原件的 issuer、period、class axis 和配對 title 一致。保留的 v5 請求繼續使用原判定。Mapping v45 保留年度貨幣行項的 canonical issuer scope，並讓已批准的 primary FX concept 及 locator 沿用同表 cash-balance basis。原始 FX tag、parser scope 及真正不同 cash definition 的拒絕保留；股數與每股角色不自動取得 issuer scope。
+
+Microsoft FY2020 的 HTML block LF 表示差異只由 `sec_html_representation_registry.py` 中的單一來源登錄批准。登錄綁定原件 hashes、精確 offsets、schema/context proof、V18 profile 與 taxonomy cache。未知表示差異回報 `SOURCE_HTML_REPRESENTATION_UNREGISTERED`；profile/cache 不符回報 `SOURCE_HTML_REPRESENTATION_RESOURCE_SCOPE_MISMATCH`。不得藉由補登 hash 或忽略拒絕來取得資料資格。新登錄需先核對原文、submission、ZIP、schema 和內容語義，提交獨立審閱證據，然後更新 policy pins 並重新驗收。機器 proof 位於 `tests/fixtures/sec-integrity/msft-2020-html-block-representation-proof.json`，來源 bytes 仍依既有 capture 流程保留與重取。
+
+重跑相同 retained inputs 與版本會重用 publication；新原文 hash、parser input、profile、mapping 或 executable pin 需形成新輸入。Registry 外原件、金融 SIC、錯 namespace、缺 validation、cutoff 不符及資料毀損均具名拒絕。五年度為 coverage 目標，`supported_history_threshold` 維持 null。正式成功仍須核對服務數字、每格來源、partial 結果與 workspace 行為。

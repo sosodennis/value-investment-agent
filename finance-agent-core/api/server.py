@@ -13,6 +13,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from src.agents.fundamental.entrypoint import (
+    fundamental_annual_statement_router,
     fundamental_forward_evidence_router,
 )
 from src.analysis_runtime.application.ports import OwnerPort
@@ -53,14 +54,24 @@ from src.shared.kernel.rate_limit import close_rate_limiter
 
 
 class OwnedThreadPort(OwnerPort):
-    async def owns(self, *, principal_id: str, thread_id: str) -> bool:
+    async def owns(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
         return await get_ownership_service().owns(
-            user_id=principal_id, resource_type="thread", resource_id=thread_id
+            user_id=principal_id,
+            resource_type="thread",
+            resource_id=thread_id,
+            organization_id=organization_id,
         )
 
-    async def claim(self, *, principal_id: str, thread_id: str) -> bool:
+    async def claim(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
         return await get_ownership_service().claim(
-            user_id=principal_id, resource_type="thread", resource_id=thread_id
+            user_id=principal_id,
+            resource_type="thread",
+            resource_id=thread_id,
+            organization_id=organization_id,
         )
 
 
@@ -165,6 +176,7 @@ app.include_router(llm_settings_router)
 app.include_router(search_settings_router)
 app.include_router(analysis_runtime_router)
 app.include_router(fundamental_forward_evidence_router)
+app.include_router(fundamental_annual_statement_router)
 app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(client_debug_router)

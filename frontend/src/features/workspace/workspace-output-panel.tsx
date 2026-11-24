@@ -56,22 +56,15 @@ export function WorkspaceOutputPanel({
         `workspace_output.${agent.id}`
     );
 
+    const fundamentalReport = <FundamentalAnalysisOutput
+        reference={viewModel.reference} resolvedTicker={resolvedTicker} status={status}
+        onSelectEvidence={onSelectEvidence} onEvidenceInventory={onEvidenceInventory}
+        onReportReady={onReportReady} threadId={threadId} runId={runId} revisionControl={revisionControl}
+    />;
     let report: ReactNode;
     switch (viewModel.kind) {
         case 'fundamental_analysis':
-            report = (
-                <FundamentalAnalysisOutput
-                    reference={viewModel.reference}
-                    resolvedTicker={resolvedTicker}
-                    status={status}
-                    onSelectEvidence={onSelectEvidence}
-                    onEvidenceInventory={onEvidenceInventory}
-                    onReportReady={onReportReady}
-                    threadId={threadId}
-                    runId={runId}
-                    revisionControl={revisionControl}
-                />
-            );
+            report = fundamentalReport;
             break;
         case 'financial_news_research':
             report = (
@@ -103,7 +96,7 @@ export function WorkspaceOutputPanel({
             );
             break;
         case 'generic':
-            report = (
+            report = agent.id === 'fundamental_analysis' ? fundamentalReport : (
                 <GenericAgentOutput
                     agentName={agent.name}
                     viewModel={viewModel}

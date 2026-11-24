@@ -11,9 +11,9 @@ from contextlib import AbstractContextManager, contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol, TypeVar
+from typing import Annotated, Literal, Protocol, TypeVar
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, TypeAdapter, model_validator
 
 from .annual_discovery import AnnualFilingV1
 from .annual_discovery_service import AnnualDiscovery, AnnualDiscoveryEvidenceV1
@@ -57,7 +57,9 @@ class OriginalValidationRuntimeV1(StrictModel):
     taxonomy_cache_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     validation_profile_id: Literal[
-        "sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"
+        "sec-efm-us-dqc-v31.0.3",
+        "sec-efm-us-dqc-v18-xule30055-build-v1",
+        "sec-efm-us-dqc-v1.0.0-historical",
     ] = "sec-efm-us-dqc-v31.0.3"
     supported_filing_years: tuple[int, ...]
     supported_filing_forms: tuple[str, ...]
@@ -275,6 +277,56 @@ class OriginalPreparationRequestV1(OriginalSecuritySelectionV1):
     def digest(self) -> str:
         return sha256_digest(self)
 
+    def runtime_for(self, accession_number: str) -> OriginalValidationRuntimeV1:
+        return self.runtime
+
+
+class OriginalFilingRuntimeV1(StrictModel):
+    accession_number: str = Field(pattern=r"^[0-9]{10}-[0-9]{2}-[0-9]{6}$")
+    runtime: OriginalValidationRuntimeV1
+
+
+class StatementOriginalPreparationRequestV1(OriginalSecuritySelectionV1):
+    protocol: Literal["sec-statement-original-preparation-v1"] = (
+        "sec-statement-original-preparation-v1"
+    )
+    annual: ArtifactRefV1
+    original_runtimes: tuple[OriginalFilingRuntimeV1, ...] = Field(
+        min_length=1, max_length=6
+    )
+
+    @model_validator(mode="after")
+    def annual_and_runtimes_are_pinned(self) -> StatementOriginalPreparationRequestV1:
+        accessions = tuple(item.accession_number for item in self.original_runtimes)
+        if (
+            self.annual.role != "sec-original-annual-discovery-v1"
+            or self.annual.media_type != "application/json"
+            or accessions != tuple(sorted(set(accessions)))
+        ):
+            raise ValueError(
+                "statement preparation requires annual evidence and distinct ordered original runtimes"
+            )
+        return self
+
+    @property
+    def digest(self) -> str:
+        return sha256_digest(self)
+
+    def runtime_for(self, accession_number: str) -> OriginalValidationRuntimeV1:
+        for item in self.original_runtimes:
+            if item.accession_number == accession_number:
+                return item.runtime
+        raise SnapshotError(
+            "ORIGINAL_RUNTIME_NOT_DECLARED", "original has no declared runtime"
+        )
+
+
+OriginalPreparationRequest = Annotated[
+    OriginalPreparationRequestV1 | StatementOriginalPreparationRequestV1,
+    Field(discriminator="protocol"),
+]
+_PREPARATION_REQUEST = TypeAdapter(OriginalPreparationRequest)
+
 
 class OriginalPreparedFilingV1(StrictModel):
     validation: ArtifactRefV1
@@ -283,7 +335,7 @@ class OriginalPreparedFilingV1(StrictModel):
 
 
 class OriginalPreparationEvidenceV1(StrictModel):
-    request: OriginalPreparationRequestV1
+    request: OriginalPreparationRequest
     filings: tuple[OriginalPreparedFilingV1, ...]
     issue_codes: tuple[str, ...]
     retryable: bool
@@ -390,18 +442,20 @@ class OriginalPreparation:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "artifact differs")
         return payload
 
-    def _annual(
-        self, request: OriginalPreparationRequestV1
-    ) -> AnnualDiscoveryEvidenceV1:
+    def _annual(self, request: OriginalPreparationRequest) -> AnnualDiscoveryEvidenceV1:
         self._bytes(request.annual)
         return self._discovery.read(request.annual.artifact_id)
 
     def read_validation(
-        self, artifact_id: str, *, build_checks: ParserBuildChecks | None = None
+        self,
+        artifact_id: str,
+        *,
+        build_checks: ParserBuildChecks | None = None,
+        original_checks: OriginalIssuerEvidenceChecks | None = None,
     ) -> OriginalValidationEvidenceV1:
         reference = self.reference(artifact_id, "sec-original-validation-v1")
         payload = self._bytes(reference)
-        original_checks = OriginalIssuerEvidenceChecks()
+        original_checks = original_checks or OriginalIssuerEvidenceChecks()
         try:
             evidence = OriginalValidationEvidenceV1.model_validate_json(
                 payload, context=original_checks
@@ -513,21 +567,31 @@ class OriginalPreparation:
 
     @staticmethod
     def _selection_issues(
-        request: OriginalPreparationRequestV1, annual: AnnualDiscoveryEvidenceV1
+        request: OriginalPreparationRequest, annual: AnnualDiscoveryEvidenceV1
     ) -> tuple[str, ...]:
-        runtime, selection = request.runtime, annual.request
+        selection = annual.request
         codes = set(annual.selection.issue_codes)
-        if (
-            runtime.declared_source_revision != selection.declared_source_revision
-            or runtime.supported_filing_years != selection.supported_filing_years
-            or runtime.supported_filing_forms != selection.supported_filing_forms
-        ):
-            codes.add("ORIGINAL_RUNTIME_CATALOG_MISMATCH")
+        runtimes = (
+            tuple(item.runtime for item in request.original_runtimes)
+            if isinstance(request, StatementOriginalPreparationRequestV1)
+            else (request.runtime,)
+        )
+        if isinstance(request, StatementOriginalPreparationRequestV1) and {
+            item.accession_number for item in request.original_runtimes
+        } != {filing.accession_number for filing in annual.selection.selected}:
+            codes.add("ORIGINAL_RUNTIME_SELECTION_MISMATCH")
+        for runtime in runtimes:
+            if (
+                runtime.declared_source_revision != selection.declared_source_revision
+                or runtime.supported_filing_years != selection.supported_filing_years
+                or runtime.supported_filing_forms != selection.supported_filing_forms
+            ):
+                codes.add("ORIGINAL_RUNTIME_CATALOG_MISMATCH")
         return tuple(sorted(codes))
 
     def _assess(
         self,
-        request: OriginalPreparationRequestV1,
+        request: OriginalPreparationRequest,
         annual: AnnualDiscoveryEvidenceV1,
         validations: tuple[OriginalValidationEvidenceV1, ...],
     ) -> OriginalPreparationEvidenceV1:
@@ -542,7 +606,7 @@ class OriginalPreparation:
 
     def _assess_filings(
         self,
-        request: OriginalPreparationRequestV1,
+        request: OriginalPreparationRequest,
         annual: AnnualDiscoveryEvidenceV1,
         validations: tuple[_FilingAssessment, ...],
     ) -> OriginalPreparationEvidenceV1:
@@ -551,7 +615,8 @@ class OriginalPreparation:
         if tuple(v.request.filing for v in validations) != expected or any(
             v.request.cik != annual.request.cik
             or v.request.valuation_timestamp != annual.request.valuation_timestamp
-            or v.request.runtime != request.runtime
+            or v.request.runtime
+            != request.runtime_for(v.request.filing.accession_number)
             for v in validations
         ):
             raise SnapshotError(
@@ -610,7 +675,10 @@ class OriginalPreparation:
         return evidence
 
     def read_with_validations(
-        self, artifact_id: str
+        self,
+        artifact_id: str,
+        *,
+        original_checks: OriginalIssuerEvidenceChecks | None = None,
     ) -> tuple[OriginalPreparationEvidenceV1, tuple[OriginalValidationEvidenceV1, ...]]:
         """Return preparation and the original validations checked in this read."""
         reference = self.reference(artifact_id, "sec-original-preparation-v1")
@@ -624,8 +692,13 @@ class OriginalPreparation:
         request = evidence.request
         annual = self._annual(request)
         build_checks = self._build_checks or ParserBuildChecks()
+        original_checks = original_checks or OriginalIssuerEvidenceChecks()
         validations = tuple(
-            self.read_validation(f.validation.artifact_id, build_checks=build_checks)
+            self.read_validation(
+                f.validation.artifact_id,
+                build_checks=build_checks,
+                original_checks=original_checks,
+            )
             for f in evidence.filings
         )
         record = self._artifacts.get(artifact_id)
@@ -648,7 +721,7 @@ class OriginalPreparation:
 
     def _completed(
         self,
-        request: OriginalPreparationRequestV1,
+        request: OriginalPreparationRequest,
         reads: OriginalPreparationReads | None = None,
     ) -> tuple[OriginalPreparationEvidenceV1, ArtifactPublicationV1] | None:
         artifact_id = f"original-preparation:{request.digest}"
@@ -667,7 +740,7 @@ class OriginalPreparation:
 
     def execute(
         self,
-        request: OriginalPreparationRequestV1,
+        request: OriginalPreparationRequest,
         *,
         deadline_at: datetime,
         reads: OriginalPreparationReads | None = None,
@@ -677,9 +750,7 @@ class OriginalPreparation:
         if reads is not None and reads.closed:
             raise RuntimeError("preparation read scope has ended")
         build_checks = reads.builds if reads is not None else ParserBuildChecks()
-        request = OriginalPreparationRequestV1.model_validate_json(
-            canonical_bytes(request)
-        )
+        request = _PREPARATION_REQUEST.validate_json(canonical_bytes(request))
         if completed := self._completed(request, reads):
             return completed
         with self._lock(sha256_digest(("original-preparation", request.digest))):
@@ -696,7 +767,7 @@ class OriginalPreparation:
                             cik=annual.request.cik,
                             valuation_timestamp=annual.request.valuation_timestamp,
                             filing=filing,
-                            runtime=request.runtime,
+                            runtime=request.runtime_for(filing.accession_number),
                         ),
                         deadline_at,
                         build_checks,

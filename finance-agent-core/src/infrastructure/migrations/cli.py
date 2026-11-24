@@ -7,6 +7,9 @@ from src.infrastructure.migrations import (
     run_history_migration,
     run_retry_schema_migration,
 )
+from src.infrastructure.migrations.thread_ownership import (
+    run_thread_ownership_migration,
+)
 
 
 async def _main() -> None:
@@ -16,6 +19,7 @@ async def _main() -> None:
         result = await run_history_migration()
         if not result.completed:
             raise RuntimeError("database migration did not complete")
+        await run_thread_ownership_migration()
         print(f"Database migrations complete: {result.batches_processed} batches")
     finally:
         await engine.dispose()

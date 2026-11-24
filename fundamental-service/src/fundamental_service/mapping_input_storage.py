@@ -220,7 +220,7 @@ def read_mapping_batch_input(
     input_digest: str,
     model: type[ModelT],
     *,
-    artifacts: EvidenceArtifactStore,
+    artifacts: MappingInputReader,
     original_checks: OriginalIssuerEvidenceChecks | None = None,
     input_digests: MappingInputDigests | None = None,
 ) -> tuple[ArtifactRefV1, ModelT]:

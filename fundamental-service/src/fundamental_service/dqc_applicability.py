@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .serialization import sha256_digest
+from .dqc_rulesets import DQC_V18_SOURCE_COMMIT
 
 _CATALOG_PATH = Path(__file__).with_name("resources") / "dqc-v31-effective-dates.json"
 _CATALOG_SHA256 = "47c60da21ed6f7503e6965f6b7eb37cd5419c57192d892dad798a573cecff269"
@@ -23,7 +24,21 @@ _TABLE_CATALOG_SHA256 = (
 _OFFICIAL_COMMIT = "cd82706519e384fb209d74f13ccbe535be42da4b"
 
 
-def dqc_applicability_policy_digest() -> str:
+def dqc_applicability_policy_digest(dqc_version: str = "v31.0.3") -> str:
+    if dqc_version == "v18":
+        return sha256_digest(
+            {
+                "protocol": "dqc-sec-filing-date-applicability-v1",
+                "dqc_version": "v18",
+                "official_commit": DQC_V18_SOURCE_COMMIT,
+                "build_profile": "sec-efm-us-dqc-v18-xule30055-build-v1",
+                "date_sources": "official-xule-diagnostic",
+                "unknown_or_conflicting_dates": "retain-blocking",
+                "critical_or_fatal": "retain-blocking",
+            }
+        )
+    if dqc_version != "v31.0.3":
+        raise ValueError("DQC applicability version is unsupported")
     return sha256_digest(
         {
             "protocol": "dqc-sec-filing-date-applicability-v1",
@@ -46,11 +61,14 @@ class DqcFilingContextV1(BaseModel):
     issuer_id: str = Field(pattern=r"^[0-9]{10}$")
     accession_number: str = Field(pattern=r"^[0-9]{10}-[0-9]{2}-[0-9]{6}$")
     filing_date: date
+    dqc_version: Literal["v31.0.3", "v18"] = Field(
+        default="v31.0.3", exclude_if=lambda value: value == "v31.0.3"
+    )
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def pinned_policy(self) -> "DqcFilingContextV1":
-        if self.policy_digest != dqc_applicability_policy_digest():
+        if self.policy_digest != dqc_applicability_policy_digest(self.dqc_version):
             raise ValueError("DQC filing-date context requires the pinned policy")
         return self
 
@@ -135,9 +153,9 @@ def evaluate_dqc_applicability(
 ) -> DqcRuleApplicabilityV1 | None:
     if not re.fullmatch(r"DQC\.US\.[0-9]{4}\.[0-9]+", code):
         return None
-    document = _document_dates().get(code)
+    document = _document_dates().get(code) if context.dqc_version == "v31.0.3" else None
     document_date, document_hash = document if document else (None, None)
-    table = _assertion_dates().get(code)
+    table = _assertion_dates().get(code) if context.dqc_version == "v31.0.3" else None
     table_date, table_hash, source_hashes = table if table else (None, None, ())
     dates = {value for value in (emitted_date, document_date, table_date) if value}
     conflict = len(dates) > 1

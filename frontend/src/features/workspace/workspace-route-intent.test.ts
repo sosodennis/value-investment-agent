@@ -17,6 +17,11 @@ describe('parseWorkspaceRouteIntent', () => {
         expect(parseWorkspaceRouteIntent(new URLSearchParams('thread_id=&run_id=run-1'))).toEqual({ kind: 'invalid-history' });
     });
 
+    it('reopens standalone annual statements by exact saved identity', () => {
+        expect(parseWorkspaceRouteIntent(new URLSearchParams('statement_thread=thread-1&statement_artifact=artifact-1'))).toEqual({ kind: 'statement-report', threadId: 'thread-1', artifactId: 'artifact-1' });
+        expect(parseWorkspaceRouteIntent(new URLSearchParams('statement_thread=thread-1'))).toEqual({ kind: 'invalid-history' });
+    });
+
     it('rejects ambiguous duplicate history identifiers', () => {
         expect(parseWorkspaceRouteIntent(new URLSearchParams('thread_id=thread-1&thread_id=thread-2&run_id=run-1'))).toEqual({
             kind: 'invalid-history',

@@ -1707,8 +1707,15 @@ def test_runtime_injects_deployment_data_release_trust_roots(
         "PolicyRegistry",
     ):
         monkeypatch.setattr(fundamental_app, name, lambda *_args, **_kwargs: object())
+    originals = object()
+
+    class Acquisition:
+        def original_preparation(self):
+            return originals
+
+    acquisition = Acquisition()
     monkeypatch.setattr(
-        fundamental_app, "build_runtime_sec_acquisition", lambda **_kwargs: object()
+        fundamental_app, "build_runtime_sec_acquisition", lambda **_kwargs: acquisition
     )
     monkeypatch.setattr(fundamental_app, "create_app", lambda **kwargs: kwargs)
 
@@ -1718,6 +1725,8 @@ def test_runtime_injects_deployment_data_release_trust_roots(
     assert captured["data_release_trust_roots"] == roots
     assert composed["metadata_store"] is not None
     assert composed["source_use_policy"] == source_use_policy
+    assert composed["sec_acquisition"] is acquisition
+    assert composed["statement_originals"] is originals
 
 
 def test_snapshot_resolution_pins_only_active_release_facts():

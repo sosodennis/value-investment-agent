@@ -19,6 +19,8 @@ from fundamental_service.automatic_mapping import (
 from fundamental_service.automatic_mapping_batch import (
     AutomaticMappingBatchDecisionV1,
     AutomaticMappingBatchRequestV1,
+    StatementMappingBatchDecisionV1,
+    StatementMappingBatchRequestV1,
 )
 from fundamental_service.automatic_mapping_runner import approve_mapping_batch, main
 from fundamental_service.data_releases import (
@@ -33,6 +35,10 @@ from fundamental_service.metadata import (
 from fundamental_service.persistence_recovery import export_backup, restore_backup
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.serialization import canonical_bytes
+from fundamental_service.statement_profiles import (
+    annual_statement_profile,
+    statement_executable_digest,
+)
 from fundamental_service.valuation_requirements import valuation_requirements_profile
 from test_automatic_mapping import case, MACHINE_KEY
 from test_issuer_operating_release import inventory
@@ -179,6 +185,59 @@ def test_caller_cannot_select_easier_requirements_or_promote_history(tmp_path, c
 
 def test_untrusted_batch_key_publishes_nothing(tmp_path):
     request, store, roots = batch_case(tmp_path)
+    before = inventory(store.root)
+    with pytest.raises(DataReleaseError) as error:
+        run_batch(request, store, roots, private_key=Ed25519PrivateKey.generate())
+    assert error.value.code == "MAPPING_AUTOMATIC_AUTHORITY_MISMATCH"
+    assert inventory(store.root) == before
+
+
+def statement_batch_case(tmp_path):
+    single, store, roots, _ = case(tmp_path)
+    request = StatementMappingBatchRequestV1(
+        **single.model_dump(exclude={"protocol", "proposal"}),
+        mapping_version=single.proposal.mapping_version,
+        statement_profile=annual_statement_profile(
+            executable_digest=statement_executable_digest()
+        ),
+    )
+    return request, store, roots
+
+
+def test_statement_batch_retains_declared_rows_without_valuation_requirements(tmp_path):
+    request, store, roots = statement_batch_case(tmp_path)
+    receipt = run_batch(request, store, roots)
+    decision = StatementMappingBatchDecisionV1.model_validate_json(
+        store.read(receipt.decision_publication.artifact.artifact_id)
+    )
+    assert len(decision.roles) == 25
+    assert (
+        tuple(role.normalized_field for role in decision.roles) == request.role_fields
+    )
+    assert decision.statement_profile == request.statement_profile
+    assert "model_version" not in decision.model_dump()
+    assert "requirements" not in decision.model_dump()
+    roles = {role.normalized_field: role for role in decision.roles}
+    assert roles["revenue"].status == "approved"
+    assert roles["gross_profit"].status == "abstain"
+    assert "MAPPING_NO_ELIGIBLE_OBSERVATIONS" in roles["gross_profit"].reason_codes
+    before = inventory(store.root)
+    repeated = run_batch(request, ArtifactStore(store.root), roots)
+    assert not repeated.wrote and repeated.output_digest == receipt.output_digest
+    assert inventory(store.root) == before
+    for invalid in (decision.roles[1:], tuple(reversed(decision.roles))):
+        with pytest.raises(ValidationError, match="every declared row"):
+            StatementMappingBatchDecisionV1.model_validate(
+                {**decision.model_dump(), "roles": invalid}
+            )
+
+
+def test_statement_batch_rejects_modified_profile_and_untrusted_key(tmp_path):
+    request, store, roots = statement_batch_case(tmp_path)
+    payload = request.model_dump(mode="json")
+    payload["statement_profile"]["rows"] = payload["statement_profile"]["rows"][1:]
+    with pytest.raises(ValidationError):
+        StatementMappingBatchRequestV1.model_validate(payload)
     before = inventory(store.root)
     with pytest.raises(DataReleaseError) as error:
         run_batch(request, store, roots, private_key=Ed25519PrivateKey.generate())

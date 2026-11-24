@@ -95,6 +95,12 @@ from .source_admission_evidence import load_release_source_admissions
 from .replay import ArtifactRecordV1, ArtifactStore
 from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
+from .original_preparation import OriginalPreparation
+from .snapshots import ContentAddressedStore
+from .statement_releases import (
+    read_statement_release,
+    verify_statement_release_membership,
+)
 from .snapshots import FilesystemSnapshotRepository, SnapshotError
 from .sec_rebuild import parsed_facts_to_candidates
 from .taxonomy_evidence import TaxonomyArchiveChecks, require_original_taxonomy
@@ -209,6 +215,9 @@ class DataReleaseContentReportV1(BaseModel):
     checked_operating_forecast_digests: tuple[str, ...] = Field(
         default=(), exclude_if=lambda value: not value
     )
+    checked_regulatory_evidence_digests: tuple[str, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
 
     @property
     def digest(self) -> str:
@@ -231,6 +240,8 @@ class DataReleaseCanaryRunner:
         reference_providers: tuple[MarketReferenceProviderPort, ...] = (),
         source_use_policy: SourceUsePolicyV1 | None = None,
         policy_registry: PolicyRegistry | None = None,
+        statement_originals: OriginalPreparation | None = None,
+        statement_content: ContentAddressedStore | None = None,
     ) -> None:
         self._snapshots = snapshot_repository
         self._facts = fact_repository
@@ -242,6 +253,8 @@ class DataReleaseCanaryRunner:
         self._reference_providers = reference_providers
         self._source_use_policy = source_use_policy
         self._policy_registry = policy_registry
+        self._statement_originals = statement_originals
+        self._statement_content = statement_content
 
     def validate(
         self,
@@ -311,6 +324,58 @@ class DataReleaseCanaryRunner:
                 manifest, manifest.conditional_reinvestment_policies[0].recipe.model_id
             )
         self._verify_artifacts(manifest, request)
+        statement = read_statement_release(manifest, artifacts=self._artifacts)
+        if statement is not None:
+            if any(
+                not isinstance(review, AutomaticMappingApprovalV1)
+                for review in request.mapping_reviews
+            ):
+                raise DataReleaseError(
+                    "STATEMENT_MAPPING_METHOD_UNSUPPORTED",
+                    "statement releases require the source-replayed automatic mapping authority",
+                )
+            if self._statement_originals is None or self._statement_content is None:
+                raise DataReleaseError(
+                    "STATEMENT_ORIGINAL_PREPARATION_UNAVAILABLE",
+                    "statement canary requires the retained original preparation owner",
+                )
+            mappings = self._verify_mappings(manifest.mapping_refs)
+            evidence_checks = AutomaticMappingEvidenceChecks()
+            self._verify_automatic_mappings(
+                manifest, request, mappings, evidence_checks=evidence_checks
+            )
+            checked = verify_statement_release_membership(
+                manifest,
+                statement,
+                originals=self._statement_originals,
+                content=self._statement_content,
+                snapshots=self._snapshots,
+                facts=self._facts,
+                mappings=self._mappings,
+                artifacts=self._artifacts,
+                source_revision=request.source_revision,
+            )
+            require_current_parser_action_refs(
+                (
+                    *manifest.artifact_refs,
+                    *request.evidence_refs,
+                    *(
+                        ref
+                        for review in request.mapping_reviews
+                        for ref in review.evidence_refs
+                    ),
+                ),
+                artifacts=self._artifacts,
+                build_checks=evidence_checks.builds,
+            )
+            return DataReleaseContentReportV1(
+                candidate_manifest_digest=manifest.manifest_digest,
+                request_digest=sha256_digest(request),
+                checked_snapshot_ids=checked.snapshot_ids,
+                checked_fact_digests=checked.fact_digests,
+                checked_artifact_digests=self._artifact_digests(manifest, request),
+                checked_regulatory_evidence_digests=checked.regulatory_evidence_digests,
+            )
         admissions = load_release_source_admissions(
             manifest,
             artifacts=self._artifacts,

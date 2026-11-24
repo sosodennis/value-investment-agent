@@ -42,9 +42,13 @@ class GraphRunner(Protocol):
 
 
 class OwnerPort(Protocol):
-    async def owns(self, *, principal_id: str, thread_id: str) -> bool: ...
+    async def owns(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool: ...
 
-    async def claim(self, *, principal_id: str, thread_id: str) -> bool: ...
+    async def claim(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool: ...
 
 
 class ActivityRepository(Protocol):

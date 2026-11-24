@@ -51,6 +51,17 @@ def artifact_dedupe_key(
     ).hexdigest()
 
 
+def thread_artifact_dedupe_key(*, thread_id: str, envelope: ArtifactEnvelope) -> str:
+    identity = {
+        "version": "thread-artifact-v1",
+        "thread_id": thread_id,
+        "content": artifact_content(envelope),
+    }
+    return hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 def references_artifact(value: object, artifact_id: str) -> bool:
     if isinstance(value, Mapping):
         for key, nested in value.items():

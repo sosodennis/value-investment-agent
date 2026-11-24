@@ -594,6 +594,338 @@
         "title": "AnalystPerspectiveSignalExplainerModel",
         "type": "object"
       },
+      "AnnualStatementArtifactResponse": {
+        "properties": {
+          "reference": {
+            "$ref": "#/components/schemas/ArtifactReference"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "reference"
+        ],
+        "title": "AnnualStatementArtifactResponse",
+        "type": "object"
+      },
+      "AnnualStatementCatalogEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "company_name": {
+            "minLength": 1,
+            "title": "Company Name",
+            "type": "string"
+          },
+          "cutoff_at": {
+            "format": "date-time",
+            "title": "Cutoff At",
+            "type": "string"
+          },
+          "issuer_id": {
+            "pattern": "^[0-9]{10}$",
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "ticker": {
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[A-Z0-9.-]+$",
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issuer_id",
+          "ticker",
+          "company_name",
+          "cutoff_at"
+        ],
+        "title": "AnnualStatementCatalogEntry",
+        "type": "object"
+      },
+      "AnnualStatementCatalogResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AnnualStatementCatalogEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "title": "AnnualStatementCatalogResponse",
+        "type": "object"
+      },
+      "AnnualStatementExistingThreadReadIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "issuer_id": {
+            "pattern": "^[0-9]{10}$",
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "existing_thread",
+            "title": "Kind",
+            "type": "string"
+          },
+          "thread_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "thread_id",
+          "issuer_id"
+        ],
+        "title": "AnnualStatementExistingThreadReadIntent",
+        "type": "object"
+      },
+      "AnnualStatementNewThreadReadIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "creation_id": {
+            "format": "uuid",
+            "title": "Creation Id",
+            "type": "string"
+          },
+          "issuer_id": {
+            "pattern": "^[0-9]{10}$",
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "new_thread",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "creation_id",
+          "issuer_id"
+        ],
+        "title": "AnnualStatementNewThreadReadIntent",
+        "type": "object"
+      },
+      "AnnualStatementReadErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/AnnualStatementReadFailure"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "AnnualStatementReadErrorResponse",
+        "type": "object"
+      },
+      "AnnualStatementReadFailure": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "title": "AnnualStatementReadFailure",
+        "type": "object"
+      },
+      "AnnualStatementsReadResponseV1": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "fundamental.annual-statements.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "data_release_manifest_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Data Release Manifest Digest",
+            "type": "string"
+          },
+          "statements": {
+            "$ref": "#/components/schemas/AnnualStatementsV1"
+          }
+        },
+        "required": [
+          "contract_version",
+          "data_release_manifest_digest",
+          "statements"
+        ],
+        "title": "AnnualStatementsReadResponseV1",
+        "type": "object"
+      },
+      "AnnualStatementsV1": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/StatementFactEvidenceV1"
+            },
+            "title": "Candidate Evidence",
+            "type": "array"
+          },
+          "comparability": {
+            "items": {
+              "$ref": "#/components/schemas/StatementComparabilityV1"
+            },
+            "title": "Comparability",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "fundamental.annual-statements.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/StatementCoverageV1"
+            },
+            "title": "Coverage",
+            "type": "array"
+          },
+          "cutoff_at": {
+            "format": "date-time",
+            "title": "Cutoff At",
+            "type": "string"
+          },
+          "input_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input Digest",
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/StatementProfileV1"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "reconciliations": {
+            "items": {
+              "$ref": "#/components/schemas/StatementReconciliationV1"
+            },
+            "title": "Reconciliations",
+            "type": "array"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/StatementScopeV1"
+          },
+          "source_outcomes": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "available": "#/components/schemas/StatementAvailableSourceV1",
+                  "unavailable": "#/components/schemas/StatementUnavailableSourceV1"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/StatementAvailableSourceV1"
+                },
+                {
+                  "$ref": "#/components/schemas/StatementUnavailableSourceV1"
+                }
+              ]
+            },
+            "title": "Source Outcomes",
+            "type": "array"
+          },
+          "statement_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Statement Id",
+            "type": "string"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/StatementTableV1"
+            },
+            "title": "Tables",
+            "type": "array"
+          },
+          "valuation_eligibility": {
+            "const": "not_evaluated",
+            "default": "not_evaluated",
+            "title": "Valuation Eligibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "statement_id",
+          "input_digest",
+          "scope",
+          "cutoff_at",
+          "profile",
+          "tables",
+          "source_outcomes",
+          "candidate_evidence",
+          "coverage",
+          "comparability",
+          "reconciliations",
+          "quality_status"
+        ],
+        "title": "AnnualStatementsV1",
+        "type": "object"
+      },
+      "ArtifactReference": {
+        "description": "Pointer to a large artifact stored by the artifact capability.",
+        "properties": {
+          "artifact_id": {
+            "description": "UUID of the artifact in the store",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "download_url": {
+            "description": "API endpoint to fetch the artifact (e.g., /api/v1/artifacts/{id})",
+            "title": "Download Url",
+            "type": "string"
+          },
+          "type": {
+            "description": "Artifact type identifier (e.g., 'financial_report', 'news_analysis')",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "download_url",
+          "type"
+        ],
+        "title": "ArtifactReference",
+        "type": "object"
+      },
       "ArtifactRefsModel": {
         "properties": {
           "alerts_id": {
@@ -1957,6 +2289,33 @@
         "title": "DirectoryUserResponse",
         "type": "object"
       },
+      "DurationStatementPeriodV1": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "duration",
+            "default": "duration",
+            "title": "Kind",
+            "type": "string"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date",
+            "title": "Period Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end"
+        ],
+        "title": "DurationStatementPeriodV1",
+        "type": "object"
+      },
       "EvidenceBreakoutSignalModel": {
         "properties": {
           "confidence": {
@@ -2443,6 +2802,16 @@
       "FinancialReportsArtifactData": {
         "additionalProperties": false,
         "properties": {
+          "annual_statements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnualStatementsReadResponseV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "company_name": {
             "anyOf": [
               {
@@ -6882,6 +7251,27 @@
         "title": "IndustrialExtensionModel",
         "type": "object"
       },
+      "InstantStatementPeriodV1": {
+        "additionalProperties": false,
+        "properties": {
+          "instant": {
+            "format": "date",
+            "title": "Instant",
+            "type": "string"
+          },
+          "kind": {
+            "const": "instant",
+            "default": "instant",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instant"
+        ],
+        "title": "InstantStatementPeriodV1",
+        "type": "object"
+      },
       "InteractionIdentity": {
         "additionalProperties": false,
         "properties": {
@@ -9315,6 +9705,166 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "ReportedStatementCellV1": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Fact Ids",
+            "type": "array"
+          },
+          "cash_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cash_and_equivalents",
+                  "cash_equivalents_and_restricted_cash"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cash Basis"
+          },
+          "cell_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Cell Id",
+            "type": "string"
+          },
+          "fact": {
+            "$ref": "#/components/schemas/StatementNumericFactV1"
+          },
+          "mapping_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Mapping Digest",
+            "type": "string"
+          },
+          "mapping_evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/StatementArtifactRefV1"
+            },
+            "title": "Mapping Evidence Refs",
+            "type": "array"
+          },
+          "period_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Period Id",
+            "type": "string"
+          },
+          "quality_status": {
+            "default": "verified",
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "rejected_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/FundamentalCandidateRejectionV1"
+            },
+            "title": "Rejected Candidates",
+            "type": "array"
+          },
+          "row_id": {
+            "enum": [
+              "revenue",
+              "cost_of_revenue",
+              "gross_profit",
+              "operating_income",
+              "income_before_tax",
+              "income_tax_expense",
+              "net_income",
+              "cash_and_equivalents",
+              "operating_current_receivables",
+              "inventory",
+              "current_assets",
+              "property_plant_and_equipment",
+              "total_assets",
+              "operating_current_payables",
+              "current_liabilities",
+              "total_liabilities",
+              "total_equity",
+              "liabilities_and_equity",
+              "operating_cash_flow",
+              "investing_cash_flow",
+              "financing_cash_flow",
+              "effect_of_exchange_rates_on_cash",
+              "net_change_in_cash",
+              "cash_flow_beginning_balance",
+              "cash_flow_ending_balance"
+            ],
+            "title": "Row Id",
+            "type": "string"
+          },
+          "selected_version_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Selected Version Id",
+            "type": "string"
+          },
+          "selection_kind": {
+            "enum": [
+              "original",
+              "amended",
+              "later_comparative"
+            ],
+            "title": "Selection Kind",
+            "type": "string"
+          },
+          "selection_reason": {
+            "title": "Selection Reason",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_manifest_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Manifest Digest",
+            "type": "string"
+          },
+          "source_report_period_end": {
+            "format": "date",
+            "title": "Source Report Period End",
+            "type": "string"
+          },
+          "status": {
+            "const": "reported",
+            "default": "reported",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cell_id",
+          "row_id",
+          "period_id",
+          "selected_version_id",
+          "fact",
+          "snapshot_id",
+          "snapshot_manifest_digest",
+          "mapping_digest",
+          "mapping_evidence_refs",
+          "cash_basis",
+          "selection_reason",
+          "selection_kind",
+          "source_report_period_end",
+          "candidate_fact_ids",
+          "rejected_candidates"
+        ],
+        "title": "ReportedStatementCellV1",
+        "type": "object"
+      },
       "ResumeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -9863,6 +10413,1521 @@
           "reliability_score"
         ],
         "title": "SourceInfoModel",
+        "type": "object"
+      },
+      "StatementArtifactRefV1": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "minLength": 1,
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "media_type": {
+            "minLength": 1,
+            "title": "Media Type",
+            "type": "string"
+          },
+          "role": {
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "content_hash",
+          "media_type",
+          "role"
+        ],
+        "title": "StatementArtifactRefV1",
+        "type": "object"
+      },
+      "StatementAvailableSourceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "accession_number": {
+            "title": "Accession Number",
+            "type": "string"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "kind": {
+            "const": "available",
+            "default": "available",
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome_ref": {
+            "$ref": "#/components/schemas/StatementArtifactRefV1"
+          },
+          "report_period_end": {
+            "format": "date",
+            "title": "Report Period End",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accession_number",
+          "available_at",
+          "report_period_end",
+          "outcome_ref",
+          "fact_ids"
+        ],
+        "title": "StatementAvailableSourceV1",
+        "type": "object"
+      },
+      "StatementColumnV1": {
+        "additionalProperties": false,
+        "properties": {
+          "calendar": {
+            "enum": [
+              "52_week",
+              "53_week",
+              "calendar_year",
+              "other",
+              "unresolved"
+            ],
+            "title": "Calendar",
+            "type": "string"
+          },
+          "duration_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Days"
+          },
+          "fiscal_label": {
+            "title": "Fiscal Label",
+            "type": "string"
+          },
+          "period": {
+            "discriminator": {
+              "mapping": {
+                "duration": "#/components/schemas/DurationStatementPeriodV1",
+                "instant": "#/components/schemas/InstantStatementPeriodV1",
+                "unresolved": "#/components/schemas/UnresolvedStatementPeriodV1"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DurationStatementPeriodV1"
+              },
+              {
+                "$ref": "#/components/schemas/InstantStatementPeriodV1"
+              },
+              {
+                "$ref": "#/components/schemas/UnresolvedStatementPeriodV1"
+              }
+            ],
+            "title": "Period"
+          },
+          "period_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Period Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period_id",
+          "fiscal_label",
+          "period",
+          "duration_days",
+          "calendar"
+        ],
+        "title": "StatementColumnV1",
+        "type": "object"
+      },
+      "StatementComparabilityV1": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_row_ids": {
+            "default": [],
+            "items": {
+              "enum": [
+                "revenue",
+                "cost_of_revenue",
+                "gross_profit",
+                "operating_income",
+                "income_before_tax",
+                "income_tax_expense",
+                "net_income",
+                "cash_and_equivalents",
+                "operating_current_receivables",
+                "inventory",
+                "current_assets",
+                "property_plant_and_equipment",
+                "total_assets",
+                "operating_current_payables",
+                "current_liabilities",
+                "total_liabilities",
+                "total_equity",
+                "liabilities_and_equity",
+                "operating_cash_flow",
+                "investing_cash_flow",
+                "financing_cash_flow",
+                "effect_of_exchange_rates_on_cash",
+                "net_change_in_cash",
+                "cash_flow_beginning_balance",
+                "cash_flow_ending_balance"
+              ],
+              "type": "string"
+            },
+            "title": "Affected Row Ids",
+            "type": "array"
+          },
+          "earlier_period_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Earlier Period Id",
+            "type": "string"
+          },
+          "issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "later_period_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Later Period Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "comparable",
+              "limited",
+              "not_comparable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "earlier_period_id",
+          "later_period_id",
+          "status",
+          "issue_codes"
+        ],
+        "title": "StatementComparabilityV1",
+        "type": "object"
+      },
+      "StatementCoverageV1": {
+        "additionalProperties": false,
+        "properties": {
+          "declared_rows": {
+            "title": "Declared Rows",
+            "type": "integer"
+          },
+          "fiscal_label": {
+            "title": "Fiscal Label",
+            "type": "string"
+          },
+          "period_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Period Id",
+            "type": "string"
+          },
+          "reported_rows": {
+            "title": "Reported Rows",
+            "type": "integer"
+          },
+          "statement": {
+            "enum": [
+              "income_statement",
+              "balance_sheet",
+              "cash_flow"
+            ],
+            "title": "Statement",
+            "type": "string"
+          },
+          "unavailable_row_ids": {
+            "items": {
+              "enum": [
+                "revenue",
+                "cost_of_revenue",
+                "gross_profit",
+                "operating_income",
+                "income_before_tax",
+                "income_tax_expense",
+                "net_income",
+                "cash_and_equivalents",
+                "operating_current_receivables",
+                "inventory",
+                "current_assets",
+                "property_plant_and_equipment",
+                "total_assets",
+                "operating_current_payables",
+                "current_liabilities",
+                "total_liabilities",
+                "total_equity",
+                "liabilities_and_equity",
+                "operating_cash_flow",
+                "investing_cash_flow",
+                "financing_cash_flow",
+                "effect_of_exchange_rates_on_cash",
+                "net_change_in_cash",
+                "cash_flow_beginning_balance",
+                "cash_flow_ending_balance"
+              ],
+              "type": "string"
+            },
+            "title": "Unavailable Row Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "period_id",
+          "statement",
+          "fiscal_label",
+          "reported_rows",
+          "declared_rows",
+          "unavailable_row_ids"
+        ],
+        "title": "StatementCoverageV1",
+        "type": "object"
+      },
+      "StatementFactEvidenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "cash_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cash_and_equivalents",
+                  "cash_equivalents_and_restricted_cash"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cash Basis"
+          },
+          "fact": {
+            "$ref": "#/components/schemas/FundamentalCanonicalFactV1"
+          },
+          "mapping": {
+            "$ref": "#/components/schemas/StatementMappingV1"
+          },
+          "mapping_evidence_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/StatementArtifactRefV1"
+            },
+            "title": "Mapping Evidence Refs",
+            "type": "array"
+          },
+          "snapshot_id": {
+            "minLength": 1,
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_manifest_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Manifest Digest",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/StatementSourceRecordV1"
+          }
+        },
+        "required": [
+          "fact",
+          "mapping",
+          "source",
+          "snapshot_id",
+          "snapshot_manifest_digest"
+        ],
+        "title": "StatementFactEvidenceV1",
+        "type": "object"
+      },
+      "StatementMappingV1": {
+        "additionalProperties": false,
+        "properties": {
+          "accounting_rules": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accounting Rules"
+          },
+          "anchor_concept": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Concept"
+          },
+          "confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              "unresolved"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "mapping_version": {
+            "title": "Mapping Version",
+            "type": "string"
+          },
+          "normalized_field": {
+            "title": "Normalized Field",
+            "type": "string"
+          },
+          "observation_scope": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Scope"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
+          },
+          "security_scope": {
+            "anyOf": [
+              {
+                "const": "issuer",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Scope"
+          },
+          "source_concept": {
+            "title": "Source Concept",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "approved",
+              "provisional",
+              "ambiguous",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "decision_id",
+          "source_concept",
+          "normalized_field",
+          "mapping_version",
+          "confidence",
+          "status"
+        ],
+        "title": "StatementMappingV1",
+        "type": "object"
+      },
+      "StatementNumericFactV1": {
+        "additionalProperties": false,
+        "properties": {
+          "accession_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accession Number"
+          },
+          "accounting_evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accounting Evidence"
+          },
+          "amendment_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "valuation_relevant",
+                  "unrelated",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendment Scope"
+          },
+          "amends_accession": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amends Accession"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "concept": {
+            "minLength": 1,
+            "title": "Concept",
+            "type": "string"
+          },
+          "context": {
+            "$ref": "#/components/schemas/FundamentalXbrlContextV1"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decimals"
+          },
+          "fact_id": {
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "filed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filed At"
+          },
+          "filing_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Version"
+          },
+          "instant": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instant"
+          },
+          "is_amendment": {
+            "default": false,
+            "title": "Is Amendment",
+            "type": "boolean"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "issuer_id": {
+            "minLength": 1,
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "mapping_confidence": {
+            "anyOf": [
+              {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  "unresolved"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Confidence"
+          },
+          "mapping_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Decision Id"
+          },
+          "normalized_field": {
+            "minLength": 1,
+            "title": "Normalized Field",
+            "type": "string"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "point_in_time_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point In Time Policy"
+          },
+          "quality": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "rejected_candidate_reasons": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalCandidateRejectionV1"
+            },
+            "title": "Rejected Candidate Reasons",
+            "type": "array"
+          },
+          "rejected_candidates": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Rejected Candidates",
+            "type": "array"
+          },
+          "scale": {
+            "title": "Scale",
+            "type": "integer"
+          },
+          "security_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Id"
+          },
+          "security_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Scope"
+          },
+          "selection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Reason"
+          },
+          "source": {
+            "$ref": "#/components/schemas/FundamentalSourceProvenanceV1"
+          },
+          "supersedes_accession": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Accession"
+          },
+          "taxonomy_version": {
+            "minLength": 1,
+            "title": "Taxonomy Version",
+            "type": "string"
+          },
+          "unit": {
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "fact_id",
+          "issuer_id",
+          "concept",
+          "normalized_field",
+          "value",
+          "unit",
+          "scale",
+          "period_end",
+          "context",
+          "as_of",
+          "available_at",
+          "captured_at",
+          "taxonomy_version",
+          "source",
+          "quality"
+        ],
+        "title": "StatementNumericFactV1",
+        "type": "object"
+      },
+      "StatementProfileV1": {
+        "additionalProperties": false,
+        "properties": {
+          "comparability_policy": {
+            "const": "actual-annual-periods-no-annualization-v1",
+            "title": "Comparability Policy",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "fundamental.annual-statements.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "executable_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Executable Digest",
+            "type": "string"
+          },
+          "history_coverage_target": {
+            "const": 5,
+            "default": 5,
+            "title": "History Coverage Target",
+            "type": "integer"
+          },
+          "profile_id": {
+            "const": "us-gaap-nonfinancial-annual-v1",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "reconciliation_policy": {
+            "const": "reported-decimals-half-unit-sum-v1",
+            "title": "Reconciliation Policy",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/StatementRowDefinitionV1"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "selection_policy": {
+            "const": "canonical-pit-exact-row-key-v1",
+            "title": "Selection Policy",
+            "type": "string"
+          },
+          "supported_history_threshold": {
+            "title": "Supported History Threshold",
+            "type": "null"
+          }
+        },
+        "required": [
+          "profile_id",
+          "contract_version",
+          "rows",
+          "selection_policy",
+          "reconciliation_policy",
+          "comparability_policy",
+          "executable_digest"
+        ],
+        "title": "StatementProfileV1",
+        "type": "object"
+      },
+      "StatementReconciliationV1": {
+        "additionalProperties": false,
+        "properties": {
+          "check_id": {
+            "title": "Check Id",
+            "type": "string"
+          },
+          "difference": {
+            "anyOf": [
+              {
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difference"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "input_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Fact Ids",
+            "type": "array"
+          },
+          "issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "period_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Period Id",
+            "type": "string"
+          },
+          "policy_version": {
+            "const": "reported-decimals-half-unit-sum-v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error",
+              "fatal"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "statement": {
+            "enum": [
+              "income_statement",
+              "balance_sheet",
+              "cash_flow"
+            ],
+            "title": "Statement",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "rounding",
+              "unresolved",
+              "not_applicable",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tolerance": {
+            "anyOf": [
+              {
+                "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerance"
+          }
+        },
+        "required": [
+          "statement",
+          "period_id",
+          "check_id",
+          "status",
+          "severity",
+          "expression",
+          "input_fact_ids",
+          "difference",
+          "tolerance",
+          "issue_codes",
+          "policy_version"
+        ],
+        "title": "StatementReconciliationV1",
+        "type": "object"
+      },
+      "StatementRowDefinitionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "concepts": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Concepts",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "row_id": {
+            "enum": [
+              "revenue",
+              "cost_of_revenue",
+              "gross_profit",
+              "operating_income",
+              "income_before_tax",
+              "income_tax_expense",
+              "net_income",
+              "cash_and_equivalents",
+              "operating_current_receivables",
+              "inventory",
+              "current_assets",
+              "property_plant_and_equipment",
+              "total_assets",
+              "operating_current_payables",
+              "current_liabilities",
+              "total_liabilities",
+              "total_equity",
+              "liabilities_and_equity",
+              "operating_cash_flow",
+              "investing_cash_flow",
+              "financing_cash_flow",
+              "effect_of_exchange_rates_on_cash",
+              "net_change_in_cash",
+              "cash_flow_beginning_balance",
+              "cash_flow_ending_balance"
+            ],
+            "title": "Row Id",
+            "type": "string"
+          },
+          "sign_policy": {
+            "const": "reported_signed_decimal_v1",
+            "default": "reported_signed_decimal_v1",
+            "title": "Sign Policy",
+            "type": "string"
+          },
+          "statement": {
+            "enum": [
+              "income_statement",
+              "balance_sheet",
+              "cash_flow"
+            ],
+            "title": "Statement",
+            "type": "string"
+          },
+          "value_period_role": {
+            "enum": [
+              "duration",
+              "period_end",
+              "day_before_period_start"
+            ],
+            "title": "Value Period Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "row_id",
+          "statement",
+          "label",
+          "value_period_role",
+          "concepts"
+        ],
+        "title": "StatementRowDefinitionV1",
+        "type": "object"
+      },
+      "StatementRowV1": {
+        "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "reported": "#/components/schemas/ReportedStatementCellV1",
+                  "unavailable": "#/components/schemas/UnavailableStatementCellV1"
+                },
+                "propertyName": "status"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ReportedStatementCellV1"
+                },
+                {
+                  "$ref": "#/components/schemas/UnavailableStatementCellV1"
+                }
+              ]
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/StatementRowDefinitionV1"
+          }
+        },
+        "required": [
+          "definition",
+          "cells"
+        ],
+        "title": "StatementRowV1",
+        "type": "object"
+      },
+      "StatementScopeV1": {
+        "additionalProperties": false,
+        "properties": {
+          "consolidation_scope": {
+            "const": "consolidated",
+            "default": "consolidated",
+            "title": "Consolidation Scope",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "entity_scope": {
+            "title": "Entity Scope",
+            "type": "string"
+          },
+          "issuer_id": {
+            "minLength": 1,
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "security_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Id"
+          },
+          "security_scope": {
+            "title": "Security Scope",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issuer_id",
+          "security_id",
+          "security_scope",
+          "entity_scope",
+          "currency",
+          "unit"
+        ],
+        "title": "StatementScopeV1",
+        "type": "object"
+      },
+      "StatementSourceRecordV1": {
+        "additionalProperties": false,
+        "properties": {
+          "accession_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accession Number"
+          },
+          "amendment_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "valuation_relevant",
+                  "unrelated",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendment Scope"
+          },
+          "amends_accession": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amends Accession"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "declared_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Size"
+          },
+          "filed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filed At"
+          },
+          "filing_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Date"
+          },
+          "filing_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filing Version"
+          },
+          "form": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Form"
+          },
+          "http_status": {
+            "maximum": 599.0,
+            "minimum": 100.0,
+            "title": "Http Status",
+            "type": "integer"
+          },
+          "is_amendment": {
+            "default": false,
+            "title": "Is Amendment",
+            "type": "boolean"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "parser_input_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parser Input Hash"
+          },
+          "parser_version": {
+            "title": "Parser Version",
+            "type": "string"
+          },
+          "point_in_time_relevant": {
+            "default": true,
+            "title": "Point In Time Relevant",
+            "type": "boolean"
+          },
+          "publication_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication At"
+          },
+          "received_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received Size"
+          },
+          "response_headers": {
+            "default": [],
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Response Headers",
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "filing",
+              "company_facts",
+              "taxonomy",
+              "acquisition",
+              "macro",
+              "market",
+              "reference"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "supersedes_accession": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Accession"
+          },
+          "taxonomy_manifest_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Manifest Id"
+          },
+          "terms_reference": {
+            "title": "Terms Reference",
+            "type": "string"
+          },
+          "uri": {
+            "title": "Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "uri",
+          "role",
+          "available_at",
+          "captured_at",
+          "http_status",
+          "media_type",
+          "terms_reference",
+          "content_hash",
+          "parser_version"
+        ],
+        "title": "StatementSourceRecordV1",
+        "type": "object"
+      },
+      "StatementTableV1": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/StatementColumnV1"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/StatementRowV1"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "statement": {
+            "enum": [
+              "income_statement",
+              "balance_sheet",
+              "cash_flow"
+            ],
+            "title": "Statement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "statement",
+          "columns",
+          "rows"
+        ],
+        "title": "StatementTableV1",
+        "type": "object"
+      },
+      "StatementUnavailableSourceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "accession_number": {
+            "title": "Accession Number",
+            "type": "string"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "kind": {
+            "const": "unavailable",
+            "default": "unavailable",
+            "title": "Kind",
+            "type": "string"
+          },
+          "missing": {
+            "$ref": "#/components/schemas/FundamentalMissingValueV1"
+          },
+          "outcome_ref": {
+            "$ref": "#/components/schemas/StatementArtifactRefV1"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "report_period_end": {
+            "format": "date",
+            "title": "Report Period End",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accession_number",
+          "available_at",
+          "report_period_end",
+          "outcome_ref",
+          "quality_status",
+          "missing",
+          "issue_codes"
+        ],
+        "title": "StatementUnavailableSourceV1",
         "type": "object"
       },
       "StructureConfluenceSummaryModel": {
@@ -14452,6 +16517,144 @@
         "additionalProperties": true,
         "type": "object"
       },
+      "UnavailableStatementCellV1": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_fact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Fact Ids",
+            "type": "array"
+          },
+          "cell_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Cell Id",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/StatementArtifactRefV1"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "missing": {
+            "$ref": "#/components/schemas/FundamentalMissingValueV1"
+          },
+          "period_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Period Id",
+            "type": "string"
+          },
+          "quality_status": {
+            "enum": [
+              "verified",
+              "provisional",
+              "degraded",
+              "unsupported",
+              "abstain",
+              "error"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "rejected_candidates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalCandidateRejectionV1"
+            },
+            "title": "Rejected Candidates",
+            "type": "array"
+          },
+          "row_id": {
+            "enum": [
+              "revenue",
+              "cost_of_revenue",
+              "gross_profit",
+              "operating_income",
+              "income_before_tax",
+              "income_tax_expense",
+              "net_income",
+              "cash_and_equivalents",
+              "operating_current_receivables",
+              "inventory",
+              "current_assets",
+              "property_plant_and_equipment",
+              "total_assets",
+              "operating_current_payables",
+              "current_liabilities",
+              "total_liabilities",
+              "total_equity",
+              "liabilities_and_equity",
+              "operating_cash_flow",
+              "investing_cash_flow",
+              "financing_cash_flow",
+              "effect_of_exchange_rates_on_cash",
+              "net_change_in_cash",
+              "cash_flow_beginning_balance",
+              "cash_flow_ending_balance"
+            ],
+            "title": "Row Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "unavailable",
+            "default": "unavailable",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cell_id",
+          "row_id",
+          "period_id",
+          "missing",
+          "quality_status",
+          "issue_codes",
+          "evidence_refs"
+        ],
+        "title": "UnavailableStatementCellV1",
+        "type": "object"
+      },
+      "UnresolvedStatementPeriodV1": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "unresolved",
+            "default": "unresolved",
+            "title": "Kind",
+            "type": "string"
+          },
+          "missing": {
+            "$ref": "#/components/schemas/FundamentalMissingValueV1"
+          },
+          "reported_period_end": {
+            "format": "date",
+            "title": "Reported Period End",
+            "type": "string"
+          },
+          "source_outcome_ref": {
+            "$ref": "#/components/schemas/StatementArtifactRefV1"
+          }
+        },
+        "required": [
+          "reported_period_end",
+          "missing",
+          "source_outcome_ref"
+        ],
+        "title": "UnresolvedStatementPeriodV1",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -15305,6 +17508,23 @@
               ],
               "title": "Run Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
           }
         ],
         "responses": {
@@ -15840,6 +18060,133 @@
         "summary": "List the authenticated account's recent analysis runs",
         "tags": [
           "Dashboard"
+        ]
+      }
+    },
+    "/api/v1/fundamental/annual-statements/catalog": {
+      "get": {
+        "operationId": "catalog_api_v1_fundamental_annual_statements_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnualStatementCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Catalog",
+        "tags": [
+          "Annual statements"
+        ]
+      }
+    },
+    "/api/v1/fundamental/annual-statements/read": {
+      "post": {
+        "operationId": "read_api_v1_fundamental_annual_statements_read_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "existing_thread": "#/components/schemas/AnnualStatementExistingThreadReadIntent",
+                    "new_thread": "#/components/schemas/AnnualStatementNewThreadReadIntent"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AnnualStatementExistingThreadReadIntent"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AnnualStatementNewThreadReadIntent"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnualStatementArtifactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnualStatementReadErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "408": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnualStatementReadErrorResponse"
+                }
+              }
+            },
+            "description": "Request Timeout"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnualStatementReadErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnualStatementReadErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnualStatementReadErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "Annual statements"
         ]
       }
     },

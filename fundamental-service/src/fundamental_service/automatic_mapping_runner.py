@@ -27,6 +27,8 @@ from .automatic_mapping_batch import (
     AutomaticMappingBatchRequestV1,
     AutomaticMappingProposalDecisionV1,
     AutomaticMappingRoleDecisionV1,
+    StatementMappingBatchRequestV1,
+    StatementMappingBatchDecisionV1,
 )
 from .automatic_mapping_evidence import AutomaticMappingEvidenceChecks
 from .command_artifacts import EvidenceArtifactStore, command_artifacts
@@ -223,7 +225,7 @@ def _artifact_ref(publication: ArtifactPublicationV1, role: str) -> ArtifactRefV
 
 
 def approve_mapping_batch(
-    request: AutomaticMappingBatchRequestV1,
+    request: AutomaticMappingBatchRequestV1 | StatementMappingBatchRequestV1,
     *,
     artifacts: EvidenceArtifactStore,
     trust_roots: DataReleaseTrustRootsV1,
@@ -243,10 +245,7 @@ def approve_mapping_batch(
         input_digests=evidence_checks.identities,
     )
     roles, receipts = [], []
-    for role in sorted(
-        set(request.requirements.required_fact_fields)
-        | set(request.requirements.supporting_fact_fields)
-    ):
+    for role in request.role_fields:
         proposals = automatic_mapping_proposals(
             role,
             mapping_version=request.mapping_version,
@@ -319,19 +318,30 @@ def approve_mapping_batch(
                 additional_decisions=tuple(outcomes[1:]),
             )
         )
-    batch_decision = AutomaticMappingBatchDecisionV1(
+    batch_decision: AutomaticMappingBatchDecisionV1 | StatementMappingBatchDecisionV1
+    common = dict(
         input_digest=input_digest,
         source_revision=request.source_revision,
         policy_digest=automatic_mapping_policy_digest(),
-        model_version=request.model_version,
-        requirements=request.requirements,
         roles=tuple(roles),
     )
+    if isinstance(request, StatementMappingBatchRequestV1):
+        batch_decision = StatementMappingBatchDecisionV1.model_validate(
+            {**common, "statement_profile": request.statement_profile}
+        )
+    else:
+        batch_decision = AutomaticMappingBatchDecisionV1.model_validate(
+            {
+                **common,
+                "model_version": request.model_version,
+                "requirements": request.requirements,
+            }
+        )
     output_digest = sha256_digest(batch_decision)
     dependencies = {
         input_publication.artifact.content_hash,
         batch_decision.policy_digest,
-        request.requirements.digest,
+        request.coverage_digest,
     }
     for role_decision in roles:
         for outcome in role_decision.proposal_decisions():
@@ -363,8 +373,14 @@ def approve_mapping_batch(
 
 
 _COMMAND_REQUEST = TypeAdapter[
-    AutomaticMappingRequestV1 | AutomaticMappingBatchRequestV1
-](AutomaticMappingRequestV1 | AutomaticMappingBatchRequestV1)
+    AutomaticMappingRequestV1
+    | AutomaticMappingBatchRequestV1
+    | StatementMappingBatchRequestV1
+](
+    AutomaticMappingRequestV1
+    | AutomaticMappingBatchRequestV1
+    | StatementMappingBatchRequestV1
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -390,7 +406,10 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("machine approvals require an Ed25519 key")
         with command_artifacts(args.artifacts_root) as artifacts:
             receipt: AutomaticMappingBatchReceiptV1 | AutomaticMappingReceiptV1
-            if isinstance(request, AutomaticMappingBatchRequestV1):
+            if isinstance(
+                request,
+                (AutomaticMappingBatchRequestV1, StatementMappingBatchRequestV1),
+            ):
                 receipt = approve_mapping_batch(
                     request, artifacts=artifacts, trust_roots=roots, private_key=key
                 )

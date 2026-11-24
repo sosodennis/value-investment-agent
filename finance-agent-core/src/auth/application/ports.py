@@ -152,6 +152,7 @@ class OwnershipRepository(Protocol):
         resource_type: str,
         resource_id: str,
         user_id: str,
+        organization_id: str | None = None,
     ) -> bool: ...
 
     async def owner_of(
@@ -159,6 +160,7 @@ class OwnershipRepository(Protocol):
         *,
         resource_type: str,
         resource_id: str,
+        organization_id: str | None = None,
     ) -> str | None: ...
 
     async def list_owned_ids(

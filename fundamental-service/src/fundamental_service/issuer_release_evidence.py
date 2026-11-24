@@ -18,7 +18,10 @@ from .facts import (
 from .original_issuer import IssuerOperatingSourceV1, OriginalIssuerEvidenceV1
 from .regulatory_validation import require_sec_validation_evidence
 from .sec_rebuild import parsed_facts_to_candidates
-from .sec_integrity import assess_filing_response
+from .sec_integrity import (
+    assess_filing_response,
+    require_registered_html_resource_scope,
+)
 from .parser_computation import execution_validation_evidence
 from .serialization import canonical_bytes, sha256_digest
 from .valuation_requirements import (
@@ -71,6 +74,19 @@ def verify_original_integrity(
 ) -> None:
     source, report = original.source, original.report
     try:
+        for policy_id, member_hash in (
+            (integrity.normalization_policy_id, integrity.archive_member_hash),
+            *(
+                (item.normalization_policy_id, item.archive_member_hash)
+                for item in integrity.inline_documents
+            ),
+        ):
+            require_registered_html_resource_scope(
+                normalization_policy_id=policy_id,
+                archive_member_hash=member_hash,
+                validation_profile_digest=report.validation_profile_digest,
+                taxonomy_cache_hash=report.taxonomy_cache_hash,
+            )
         require_sec_validation_evidence(report)
     except SnapshotError as error:
         raise DataReleaseError(error.code, str(error)) from error

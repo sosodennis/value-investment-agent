@@ -4,6 +4,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.shared.artifacts.annual_statement_contracts import (
+    AnnualStatementsReadResponseV1,
+)
 from src.shared.artifacts.debate_contracts import EvidenceFactModel
 from src.shared.artifacts.financial_statement_contracts import (
     FinancialReportModel,
@@ -20,6 +23,7 @@ class FinancialReportsArtifactData(BaseModel):
 
     financial_reports: list[FinancialReportModel] = Field(default_factory=list)
     fundamental_service: FundamentalServiceArtifactV1 | None = None
+    annual_statements: AnnualStatementsReadResponseV1 | None = None
     forward_signals: list[dict[str, object]] | None = None
     diagnostics: dict[str, object] | None = None
     quality_gates: dict[str, object] | None = None

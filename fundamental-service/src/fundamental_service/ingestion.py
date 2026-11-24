@@ -60,7 +60,11 @@ from .mapping_input_identity import MappingInputDigests
 from .parser_actions import ParserActions
 from .parser_action_identity import ParserBuildChecks
 from .replay import ArtifactRecordV1
-from .sec_integrity import assess_filing_response, extract_referenced_graphics
+from .sec_integrity import (
+    assess_filing_response,
+    extract_referenced_graphics,
+    require_registered_html_resource_scope,
+)
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
 from .sec_source import SecSourceCapturePort, sec_source_register
 from .serialization import canonical_bytes, sha256_digest
@@ -653,15 +657,31 @@ class SecIngestionService:
             report = parse_representation(
                 normalized_path, "normalized", parser_input_hash
             )
+            for item_assessment in (
+                assessment,
+                *(item for _, item in inline_assessments),
+            ):
+                require_registered_html_resource_scope(
+                    normalization_policy_id=item_assessment.normalization_policy_id,
+                    archive_member_hash=item_assessment.archive_member_hash,
+                    validation_profile_digest=report.validation_profile_digest,
+                    taxonomy_cache_hash=report.taxonomy_cache_hash,
+                )
             require_sec_validation_evidence(report)
             if filing_date is not None and profile.dqc_applicability_digest is not None:
+                dqc_version: Literal["v18", "v31.0.3"] = (
+                    "v18" if profile.dqc_version == "v18" else "v31.0.3"
+                )
                 report = bind_dqc_filing_context(
                     report,
                     DqcFilingContextV1(
                         issuer_id=cik,
                         accession_number=accession_number,
                         filing_date=filing_date,
-                        policy_digest=dqc_applicability_policy_digest(),
+                        dqc_version=dqc_version,
+                        policy_digest=dqc_applicability_policy_digest(
+                            profile.dqc_version
+                        ),
                     ),
                 )
             archive_report = report
@@ -671,6 +691,16 @@ class SecIngestionService:
                     "archive",
                     parser_input_hash if inline_integrity else archive_member_hash,
                 )
+                for item_assessment in (
+                    assessment,
+                    *(item for _, item in inline_assessments),
+                ):
+                    require_registered_html_resource_scope(
+                        normalization_policy_id=item_assessment.normalization_policy_id,
+                        archive_member_hash=item_assessment.archive_member_hash,
+                        validation_profile_digest=archive_report.validation_profile_digest,
+                        taxonomy_cache_hash=archive_report.taxonomy_cache_hash,
+                    )
                 require_sec_validation_evidence(archive_report)
                 if report.dqc_filing_context is not None:
                     archive_report = bind_dqc_filing_context(
@@ -905,14 +935,117 @@ class SecIngestionService:
             amends_accession=amends_accession,
             amendment_scope=amendment_scope,
         )
-        source = validated.source
-        archive_source = validated.archive_source
-        index_source = validated.index_source
-        dts_sources = validated.dts_sources
-        inline_sources = validated.inline_sources
-        captured_sources = validated.captured_sources
-        report = validated.parser_report
-        integrity_evidence = validated.integrity_evidence
+        return self._materialize_filing(
+            validated=validated,
+            sources=(
+                *(
+                    item
+                    for item in reference_sources
+                    if item.source_id != "sec-filing-index"
+                ),
+                validated.index_source,
+                validated.source,
+                validated.archive_source,
+                *((submission_source,) if submission_source is not None else ()),
+                *validated.dts_sources,
+                *validated.inline_sources,
+            ),
+            identity=identity,
+            identity_basis=identity_basis,
+            identity_ticker=identity_ticker,
+            cik=cik,
+            accession_number=accession_number,
+            form=form,
+            is_amendment=is_amendment,
+            accepted_at=accepted_at,
+            filed_at=filed_at,
+            captured_at=captured_at,
+            valuation_timestamp=valuation_timestamp,
+            fiscal_period_selector=fiscal_period_selector,
+            parser_version=parser_version,
+            policy_version=policy_version,
+            taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
+            mappings=mappings,
+            mapping_resolver=mapping_resolver,
+            additional_issues=additional_issues,
+        )
+
+    def prepare_original(
+        self,
+        *,
+        validated: ValidatedOriginalV1,
+        sources: tuple[CapturedSource, ...],
+        identity_ticker: str,
+        captured_at: datetime,
+        valuation_timestamp: datetime,
+        fiscal_period_selector: FiscalPeriodSelectorV1 | None,
+        parser_version: str,
+        policy_version: str,
+        taxonomy_manifest_id: str,
+        acquisition_key: str,
+        mapping_resolver: IngestionMappingResolverPort,
+        reference_sources: tuple[CapturedSource, ...] = (),
+        additional_issues: tuple[IssueV1, ...] = (),
+    ) -> SecIngestionResult:
+        """Materialize the complete original admitted by the preparation owner."""
+        original = validated.original.source
+        return self._materialize_filing(
+            validated=validated,
+            sources=(*reference_sources, *sources),
+            identity=validated.identity,
+            identity_basis="original-filing-dei-v1",
+            identity_ticker=identity_ticker,
+            cik=original.cik,
+            accession_number=original.accession_number,
+            form=original.form,
+            is_amendment=original.is_amendment,
+            accepted_at=original.available_at,
+            filed_at=original.available_at,
+            captured_at=captured_at,
+            valuation_timestamp=valuation_timestamp,
+            fiscal_period_selector=fiscal_period_selector,
+            parser_version=parser_version,
+            policy_version=policy_version,
+            taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
+            mappings=(),
+            mapping_resolver=mapping_resolver,
+            additional_issues=additional_issues,
+        )
+
+    def _materialize_filing(
+        self,
+        *,
+        validated: ValidatedSecFiling | ValidatedOriginalV1,
+        sources: tuple[CapturedSource, ...],
+        identity: IdentityV1,
+        identity_basis: SecIdentityBasis,
+        identity_ticker: str | None,
+        cik: str,
+        accession_number: str,
+        form: str,
+        is_amendment: bool,
+        accepted_at: datetime | None,
+        filed_at: datetime,
+        captured_at: datetime,
+        valuation_timestamp: datetime,
+        fiscal_period_selector: FiscalPeriodSelectorV1 | None,
+        parser_version: str,
+        policy_version: str,
+        taxonomy_manifest_id: str | None,
+        acquisition_key: str | None,
+        mappings: tuple[CanonicalMappingV1, ...],
+        mapping_resolver: IngestionMappingResolverPort | None,
+        additional_issues: tuple[IssueV1, ...],
+    ) -> SecIngestionResult:
+        source = next(item for item in sources if item.source_id == "sec-filing")
+        if isinstance(validated, ValidatedOriginalV1):
+            report = validated.original.report
+            integrity_evidence = validated.integrity
+        else:
+            report = validated.parser_report
+            integrity_evidence = validated.integrity_evidence
         taxonomy_hash = integrity_evidence.taxonomy_manifest_hash
         normalized_hash = integrity_evidence.normalized_content_hash
 
@@ -979,49 +1112,40 @@ class SecIngestionService:
         mapping_issues: tuple[IssueV1, ...] = ()
         mapping_missing: tuple[str, ...] = ()
         if mapping_resolver is not None:
-            original = evaluate_original_issuer(
-                report,
-                source=OriginalOperatingSourceV1(
-                    cik=cik,
-                    accession_number=accession_number,
-                    uri=source.uri,
-                    content_hash=integrity_evidence.raw_content_hash,
-                    parser_input_hash=report.source_content_hash or "",
-                    form=form,
-                    is_amendment=is_amendment,
-                    available_at=accepted_at or filed_at,
-                    captured_at=source.captured_at or captured_at,
-                    http_status=source.http_status,
-                ),
-                decision_at=valuation_timestamp,
-            )
-            resolved = mapping_resolver.resolve(
-                ValidatedOriginalV1(
+            if isinstance(validated, ValidatedOriginalV1):
+                original_input = validated
+                original = validated.original
+            else:
+                original = evaluate_original_issuer(
+                    report,
+                    source=OriginalOperatingSourceV1(
+                        cik=cik,
+                        accession_number=accession_number,
+                        uri=source.uri,
+                        content_hash=integrity_evidence.raw_content_hash,
+                        parser_input_hash=report.source_content_hash or "",
+                        form=form,
+                        is_amendment=is_amendment,
+                        available_at=accepted_at or filed_at,
+                        captured_at=source.captured_at or captured_at,
+                        http_status=source.http_status,
+                    ),
+                    decision_at=valuation_timestamp,
+                )
+                original_input = ValidatedOriginalV1(
                     identity=identity,
                     original=original,
                     integrity=integrity_evidence,
-                    captured_sources=captured_sources,
+                    captured_sources=validated.captured_sources,
                     primary_media_type=source.media_type,
                 )
-            )
+            resolved = mapping_resolver.resolve(original_input)
             mapping_report = original.report
             mappings = resolved.mappings
             mapping_evidence_ref = resolved.evidence_ref
             mapping_issues = resolved.issues
             mapping_missing = resolved.missing_fields
 
-        other_sources = tuple(
-            item for item in reference_sources if item.source_id != "sec-filing-index"
-        )
-        sources = (
-            *other_sources,
-            index_source,
-            source,
-            archive_source,
-            *((submission_source,) if submission_source is not None else ()),
-            *dts_sources,
-            *inline_sources,
-        )
         snapshot = self.builder.prepare(
             identity=identity,
             valuation_timestamp=valuation_timestamp,
@@ -1289,6 +1413,12 @@ class SecIngestionService:
                 taxonomy_cache_dir=taxonomy_cache_dir,
                 source_content_hash=normalized_hash,
             )
+            require_registered_html_resource_scope(
+                normalization_policy_id=assessment.normalization_policy_id,
+                archive_member_hash=assessment.archive_member_hash,
+                validation_profile_digest=parser_report.validation_profile_digest,
+                taxonomy_cache_hash=parser_report.taxonomy_cache_hash,
+            )
             require_sec_validation_evidence(parser_report)
             archive_report = parser_report
             if assessment.relation == "normalized":
@@ -1298,6 +1428,12 @@ class SecIngestionService:
                     taxonomy_version=taxonomy_version,
                     taxonomy_cache_dir=taxonomy_cache_dir,
                     source_content_hash=archive_member_hash,
+                )
+                require_registered_html_resource_scope(
+                    normalization_policy_id=assessment.normalization_policy_id,
+                    archive_member_hash=assessment.archive_member_hash,
+                    validation_profile_digest=archive_report.validation_profile_digest,
+                    taxonomy_cache_hash=archive_report.taxonomy_cache_hash,
                 )
                 require_sec_validation_evidence(archive_report)
                 if fact_semantic_digest(parser_report) != fact_semantic_digest(
