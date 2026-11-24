@@ -107,7 +107,7 @@ def _original_identity_facts():
 
 
 @pytest.mark.parametrize(
-    "policy", (None, *(f"original-dei-paired-common-stock-v{i}" for i in range(2, 6)))
+    "policy", (None, *(f"original-dei-paired-common-stock-v{i}" for i in range(2, 7)))
 )
 @pytest.mark.parametrize(
     "change",
@@ -260,6 +260,86 @@ def test_explicit_no_symbol_note_does_not_obscure_unique_common_stock():
         )
         == identity
     )
+
+
+@pytest.mark.parametrize(
+    "namespace",
+    (
+        "http://xbrl.sec.gov/dei/2020-01-31",
+        "http://xbrl.sec.gov/dei/2021",
+        "http://xbrl.sec.gov/dei/2022",
+        "http://xbrl.sec.gov/dei/2024",
+    ),
+)
+def test_no_symbol_notes_use_the_original_dei_namespace(namespace):
+    facts = tuple(
+        fact.model_copy(update={"namespace_uri": namespace})
+        if fact.concept.startswith("dei:")
+        else fact
+        for fact in _note_with_no_trading_symbol()
+    )
+    identity = _resolve_original(
+        facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+    )
+    assert identity.security_id == "AAPL"
+    assert identity.share_class == "Common Stock"
+
+
+@pytest.mark.parametrize(
+    "namespace",
+    (
+        "http://xbrl.sec.gov/dei/2020-01-31",
+        "http://xbrl.sec.gov/dei/2021",
+        "http://xbrl.sec.gov/dei/2022",
+    ),
+)
+def test_v5_keeps_historical_no_symbol_note_refusal(namespace):
+    facts = tuple(
+        fact.model_copy(update={"namespace_uri": namespace})
+        if fact.concept.startswith("dei:")
+        else fact
+        for fact in _note_with_no_trading_symbol()
+    )
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            facts, security_selection_policy="original-dei-paired-common-stock-v5"
+        )
+    assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    "namespace",
+    (
+        "http://xbrl.sec.gov/dei/2020-01-31",
+        "http://xbrl.sec.gov/dei/2021",
+        "http://xbrl.sec.gov/dei/2022",
+        "http://xbrl.sec.gov/dei/2024",
+    ),
+)
+@pytest.mark.parametrize(
+    "change",
+    (
+        {"namespace_uri": "http://xbrl.sec.gov/dei/2023"},
+        {"namespace_uri": "https://example.test/dei/2024"},
+        {"entity_identifier": "0000320194"},
+        {"entity_scheme": "https://example.test/CIK"},
+        {"dimensions": (("issuer:OtherAxis", "issuer:OtherMember"),)},
+        {"value": "false"},
+    ),
+)
+def test_no_symbol_notes_keep_exact_namespace_issuer_and_class_scope(namespace, change):
+    facts = tuple(
+        fact.model_copy(update={"namespace_uri": namespace})
+        if fact.concept.startswith("dei:")
+        else fact
+        for fact in _note_with_no_trading_symbol()
+    )
+    facts = (*facts[:-1], facts[-1].model_copy(update=change))
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+    assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
 
 
 @pytest.mark.parametrize(
@@ -1400,7 +1480,11 @@ def test_v3_preserves_selected_ticker_and_unselected_symbol_boundaries(context, 
 @pytest.mark.parametrize("representation", ("single", "distinct_note", "reused_note"))
 @pytest.mark.parametrize(
     "policy",
-    ("original-dei-paired-common-stock-v4", "original-dei-paired-common-stock-v5"),
+    (
+        "original-dei-paired-common-stock-v4",
+        "original-dei-paired-common-stock-v5",
+        "original-dei-paired-common-stock-v6",
+    ),
 )
 def test_paired_v4_selects_explicit_no_par_common_stock(title, representation, policy):
     source = {
@@ -1414,7 +1498,7 @@ def test_paired_v4_selects_explicit_no_par_common_stock(title, representation, p
         else f
         for f in source
     )
-    assert DEFAULT_ORIGINAL_SECURITY_POLICY == "original-dei-paired-common-stock-v5"
+    assert DEFAULT_ORIGINAL_SECURITY_POLICY == "original-dei-paired-common-stock-v6"
     identity = _resolve_original(facts, security_selection_policy=policy)
     assert identity.security_id == "AAPL" and identity.share_class == title
     assert (
@@ -1448,7 +1532,11 @@ def test_paired_v4_selects_explicit_no_par_common_stock(title, representation, p
 )
 @pytest.mark.parametrize(
     "policy",
-    ("original-dei-paired-common-stock-v4", "original-dei-paired-common-stock-v5"),
+    (
+        "original-dei-paired-common-stock-v4",
+        "original-dei-paired-common-stock-v5",
+        "original-dei-paired-common-stock-v6",
+    ),
 )
 def test_paired_v4_requires_the_complete_supported_printed_title(title, policy):
     facts = tuple(

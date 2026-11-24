@@ -66,9 +66,10 @@ OriginalSecuritySelectionPolicy = Literal[
     "original-dei-paired-common-stock-v3",
     "original-dei-paired-common-stock-v4",
     "original-dei-paired-common-stock-v5",
+    "original-dei-paired-common-stock-v6",
 ]
 DEFAULT_ORIGINAL_SECURITY_POLICY: OriginalSecuritySelectionPolicy = (
-    "original-dei-paired-common-stock-v5"
+    "original-dei-paired-common-stock-v6"
 )
 _PAIRED_SECURITY_POLICIES = frozenset(
     {
@@ -76,6 +77,7 @@ _PAIRED_SECURITY_POLICIES = frozenset(
         "original-dei-paired-common-stock-v3",
         "original-dei-paired-common-stock-v4",
         "original-dei-paired-common-stock-v5",
+        "original-dei-paired-common-stock-v6",
     }
 )
 OriginalHistoryIdentityPolicy = Literal["original-history-name-format-v1"]
@@ -204,6 +206,8 @@ def _single_standard_common_title(
 
 def _no_symbol_note_contexts(
     facts: tuple[ParsedXbrlFactV1, ...],
+    *,
+    allow_historical_dei_namespaces: bool,
 ) -> frozenset[_SecurityContext] | None:
     flags = tuple(f for f in facts if f.concept == "dei:NoTradingSymbolFlag")
     if not flags:
@@ -261,11 +265,15 @@ def _no_symbol_note_contexts(
                     f.namespace_uri,
                 )
                 != reference
-                or f.namespace_uri
-                not in {
-                    f"http://xbrl.sec.gov/dei/{year}"
-                    for year in (2023, 2024, 2025, 2026)
-                }
+                or not (
+                    _DEI_NAMESPACE.fullmatch(f.namespace_uri or "")
+                    if allow_historical_dei_namespaces
+                    else f.namespace_uri
+                    in {
+                        f"http://xbrl.sec.gov/dei/{year}"
+                        for year in (2023, 2024, 2025, 2026)
+                    }
+                )
                 or f.unit is not None
                 or f.is_numeric
                 or f.instant is not None
@@ -288,6 +296,7 @@ def _paired_common_security(
     allow_omitted_per_share: bool,
     allow_no_par_value: bool,
     allow_no_symbol_notes: bool,
+    allow_historical_dei_namespaces: bool,
 ) -> tuple[str, str, tuple[tuple[str, str], ...]] | None:
     """Classify paired printed DEI titles, without interpreting custom member names."""
 
@@ -300,7 +309,11 @@ def _paired_common_security(
         target = symbols if fact.concept == "dei:TradingSymbol" else titles
         target.setdefault(context, set()).add(" ".join(fact.value.split()))
     no_symbol_notes = (
-        _no_symbol_note_contexts(facts) if allow_no_symbol_notes else frozenset()
+        _no_symbol_note_contexts(
+            facts, allow_historical_dei_namespaces=allow_historical_dei_namespaces
+        )
+        if allow_no_symbol_notes
+        else frozenset()
     )
     if (
         not symbols
@@ -364,6 +377,7 @@ def resolve_original_filing_identity(
             "original-dei-paired-common-stock-v3",
             "original-dei-paired-common-stock-v4",
             "original-dei-paired-common-stock-v5",
+            "original-dei-paired-common-stock-v6",
         )
     ):
         raise refuse(
@@ -386,14 +400,21 @@ def resolve_original_filing_identity(
                 "original-dei-paired-common-stock-v3",
                 "original-dei-paired-common-stock-v4",
                 "original-dei-paired-common-stock-v5",
+                "original-dei-paired-common-stock-v6",
             },
             allow_no_par_value=security_selection_policy
             in {
                 "original-dei-paired-common-stock-v4",
                 "original-dei-paired-common-stock-v5",
+                "original-dei-paired-common-stock-v6",
             },
             allow_no_symbol_notes=security_selection_policy
-            == "original-dei-paired-common-stock-v5",
+            in {
+                "original-dei-paired-common-stock-v5",
+                "original-dei-paired-common-stock-v6",
+            },
+            allow_historical_dei_namespaces=security_selection_policy
+            == "original-dei-paired-common-stock-v6",
         )
         if security_selection_policy in _PAIRED_SECURITY_POLICIES
         else None
@@ -492,6 +513,7 @@ def resolve_original_filing_identity(
             "original-dei-paired-common-stock-v3",
             "original-dei-paired-common-stock-v4",
             "original-dei-paired-common-stock-v5",
+            "original-dei-paired-common-stock-v6",
         } and (symbol, title) != (ticker, identity.share_class):
             symbol_pattern = r"[A-Z0-9][A-Z0-9. -]{0,24}"
         if not re.fullmatch(symbol_pattern, symbol):

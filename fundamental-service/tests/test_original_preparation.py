@@ -332,6 +332,100 @@ def test_no_par_policy_reuses_validation_and_preserves_prior_refusal(
     assert _inventory(tmp_path) == before
 
 
+@pytest.mark.parametrize(
+    "namespace",
+    (
+        "http://xbrl.sec.gov/dei/2020-01-31",
+        "http://xbrl.sec.gov/dei/2021",
+        "http://xbrl.sec.gov/dei/2022",
+    ),
+)
+def test_historical_note_policy_reuses_validation_and_replays_v5_refusal(
+    tmp_path, monkeypatch, namespace
+):
+    from fundamental_service import ingestion
+
+    value = case(tmp_path, monkeypatch)
+    parser = ingestion.parse_filing_offline
+
+    def historical_note_parser(*args, **kwargs):
+        report = parser(*args, **kwargs)
+        facts = tuple(
+            fact.model_copy(
+                update={
+                    "namespace_uri": namespace,
+                    **(
+                        {
+                            "context_id": "common-class",
+                            "dimensions": (
+                                (
+                                    "us-gaap:StatementClassOfStockAxis",
+                                    "us-gaap:CommonStockMember",
+                                ),
+                            ),
+                        }
+                        if fact.concept in {"dei:TradingSymbol", "dei:Security12bTitle"}
+                        else {}
+                    ),
+                }
+            )
+            if fact.concept.startswith("dei:")
+            else fact
+            for fact in report.facts
+        )
+        title = next(fact for fact in facts if fact.concept == "dei:Security12bTitle")
+        note = title.model_copy(
+            update={
+                "context_id": "listed-note",
+                "dimensions": (
+                    ("us-gaap:StatementClassOfStockAxis", "issuer:NotesDue2027Member"),
+                ),
+                "value": "2.000% Notes due 2027",
+            }
+        )
+        return report.model_copy(
+            update={
+                "facts": (
+                    *facts,
+                    note,
+                    note.model_copy(
+                        update={"concept": "dei:NoTradingSymbolFlag", "value": "true"}
+                    ),
+                )
+            }
+        )
+
+    monkeypatch.setattr(ingestion, "parse_filing_offline", historical_note_parser)
+    old_request = type(value.request).model_validate(
+        {
+            **value.request.model_dump(),
+            "security_selection_policy": "original-dei-paired-common-stock-v5",
+        }
+    )
+    refused, _ = execute(value, old_request)
+    assert refused.issue_codes == ("HISTORICAL_SECURITY_SELECTION_REQUIRED",)
+    assert refused.filings[0].identity is None
+    calls = value.state.provider_calls, value.state.parser_calls
+    request = type(value.request).model_validate(
+        {
+            **value.request.model_dump(),
+            "security_selection_policy": DEFAULT_ORIGINAL_SECURITY_POLICY,
+        }
+    )
+    prepared, publication = execute(value, request)
+    assert not prepared.issue_codes
+    assert publication.wrote and request.digest != old_request.digest
+    assert prepared.filings[0].identity == value.expected_identity
+    assert prepared.filings[0].validation == refused.filings[0].validation
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+    before = _inventory(tmp_path)
+    repeated, receipt = execute(value, request)
+    assert repeated == prepared and not receipt.wrote
+    assert value.service.read(refused.artifact_id) == refused
+    assert value.service.read(prepared.artifact_id) == prepared
+    assert _inventory(tmp_path) == before
+
+
 def test_concurrent_requests_publish_once_and_parse_once(tmp_path, monkeypatch):
     value = case(tmp_path, monkeypatch)
     with ThreadPoolExecutor(max_workers=3) as pool:
