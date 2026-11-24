@@ -12,6 +12,10 @@ See [market inputs and replaceable sources](docs/market-input-providers.md) for
 the current parameter sources, provider ports, composition points and the
 distinction between source admission and financial-policy approval.
 
+See [公開來源、用途與固定 coverage](docs/source-use-coverage.md) for the
+source research matrix, frozen SEC cohort, evidence limits and downstream scope.
+Use [重跑來源核對](docs/reproduce-source-coverage.md) to replay the retained inputs.
+
 Production deployments must set `FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE` to a
 read-only deployment-owned JSON file containing verifier IDs, workflow
 identities, raw Ed25519 public keys, exact source revisions, and verification

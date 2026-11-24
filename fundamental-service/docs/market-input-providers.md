@@ -1,5 +1,9 @@
 # Market inputs and replaceable sources
 
+The [公開來源、用途與固定 coverage](source-use-coverage.md) reference links the
+research matrix to these owners and policies. Its six research uses grant no
+runtime authority. See [重跑來源核對](reproduce-source-coverage.md) for retained-input checks.
+
 Fundamental Service owns source acquisition, source admission, issuer mapping
 and market-input policy. The formal #352 composer owns valuation preparation
 and calculation. Providers reproduce source evidence; deterministic policies
@@ -386,14 +390,14 @@ refusal without parsing message text.
 
 The optional `source_admissions` plan entries connect these captures to the
 existing source-use evaluator. Each `public-source-admission-v1` entry pins
-`kind` (`macro` or `reference`), `provider_id`, `metric_id`, `intended_use`,
+`kind` (`macro`, `reference` or `quote`), `provider_id`, `metric_id`, `intended_use`,
 `valuation_at`, trusted `policy_version`/`policy_digest`, and ordered distinct
 `source_request_digests`/`terms_request_digests`. Capture digests must identify
 entries in the same plan; admission dates must equal the effective plan cutoff.
 In current mode acquisition requests retain the earlier business request time;
 the stored cutoff binds those exact receipts to the later decision. Requests cannot install policies
-or approve numbers. The command injects the application's configured macro and
-reference providers and trusted source-use policy into `PublicSourceAdmission`.
+or approve numbers. The command injects the application's configured macro,
+reference and quote providers and trusted source-use policy into `PublicSourceAdmission`.
 
 Exact permission pages have separate registrations: `damodaran-use-terms`,
 `bea-citation-terms`, `us-government-works-terms` and `new-york-fed-use-terms`.
