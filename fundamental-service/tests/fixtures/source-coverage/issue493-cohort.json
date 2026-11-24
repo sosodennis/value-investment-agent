@@ -1,0 +1,125 @@
+{
+  "protocol": "source-coverage-engineering-cohort-v1",
+  "issue": 493,
+  "frozen_on": "2026-11-24",
+  "scope": "Fixed original-source engineering checks, not market-wide coverage or the issue-376 cohort",
+  "source_manifest": "fundamental-service/tests/fixtures/sec-edgar/capture_manifest.json",
+  "actual_coverage": "unknown",
+  "supported_history_threshold": null,
+  "cases": [
+    {
+      "case_id": "aapl-fy2024-original",
+      "cik": "0000320193",
+      "company": "Apple Inc.",
+      "security_id": "AAPL",
+      "security_title": "Common Stock",
+      "accession_number": "0000320193-24-000123",
+      "form": "10-K",
+      "period_start": "2023-10-01",
+      "period_end": "2024-09-28",
+      "available_at": "2024-11-01T10:01:36+00:00",
+      "is_amendment": false,
+      "amends_accession": null,
+      "filing_path": "apple-2024-original-aapl-20240928.htm",
+      "archive_path": "apple-2024-original-0000320193-24-000123-xbrl.zip",
+      "source_uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+      "selection_evidence": [
+        {
+          "locator": "Note 1, Basis of Presentation; MD&A, Fiscal Period",
+          "quote": "The Company’s fiscal years 2024 and 2022 spanned 52 weeks each, whereas fiscal year 2023 spanned 53 weeks."
+        }
+      ],
+      "expected_checks": [
+        "Verify retained HTML and accession ZIP against the existing capture manifest before parsing",
+        "Preserve the non-December year end and distinguish FY2024 52 weeks from FY2023 53 weeks without annualizing or declaring comparability",
+        "Inventory standard and issuer-extension concepts from the original DTS; do not infer extension absence from CompanyFacts",
+        "Retain original contexts, periods, dimensions and units for statement observations",
+        "A parse-only result cannot authorize SEC canonical ingestion, accounting mappings, complete claims or calculation"
+      ],
+      "actual_coverage": "unknown"
+    },
+    {
+      "case_id": "tsla-fy2023-original",
+      "cik": "0001318605",
+      "company": "Tesla, Inc.",
+      "security_id": "TSLA",
+      "security_title": "Common Stock",
+      "accession_number": "0001628280-24-002390",
+      "form": "10-K",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "available_at": "2024-01-29T01:34:42+00:00",
+      "is_amendment": false,
+      "amends_accession": null,
+      "filing_path": "tesla-2024-original-tsla-20231231.htm",
+      "archive_path": "tesla-2024-original-0001628280-24-002390-xbrl.zip",
+      "source_uri": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+      "selection_evidence": [
+        {
+          "locator": "Cover; Part II, Item 8",
+          "quote": "For the fiscal year ended December 31, 2023"
+        }
+      ],
+      "expected_checks": [
+        "Verify retained HTML and accession ZIP against the existing capture manifest before parsing",
+        "Inspect the ordinary calendar-year original separately from the later FY2024 amendment",
+        "Inventory standard and issuer-extension observations without equating their presence to approved mappings",
+        "Report missing or unparsed roles explicitly; never replace them with zero",
+        "Retain a refusal of calculation qualification for an extraction-only report"
+      ],
+      "actual_coverage": "unknown"
+    },
+    {
+      "case_id": "tsla-fy2024-amendment",
+      "cik": "0001318605",
+      "company": "Tesla, Inc.",
+      "security_id": "TSLA",
+      "security_title": "Common Stock",
+      "accession_number": "0001104659-25-042659",
+      "form": "10-K/A",
+      "period_start": "2024-01-01",
+      "period_end": "2024-12-31",
+      "available_at": "2025-04-30T21:08:56+00:00",
+      "is_amendment": true,
+      "amends_accession": "0001628280-25-003063",
+      "filing_path": "tesla-2025-amendment-tm252787d2_10ka.htm",
+      "archive_path": "tesla-2025-amendment-0001104659-25-042659-xbrl.zip",
+      "source_uri": "https://www.sec.gov/Archives/edgar/data/1318605/000110465925042659/tm252787d2_10ka.htm",
+      "selection_evidence": [
+        {
+          "locator": "EXPLANATORY NOTE",
+          "quote": "amend Part III, Items 10, 11, 12, 13 and 14 of the Original Form 10-K to include the information required by such Items"
+        },
+        {
+          "locator": "EXPLANATORY NOTE",
+          "quote": "This Amendment does not otherwise change or update any of the disclosures set forth in the Original Form 10-K"
+        }
+      ],
+      "expected_checks": [
+        "Preserve the original capture manifest amendment_scope=unknown; the explanatory-note research citation does not rewrite capture metadata",
+        "Treat this Part III amendment as a known incomplete standalone source for annual three-statement coverage",
+        "Check operating cash-flow observations and retain missing evidence if absent; do not borrow the FY2023 original or synthesize FY2024 values",
+        "Do not treat an amendment as a replacement financial restatement without source-bound evidence",
+        "Preserve custom concepts and any parse refusal; original availability alone is not semantic or use approval"
+      ],
+      "actual_coverage": "unknown"
+    }
+  ],
+  "public_source_case": {
+    "case_id": "treasury-2026-capture",
+    "source_id": "treasury-yields",
+    "provider_id": "us-treasury",
+    "metric_id": "us.treasury_par_yield_10y",
+    "source_profile": "treasury-par-yield-xml-10y-v1",
+    "source_uri": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=2026",
+    "terms_source_id": "us-government-works-terms",
+    "expected_checks": [
+      "Use existing acquisition and admission owners with the installed deployment policy",
+      "Actual availability is capture time, not the historical observation date",
+      "At least one macro/reference route must match actual retained bytes, terms and policy before this issue can complete",
+      "Retain refusals for unsupported redistribution, missing or changed terms, mismatched policy pins and an earlier cutoff",
+      "Repeat identical retained inputs without provider I/O or evidence rewrites"
+    ],
+    "actual_coverage": "unknown"
+  }
+}
