@@ -1,11 +1,11 @@
 {
   "issue": 494,
   "branch": "codex/issue-494-annual-statements",
-  "commit": "715c48fb835f2fd542028d0594758f627faac23d",
+  "commit": "6c0b7fe4434cc78f88dedd630c9c8a51e70e6a23",
   "status": "WIP",
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent",
-    "browser_session": "CUA IAB browser2 tab2; http://127.0.0.1:23181/workspace",
+    "browser_session": "CUA IAB browser2 tab2; new tab required for updated tuple before next UI acceptance",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-494-app",
@@ -38,7 +38,7 @@
       "container_port": 8080,
       "published_port": 23190,
       "url": "http://127.0.0.1:23190",
-      "env_file_sha256": "ade54664f72a76585718f966b7205cb719ded5dd404239acfb159d5546770f94",
+      "env_file_sha256": "17f7dd74ff4d87bc9c66f1393e0838b7d35dbe78bc501ea85e215dee28f86ebb",
       "compose_file_sha256": {
         "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml": "9aa39254d0c2dfe4359587fbbae4c7aa527da71e1669ec9719fe5ff9d0fad264",
         "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml": "80a1d825662d3f39c7c91b9d83c954b1bc818c89d150b3da19f30b3f46a432d9",
@@ -64,8 +64,8 @@
     }
   },
   "runtime_inputs": {
-    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/data-release-trust-roots.json": "f6437d552e9d031db68de39e3fc2aa2c24f27e8f9e7600112f548978a687f012",
-    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/model-trust-roots.json": "a2fb0422dca0870176c14de1648d8b91f8d735ce6816725dd5e3cd92fcd20b14",
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/data-release-trust-roots.json": "72e6a2495c8770b5794631f1e064c2e7906316dd7282d320b91f80c25dacc6d9",
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/model-trust-roots.json": "1c40d85a71098d9bb5febebffd336b17b85250f90f98990532ac6ba5ab2935b0",
     "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/statement-release-policy.json": "a39faca69261783f12857801b2fc1f4e2649b6de470beaee824cf9f37117fb97"
   },
   "resources": {
@@ -92,7 +92,7 @@
     "fundamental-postgres",
     "fundamental-service"
   ],
-  "preflight": "passed exact 445504c6, SEC identity required; see preflight-445504c6.log",
+  "preflight": "passed exact 6c0b7fe4434cc78f88dedd630c9c8a51e70e6a23, SEC identity required; see preflight-6c0b7fe4.log",
   "schema_version": 1,
   "checks": [
     {
@@ -100,34 +100,27 @@
       "status": "pass",
       "command": "python3 /tmp/issue494-source-review/run-preflight.py",
       "exit_code": 0,
-      "tested_commit": "715c48fb835f2fd542028d0594758f627faac23d"
+      "tested_commit": "6c0b7fe4434cc78f88dedd630c9c8a51e70e6a23"
     },
     {
       "name": "formal-annual-statement-flow",
       "status": "not_run",
       "command": "fundamental-prepare-statements; authenticated read; workspace inspection",
       "exit_code": null
-    },
-    {
-      "name": "service-suite",
-      "status": "pass",
-      "command": "ISSUE494_SEC_EVIDENCE_DIR and pinned V18/V31 runtime paths; uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -ra",
-      "exit_code": 0,
-      "tested_commit": "715c48fb835f2fd542028d0594758f627faac23d",
-      "result": "5402 passed, 14 skipped, 5 warnings; conditional skips do not establish SEC acceptance",
-      "evidence": {
-        "path": "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/service-suite-715c48fb.log",
-        "sha256": "32c164a18752c81a5b23189e481e0a926705203f5b0b534f84df23ab8cf69991"
-      }
     }
   ],
   "blockers": [
-    "#509 formal source-to-workspace coverage",
+    "#509 formal Linux SEC coverage",
     "#511 standalone thread ownership formal workflow",
-    "#512 failed original exact failure semantics formal workflow",
-    "#513 SEC authorization formal workflow",
-    "#514 submission dates formal workflow",
-    "#515 prepared original identity through canonical ingestion"
+    "#512 failed original exact semantics",
+    "#513 source organization authorization",
+    "#514 original header dates",
+    "#515 prepared original identity formal workflow"
   ],
-  "next_step": "修正#515 owning acquisition/ingestion identity，完成Linux記憶體配置後重驗四組operator與API/workspace。"
+  "next_step": "Exact-commit four-case operator and full suite are running; independent engineering and accounting review pending final outputs.",
+  "runtime_resource_limits": {
+    "parser_virtual_memory_bytes": 3221225472,
+    "container_memory": "4GiB",
+    "parser_concurrency": 1
+  }
 }
