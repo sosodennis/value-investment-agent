@@ -28,6 +28,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     optimizePackageImports: ["lucide-react"],
+    proxyTimeout: 60_000,
   },
 };
 
