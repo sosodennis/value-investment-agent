@@ -75,6 +75,7 @@ assets match the approved inputs.
 | `FUNDAMENTAL_SEC_TAXONOMY_CACHE_HOST_DIR`, `FUNDAMENTAL_SEC_EDGAR_PLUGIN_HOST_DIR`, `FUNDAMENTAL_SEC_XULE_PLUGIN_HOST_DIR` | Host directories mounted read-only into the Fundamental service | Obtain the approved offline bundles for the target parser release. Use absolute paths in the worktree runtime manifest. |
 | `FUNDAMENTAL_SEC_DQC_RULESET_HOST_PATH` | Host path to the pinned DQC ruleset file | Obtain the approved ruleset file. Use an absolute path in the runtime manifest. |
 | `FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH` | Optional in-container path to a full DQC taxonomy ruleset catalog | Bind-mount the catalog and every pinned ruleset read-only. The catalog selects by the loaded US GAAP namespace; missing, mixed or unbound namespaces refuse. See `fundamental-service/README.md`. |
+| `FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH` | Optional in-container path to the official-source V18 catalog | Mount the reviewed derived V18 rulesets read-only. Keep this catalog separate from V31; each original selects its exact validation profile and DTS namespace. |
 | `FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256`, `FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256`, `FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256` | Directory digests | Compute them with the Fundamental service `_directory_hash` algorithm. That algorithm includes relative file names and bytes and ignores `__pycache__`, `.pyc`, and `.pyo` files. |
 | `FUNDAMENTAL_SEC_DQC_RULESET_SHA256` | DQC ruleset file digest | Compute `shasum -a 256 <path>` or `sha256sum <path>` on the exact mounted file. |
 | `FUNDAMENTAL_SEC_HISTORICAL_DQC_HOST_DIR` | Official DQC v1 package directory for the issue 361 overlay | Supply the 15 unchanged official files documented in `fundamental-service/docs/issue361-historical-validation.md`. The overlay pins their directory digest. |
@@ -139,6 +140,7 @@ runtime tuple.
 | `FRONTEND_ALLOWED_ORIGINS`, `STAGING_BASE_URL` | URLs derived from the selected frontend or backend ports. |
 | `FUNDAMENTAL_SERVICE_URL` | Backend-to-Fundamental service location for the app overlay. |
 | `FUNDAMENTAL_DATA_RELEASE_PROFILE_ID` | Active immutable release profile selected by the backend deployment. Required for automatic valuation. |
+| `FUNDAMENTAL_ANNUAL_STATEMENT_READERS` | JSON array of prepared annual statement readers; defaults to `[]`. Each entry binds issuer_id, ticker, company_name, exact profile_id, cutoff_at, security_id and security_scope. Reading statements uses its own release selector and does not grant valuation eligibility. |
 | `FUNDAMENTAL_COVERAGE_PROFILE` | Coverage profile for the configured released evidence. Required for automatic valuation. |
 | `FUNDAMENTAL_SOURCE_SELECTION_POLICY` | Source selection policy for the configured released evidence. Required for automatic valuation. |
 | `LLM_PROVIDER_SERVICE_URL`, `SEARCH_SERVICE_URL`, `MODEL_INFERENCE_FLS_URL`, `MODEL_INFERENCE_NEWS_URL`, `NEXT_PUBLIC_LANGGRAPH_URL` | Internal service locations. Change them only when the Compose topology changes. |
@@ -189,6 +191,7 @@ consumer. A key that exists only in an example is not a supported setting.
 - `FRONTEND_ALLOWED_ORIGINS`
 - `FRONTEND_HOST_PORT`
 - `FUNDAMENTAL_COVERAGE_PROFILE`
+- `FUNDAMENTAL_ANNUAL_STATEMENT_READERS`
 - `FUNDAMENTAL_DATA_RELEASE_PROFILE_ID`
 - `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_HOST_FILE`
 - `FUNDAMENTAL_MODEL_TRUST_ROOTS_HOST_FILE`
@@ -196,6 +199,7 @@ consumer. A key that exists only in an example is not a supported setting.
 - `FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH`
 - `FUNDAMENTAL_SEC_DQC_RULESET_HOST_PATH`
 - `FUNDAMENTAL_SEC_DQC_RULESET_SHA256`
+- `FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH`
 - `FUNDAMENTAL_SEC_EDGAR_PLUGIN_HOST_DIR`
 - `FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256`
 - `FUNDAMENTAL_SEC_HISTORICAL_DQC_HOST_DIR`
