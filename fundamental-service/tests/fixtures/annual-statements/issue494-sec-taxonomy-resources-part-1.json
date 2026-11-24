@@ -1,6 +1,6 @@
 {
   "protocol": "arelle-taxonomy-cache-manifest-v1",
-  "cache_sha256": "66a4fe146d9989730cf64955b9d5ab9cd910b668371ce2a6039690912237bf32",
+  "cache_sha256": "fbcd82b406a2420f37bf17c7afc8baa823e7cfadd2308ccb8bfecf88648a9691",
   "resources": [
     {
       "uri": "http://www.w3.org/2001/03/xml.xsd",
@@ -41,6 +41,11 @@
       "uri": "http://www.xbrl.org/2006/ref-2006-02-27.xsd",
       "sha256": "fae0144a41edf741c3b74c866988f64d24714dba4ca822258dea8b490b7904b7",
       "byte_size": 6544
+    },
+    {
+      "uri": "http://www.xbrl.org/2008/generic-link.xsd",
+      "sha256": "fe0d65342b89b760bb62b3cbea6a8c11f8e7381970e187a2d88984ea3320893d",
+      "byte_size": 3039
     },
     {
       "uri": "http://www.xbrl.org/2013/inlineXBRL/xbrl/xbrl-instance-2003-12-31-ixmod.xsd",
@@ -286,6 +291,11 @@
       "uri": "http://www.xbrl.org/lrr/role/net-2009-12-16.xsd",
       "sha256": "de7db88c29983dab5668dd437fdf659f9b66c1235e1e0240b79573305982a446",
       "byte_size": 864
+    },
+    {
+      "uri": "http://www.xbrl.org/lrr/role/reference-2009-12-16.xsd",
+      "sha256": "d0919c617180c2f903b0e5b4dc6e335220f3a32cfb776820f84de60bea95bc54",
+      "byte_size": 1432
     },
     {
       "uri": "http://www.xbrl.org/utr/2025-03-18/utr.xml",
@@ -3365,106 +3375,116 @@
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/refs/heads/v28/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2023-all.xsd",
       "sha256": "c24b22efed4cb37844f585d49c20ec25bd2d29f631a3fed1781fb7b28618cf28",
-      "byte_size": 3381523
+      "byte_size": 3381523,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/a08f95dcda9f5c4320a98eb2c245d488355bb512/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2023-all.xsd"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/refs/heads/v28/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2024-all.xsd",
       "sha256": "cd131e4812af98420cef136bd85ddcad250ccf39e8c74d1b380d3a8fb2c7e1a7",
-      "byte_size": 3476957
+      "byte_size": 3476957,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/a08f95dcda9f5c4320a98eb2c245d488355bb512/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2024-all.xsd"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/refs/heads/v28/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2025-all.xsd",
       "sha256": "a1f307452dd71f395c794bcb1a6bb1bc473b713cbd17986a93700dbebe354716",
-      "byte_size": 3474647
+      "byte_size": 3474647,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/a08f95dcda9f5c4320a98eb2c245d488355bb512/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2025-all.xsd"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/refs/heads/v28/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2026-all.xsd",
       "sha256": "c5bc9f39c5351786cfc57b4d3c9b03830ca200fd9f4224a5e415f537d6cb1b64",
-      "byte_size": 3547075
+      "byte_size": 3547075,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/a08f95dcda9f5c4320a98eb2c245d488355bb512/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2026-all.xsd"
+    },
+    {
+      "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/refs/heads/v29/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2026-all.xsd",
+      "sha256": "c5bc9f39c5351786cfc57b4d3c9b03830ca200fd9f4224a5e415f537d6cb1b64",
+      "byte_size": 3547075,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/15523c24c6997d9384a6aef82b7205ccd53feea2/dqc_us_rules/resources/Taxonomies/us-gaap-cal-2026-all.xsd"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0011/dqc_0011.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0011/dqc_0011.csv",
       "sha256": "84fead39b3b4acb7eb7fa09876ec55b986135666cf96557215979bd49c84a58e",
-      "byte_size": 2511
+      "byte_size": 2511,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0011/dqc_0011.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0015/dqc_15_dei_concepts.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_dei_concepts.csv",
       "sha256": "e136c5925cfd1bff374137e3377bfb34b38c423fbc633906dea1badb9f7d3313",
-      "byte_size": 182
+      "byte_size": 182,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_dei_concepts.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0015/dqc_15_srt_concepts.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_srt_concepts.csv",
       "sha256": "8f855a12a9ecd01a9da954c197989d909ab5af22efc0caea30789bee01550d4f",
-      "byte_size": 3126
+      "byte_size": 3126,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_srt_concepts.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2020_concepts.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2020_concepts.csv",
       "sha256": "3452208a252b81ad1a23b5bedf892422c7204763c7c001ab71ef3b9ca856c814",
-      "byte_size": 348064
+      "byte_size": 348064,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2020_concepts.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2021_concepts.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2021_concepts.csv",
       "sha256": "a4ae0d726ac4dc279a471cc4e5f7f203dfb3fd0a1dc47a01249bdac21e26279b",
-      "byte_size": 361963
+      "byte_size": 361963,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2021_concepts.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2022_concepts.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2022_concepts.csv",
       "sha256": "e73e50df83f7edd79e7eaa7288d0219149d5841fe6de14064d6d95e986e99a0b",
-      "byte_size": 367977
+      "byte_size": 367977,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0015/dqc_15_usgaap_2022_concepts.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0079/dqc_0079.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0079/dqc_0079.csv",
       "sha256": "a179299d5b4d512da6be7174246cb8d8c10d2804127eb8a1af038552a7adce17",
-      "byte_size": 7707
+      "byte_size": 7707,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0079/dqc_0079.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0081/child_elements_promotable_to_sibling.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/child_elements_promotable_to_sibling.csv",
       "sha256": "d9bf83f461eecb76af5995e87ec32d3cce5b0d00e728b696b70d4c06328a8b34",
-      "byte_size": 6557
+      "byte_size": 6557,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/child_elements_promotable_to_sibling.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0081/child_elements_promotable_to_sibling_of_parent_element.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/child_elements_promotable_to_sibling_of_parent_element.csv",
       "sha256": "ce73008ecb61c24984f16aeafeee6567d56ae9a54ed4bb6dac3ad568f0dc7407",
-      "byte_size": 144
+      "byte_size": 144,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/child_elements_promotable_to_sibling_of_parent_element.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0081/elements_excluded_from_rule.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/elements_excluded_from_rule.csv",
       "sha256": "fc6c27f35e8f61cc3837ad9972b708182ef7670f3d56683435b510ef0e28750e",
-      "byte_size": 197
+      "byte_size": 197,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/elements_excluded_from_rule.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0081/sibling_should_be_child_message-9278.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/sibling_should_be_child_message-9278.csv",
       "sha256": "b7b3d3ce2b052901b69d9be81e4587cf1b5b9fb999e095be70ea0df942b937f6",
-      "byte_size": 1540
+      "byte_size": 1540,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/sibling_should_be_child_message-9278.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0081/siblings_demotable_to_child.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/siblings_demotable_to_child.csv",
       "sha256": "fb3e6a9d762e4fb4be7303e6cbdd56c0b2cde953dbde9d390343f2ccc74fcc37",
-      "byte_size": 4319
+      "byte_size": 4319,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0081/siblings_demotable_to_child.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/DQC_US_0094/dqc_0094.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0094/dqc_0094.csv",
       "sha256": "294c83fb4ba87d0956e195f854180c252ae15d9b10967a98e4ebfaec4c35c7ad",
-      "byte_size": 6701
+      "byte_size": 6701,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/DQC_US_0094/dqc_0094.csv"
     },
     {
       "uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/v18/dqc_us_rules/resources/Effective_Dates/effective_dates.csv",
-      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/Effective_Dates/effective_dates.csv",
       "sha256": "82c2b960fc1d94dfa9fed203d28437a6395123d3d9769b57c7281f64f6ea518a",
-      "byte_size": 120840
+      "byte_size": 120840,
+      "retrieval_uri": "https://raw.githubusercontent.com/DataQualityCommittee/dqc_us_rules/cbb5f1f02d2f3f21b438a72a555127c4090d135b/dqc_us_rules/resources/Effective_Dates/effective_dates.csv"
     },
     {
       "uri": "https://www.xbrl.org/2020/extensible-enumerations-2.0.xsd",
@@ -3557,9 +3577,24 @@
       "byte_size": 143257
     },
     {
+      "uri": "https://xbrl.fasb.org/srt/2023/elts/srt-ent-std-2023.xsd",
+      "sha256": "fb93bbcc6bef954c893fcddb75223e89174b09a05bde223041f1f56bd50f5e5c",
+      "byte_size": 1410
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2023/elts/srt-lab-2023.xml",
+      "sha256": "22ee3eda5d324a6fb62ac3617e6f9c6016f1467497708dd71636b3ee50f924f0",
+      "byte_size": 407391
+    },
+    {
       "uri": "https://xbrl.fasb.org/srt/2023/elts/srt-roles-2023.xsd",
       "sha256": "168e9b14e9162bff89a16c4c8891c0af4d61cdf9d9ea5551fe4735d16b2c20bb",
       "byte_size": 23152
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2023/elts/srt-std-2023.xsd",
+      "sha256": "fa9843be4dd4f305f745bfe69a0e66aa6cabfcc162456a76711cb4b608277f15",
+      "byte_size": 1596
     },
     {
       "uri": "https://xbrl.fasb.org/srt/2023/elts/srt-types-2023.xsd",
@@ -3602,9 +3637,34 @@
       "byte_size": 159426
     },
     {
+      "uri": "https://xbrl.fasb.org/srt/2025/elts/srt-doc-2025.xml",
+      "sha256": "fce45f29c0e1d58a299258e75fbc73df54dff6f4cba52ab6ed3d43eb3798999d",
+      "byte_size": 454344
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2025/elts/srt-ent-std-2025.xsd",
+      "sha256": "38cf6028af05e19670bde0f6a2f7b9e315a71576d74b937f252d843c1cec410a",
+      "byte_size": 1410
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2025/elts/srt-lab-2025.xml",
+      "sha256": "09ffa7877b57fa3d6db0677b41b72dd42a46858832999a80ff08f5045ff50327",
+      "byte_size": 438904
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2025/elts/srt-ref-2025.xml",
+      "sha256": "293f8990518ec115f40f5d043ef324c596ad9084cd8c377e26230d39dd9bcd17",
+      "byte_size": 338365
+    },
+    {
       "uri": "https://xbrl.fasb.org/srt/2025/elts/srt-roles-2025.xsd",
       "sha256": "db485cc9353e3bbb11db16f3cd95f5906c5cbeecfa328c2be06040314c556a4e",
       "byte_size": 22636
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2025/elts/srt-std-2025.xsd",
+      "sha256": "76027590fc4425d6bf881adad5d7a8d840070ba121e487fb622f280b648e174d",
+      "byte_size": 1596
     },
     {
       "uri": "https://xbrl.fasb.org/srt/2025/elts/srt-types-2025.xsd",
@@ -3617,9 +3677,44 @@
       "byte_size": 158620
     },
     {
+      "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-depcon-def-2026.xml",
+      "sha256": "cc2c5f0a8104d1eb96c1dc9dd010b6d0005b8a95a4637a09a35a68b312b5e7b9",
+      "byte_size": 8017
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-depcon-pre-2026.xml",
+      "sha256": "50f9c3c9a74e99b3f80e5e975bc85d4087eb72e89fbd52e1a71534015b9fff56",
+      "byte_size": 14985
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-doc-2026.xml",
+      "sha256": "d2dd688ebcc1e3579ce52d0f1b76980a5fabc4fea6616d8e6c6944f4cf435847",
+      "byte_size": 456569
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-ent-std-2026.xsd",
+      "sha256": "934c9b96ec3d58d554a42d8cb44fe7bd8d221b60998b4749e1031b77a442adb9",
+      "byte_size": 1968
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-lab-2026.xml",
+      "sha256": "0202f92eea28c233b7066e8bbb2f8ee0b7eba0eeb93e63056a40bad5d090b9ad",
+      "byte_size": 441382
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-ref-2026.xml",
+      "sha256": "0de521404d01a5b12c088539ec50c7c9249aee2f31ebb9098068936feda9d406",
+      "byte_size": 326971
+    },
+    {
       "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-roles-2026.xsd",
       "sha256": "d90f5358e9446c6816c5a12bc29e18419e490fbf16357913c39c5976f22ccfea",
       "byte_size": 22547
+    },
+    {
+      "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-std-2026.xsd",
+      "sha256": "f1eb0558ea84d24336d3bd1c073792f9ed75a0a389222e6de4d69bf42adb3015",
+      "byte_size": 1596
     },
     {
       "uri": "https://xbrl.fasb.org/srt/2026/elts/srt-types-2026.xsd",
@@ -7647,2354 +7742,359 @@
       "byte_size": 54362
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2023/elts/us-gaap-2023.xsd",
-      "sha256": "5b23edf9ea3f1a6e35a50214e72d8a21acc2c262c6490d606a72cee0c3fb342e",
-      "byte_size": 4858012
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-acec-2023.xsd",
+      "sha256": "2a748fcf8c5f8dafee5180413c14c1ff210830c8b5777fbc142897cc070a9d64",
+      "byte_size": 1950
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2023/elts/us-roles-2023.xsd",
-      "sha256": "207ca9dc6e2890ec585379643e7fa18cd6d8195b2f39e52d1aed9461519f95b3",
-      "byte_size": 235275
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-acec-def-2023.xml",
+      "sha256": "29f4deec4ad98f2568503467593123fb41bf978b26458a6b633df9bdfe9b91e3",
+      "byte_size": 76857
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2023/elts/us-types-2023.xsd",
-      "sha256": "3edc0cab30fb34f4e600d4cd5a34eb2ba47dae9e5e710e15ec662b7bb18aeafe",
-      "byte_size": 10759
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-acec-pre-2023.xml",
+      "sha256": "72beea8b83f20800b746a902d78a0e0ce3394120c16b5489e464f81fe9dbde3c",
+      "byte_size": 61279
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-acec-2024.xsd",
-      "sha256": "37e9fd33b5dcfd693a67806a204cc1e256891d11593d21ba8575f8b27121fa16",
-      "byte_size": 1974
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ap-2023.xsd",
+      "sha256": "cb4d9d3c3b233cd1dd0b05a6fcb67678c074726af8235e674cf4ec9de74622bf",
+      "byte_size": 1875
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-acec-def-2024.xml",
-      "sha256": "d72f84a19f970432de958fadca391938009d3d37a484818d83e5d1145e02d0d7",
-      "byte_size": 87397
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ap-def-2023.xml",
+      "sha256": "c320700a5d64601bcff12da30cfa07a3b367827c5afb6e5cd007363b365e6ece",
+      "byte_size": 92494
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-acec-pre-2024.xml",
-      "sha256": "59531dcc64279362b34d3a62b08b78b46d65872dcb3f872c23352ab6cbd932c9",
-      "byte_size": 62173
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ap-pre-2023.xml",
+      "sha256": "1c7bf52e4a45e351c58d596833de7a7af0ffd59b3fa0e6ed3b3f7a8f3b3bf1f4",
+      "byte_size": 215996
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ap-2024.xsd",
-      "sha256": "5074420234460a726251597f6d8565fcb56e414e03f9d806c3628063d9929df0",
-      "byte_size": 1899
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-aro-2023.xsd",
+      "sha256": "f85fd5111c4546adb12e67d6a6f266de94935693233ea26ded959aea1939a800",
+      "byte_size": 1481
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ap-def-2024.xml",
-      "sha256": "13ab1157a44329042ec1bdf2b702bff68ab61bc702500c11ec6749a574081114",
-      "byte_size": 93003
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-aro-pre-2023.xml",
+      "sha256": "adb5c67bbd365e4128710315dba3dd8cc3b395779c49bac32a5fde84ac919c29",
+      "byte_size": 13263
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ap-pre-2024.xml",
-      "sha256": "b57648b9279d9566850cd9b5e4199d713b1539f2f5408fa03ea3820a3c869a38",
-      "byte_size": 217373
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bc-2023.xsd",
+      "sha256": "ed83a265684e285d9fc115bccaf457aae3d5888955541983aa6f84c53ab7ba22",
+      "byte_size": 2267
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-aro-2024.xsd",
-      "sha256": "56dee1bc9db210a1775015fa9464b4d6a8689c5aad2e94490578b116c50fd0cb",
-      "byte_size": 1502
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bc-cal-2023.xml",
+      "sha256": "ff5454a8bb0f03a3ad415f603246db1070a774d3f3d75c02a49c0c503ea80b33",
+      "byte_size": 36560
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-aro-pre-2024.xml",
-      "sha256": "4f2ac2fad0d4e3e894f74f271cdca28400ec91d84d3f09a11e415535abad04fd",
-      "byte_size": 13330
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bc-def-2023.xml",
+      "sha256": "5acc6d156405b981ef137b01cd706ef3b1d58c7d168a3e2a0560dbc54d3259d7",
+      "byte_size": 222262
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bc-2024.xsd",
-      "sha256": "4ba69c614981ae24406d9462e35aacab68c6a65a311a94ed04daaf982d2edd22",
-      "byte_size": 2397
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bc-pre-2023.xml",
+      "sha256": "e77806c2cc561ed468658b72678ced7d44c70e48495b8016a8c31d32d3be3663",
+      "byte_size": 218674
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bc-cal-2024.xml",
-      "sha256": "1ade34ef80e1a5d29da023cee6c21c0f524b5f8dfb13ac28cd812a50b833d058",
-      "byte_size": 36695
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bsoff-2023.xsd",
+      "sha256": "e4faea46726a0eb2f6d3ed26e12ef3c78d869f1eeabacc83fcb9ee2fb144dc15",
+      "byte_size": 2509
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bc-def-2024.xml",
-      "sha256": "489225848f5f8a6dd815f513592dfa38f75ae531ed2af2df3c10d6c0d23c6cbe",
-      "byte_size": 231074
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bsoff-cal-2023.xml",
+      "sha256": "e18c47c0b9031c2c9a6365dc176e61e8d765a9865d1c587a04b18690d825649b",
+      "byte_size": 60111
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bc-pre-2024.xml",
-      "sha256": "10e58870cc952c1d7a101c2932acccdd2df5e274fb6c76a8dabf2e616f9acb95",
-      "byte_size": 233128
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bsoff-def-2023.xml",
+      "sha256": "021cb3e73bd8ebaf8ef31b892582503530600dfe4b86fb3340bd8290be89cabe",
+      "byte_size": 139610
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bsoff-2024.xsd",
-      "sha256": "54ff08ec79764b771767326958bd8676fa74b0194147bf84029402682650e5f1",
-      "byte_size": 2537
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bsoff-pre-2023.xml",
+      "sha256": "f4edb5f01fb955c355a08a434ad04f34e4c15ad9c4a6bc720f3e1e3dc90d9c3f",
+      "byte_size": 143615
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bsoff-cal-2024.xml",
-      "sha256": "cf15cc943ebd833959f654a4793f6851b8eb74f98c288bebf4497af70602a20a",
-      "byte_size": 60149
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-bsoff1-cal-2023.xml",
+      "sha256": "0b04c5e74a2463e9a38d7290a143d1491561dcb00a42499b43d94e65f502d742",
+      "byte_size": 12428
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bsoff-def-2024.xml",
-      "sha256": "c5d19e63a0c53987d5e2ebc6cd17354ab00d2b02e881e2622196c4445e14e297",
-      "byte_size": 140213
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cc-2023.xsd",
+      "sha256": "9d4c49da7f6204c8c6d64c11716a5d6183d3b673129dbcbe938074e41a83018d",
+      "byte_size": 2505
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bsoff-pre-2024.xml",
-      "sha256": "65f5a7f3976c6c66e4c2a7c7cbee71df3e219858d85d4254a44c7dd5b7da0491",
-      "byte_size": 144168
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cc-cal-2023.xml",
+      "sha256": "d4cb9ee4b44a44d3065caca3a57f909d785e417a3fde746fc98b7906f9a45003",
+      "byte_size": 44180
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-bsoff1-cal-2024.xml",
-      "sha256": "acf71f22bffd1f94493a8af62a861eca12d0c8f6611ffdf0e5a34fe663a8a483",
-      "byte_size": 12603
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cc-def-2023.xml",
+      "sha256": "03af5f585472ce05ef9a8bbd28d2a72ff98221431e8d055a90ba5199cd09b233",
+      "byte_size": 230817
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cc-2024.xsd",
-      "sha256": "1ee3cd80d53b5169df9811f8f1e2dbb2e6c9830930668a5f519584369ca8b054",
-      "byte_size": 2533
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cc-pre-2023.xml",
+      "sha256": "89ac7a075f2ba518ad4acd3488617cb7a90f1fea32590e86e9c92555204d34f6",
+      "byte_size": 193392
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cc-cal-2024.xml",
-      "sha256": "90c7c6fd52a0c391e927ab15c35ada768bf3d09d027a4cff00521d4ef67e78b1",
-      "byte_size": 44252
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cc2-cal-2023.xml",
+      "sha256": "6d1058b6a1b7454ed9ee843b7993fe36dba54c98c29179b3ce9ee4e7c5dd92c7",
+      "byte_size": 10547
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cc-def-2024.xml",
-      "sha256": "54d5371e391a525f2f7794ddc51f867871c390179e80a4095ed20801cfe9f203",
-      "byte_size": 234655
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cce-2023.xsd",
+      "sha256": "e58a68695dadca7a0c06ab329ec959ce71744ba8e480563bb1000ee54d998641",
+      "byte_size": 1772
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cc-pre-2024.xml",
-      "sha256": "9c3bcb14b042118e23eb6aa6a9b7caa2a0449a1034ba04cd2288e0889c35300a",
-      "byte_size": 198969
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cce-def-2023.xml",
+      "sha256": "c277fa79775df60c2c360bc4bf3e2cd98092bf9bae033040d6cb430a92f01dd0",
+      "byte_size": 48137
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cc2-cal-2024.xml",
-      "sha256": "d9c1065bd29665edde93154da16f97a73d36cdea65191702f6e3fbb862d15fa4",
-      "byte_size": 10716
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cce-pre-2023.xml",
+      "sha256": "7e5cd356ac32553d3ca2386018bf648d2a6645f1b8f5b9e753934de829f3cd50",
+      "byte_size": 39238
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cce-2024.xsd",
-      "sha256": "e95f74fe0801d79a9d7957e9136ce73f33236de7f698170fe942e993fa9218d7",
-      "byte_size": 1795
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cce-def-2024.xml",
-      "sha256": "d9f989ecd85e0fbb7c005ddf727ecac5530617ff8507ade03d0e27e9ad43fce1",
-      "byte_size": 48401
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cce-pre-2024.xml",
-      "sha256": "920563c7dc2b6f4720ff15caae5ead175c25accd9def579678bd3a18f700570e",
-      "byte_size": 39430
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cecl-2024.xsd",
-      "sha256": "f9b97da13ba7d02ed2e6789d775987a91ce5bb5333ea7dde4f2dfcacd31bc771",
-      "byte_size": 2183
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cecl-cal-2024.xml",
-      "sha256": "7b96ed8b718472c7073cff9fb1d9b77f131e3755a19e99d9f4aa5cd0852687ab",
-      "byte_size": 120243
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cecl-def-2024.xml",
-      "sha256": "84e403c1800159849540369d2e556bb4da012012e7028f5a42e1a346ba914acd",
-      "byte_size": 839784
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-cecl-pre-2024.xml",
-      "sha256": "5c13adc53c5995d1d51f19cc2d48cac458c0a0cc193b6de4f852e3a13a60b356",
-      "byte_size": 656854
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ceclcalc2-2024.xsd",
-      "sha256": "aae2fb866f6c4dbda40c9ab25d5521e0c2495a8d9f75418b162ece79cb9d1823",
-      "byte_size": 1392
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ceclcalc2-cal-2024.xml",
-      "sha256": "c38e093e50f02abde95fb4458be131b81b300d224b553db08df650b599ef4dea",
-      "byte_size": 71988
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ceclcalc3l-2024.xsd",
-      "sha256": "17756054dda76eb4d1388e610b20fcaef3c348c6cb4d211b5bc71defaa6badd4",
-      "byte_size": 1397
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ceclcalc3l-cal-2024.xml",
-      "sha256": "f0711a1f8fac09e11098f5c6ad70e4686fd02a5f3137ac5d6c14f0de9c03666d",
-      "byte_size": 5448
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-con-2024.xsd",
-      "sha256": "18936ca2f2d037d85ca21dbd08e10a9316fb0d2dc8f51e63711d905b0bb69344",
-      "byte_size": 1881
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-con-def-2024.xml",
-      "sha256": "8b3ad80bef6efa5d4580cb4d1382da2798dff4123c27e931d65966f5b6469e9b",
-      "byte_size": 7328
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-con-pre-2024.xml",
-      "sha256": "81d5420015e4adb09094890c40ba34ccdda946f9d9a15533df3d92aae26badb5",
-      "byte_size": 41457
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcgen-2024.xsd",
-      "sha256": "8801af3169fb3c7bdc9b35d2f4aaf38c12eeef6c530728a4d4841bb461a48391",
-      "byte_size": 1971
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcgen-def-2024.xml",
-      "sha256": "2abc991c3dc4fc6b3491ee211a2e7cc466b352acbf90e6db2105e15d22f7f283",
-      "byte_size": 57786
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcgen-pre-2024.xml",
-      "sha256": "890dcc81e3cc9b134d5b08bb5492a7ff8903b23a0ac00135e6fdab1cc155f8c6",
-      "byte_size": 47810
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcpb-2024.xsd",
-      "sha256": "4ee5d420a200a8ee55641b24ae68318f423db6c1e30fb8c0e139fc6c0aa6a2e3",
-      "byte_size": 1558
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcpb-pre-2024.xml",
-      "sha256": "d59f94b4e24efee7b1b19619482342b62acfc8f15b1b40574a0f58d0c2dc82b4",
-      "byte_size": 9910
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcrb-2024.xsd",
-      "sha256": "6bd79bbe9d2317076aa5267f99182744bb875e00f14190cc1f8cb23bc41015bd",
-      "byte_size": 2326
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcrb-cal-2024.xml",
-      "sha256": "0db6385c553faf595ba02c1ce5b743753e3e4b706206527ebbf15d23ad0e12c0",
-      "byte_size": 34028
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcrb-def-2024.xml",
-      "sha256": "5207d5727172418ed85f1ecfc23f94cf497b0582a6544358afee95cf00730977",
-      "byte_size": 439660
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcrb-pre-2024.xml",
-      "sha256": "0dd7bfcbc145e12e1fd7b08fa3114488abb812c861e70f02702a9fc7aa2795f6",
-      "byte_size": 273236
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcsbp-2024.xsd",
-      "sha256": "dd9d45f47ad2b043ac00818e52678d0d48e65aeefb7b67867c16efd8575444ba",
-      "byte_size": 2337
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcsbp-cal-2024.xml",
-      "sha256": "31f2bb307974ed6d892e49b55ea0bd9d0ac41668438549678fbd7234677703e6",
-      "byte_size": 18306
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcsbp-def-2024.xml",
-      "sha256": "971324335eadf0230557c2bdf024c8eea82b76d957d126681dccc1cb23e94258",
-      "byte_size": 167133
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-crcsbp-pre-2024.xml",
-      "sha256": "206bdb88d8b747e7da474280bf5189d05ff927506fefd0b2e0a1a526f121611d",
-      "byte_size": 202435
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ctbl-2024.xsd",
-      "sha256": "154c24e2827a1659dcc2bbf4e836159f7003a56cd10c69e2c35f049ff6000837",
-      "byte_size": 1637
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ctbl-pre-2024.xml",
-      "sha256": "eaf9293f5b135c43cb9c421cb163e45a61caba18a5eb9ec33cb37664e6b46f77",
-      "byte_size": 429500
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-dccpoa-2024.xsd",
-      "sha256": "d53bfa311c862ba16555adb2d22a447666a0aa0cdd6c6eadc442d23a80c3c636",
-      "byte_size": 1569
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-dccpoa-pre-2024.xml",
-      "sha256": "e9bbd49c56c7f78e83969a435817b813925c6b25355722544e25042134f2b905",
-      "byte_size": 47006
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-debt-2024.xsd",
-      "sha256": "e73037520d2de21d2ab8964a47ff797b97840baee6d551327cb2366fc884875c",
-      "byte_size": 2147
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-debt-cal-2024.xml",
-      "sha256": "a2d93185a66fced402f2c0adb78e7a16bf9e635a97ce8753a988f301e3620b21",
-      "byte_size": 9335
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-debt-def-2024.xml",
-      "sha256": "4706c8d3729f8533df6ce4b6fc4a5c2cb096766e178dae4386eb1d2c76665577",
-      "byte_size": 218019
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-debt-pre-2024.xml",
-      "sha256": "70ef926a790c8349c64ef53713e9ae4f471976b3e9451f609fe2e227232c70ec",
-      "byte_size": 276761
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-diha-2024.xsd",
-      "sha256": "b3f0a50d22e12244ea105fc872b88ea79401aaffaa5197150597c5fc565ed067",
-      "byte_size": 2311
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-diha-cal-2024.xml",
-      "sha256": "96b8472c534f60931763e3f8132c8d5435dd4dd6c9c46e956fd4873dc326e92d",
-      "byte_size": 47816
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-diha-def-2024.xml",
-      "sha256": "772ce4a4dd77ebce1dd60c8e2c382c67c229b26cb3bfe17060eed472ba0930aa",
-      "byte_size": 378872
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-diha-pre-2024.xml",
-      "sha256": "b92d2478557d8ea2c8828799a43fdb2d82223c8ac03f2988d1c01a6ec231ce4e",
-      "byte_size": 365239
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-disops-2024.xsd",
-      "sha256": "32bf6348ac6d17b6d99e90765667c344e706e05dcb07472ec36c34255254f9d8",
-      "byte_size": 1867
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-disops-def-2024.xml",
-      "sha256": "49f65768a89a7aa1534cfe74468519dc704084ec9e4ef788dc3d2808cbdf4702",
-      "byte_size": 117413
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-disops-pre-2024.xml",
-      "sha256": "c3d08f6b5fc5f9f4c26b51183b24c11383045a7c3314bbbcf952f428bb1a5920",
-      "byte_size": 116270
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-dr-2024.xsd",
-      "sha256": "26c7b186ff3c50325e0fbacc74a6c1f9e87b8a68788ecc6ecc274ae7c63f1596",
-      "byte_size": 2149
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-dr-cal-2024.xml",
-      "sha256": "9e1b017e7d8aec4ca87f6779be75edaae8159cbec04b8b1cfc11592635a4d1e1",
-      "byte_size": 12564
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-dr-def-2024.xml",
-      "sha256": "6abdd1564f9fee72d5ba1d3eaffab7ca0c60843fcfdad25dbfe0354a2dc94859",
-      "byte_size": 1913
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-dr-pre-2024.xml",
-      "sha256": "575e131b556e4b026e0fb8f13237532cfeb7e1363fba65a4acda45374b09ab7e",
-      "byte_size": 55035
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-edco-2024.xsd",
-      "sha256": "299719a1005624db628020fca11ac500e8e3fb416725431d8ba426fe6e114e58",
-      "byte_size": 1962
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-edco-def-2024.xml",
-      "sha256": "25aa3d28d20456b32c06ad5448136eb8694957969886509f8ce8071cb5c6a2cc",
-      "byte_size": 62852
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-edco-pre-2024.xml",
-      "sha256": "76d91e76022eae1781c438c2b48104f092a963191dc9ae6aa73c8604d193e421",
-      "byte_size": 54978
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ei-2024.xsd",
-      "sha256": "7fe0fe4922a89bf393c2a26b1b67b29733e177d4b1c6e9e4883237b5c1c64d85",
-      "byte_size": 2201
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ei-cal-2024.xml",
-      "sha256": "727dee515259ee41cf774e27ed0e73ada37633c70099df3bf5dfa50670bbcf57",
-      "byte_size": 54011
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ei-def-2024.xml",
-      "sha256": "870df1b46e16ea85c495bfff8af2a7480d2ce3c2a5c4f211238c76ccf993197b",
-      "byte_size": 183476
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ei-pre-2024.xml",
-      "sha256": "3e15431215e5bacf9c8a139a07664103e4cc34c167cf23f325a0e71a32e200e9",
-      "byte_size": 181376
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-emjv-2024.xsd",
-      "sha256": "a5c42e7f32d7e567f4034d03878c11d7524a86c4f1fa833460e40bdafebc4094",
-      "byte_size": 1989
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-emjv-def-2024.xml",
-      "sha256": "07870a9490e95fe859b3a0da5c59984b6d75b3ee754009442a11a82eba156763",
-      "byte_size": 60871
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-emjv-pre-2024.xml",
-      "sha256": "135829e24cc8257e48f679265b6960742b8947b45860a85f2d8742d3138f6d00",
-      "byte_size": 53596
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-eps-2024.xsd",
-      "sha256": "d7529bff9c13e1f0eea8b2646bd15831209b5828819a2abf55e6d72e0c8ca665",
-      "byte_size": 1774
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-eps-def-2024.xml",
-      "sha256": "093ec562963faacbb16a14d8f2e2ba0b68245b0aedb36990df1bb790e87b02ff",
-      "byte_size": 84630
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-eps-pre-2024.xml",
-      "sha256": "e6339be703e2a4cc85480740254d89730a1184beda2efaebd61597d8b13a2489",
-      "byte_size": 92350
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-equity-2024.xsd",
-      "sha256": "fa077747074162396f3ccc339f3ae06e2981e7a09cc63d5f1d952e5d572b7d07",
-      "byte_size": 2169
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-equity-cal-2024.xml",
-      "sha256": "bde42b50fec6dc06456e92b699e0c11a675169967744425d7b459cd82c5bab8a",
-      "byte_size": 9540
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-equity-def-2024.xml",
-      "sha256": "5e097a2eee5e2b3bfe4140805b940175c7d880f4eb7a434aad520183340c8dfe",
-      "byte_size": 303723
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-equity-pre-2024.xml",
-      "sha256": "a4e11caae05492e7555db0dbb113187a16b056304b4da732ce2772112ae3e01d",
-      "byte_size": 371195
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ero-2024.xsd",
-      "sha256": "1e1aefd2ac95c974f895bde07d800e9ff9972ace8245c4197bc27c782eae9b8d",
-      "byte_size": 1959
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ero-def-2024.xml",
-      "sha256": "0f52291ff89860ce1f3cb93c5796f78029332a3ed138b2fa5e32300b7161d5c8",
-      "byte_size": 48996
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ero-pre-2024.xml",
-      "sha256": "95c220facb039ce0ca80625c1b6aa41c454342b8a7ca6383ae8477f8c1ca9d24",
-      "byte_size": 59515
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-eui-2024.xsd",
-      "sha256": "e4bc6c4158e0e0f4012716ae3aa9a0f11704d4bbcf43dd1f092b16ae82ebe085",
-      "byte_size": 1837
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-eui-def-2024.xml",
-      "sha256": "9807ccaf7d8c8297b2723ee82ad06e5bf78fe96f3598eab4397b147b0ed0cfed",
-      "byte_size": 25222
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-eui-pre-2024.xml",
-      "sha256": "c103fce39929485a71d79b34fd56dac932a1ebd702dc473cadc8b3f60e8c5592",
-      "byte_size": 21211
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fifvd-2024.xsd",
-      "sha256": "796c52753b1b4ee9174a90ec549adb5e3acf14691c231ea31b8f236e761aec9d",
-      "byte_size": 2278
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fifvd-cal-2024.xml",
-      "sha256": "47654590e05bfe26d42a537cb85af7ca73e7573b928f9d78bf86223a2f56079a",
-      "byte_size": 62431
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fifvd-def-2024.xml",
-      "sha256": "bbb08d410470ff1a77d4514979bc71f877109ec10986b54987121d7e18ec3265",
-      "byte_size": 606301
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fifvd-pre-2024.xml",
-      "sha256": "c05f258cffaf0ee19ef7f51bb29052cb8c8e17c57cd22f22bb3bc157240c3b07",
-      "byte_size": 379653
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-foct-2024.xsd",
-      "sha256": "8ccc6697a1974288cb46cbb7b119c9ca2a450e21132f08e944a71c8ffb20a704",
-      "byte_size": 2175
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-foct-cal-2024.xml",
-      "sha256": "a4b2794d049629108a3f69324a4c7f97f08dc4d02679710572ce257538fd4e62",
-      "byte_size": 11887
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-foct-def-2024.xml",
-      "sha256": "3a9c97d1910507e77bf51515149df2058c1a2be00102da9c9c2723570bb5e201",
-      "byte_size": 30284
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-foct-pre-2024.xml",
-      "sha256": "b9f26f773012b3eb54c842281cf04ac0deac92c55a552acb61b2b5ef5775c91d",
-      "byte_size": 47691
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bd-2024.xsd",
-      "sha256": "deb01e1655fbc82afc77f4c1f9f849b310f52c4207712fd912f7d5647b8cfab1",
-      "byte_size": 2612
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bd-cal-2024.xml",
-      "sha256": "1b86f0674320962a908f3d72afeac796e69268920ccd7a252320b702a9e8fc34",
-      "byte_size": 7392
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bd-def-2024.xml",
-      "sha256": "cf615962a4f92d488598e40a5c580606ecbdcde0650455e1e98481c6ad725880",
-      "byte_size": 146860
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bd-pre-2024.xml",
-      "sha256": "172f6924d8716112668d7680d5eb846cad62fae5490992a43a5b339b305ea030",
-      "byte_size": 173550
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bd3-cal-2024.xml",
-      "sha256": "911b6deed9d04ce34a53d75fbcff11e65f45eaba0dbffaad4d929ca02d289c28",
-      "byte_size": 2933
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bt-2024.xsd",
-      "sha256": "bc109db9fede78c5f051821a8f32f68140c7123d0f5d7542ddaed80ae91d2fe1",
-      "byte_size": 2607
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bt-cal-2024.xml",
-      "sha256": "49a3e88e720d3bf775fed67926cac5981132455499d98be8700b673be530276a",
-      "byte_size": 78178
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bt-def-2024.xml",
-      "sha256": "fbab75f345d350cbdebfb15eae84a6c78bf1cf94928a2b6e29fb8aeb5092344b",
-      "byte_size": 422200
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bt-pre-2024.xml",
-      "sha256": "eeb3a8ca054c1e6af4b5eb24554b53abd323eb4fad0b4eafdbd6e6b4f6ca53ce",
-      "byte_size": 432678
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-bt1-cal-2024.xml",
-      "sha256": "bd50a00794b41fb3805b76bc6eaf4f8991edc60e2a8389b5027ee7910ddee6b6",
-      "byte_size": 25629
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-fhlb-2024.xsd",
-      "sha256": "771c5fa8add4e67d4df0d4031c78f769ef5bb87b4105a0e312a5c94ee12be8f4",
-      "byte_size": 2324
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-fhlb-cal-2024.xml",
-      "sha256": "2a1096defe8825d84a1255d98644bee73c5aaa4a78267dfc213668f3ecd3d004",
-      "byte_size": 8578
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-fhlb-def-2024.xml",
-      "sha256": "d9071de4b2b1d7e838041ae2ca557e506b260f68a2238dea88b1425d4ea0fd15",
-      "byte_size": 11079
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-fhlb-pre-2024.xml",
-      "sha256": "4b10678bcebdc3c1ef7fce549e7b4b50e0616f6d600f2ec79bf90618d3032e8e",
-      "byte_size": 75335
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-ins-2024.xsd",
-      "sha256": "3514505232ae04e806762748f8bbab2375a21356105cb0920b92f7b1f522eee6",
-      "byte_size": 2261
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-ins-cal-2024.xml",
-      "sha256": "c436c0952f6c1e8729dd81aa194d746d9ec8311f9e08cada4f26c81dd6384c23",
-      "byte_size": 140117
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-ins-def-2024.xml",
-      "sha256": "4a82e33ff6484fb2ab0e36470bacd7bd71860714805f11bfcd605522c8361d30",
-      "byte_size": 925177
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-ins-pre-2024.xml",
-      "sha256": "c04a6e8a92b76bf35d8eec90dcafa2563ced13dfae4321bbc2fbc8f7286b97cd",
-      "byte_size": 604281
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-interest-2024.xsd",
-      "sha256": "4c2e570bd23536c00af65ed198b50bc4b961b60206736f4fef776b3c09ca5eb9",
-      "byte_size": 1884
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-interest-cal-2024.xml",
-      "sha256": "d842e74ef14097024929ee26bf0c3b342206b46c3f71f92819906d66eb2b29da",
-      "byte_size": 11199
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-interest-pre-2024.xml",
-      "sha256": "00eb0a64008ef240a3b621f55c3ff2dafcde3b669f3b4d65288f434d88022bba",
-      "byte_size": 60696
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-mort-2024.xsd",
-      "sha256": "35fb8b67c06d6b8afcd573544bda7dec5879c68961d544f7db69a56e17ba4073",
-      "byte_size": 1852
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-mort-def-2024.xml",
-      "sha256": "0eb2f391dc9460db08e215a8a8505d5ebdbce2038a5ce8142853ec29710f2d25",
-      "byte_size": 11997
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-fs-mort-pre-2024.xml",
-      "sha256": "698d25525d60830ba2a12ea97570cbe1a8a634e407834cbbf4102fc0a420e392",
-      "byte_size": 10399
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ga-2024.xsd",
-      "sha256": "f08d14a2f1fbba3216014612e5b664d98ba975d0c1dab1a67d30a179a3622f63",
-      "byte_size": 1777
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ga-def-2024.xml",
-      "sha256": "d3e72cb948b6408b72385b40c7556b97667e8a764bdd9129dc16404f25cc7cba",
-      "byte_size": 55706
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ga-pre-2024.xml",
-      "sha256": "9ef9930a9908bd5f73e95e789d9fdabc149c1d9525f827e43d87c03ce0bcc692",
-      "byte_size": 51709
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-guar-2024.xsd",
-      "sha256": "d6e209094b29fb940d8ca0106f16e80e309c3ba0e7e8357948f2c04ba1b4ef77",
-      "byte_size": 1884
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-guar-def-2024.xml",
-      "sha256": "503a3c4bfda919e6da9a8cd56a31bfb3316ae7aac2670305dadef065ee91baac",
-      "byte_size": 90449
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-guar-pre-2024.xml",
-      "sha256": "8da5daf179060a9548590616e663ecedacb3868650b81cf96e8ba323ff155eec",
-      "byte_size": 80258
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-hco-2024.xsd",
-      "sha256": "92cd429a65f8b265598a8e3c56c3b95eb3735c748355866cc621d133dea01073",
-      "byte_size": 2224
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-hco-cal-2024.xml",
-      "sha256": "d6a88f29114f49b31f99b2a20b1f5c05e98d337c37b4ff69f7ff95a8162c2fa0",
-      "byte_size": 6333
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-hco-def-2024.xml",
-      "sha256": "0ffd1e8c73114a17c89e3545eeb294d02770561f4ae61295d51b83917baeebec",
-      "byte_size": 51778
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-hco-pre-2024.xml",
-      "sha256": "fe83ddb7ebe0c15f360d24d22feaa8a684d0a5099b2f30e2f2796e0ce39a51cc",
-      "byte_size": 72021
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-iago-2024.xsd",
-      "sha256": "fc0401a4b82245004199426135ccc4cac422bd4f19ffde62a19f4afaa93f19b5",
-      "byte_size": 1965
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-iago-def-2024.xml",
-      "sha256": "cb25e06511e5ab1aa9a9f853e12dad2f8c6609c8c65b8ab3447bee5db74c343d",
-      "byte_size": 190011
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-iago-pre-2024.xml",
-      "sha256": "001ff1554e10400ba5b6cbad05104e6ee636c94b2c981cbe44b02f54a248553a",
-      "byte_size": 153977
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-iaoi-2024.xsd",
-      "sha256": "0819087598514c733487c6df5473a7bdb3813b52059f2d405e952f73e13fe1b6",
-      "byte_size": 1519
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-iaoi-pre-2024.xml",
-      "sha256": "8715470250e95779d2232998de05c05013e519f99adf470f573d4ff9bbce5890",
-      "byte_size": 75274
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ides-2024.xsd",
-      "sha256": "9c7813df4aef94cb88c484233975ab7d7181d631bd3ba2cda549078c2c92d184",
-      "byte_size": 2604
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ides-cal-2024.xml",
-      "sha256": "88ebd62db30720df60ed69a89b3b488853ea145207e67009e3ffc356842d86ad",
-      "byte_size": 61959
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ides-def-2024.xml",
-      "sha256": "e89ef1c76cd4c08756fde369ed650c3407e51806b5f31114283c587c1f685b33",
-      "byte_size": 310151
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ides-pre-2024.xml",
-      "sha256": "8168b14c2370c506bba209b231f43c325c2a94dcfbcf9aadb49efecd9e98a662",
-      "byte_size": 193472
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ides1-cal-2024.xml",
-      "sha256": "61dbb94abf2c91eb79314ed7687905cbd1357a1454fc5c941456c1e93f1226ce",
-      "byte_size": 63037
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-inctax-2024.xsd",
-      "sha256": "c44f788ab3084e7f9c2d0a4e3dab84965a2d7b08cf54cc2d2e4ce060c73de7f1",
-      "byte_size": 2193
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-inctax-cal-2024.xml",
-      "sha256": "ee0c9b0cf033cb9995c2fedbc324c88c8c722a016d577d0465fd6fbe0f0388ea",
-      "byte_size": 124455
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-inctax-def-2024.xml",
-      "sha256": "154856ffcca92f02855d801df97b0aa8d00ad09d7f371e901c3eb26bc49b77f8",
-      "byte_size": 219845
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-inctax-pre-2024.xml",
-      "sha256": "185f7db7979141fc1752b7704b8abeff2b2a619c9f869313f23e71c5dcbde540",
-      "byte_size": 253055
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-inv-2024.xsd",
-      "sha256": "1a0583301fbb85a34102d0d8a5d6323594fcba72dc0ea5dc6804175898842da7",
-      "byte_size": 2032
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-inv-cal-2024.xml",
-      "sha256": "8fe196ec43e460b9539d6ea6c14655ed28ee89402143ca628306edd4b13dd3da",
-      "byte_size": 8259
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-inv-def-2024.xml",
-      "sha256": "a85bbd89a5ecf65d015ec41dd0e0e07b17e3405ca7a625aae028ec0bb3019f7e",
-      "byte_size": 42406
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-inv-pre-2024.xml",
-      "sha256": "39edf8326dad84edb308bab14a2b4ce193c9a42f20ab8a389508e37fd946edae",
-      "byte_size": 48776
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-invco-2024.xsd",
-      "sha256": "1ac21f25eb3842a4e4f0d54ce8c5d8eecc3f541928def29ce065fc4c8bfb27aa",
-      "byte_size": 2162
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-invco-cal-2024.xml",
-      "sha256": "83a321d7f0cace9972398d3d355894bd17d4fa39d05741e9538044ec92c6ad6c",
-      "byte_size": 43115
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-invco-def-2024.xml",
-      "sha256": "fa339d36c4c86373498f74f54a0ec3bfbfd38c36f6e2c46e7d66d96df0c28d88",
-      "byte_size": 101506
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-invco-pre-2024.xml",
-      "sha256": "92ff353874ad13b982d27e01aeefc05dbcb9b9170dcf30f334d55682314441f9",
-      "byte_size": 191623
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ir-2024.xsd",
-      "sha256": "cf49e1bab4b1c478e8c1fd3cad35d2c084f8ef90628519d06e209918a4a48f73",
-      "byte_size": 1765
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ir-def-2024.xml",
-      "sha256": "52333d1063fab724da2785b6ae67ccf14a5fc770d81896c3f348717f5bcf176c",
-      "byte_size": 12032
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ir-pre-2024.xml",
-      "sha256": "ab5cb65334d28022c853c2b6dcb7490d28bcb80048ec35c3dce1b6cb0ee076d5",
-      "byte_size": 25684
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-lea-2024.xsd",
-      "sha256": "1e34c66311e988a657cacf3f18b56ea4cb76a7e72443feba122646c49c65c2a1",
-      "byte_size": 1810
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-lea-def-2024.xml",
-      "sha256": "11d65199afc3cd96a1e5c03780be0c8d19221804e4c587280487544ff23b7a13",
-      "byte_size": 1869
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-lea-pre-2024.xml",
-      "sha256": "b805f24e5aa49099ade28c5cce4fa1ac396c2d8fc2d99e4188c47bb3b3822274",
-      "byte_size": 141703
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-leas-2024.xsd",
-      "sha256": "7415fa7e8aa5c21888ee136be8d7df3a9dfacf4ccf9a99538888c075c5f74935",
-      "byte_size": 2251
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-leas-cal-2024.xml",
-      "sha256": "7fb3fe85755a519b089046db476cc0b13e55224648bf3a98845960edf1185185",
-      "byte_size": 19247
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-leas-def-2024.xml",
-      "sha256": "06131ccbee076ac493b2da67fbad0d4f02ad89bbef9b19212c6b8eaeab6e54b8",
-      "byte_size": 239838
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-leas-pre-2024.xml",
-      "sha256": "6247b7bb7ff000687291687cb22532619bd5ef761b329072a03dcc263ff6455b",
-      "byte_size": 277950
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ni-2024.xsd",
-      "sha256": "d4210adee0e6b44219a39786a0e9c001185180301f61684957b9061ddaae59e0",
-      "byte_size": 2209
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ni-cal-2024.xml",
-      "sha256": "32f378ebc8c092ff8013b73e863b76ec030958f71b5648547a5861aa4fe05529",
-      "byte_size": 12595
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ni-def-2024.xml",
-      "sha256": "bbfad2cb044184f41994d8f347dcf98794aa8d6108bd0b8e320861b2463a72a2",
-      "byte_size": 90881
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ni-pre-2024.xml",
-      "sha256": "0d7bdbded3abc38eb818342adfadc2613771d16c9a3fd4860f004ea074f7d131",
-      "byte_size": 73431
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-nt-2024.xsd",
-      "sha256": "69ce9b6c3d2794d632fa8c74fb9ceffcdc16cfa0e7dba049c0b4e077ccd383d7",
-      "byte_size": 1786
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-nt-def-2024.xml",
-      "sha256": "b53a18e0e69ce6477e53a9d87deb7c0503159dae6acc83f8cf7790d343ef8577",
-      "byte_size": 12715
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-nt-pre-2024.xml",
-      "sha256": "bd3e6ed2bde17186612a205edcaa66d058f9fef6f87bf71a94a51ca881d5b997",
-      "byte_size": 10429
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ocpfs-2024.xsd",
-      "sha256": "3fda44f4926aab560b41abe9d4125a433cdc6172ce9b5be0c48c9cce0366767f",
-      "byte_size": 2410
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ocpfs-cal-2024.xml",
-      "sha256": "a6dcc7e20f9154b7d91083c44717e386b39e0e4f00a7d402cabe720e58ef3c9a",
-      "byte_size": 1832
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ocpfs-def-2024.xml",
-      "sha256": "cad8230b43944371ad19e40ed3f62985bed63ffaeab0fa1362a65632fe612d48",
-      "byte_size": 111194
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ocpfs-pre-2024.xml",
-      "sha256": "e527f4cb71b40a01e14e89c42111a1adf186a29e529d90507af29964b24fff19",
-      "byte_size": 132017
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-oi-2024.xsd",
-      "sha256": "c5639cac66af17fab321fecb7802cf972ddaca27dc1b08b39aa584d050888566",
-      "byte_size": 2181
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-oi-cal-2024.xml",
-      "sha256": "c500f7d09b2f06d4cc573c66431c22718f7917bb48b88130448cef571ea6ab09",
-      "byte_size": 31454
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-oi-def-2024.xml",
-      "sha256": "11feffd0d5493c769462b859360fdaba0c514e88c1dfd11284f41d9d793dae2e",
-      "byte_size": 20181
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-oi-pre-2024.xml",
-      "sha256": "5c8c6f694c262104d518a41bbc044908bc3aab4daf1bcde383a9115e1daae4a6",
-      "byte_size": 82972
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-otherexp-2024.xsd",
-      "sha256": "8a371dad7f0e85d93aeffbcb2eff95456f9d1cd7f33d810aba21cdb8a807115d",
-      "byte_size": 1521
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-otherexp-pre-2024.xml",
-      "sha256": "5cb9313d46b8b0e8a16bf5e6ae7b1311aabdb6c141311a2a9cef5147efd473e6",
-      "byte_size": 45111
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-othliab-2024.xsd",
-      "sha256": "7dee00470135ad21ccb1ffa0cd9abbee1a53a7d54ea0c963c3bb1a781763004f",
-      "byte_size": 2221
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-othliab-def-2024.xml",
-      "sha256": "ba17d936b81ddb878caa86c0b2eb5121662ca2fbda4856d10967578dbf68115d",
-      "byte_size": 68343
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-othliab-pre-2024.xml",
-      "sha256": "79bd043ac29555a15e025b4f5df3ff046a06601dcfb5f6de414b8c0f39f3aac8",
-      "byte_size": 98367
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-othliab5-cal-2024.xml",
-      "sha256": "21d51a7e743a1614e46f4ab58f9eb54c332b03b81468955c0b9a5770b937d09a",
-      "byte_size": 4959
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-pay-2024.xsd",
-      "sha256": "4bb6764270cea91c89530526a2dc01af9cc78f6633616aeef21b495b51a8996c",
-      "byte_size": 1911
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-pay-def-2024.xml",
-      "sha256": "e70fb88dad3611cbe7b87fd709870b5c6c7ba46af0cf3c7a9fc3f24358038cd7",
-      "byte_size": 12160
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-pay-pre-2024.xml",
-      "sha256": "e57c186277f42803c519dca9724706ba910db76f915585acf27cc3c290f6bd75",
-      "byte_size": 62338
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ppe-2024.xsd",
-      "sha256": "b06cf6938f665b41c46b9e03e96c52b9895f61359cd74725a045c13e41af7376",
-      "byte_size": 2244
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ppe-cal-2024.xml",
-      "sha256": "ab39841dc763455a04249cc854d6b47b3bff26c5aa4bdef3852a3f2be13a1bff",
-      "byte_size": 3620
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ppe-def-2024.xml",
-      "sha256": "71bf90f5905e7a160975dc3a6c0d0800be2969ebc8aeeb6bf9785da2b3ee6f0b",
-      "byte_size": 81339
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ppe-pre-2024.xml",
-      "sha256": "6e1ff5f9e56d4f60987648a2806198724908eb07135356d0f9324c86b1f2b4fc",
-      "byte_size": 90050
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rcc-2024.xsd",
-      "sha256": "176587e76919f49f838d6452a0086788489c60574dbdd47fd8e52ac5e02c161e",
-      "byte_size": 2264
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rcc-cal-2024.xml",
-      "sha256": "a472012bacb9db79bf80a5c80c704f65b567aca456bc2e419455ee5ea9587173",
-      "byte_size": 8982
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rcc-def-2024.xml",
-      "sha256": "acf37e2c2b0ac5056623c1237ae1dec6f2fa6159c84d9a1b37ef01a399685bb0",
-      "byte_size": 45558
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rcc-pre-2024.xml",
-      "sha256": "7de2a32ba3783d0807daa8839ae2bd86525562fdea478043f101e040bad6eda9",
-      "byte_size": 83452
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rd-2024.xsd",
-      "sha256": "2803fb07d42bbcc0c2de13500e373991c9b0041f04533a2152a8513eb42e3e14",
-      "byte_size": 1786
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rd-def-2024.xml",
-      "sha256": "2925d560d0c2a3c10756e5a6d64dc75987da0c645dfb789a47eed59407238daa",
-      "byte_size": 14183
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rd-pre-2024.xml",
-      "sha256": "7aff9c57892243db5904c22d7fc28a2595adaa1f4392304b7af23a8fd4e1282c",
-      "byte_size": 19056
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-re-2024.xsd",
-      "sha256": "4c4c7231894af3d98069858d2c5a348d21f301dd36922f7b3e83c4a1a65ef48c",
-      "byte_size": 2161
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-re-cal-2024.xml",
-      "sha256": "51edd845f30659009ade4ea27cb3dfd5fe62790313ccb9f3df3eb99bab8ea83a",
-      "byte_size": 6643
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-re-def-2024.xml",
-      "sha256": "00c45cfdb6c57f1d3965940243ddc652b371cac266245b9ed469c692421ba303",
-      "byte_size": 38932
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-re-pre-2024.xml",
-      "sha256": "700897c7e8bbefb533a668b771c5831afcfa512e0fc64e7291ab8d165c56f01e",
-      "byte_size": 60502
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-regop-2024.xsd",
-      "sha256": "b836d364c43a8c7593629aecf21e46169adbcd2e5e45b0685472d76fe6eb1427",
-      "byte_size": 2218
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-regop-cal-2024.xml",
-      "sha256": "d1b8f1925f46be47cc8b6f910f78cb505ab9c7e39779c58c9c30712cdd195d99",
-      "byte_size": 22957
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-regop-def-2024.xml",
-      "sha256": "1515d62ebcfd57ebaf04216975da01f163d7cfb041342c5841361c447bfab279",
-      "byte_size": 208709
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-regop-pre-2024.xml",
-      "sha256": "3d1f0fbfc6c9c2871e80b107cbe9d52d58cea723b7bd8aa7463dc239d7cd5295",
-      "byte_size": 179458
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-reorg-2024.xsd",
-      "sha256": "d8e93debe060b852be501c766fd876930df89013ca798630143761dc44375111",
-      "byte_size": 1905
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-reorg-def-2024.xml",
-      "sha256": "100d5ed7cd74e105c7004eb2b625daf79caaef6dc0771a6c9cbc0d9f67a41727",
-      "byte_size": 18148
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-reorg-pre-2024.xml",
-      "sha256": "9b8e21c73825c249bb8a396cefa8b7e9bdb64c50ac52c29431044d16a7cf99da",
-      "byte_size": 60783
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rlnro-2024.xsd",
-      "sha256": "ccc0b6fcb6e2e53f152cdcfdd16b20193c4e7f4763be17439cbf5b1b02d0a460",
-      "byte_size": 2330
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rlnro-cal-2024.xml",
-      "sha256": "a8b890a3d97642cb31825645153a0ab9a932b885a0be14a8b9e9edce5aa4ba0a",
-      "byte_size": 22609
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rlnro-def-2024.xml",
-      "sha256": "fbc5e89dc699e35cb55b2e40cc7ec14b120f8cf350c003f6dbfe3b1b9c80acf7",
-      "byte_size": 367109
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rlnro-pre-2024.xml",
-      "sha256": "23306c0b0a3ce53ea409e0e98eb2f4c489851bb8ebc5c3ba1c2c7bf18e19e2d5",
-      "byte_size": 242341
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rpd-2024.xsd",
-      "sha256": "eaed99c1cbf3b9132f206a6000c2897fc310de957aad5fd490850e98b101ddc2",
-      "byte_size": 1923
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rpd-def-2024.xml",
-      "sha256": "325093d2a7ed5a6b7e41c6c3c8a12189a4b4e539b8a3f165d2b1389d85016570",
-      "byte_size": 26626
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-rpd-pre-2024.xml",
-      "sha256": "96aa6b5a263b85ca8c022d5073876e09a5ca27a3fbd8731433a8395c3f575763",
-      "byte_size": 23776
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ru-2024.xsd",
-      "sha256": "05097b2bb1dd8ce689f57d0645011f731d0cd41cdea1fa9ba0ffc0af72676c54",
-      "byte_size": 1783
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ru-def-2024.xml",
-      "sha256": "d8dea1f9ef1b7246eeb7f3c7eb123be81e7199d6621da38f284a94b3b767c1dd",
-      "byte_size": 24005
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ru-pre-2024.xml",
-      "sha256": "30350a76595bce0c683a8f1a696431cf3eed5857750a6d2cac17752d5ff97ec1",
-      "byte_size": 31223
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-fednote-2024.xsd",
-      "sha256": "4345c716ff9cf603c4b752ba1bd58403b4a57e267310b6ad9dfee2a3c1a062c2",
-      "byte_size": 1897
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-fednote-def-2024.xml",
-      "sha256": "aee03780a97306544dd0391915df02c57d816a53f7ce000f5df157417924acd5",
-      "byte_size": 7284
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-fednote-pre-2024.xml",
-      "sha256": "af2db66a0d45d5d55cbe2e80ed7af39551ae2857db8bdeedf348daac2cbecaff",
-      "byte_size": 5342
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-hold-2024.xsd",
-      "sha256": "696c3b24e526f97cbb144772ca272dfc35b70f8d0c7cd9cd7b06e37e583d9ddc",
-      "byte_size": 2499
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-hold-cal-2024.xml",
-      "sha256": "8ca90318571c3b72541128cff6066b9d1a0a7a0e82dec9689103ac09a29b9acc",
-      "byte_size": 14257
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-hold-def-2024.xml",
-      "sha256": "d58f713c8e3a180698c83a3d4b74a7731f46a78b582e69eee998f838d129f34a",
-      "byte_size": 64362
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-hold-pre-2024.xml",
-      "sha256": "59efb13642bcee21e5f2a52cd93c8073eef937212df8451ad67169b051dc571f",
-      "byte_size": 59315
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-iiaa-2024.xsd",
-      "sha256": "b855b29383d579bcad1229a3b69f7586965304c7884dbc7add21d50eba245fe3",
-      "byte_size": 2112
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-iiaa-def-2024.xml",
-      "sha256": "7cb01859c16a2bef89078b8e9c2ad877e6a37c3298d5fdb5b0c8acebef575917",
-      "byte_size": 77498
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-iiaa-pre-2024.xml",
-      "sha256": "123aa2e2211c3c5d932202ee1d7382f02655a39703c624e5bc2551f70d601e81",
-      "byte_size": 67816
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-oocw-2024.xsd",
-      "sha256": "0019e9866e2e399e833de298f23d079ac846389397f49d1494a4332365ee573c",
-      "byte_size": 2095
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-oocw-def-2024.xml",
-      "sha256": "e45931c90bebdefef0f3edd809100012e169d4a06d4aab92580026fcab554cfe",
-      "byte_size": 52924
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-oocw-pre-2024.xml",
-      "sha256": "1384096fdc0d254d66e77e37e420a74ffabbe63be7e39a78c3eaded866792804",
-      "byte_size": 29393
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-otsh-2024.xsd",
-      "sha256": "2323311325436b116e5def2fd2310299e1937ab6df128e9a794ce7b85cd24b3c",
-      "byte_size": 2050
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-otsh-def-2024.xml",
-      "sha256": "d7f26527a0391e197f91c286988d3e2425756572a4ff4cee8b27df18c7b5124d",
-      "byte_size": 7173
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-otsh-pre-2024.xml",
-      "sha256": "2e71ea1fcbaf5e3a2f74caaf1dc318c03397984389b731679b90e1bc0c930c19",
-      "byte_size": 5536
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-shorthold-2024.xsd",
-      "sha256": "923b63c190408dfe59e32128080379d3bd2ee041e3fa038498cc7373e4e69def",
-      "byte_size": 2130
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-shorthold-def-2024.xml",
-      "sha256": "9d82e4e4669fc5a50725f20abc2adefd677b4c991603688bbd2f3dcb4af62c06",
-      "byte_size": 52011
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-shorthold-pre-2024.xml",
-      "sha256": "94be9de1460fba886ef70efe9c9b3e6bbcd6707d4d29025f199c8e3faa03aa96",
-      "byte_size": 47174
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-sumhold-2024.xsd",
-      "sha256": "39d73aac5d82922bf8612b22fbf04479f2c9a295ad68bd57fd1742a1818598cb",
-      "byte_size": 2010
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-sumhold-def-2024.xml",
-      "sha256": "88d44bd2f99e618bf8f33abf249872412d73ecbedbb8e8b152a61022493c78d5",
-      "byte_size": 88628
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-schedoi-sumhold-pre-2024.xml",
-      "sha256": "7bc40ce6866a85fe3f1275beb9f6e2c155dcc5be9c01477df601a44737d3cf7e",
-      "byte_size": 83996
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-se-2024.xsd",
-      "sha256": "7e6a4aeb749e472dc6b02b11fd050bc157b28e1e63f2297e2f2a9e2f0f5a4b32",
-      "byte_size": 1765
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-se-def-2024.xml",
-      "sha256": "6580558f060632bf4657ce0e07c4b5c4d13e7ff79599f971309f783c0b89b75f",
-      "byte_size": 6815
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-se-pre-2024.xml",
-      "sha256": "d304443e545597c4c38d347d4837bc08c5482a27cf6435d75aa4cf0ab1952ed6",
-      "byte_size": 5875
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-cndfir-2024.xsd",
-      "sha256": "778f9870997b913d8e0cc48a33aa050450ffb1d7b918c80dd92ffccf8bceab84",
-      "byte_size": 2112
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-cndfir-def-2024.xml",
-      "sha256": "98dde2b2d22b14f3cdc5868010766be6a78b162e3faf804b3f6ff2d928b50751",
-      "byte_size": 62481
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-cndfir-pre-2024.xml",
-      "sha256": "d0eb88ffcd583696daad4d1aa567434a66f21db59ceabed7a82fa0f27c1cf108",
-      "byte_size": 31792
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-mort-2024.xsd",
-      "sha256": "368981d783c2daf78bd87df74b0053146b89b091035dff600003cb3db11bb94f",
-      "byte_size": 2052
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-mort-def-2024.xml",
-      "sha256": "dd215202983718b4667effee675b69c15a8a4bfe46dbc168f1c343dc16d7dc39",
-      "byte_size": 35361
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-mort-pre-2024.xml",
-      "sha256": "e6f143eae85825fc1b9186e745bcdda4c54a8e2f737ca769206aef64b6abddbe",
-      "byte_size": 34150
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-re-2024.xsd",
-      "sha256": "b74eb72c75d98fea60a74d9570e5320607140d5c68baa693f89784c1dcc6f379",
-      "byte_size": 2073
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-re-def-2024.xml",
-      "sha256": "f66da06146f64553e6cb8982dfa31511ff31488244582f6407885770ccfd0b22",
-      "byte_size": 29979
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-re-pre-2024.xml",
-      "sha256": "a07a6910496735b8492497bc2121840cab4bfb82defdc0f2d9907f937f78c19c",
-      "byte_size": 32753
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-reins-2024.xsd",
-      "sha256": "c8c258c4c9deded50a8cb9fc7ca9a25e1870d70714840bc080c7961f8a547050",
-      "byte_size": 2004
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-reins-def-2024.xml",
-      "sha256": "d0d712fcdf0e3e23a13fc22ca5ded7a2082af75ff6d906bff80ef2db28674e36",
-      "byte_size": 19762
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-reins-pre-2024.xml",
-      "sha256": "65dc9d29a3131b2a0ea9703faa746faf0773af163e075a0ffc18de1f37bf1816",
-      "byte_size": 17401
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-srbr-2024.xsd",
-      "sha256": "2e07ef835a1f95e1e089a3d8793493a777a3a85c08d46ff281e936a5dc919cd3",
-      "byte_size": 2043
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-srbr-def-2024.xml",
-      "sha256": "6145edb3f32f93645c0a4453a07463d32ce17ec40b6b81b094dd7567ec92d86d",
-      "byte_size": 43140
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-srbr-pre-2024.xml",
-      "sha256": "5dacc8e9ca2125403b48edb98416e3c55e4b79b72e2a0f1a8e3773c6adb99634",
-      "byte_size": 26876
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-sum-2024.xsd",
-      "sha256": "00d8b4abf6321518c92ffb19223eefb9a4f600c1e727cd4dc3bfda540e0fb824",
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cecl-2023.xsd",
+      "sha256": "63313b87477d15b1abcbbbed879b78bbf72abb76050b549de3d26621927c47a6",
       "byte_size": 2157
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-sum-def-2024.xml",
-      "sha256": "f038a79214e4937662e76d61838aecabd3beb5204ff10b5d3c16108602379694",
-      "byte_size": 22952
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cecl-cal-2023.xml",
+      "sha256": "d10593b32e87713b61fece8e49e9c4448bbce6a13c308883c359bf15aff06ce8",
+      "byte_size": 118956
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-sum-pre-2024.xml",
-      "sha256": "47ae6b99bea32ac97dba3706fe0f64a019639f7fc9ac9bf7565752b3e2c6817e",
-      "byte_size": 20130
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cecl-def-2023.xml",
+      "sha256": "e49d0340e68feb7107eb05a7b66b83ea910ee2d2dedffc2c57eca647621cf47e",
+      "byte_size": 828476
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-supins-2024.xsd",
-      "sha256": "be866ac561980095f029819801bd93fd1fc4f790580c9095f6b1e7cc8018700f",
-      "byte_size": 2082
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-cecl-pre-2023.xml",
+      "sha256": "eecaad4eac22afe16b284db1c6e8390f4675db4a69c23d7bb815645b07bd1bca",
+      "byte_size": 651815
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-supins-def-2024.xml",
-      "sha256": "944e835a4d0286b2a33e42a1a0315722be66c4afbfd8317532d6cf94230793c1",
-      "byte_size": 10478
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ceclcalc2-2023.xsd",
+      "sha256": "10edcf8ccfee30fa9baa3249bb13c54d3fb74d2758353021f4b7ad32073c6767",
+      "byte_size": 1479
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-supins-pre-2024.xml",
-      "sha256": "0814cb05135de3efef71cef31b4ab90702148e01a5df481299ea6ffc163c1208",
-      "byte_size": 8505
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ceclcalc2-cal-2023.xml",
+      "sha256": "381222b9e58ed6f7bdf6980f8641a01fa0481d746c162136a1798dcf3ef70860",
+      "byte_size": 71875
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-suppc-2024.xsd",
-      "sha256": "f55845e182b7531c8a01f3492ec68b88e38656a4e73c83720bb73a052ab0a3ba",
-      "byte_size": 2184
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ceclcalc3l-2023.xsd",
+      "sha256": "fd5a59224f0c7449fedfeb4c6c42c7b1209d393bd19b73d88fe806c0c4d433a8",
+      "byte_size": 1484
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-suppc-def-2024.xml",
-      "sha256": "34649921e32e5080d8187a5d854b3f717a37a8fe704f1d64c43b19ddbd187a07",
-      "byte_size": 20781
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ceclcalc3l-cal-2023.xml",
+      "sha256": "9ae48a314cb1d5f4a3486eaed11de22ed7eb28fa4feac0baddaddda4f599bff8",
+      "byte_size": 5269
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-suppc-pre-2024.xml",
-      "sha256": "c014050180793f3a9c44b34a82d5b72a40907eccf24cb1b3a94c231e50457d27",
-      "byte_size": 16571
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-con-2023.xsd",
+      "sha256": "e793dc2018296048e10e2de970b69ab864aba8caec87ed92fadb57e3565c1a8a",
+      "byte_size": 1857
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-vq-2024.xsd",
-      "sha256": "64c8a8f9701c68480f741b16e261d2a79d39f7c2129390b1c2c0ded92db0ea8d",
-      "byte_size": 2052
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-con-def-2023.xml",
+      "sha256": "870df8f6ac4c2922ea3f8d7503211ad9f579efd1f7396aebde03608eacb6fd20",
+      "byte_size": 7280
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-vq-def-2024.xml",
-      "sha256": "65a7b90f7d24906a0566bbe06d521d13b795ef1dbd2748c27868a63daf173582",
-      "byte_size": 20965
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-con-pre-2023.xml",
+      "sha256": "a6a0ba618e20115a4fa46d95a8200924ae877db0d10d6cfaddac7012d0e2f2e5",
+      "byte_size": 41273
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sec-vq-pre-2024.xml",
-      "sha256": "620fdd2761a993e34ff747c9207426e5057b761f022b844c105900e79b09f974",
-      "byte_size": 18923
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcgen-2023.xsd",
+      "sha256": "ec27e52dfac77066439af5d4180536bce1f97e0f2ff71d759b4d47e8adc75c4b",
+      "byte_size": 1947
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sr-2024.xsd",
-      "sha256": "fbf36b3dad270808c51beb7707b7bb0726ca68a7c07ed4934aba03acb39ed07d",
-      "byte_size": 2185
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcgen-def-2023.xml",
+      "sha256": "0ad5a24eb35e07f9ca78d6457977f8d60cb0612e897337bc3cec01cfca49c3d1",
+      "byte_size": 57527
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sr-cal-2024.xml",
-      "sha256": "5ce011177f83497737770df53d1d94cd6dac840340adce4bbbee2e2bb9aa0bd8",
-      "byte_size": 3150
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcgen-pre-2023.xml",
+      "sha256": "f32f3a0384652e4f02a2aaeade1fbb1be142434aa09b838c81f4c4ef43ee7fac",
+      "byte_size": 47611
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sr-def-2024.xml",
-      "sha256": "fca42e38e4643190bc90a8205d5794f9685fd9752676fe216225ee9af7873279",
-      "byte_size": 159769
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcpb-2023.xsd",
+      "sha256": "e3d21cb218bac4f5ef800cfafe07adf5e413d36b6d6951f63391b8febca0453d",
+      "byte_size": 1537
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-sr-pre-2024.xml",
-      "sha256": "911df086dcbbcd912d29b043deb96fb81926bfe4fb84ea0c687b809c39537d29",
-      "byte_size": 98710
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcpb-pre-2023.xml",
+      "sha256": "1cbf65ae828d9c9759ad5da30a3055ee9e66706a4fb48cded7725806383aa07d",
+      "byte_size": 9858
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-te-2024.xsd",
-      "sha256": "0246d7a85e1667b2f795a1cd6eafd63b15ecad5e0566f0fc4937c1ef9f0f5df8",
-      "byte_size": 1890
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcrb-2023.xsd",
+      "sha256": "58c45ff05785fdcb242e6bc29fb186569d37031d9d4c3497110a5005bca57340",
+      "byte_size": 2300
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-te-def-2024.xml",
-      "sha256": "202251be6f523e5aaa14798c77f10bb2ea248e81d82017bffe1b3d3be33fbedf",
-      "byte_size": 36930
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcrb-cal-2023.xml",
+      "sha256": "3a2cc5385caa2fef90212eb5b441b014ffc0977a5dee5d664f674396f84f72ea",
+      "byte_size": 33902
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-te-pre-2024.xml",
-      "sha256": "b8ffe6e310a9648e03ae18e4ba672614b1810b93d67318074975725cb450fcdf",
-      "byte_size": 32293
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcrb-def-2023.xml",
+      "sha256": "a4c56ad910c6ce9105d1d9d67a932d7ce85a13e0d3ce70ecf70f99bc12ca9444",
+      "byte_size": 417807
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ts-2024.xsd",
-      "sha256": "e75b45f8e18bce448775ab58cb4a7d871ff4044bb4705613e786b8c74d6950d7",
-      "byte_size": 2209
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcrb-pre-2023.xml",
+      "sha256": "1562b5816cfe854f6896972d978095353f819dcd02a515937b056d290b57b2b7",
+      "byte_size": 262215
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ts-cal-2024.xml",
-      "sha256": "0e0eabd85e8349525de4147a0f0c8ff083fe6ed9c35a2ec044f8140453b09b9b",
-      "byte_size": 20588
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcsbp-2023.xsd",
+      "sha256": "74553fb043edfe7b85bb7fc90682318dc7d9239caeaa619a92febee7fe24891f",
+      "byte_size": 2311
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ts-def-2024.xml",
-      "sha256": "7bc196eeabf9b50aea9d022fdf1638101b96b112067a8898227f935f94845506",
-      "byte_size": 589979
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcsbp-cal-2023.xml",
+      "sha256": "e47d671e9bca13839802c2ac7b2f1c6b932971bf531225732a8f6b395094ab0d",
+      "byte_size": 18141
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/dis/us-gaap-dis-ts-pre-2024.xml",
-      "sha256": "919fc50bf384283c71515d6b3218089f33b13a36dbc443d9ab4f9570a3db9505",
-      "byte_size": 223438
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcsbp-def-2023.xml",
+      "sha256": "dad8561e6446650675b43d9f149f89f54531f09a80cc1c8f3fb3b3158403edf2",
+      "byte_size": 166875
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/ebp/elts/us-gaap-ebp-2024.xsd",
-      "sha256": "1d07006959fd8a44534075fe9e2bad1f674c16a57d0d254a8a3ffae94b608043",
-      "byte_size": 115563
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-crcsbp-pre-2023.xml",
+      "sha256": "5233e9b5032f52d33735f90dcc5f2f8a3513474fe07fe8ba598ec17eb73eda6c",
+      "byte_size": 210368
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-2024.xsd",
-      "sha256": "6a5daf96dc96edf69876ac9a34a3cb076f23eec3e2899e88ae92c1cecae0d70f",
-      "byte_size": 4999840
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ctbl-2023.xsd",
+      "sha256": "a80656bde9c51749bf4cbab86e161338e81e5d4fd7df91b288048d24a43bf59c",
+      "byte_size": 1615
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-depcon-def-2024.xml",
-      "sha256": "1ccdb7da3b1a16d953952896d64664efcc982632d36e7eb6c0b440c7c1dc076c",
-      "byte_size": 341676
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-ctbl-pre-2023.xml",
+      "sha256": "96591748f05d3f0aa01bbca81979543bd2d76357c1841097796e5d3e46663a1b",
+      "byte_size": 430243
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-depcon-pre-2024.xml",
-      "sha256": "bb87bdf694087492279f6e943d85d7c7049470f8173e3d197d6655c025468495",
-      "byte_size": 332633
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-dccpoa-2023.xsd",
+      "sha256": "bfca700fe6cd5fa5e321dfd0106f9d14fcf051974b05d79301c97f2b24756a2a",
+      "byte_size": 1548
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-lab-2024.xml",
-      "sha256": "fe570fe3409f3aba8e8bc1c9a27b39865a15ffd964a7878191ee68842a45ecab",
-      "byte_size": 14275164
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-dccpoa-pre-2023.xml",
+      "sha256": "ca38c179774551d928f962a783a5d883f5ff19187b4b3be47ea0d4904204f607",
+      "byte_size": 46830
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-std-2024.xsd",
-      "sha256": "7b08860a7602592b111066e8f8a8fb81713395bf2feb504b639b2fdbbc724204",
-      "byte_size": 1899
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-debt-2023.xsd",
+      "sha256": "7671df0a8d7b94399ebebf4c276406d729665f25073c7cbbf81d868b59184b3e",
+      "byte_size": 2121
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/elts/us-roles-2024.xsd",
-      "sha256": "84881bab38bea0bbc6d0d9bdf4f2bebb01d7809eebd9762e132084821a2092e7",
-      "byte_size": 248268
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-debt-cal-2023.xml",
+      "sha256": "6a2c3c3b2b8268e409b622888217d9018dfdcdd48ee1861b6adc335b01b5f429",
+      "byte_size": 9162
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/elts/us-types-2024.xsd",
-      "sha256": "d337b63047992f8ce9cbe741d214711d77e664361b52fa99907ebe1ed7a97842",
-      "byte_size": 11000
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-debt-def-2023.xml",
+      "sha256": "1843d6d33d50f2f21f9dab98eeba5fc59243f22e526a10f2485d19fd45bd6e3c",
+      "byte_size": 212691
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/entire/us-gaap-entryPoint-std-2024.xsd",
-      "sha256": "2dfaec635507f3a8394bb11688af9475823e05906d0e25756ed06bd6064e9ed7",
-      "byte_size": 13879
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-debt-pre-2023.xml",
+      "sha256": "e277e58a016763f58ab0fb163c618cf9a336cb26a0c7532433e7bdce039ea401",
+      "byte_size": 271309
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-com-2024.xsd",
-      "sha256": "9c7fad762b2155ffd1ef7d4d8cea65b04d6b0f39bc90b4fd555c8d51187592de",
-      "byte_size": 1902
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-diha-2023.xsd",
+      "sha256": "4a411ffc2525f0a9a1e19fe9df003f57d9e44ae5b4387e1c62941381d65b8993",
+      "byte_size": 2285
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-com-def-2024.xml",
-      "sha256": "e42286861f42fa33a44f6a45d44332fc409434b520f346c37ed35d431e99ef32",
-      "byte_size": 108515
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-diha-cal-2023.xml",
+      "sha256": "225f9d0d107b477a3f29fb2b385aa643ce95f21b9c87b7365cd6ef926d64b84e",
+      "byte_size": 47686
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-com-pre-2024.xml",
-      "sha256": "6ea6c66cabd0e7df7ceee572cfa90778c6729d39d6e60a612490f57de1193af0",
-      "byte_size": 218615
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-diha-def-2023.xml",
+      "sha256": "62043b2e0247a30ca9726212cc7806ad0e2bf2d800fadfba9a16aae672d6daf4",
+      "byte_size": 376438
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-dbo-2024.xsd",
-      "sha256": "5ee6d3bbc3021daad9b5a3fc18c338cd14afd276cbf17d3e6cff84faac830dee",
-      "byte_size": 2338
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-diha-pre-2023.xml",
+      "sha256": "e0029b28dec69f161af7a38acf38338a4f1560cb3cd5ed872e9796dc46587c24",
+      "byte_size": 363159
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-dbo-cal-2024.xml",
-      "sha256": "ad6d8d4437c40107641a5f0d1a8c0f5dcafe395a8ea7a9a005c541dc79e3b201",
-      "byte_size": 54090
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-disops-2023.xsd",
+      "sha256": "631256869d106f4d2990ba04c4a588e55d400d41aa7066a895da2c3f989847a0",
+      "byte_size": 1844
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-dbo-def-2024.xml",
-      "sha256": "4c50d27c09d2dec4161b680696c4b1bcb82b317913f56d2bae92e6d8a0d60cfc",
-      "byte_size": 282298
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-disops-def-2023.xml",
+      "sha256": "2a76a4ca6408d6d81167722cacc82a0b6be879d5f15f550edba75ef778e1f49d",
+      "byte_size": 116456
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-dbo-pre-2024.xml",
-      "sha256": "7ed1e83b5c82875835cfddb68b6280150b3fc6268582eb776e4ce1ad18d7f588",
-      "byte_size": 293250
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-disops-pre-2023.xml",
+      "sha256": "47ab5f417d868484860377d4afc0908480ae8d71955f8cf5aa0d9c6c1cb83e98",
+      "byte_size": 115331
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-dir-2024.xsd",
-      "sha256": "5855a074c8c081a773066a24b40a8d991059959add6bd809e35639375a8b3e3e",
-      "byte_size": 2378
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-dr-2023.xsd",
+      "sha256": "05c7083eb6abd71d2fc0d12adafeada672b744e467187d2d59e33c3df2fb97bb",
+      "byte_size": 2124
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-dir-cal-2024.xml",
-      "sha256": "97a1b443cb0f8ba75a0ef20d6270e10b0583a80a981bad3d02ed65f95237da1c",
-      "byte_size": 31531
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-dr-cal-2023.xml",
+      "sha256": "958a222b284c42487ee961a82eeefe141f20c209f16b16d203efa739e1ada3ef",
+      "byte_size": 12391
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-dir-def-2024.xml",
-      "sha256": "7bcd5ee1f9b9477b2d3501a2b22ad0ffa7d2b931d462470f03569adce15eb1fa",
-      "byte_size": 38239
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-dr-def-2023.xml",
+      "sha256": "34206880d1e4e31dccff68977b1d695f09b01c6e06de049c9e0e45c486b66aee",
+      "byte_size": 2428
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-dir-pre-2024.xml",
-      "sha256": "a9e5d9083a5774a73aa8e0d1b635a2db83eefc081c5525279a650ab856f87385",
-      "byte_size": 36299
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-dr-pre-2023.xml",
+      "sha256": "1e8680c11b64ad4137e5e62bab8868ec1ee3b3a98c0ebd3a4d9785f4ccfbddfd",
+      "byte_size": 83435
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-indir-2024.xsd",
-      "sha256": "10a2de1b64aad43413dd0b7edf5a7b3d978000c35258d46c739d4f27a59e2403",
-      "byte_size": 2248
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-edco-2023.xsd",
+      "sha256": "ca7753ac768014388308f0d6d1a03b81f6d983b47955483126da13f950764674",
+      "byte_size": 1938
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-indir-cal-2024.xml",
-      "sha256": "1c4c0776456d2e5e0f0ed8ede39ba5602b8566da61546aa7715ee1bd7ae8d600",
-      "byte_size": 341473
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-edco-def-2023.xml",
+      "sha256": "a03d69458752d1a27d1b6b3aa19f12e07216d7ddb0ffb600d46bf299a6529ac4",
+      "byte_size": 62033
     },
     {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-indir-def-2024.xml",
-      "sha256": "71d09960276a03b28cacf48b3174ca83a2be167eeda80a580a86a6e08895c0ef",
-      "byte_size": 325122
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-indir-pre-2024.xml",
-      "sha256": "6a6edc74e5a7429e000c7a68187482d37a0f66d5a2072ae448c401dedfa63fe9",
-      "byte_size": 337350
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-indira-2024.xsd",
-      "sha256": "4e827f93e9a9fe1ad10ac87d51db47e7ec3952ac08e0094d74316060e9238539",
-      "byte_size": 1915
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-indira-def-2024.xml",
-      "sha256": "a78ab7a2b64db3228b62f81f1f99a13c4344754f0b74bdb3d3e2aea275b14d52",
-      "byte_size": 12161
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-indira-pre-2024.xml",
-      "sha256": "bd204836fa58f3b5ed020218bf05cd1950ac70add959bd133fe4f14b5c07a167",
-      "byte_size": 89141
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-inv-2024.xsd",
-      "sha256": "6568210ade30135ac961cffcbacefd8e050e41106a7e1a69dee311f8af969291",
-      "byte_size": 2346
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-inv-cal-2024.xml",
-      "sha256": "83ab380e4c8e00cdb052ecb2ccbe778bc0fe2c05ca6d045f38343346671d88a5",
-      "byte_size": 13594
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-inv-def-2024.xml",
-      "sha256": "4b4c7d33c3c366ced36996802ef31cf3e2ae39ffbfb24787d6d7b4c5c40f1991",
-      "byte_size": 290786
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-inv-pre-2024.xml",
-      "sha256": "9a839441cf6f047b3a714d47e671ce8d36e5ba619f04de4b33f537df41f07a66",
-      "byte_size": 303202
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-re-2024.xsd",
-      "sha256": "92650056ce0870790bca36b0c816397e4695fdc74f3575d914f27bfe72c5d5cc",
-      "byte_size": 2016
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-re-def-2024.xml",
-      "sha256": "a6b90b0f1d2353e15b763a77ac1fff81d114592f10bd33a11ea94e933132dc00",
-      "byte_size": 287868
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-re-pre-2024.xml",
-      "sha256": "e5847e21e544e9cd5d0e6f1671daac8200bd2eae8ea791a08808f1300a9c795a",
-      "byte_size": 295842
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-sbo-2024.xsd",
-      "sha256": "bb9cda6873f70cc5306ce0c1600614e6e0541cb9cbfd8ee2e36bffbfc30e9f6d",
-      "byte_size": 2019
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-sbo-def-2024.xml",
-      "sha256": "2100dd26b6a3829c6a32b7c7abc1c786ea54a0e98597bdaade6539ec0ef652ed",
-      "byte_size": 239016
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-sbo-pre-2024.xml",
-      "sha256": "578477eb4696ba744a0a0654a80fe50417888a0ed43b100064d381bbef46990b",
-      "byte_size": 248904
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-sd-2024.xsd",
-      "sha256": "e707b530d8b6e950dd78d8e226b1f1692f8d5896d07e17789d5b913a3827b0d5",
-      "byte_size": 1876
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-sd-def-2024.xml",
-      "sha256": "ee755c20f03821ab4aa0787df91b866df3ca5eaf1bc67b85ef2979f141bacbdb",
-      "byte_size": 66384
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-scf-sd-pre-2024.xml",
-      "sha256": "ac83234b3ab43194404a2a423037705a254612723addd1170d66316acc84ed30",
-      "byte_size": 78728
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-clreo-2024.xsd",
-      "sha256": "a0aa54a637b79376c5f718938f10a5b92c2f7abcd3b3a8ba866fc113345b38d3",
-      "byte_size": 2079
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-clreo-def-2024.xml",
-      "sha256": "c0dfe6da39dd20409850b87bdef29a779b08d04c0094641dbdb76f01e6c17d1f",
-      "byte_size": 223530
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-clreo-pre-2024.xml",
-      "sha256": "7672c95d2ba3402d089c38e282f9ca73a3a4af6be4bdde9c3705aefe5711a4bd",
-      "byte_size": 225558
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-cls-2024.xsd",
-      "sha256": "e5002ac3e032b2830a20c7e45d824cff06291f65f7a6fecc0d945edd27af9a39",
-      "byte_size": 2960
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-cls-cal-2024.xml",
-      "sha256": "7d109aa7067cf9e43fe067d2e00f207a31afe04f7c10ad86550dba7797654a4e",
-      "byte_size": 245646
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-cls-def-2024.xml",
-      "sha256": "64bf6b000079bfe90962e5e26a40a6818b1337682ea5471c3cf5e169328d3f6b",
-      "byte_size": 295649
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-cls-pre-2024.xml",
-      "sha256": "742024349f93f9329841fa59474350bab89a1175781eb97a209fae4e64598a84",
-      "byte_size": 298231
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-cls1-cal-2024.xml",
-      "sha256": "fa28f9e767ce12cf4eb8ab3e6c4a52e4f839d4dc13ee9771ebc36d5d621243f2",
-      "byte_size": 122385
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-cls2-cal-2024.xml",
-      "sha256": "2060c088f570f46af1c6ded123cf51836aa3552c83f410bc7c24bb8df4b7d6de",
-      "byte_size": 120516
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-dbo-2024.xsd",
-      "sha256": "2b81ccc32135f2844cedcbcd14f8b9299c588c390cdbef582ccf097ae800ec74",
-      "byte_size": 2782
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-dbo-cal-2024.xml",
-      "sha256": "adb288b3cea8113d4020372ed40b7fc0a3315821d8a9ba4976a3a449745038d6",
-      "byte_size": 228860
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-dbo-def-2024.xml",
-      "sha256": "394c06707a7c2703a1d356c60ff3c29c4abae6a9e4f85b8dae2719168ac5f8e1",
-      "byte_size": 206010
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-dbo-pre-2024.xml",
-      "sha256": "151131e18c0bdc0a341e82e45d6fe13c72c53577670978394a0be2cbb8b6b2d5",
-      "byte_size": 208127
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-dbo1-cal-2024.xml",
-      "sha256": "ed0019177f6e4a001e36620352108bc46daf715491c3925e1b1b162ab46e4b06",
-      "byte_size": 48869
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-ibo-2024.xsd",
-      "sha256": "700ed8045d1353b1b06541fb438d8987e7de1a3a586be9fdaa24e651fb6edabb",
-      "byte_size": 2438
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-ibo-cal-2024.xml",
-      "sha256": "a91a1584c1cfdd5d08800cfb4da7891ad371daa3c32aaa58d0c542866b9d1f98",
-      "byte_size": 15845
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-ibo-def-2024.xml",
-      "sha256": "b677ef7534c21e3fb157398d6a4247dd9d843d843ded169f108637be2a142266",
-      "byte_size": 188602
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-ibo-pre-2024.xml",
-      "sha256": "cc08547d0dd3d1a8ddee917a7c0ff2311dcd724b908cdc023787d76f0ecb0cc1",
-      "byte_size": 189823
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-sbo-2024.xsd",
-      "sha256": "f1c73d2f02b331165fac8358be6513dafeea617e3b17766d01024cd270b05b96",
-      "byte_size": 2088
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-sbo-def-2024.xml",
-      "sha256": "437531f74fe91ac7629b8fc142bc4ffb6d693eefaffb49a84058154167a1bae5",
-      "byte_size": 176448
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-sbo-pre-2024.xml",
-      "sha256": "2558f9f82d5868c506fe8d50ccf36f43c656738c0f548a8d7a4d8c4028fbc2a2",
-      "byte_size": 176822
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-ucreo-2024.xsd",
-      "sha256": "fd7b13ea7f03e5eacb54fb9dc4d862297595e42f8d5f29e58fe13934f576b684",
-      "byte_size": 2085
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-ucreo-def-2024.xml",
-      "sha256": "4339eed54155b134e2b6e0aa05288f924865b6490729a5600262975319966a4a",
-      "byte_size": 165336
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sfp-ucreo-pre-2024.xml",
-      "sha256": "01466947b56bf502b0457a000987149956f0a4f517fcbf3fc0722cacb09266be",
-      "byte_size": 165979
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sheci-2024.xsd",
-      "sha256": "4ebbe3647ed60553ea131fa510c3ad78b1fa5ceaef1dec8ec27a6be38692c056",
-      "byte_size": 2602
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sheci-cal-2024.xml",
-      "sha256": "f8352b8fd0f461b89e5e47ec8e1148c0935362e7f8f804e8bab3ff5382269a3a",
-      "byte_size": 60665
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sheci-def-2024.xml",
-      "sha256": "105375a87087fe3ecd6e79b57fa00bee157f8dc1498d63ce4ba7b6c8baf83cc7",
-      "byte_size": 154709
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sheci-pre-2024.xml",
-      "sha256": "d4eae275f679c36911f4c10e96c695711c75eac765fae5cf0345f281964ed7f3",
-      "byte_size": 154464
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-sheci2-cal-2024.xml",
-      "sha256": "c07647d81931282a81787cb687ef3f0d255fa07536333ceed7fff4ed1dbfb694",
-      "byte_size": 14379
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soc-2024.xsd",
-      "sha256": "c5726e6ec5bc79755586d01aca61e62f4841536ee9c70982b8f1cd135066f946",
-      "byte_size": 3506
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soc-cal-2024.xml",
-      "sha256": "b43ee583b2cca83ab2d434de0f39d6473d97972b17f9d27dbe1d92cd5ddb9542",
-      "byte_size": 52822
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soc-def-2024.xml",
-      "sha256": "778ab73a71ba3fb0a83937a29ab405f839074bbaf806dab0e0647fc96782a0e1",
-      "byte_size": 165144
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soc-pre-2024.xml",
-      "sha256": "4dbf43dd6e85556f92c2ad776cac2c569056bb59986a8643224624d6364c934a",
-      "byte_size": 185031
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soc2-cal-2024.xml",
-      "sha256": "6a9b7ffd7cf912889e34894bbd15204a7f6e94fa388ee73483f604ba1a321bf4",
-      "byte_size": 63464
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soc3-cal-2024.xml",
-      "sha256": "09ea3b80db2290c6b2385f3990282ac61ab166dcfd696a3ee3872cab826054a0",
-      "byte_size": 34560
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soc4-cal-2024.xml",
-      "sha256": "b25c7bfba0d9f2ae7abf84bf91450e5ed50adc3a8b0449ed38aff935026e993f",
-      "byte_size": 17301
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soc5-cal-2024.xml",
-      "sha256": "b3bce5b98ea782790802f9829a3b7fadbd12e34d47d92c52fb00b95c1b17f302",
-      "byte_size": 47497
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-2024.xsd",
-      "sha256": "ca63fbbaf38e6c4c9678d459bacaef0076c908e6319bb43057fc070d925864cf",
-      "byte_size": 2880
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-cal-2024.xml",
-      "sha256": "e7b7c2adee456ba7d1a25321f55449f8d3fbc33bb5bfadd84e0d5bfb1bb3bfbc",
-      "byte_size": 228572
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-def-2024.xml",
-      "sha256": "8dafa29febacf07f672aea5a0d364a80d8a6a87543b3e336ba37d845619768f6",
-      "byte_size": 230663
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-egm-2024.xsd",
-      "sha256": "0258f4d9d2cd6c6e062d981670bbc2523d48abf647fb305b206ba97bd245c554",
-      "byte_size": 1920
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-egm-def-2024.xml",
-      "sha256": "27787816a26273cf12614bcc8c2f54444aa78037ac691a6f37b6a580437e0eb2",
-      "byte_size": 178486
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-egm-pre-2024.xml",
-      "sha256": "db62ce5a9a654fadce40c70581f59847203f51574fbbf592e7f1176e40b17468",
-      "byte_size": 180436
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-indira-2024.xsd",
-      "sha256": "01c6c3775692562cc3f2fe53fc9558ee60924263251b4e42463062b8096f5ea0",
-      "byte_size": 1593
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-indira-pre-2024.xml",
-      "sha256": "a7069f9b617851313b13cd4fdb8908560daebdc8d03812b5c6aeb6873f9365f5",
-      "byte_size": 8946
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-ins-2024.xsd",
-      "sha256": "fe77568c7721018174f59f7b47ab8da2fcdad4dc698b04c11e292f8ca61a5d54",
-      "byte_size": 1995
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-ins-def-2024.xml",
-      "sha256": "37171686853fd50d2f3f2638ff3e3761f7ea32278498da03c542196efe36bf49",
-      "byte_size": 115782
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-ins-pre-2024.xml",
-      "sha256": "839161a779b44e23b9bc065159ffbba3de3329596d02fb38bf64cd02d9b62c0f",
-      "byte_size": 115668
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-int-2024.xsd",
-      "sha256": "a25c0d10b0114d141c04ca133824202e37ace6cbd12841aeab98c6cea8bc6d06",
-      "byte_size": 1992
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-int-def-2024.xml",
-      "sha256": "b1168d0b26a883fdbf43f23b74bb2478a8799ab59835d33dc55a18c931478b48",
-      "byte_size": 177587
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-int-pre-2024.xml",
-      "sha256": "f5e0f3db2bafed71c52404a0af294e8bc44ddd2e2b2c404dc509d3b9dfb4e5c2",
-      "byte_size": 181345
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-pre-2024.xml",
-      "sha256": "34126fc99c2cc330b190c6fa5797f30ee8fdbfbf6b277b706021912cd359a1c6",
-      "byte_size": 233096
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-re-2024.xsd",
-      "sha256": "6f88bb0d43f466199ad096f788618f3bec89267826b5588c8ffbca6f9694fa37",
-      "byte_size": 2004
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-re-def-2024.xml",
-      "sha256": "73c8f4332162d50c21f87f81a20f86bb21f8e5642341c68453bba8a4346af4ce",
-      "byte_size": 159703
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-re-pre-2024.xml",
-      "sha256": "14f21c13e45d23b69994b85d613aca7841492cb94636fcc5ee97641b4e948034",
-      "byte_size": 161205
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-reit-2024.xsd",
-      "sha256": "95c674b89bd6326a1f485e7b89c2d392f7f9a41368142cf252c68f40fce95e35",
-      "byte_size": 2019
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-reit-def-2024.xml",
-      "sha256": "e6219f3c2e4492210073319477a1d9c33898824c4fc44b69c04d7977f6f83e16",
-      "byte_size": 157545
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-reit-pre-2024.xml",
-      "sha256": "ac43ad7d7e20d4d24bdd1a5ae0f0edc0c778180c96b4d05090169596ddecca54",
-      "byte_size": 158984
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-sbi-2024.xsd",
-      "sha256": "e6c9a58b7010dd395af12ee5fcbf0fc2c1b409e3f034e238ba110452e7685291",
-      "byte_size": 1995
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-sbi-def-2024.xml",
-      "sha256": "d544d473a5d785ce52767908361da110512d951ad30774a09d4e6e00685fa439",
-      "byte_size": 128305
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi-sbi-pre-2024.xml",
-      "sha256": "e51c291e9f378e53ca8eb2306e735f177fc26c3f39af550392030ab796e6aa23",
-      "byte_size": 129580
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi1-cal-2024.xml",
-      "sha256": "19aaaa3f549011fca0c97b29acee19a6d7d215237d61e6c1601179aae7961db4",
-      "byte_size": 69507
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-soi4-cal-2024.xml",
-      "sha256": "9c79dd795c8bb4b8e9272a3508ccd21ad6903fc61db98f5b99bd1669d6f73c98",
-      "byte_size": 50744
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-spc-2024.xsd",
-      "sha256": "e8c4dba7df222269e98a2a459cd3f0dadcf229d3ff4042ba37d9eb8ac02d3035",
-      "byte_size": 2234
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-spc-cal-2024.xml",
-      "sha256": "061fb91266d018d3a10e1d33cd843a353fc1f34012d3e1341682fc46b37cbef1",
-      "byte_size": 14092
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-spc-def-2024.xml",
-      "sha256": "46931fcd4ff3b7010ec1cacccdec5cbe3d76c01473bc8165593abd55279fc660",
-      "byte_size": 58335
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2024/stm/us-gaap-stm-spc-pre-2024.xml",
-      "sha256": "c9512872221c62e62543df70cdc6d36205ec9c39067b9accce88ea023a07b904",
-      "byte_size": 55490
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2025/elts/us-gaap-2025.xsd",
-      "sha256": "4639263ec38aaa5d531cb7d0afb33f9582c2d602fb4623d4921e47e365b6ac9f",
-      "byte_size": 5002637
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2025/elts/us-roles-2025.xsd",
-      "sha256": "5d3c7df850d5b5b753f99007b3326f2273ae556080a8831f5ac113ee031110f2",
-      "byte_size": 255169
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2025/elts/us-types-2025.xsd",
-      "sha256": "fd4fe8b98867fce2c54735b9f9fe71275f491aeee4bd01e506cb194775a2673b",
-      "byte_size": 11000
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2026/ebp/elts/us-gaap-ebp-2026.xsd",
-      "sha256": "ea2a9bc2a3c150ebf1da41d1310cec099d50bf2b69b06f3ea6d2e1abf1cb7ce5",
-      "byte_size": 185532
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2026/elts/us-gaap-2026.xsd",
-      "sha256": "5df2d5054b8a37ef1a00bbbad621317833e7c2cb65a421a283128efbd707da7e",
-      "byte_size": 4966701
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2026/elts/us-roles-2026.xsd",
-      "sha256": "2086d04ad5cf3d9cb558c0ccba04b98e993729b25ec443cc431d97dc820b0256",
-      "byte_size": 249678
-    },
-    {
-      "uri": "https://xbrl.fasb.org/us-gaap/2026/elts/us-types-2026.xsd",
-      "sha256": "12b0b39019120c63b923e66c5289333a50c7f8c3f10bcbf6bee3e4c3628332f7",
-      "byte_size": 10707
-    },
-    {
-      "uri": "https://xbrl.sec.gov/country/2020/country-2020-01-31.xsd",
-      "sha256": "82954c8f97ff52be209302fc1c07bcce244f03dae1d454409aeccd81451f56d7",
-      "byte_size": 41811
-    },
-    {
-      "uri": "https://xbrl.sec.gov/country/2021/country-2021.xsd",
-      "sha256": "921eccde5e8b9e825448ffbc87123126e03c4bffaf9c233e90dad390af73fa89",
-      "byte_size": 42514
-    },
-    {
-      "uri": "https://xbrl.sec.gov/country/2022/country-2022.xsd",
-      "sha256": "706bf0d76808408c37c736b5202ffc55b35de00895d809596b908f0961f9a729",
-      "byte_size": 42241
-    },
-    {
-      "uri": "https://xbrl.sec.gov/country/2023/country-2023.xsd",
-      "sha256": "b020349116649ac236d9a201c1ccf9c934526a58ac12739c11ca4a72ef012ab7",
-      "byte_size": 42500
-    },
-    {
-      "uri": "https://xbrl.sec.gov/country/2024/country-2024.xsd",
-      "sha256": "f03371d53118f676c78eb1cafbafcef5a3aac0cefc6d77edebb3726d8db98079",
-      "byte_size": 42458
-    },
-    {
-      "uri": "https://xbrl.sec.gov/country/2025/country-2025.xsd",
-      "sha256": "dad858d60293b4a7d89934a33a3950950a3b0066af7998c3ad6570399cc80599",
-      "byte_size": 42318
-    },
-    {
-      "uri": "https://xbrl.sec.gov/country/2026/country-2026.xsd",
-      "sha256": "a1a84c1c00fe0348642c795dfe4bd55597a843d50a1e6bb84de32bb1e3f82c50",
-      "byte_size": 42318
-    },
-    {
-      "uri": "https://xbrl.sec.gov/currency/2020/currency-2020-01-31.xsd",
-      "sha256": "3d9f1dcf26e2c82cb39bae1994b5fe4bf22a5e25ea1587a839f41049a840399b",
-      "byte_size": 31896
-    },
-    {
-      "uri": "https://xbrl.sec.gov/currency/2021/currency-2021.xsd",
-      "sha256": "96d8788920a91d1a6a346a583a640a039db2eaa6c583c3af3e77b30db4424f7b",
-      "byte_size": 31923
-    },
-    {
-      "uri": "https://xbrl.sec.gov/currency/2022/currency-2022.xsd",
-      "sha256": "7d955f1f8762a22dfae3d9e28ab6f0fe6ea9c461ebccc38f856f2d58fcc2da2c",
-      "byte_size": 31923
-    },
-    {
-      "uri": "https://xbrl.sec.gov/currency/2024/currency-2024.xsd",
-      "sha256": "3a1d0a698281043d952c5ca75583ca77fa96ad48b29bf3177ab4509584707bc3",
-      "byte_size": 32334
-    },
-    {
-      "uri": "https://xbrl.sec.gov/cyd/2024/cyd-2024.xsd",
-      "sha256": "b0299729957c8ccf51d0450e6c415885fc662df3a359c91a65dc40f601d67e95",
-      "byte_size": 50413
-    },
-    {
-      "uri": "https://xbrl.sec.gov/cyd/2025/cyd-2025.xsd",
-      "sha256": "da7e6f4447191c4e62f07ffef156348bf7683fb717743b29316ef2f09688e57e",
-      "byte_size": 52366
-    },
-    {
-      "uri": "https://xbrl.sec.gov/cyd/2025/cyd-af-2025.xsd",
-      "sha256": "456e41cd3e86fb8a9f497f9175945c2260a52c5bc2829d8c4eeda95673c85ff4",
-      "byte_size": 11802
-    },
-    {
-      "uri": "https://xbrl.sec.gov/cyd/2025/cyd-af-sub-2025.xsd",
-      "sha256": "b8255b4f6224dc9c523908ca014c4839b5c633a5478132cb7d81474d7113a0db",
-      "byte_size": 31457
-    },
-    {
-      "uri": "https://xbrl.sec.gov/cyd/2026/cyd-2026.xsd",
-      "sha256": "38e5c3379d49d54c7382a1f5dbe669271a35006464df8114d1714a20b71aa299",
-      "byte_size": 52366
-    },
-    {
-      "uri": "https://xbrl.sec.gov/cyd/2026/cyd-af-2026.xsd",
-      "sha256": "75590840d513709063cab3250f83e46784d398c8d5fb6a0d3359dfc44e5279f0",
-      "byte_size": 11802
-    },
-    {
-      "uri": "https://xbrl.sec.gov/cyd/2026/cyd-af-sub-2026.xsd",
-      "sha256": "82450ddab7ed78dfffdbe33b7fbe28217eaabf0f6fea7eea24ec9b24823aa576",
-      "byte_size": 31457
-    },
-    {
-      "uri": "https://xbrl.sec.gov/dei/2019/dei-2019-01-31.xsd",
-      "sha256": "9cc75a0ac08b5e4328d4b611e225c522092acf08a29e10ae5b41c781bf5f094f",
-      "byte_size": 133883
-    },
-    {
-      "uri": "https://xbrl.sec.gov/dei/2020/dei-2020-01-31.xsd",
-      "sha256": "dd19a2d12cbc423be6f491b566aa97073d400bf6533b742a80e266ba154b2e1d",
-      "byte_size": 133509
-    },
-    {
-      "uri": "https://xbrl.sec.gov/dei/2021/dei-2021.xsd",
-      "sha256": "247aae5561d80ceb97d27442b1e34c6d10f0e92fa713fb9a8835e502a0f11456",
-      "byte_size": 137854
-    },
-    {
-      "uri": "https://xbrl.sec.gov/dei/2022/dei-2022.xsd",
-      "sha256": "ab7f4ef0960077d050fbd4e59ef2802827bbd317dfaf1296fdd8beb30aec3e66",
-      "byte_size": 137569
-    },
-    {
-      "uri": "https://xbrl.sec.gov/dei/2023/dei-2023.xsd",
-      "sha256": "7467723f0ff8a1effe24c49a3306406915ee29c5d1269dddb4a30a43320a8af6",
-      "byte_size": 138005
-    },
-    {
-      "uri": "https://xbrl.sec.gov/dei/2024/dei-2024.xsd",
-      "sha256": "711827776f8044cc71a9c274f4695f9e0327c39814e0205845c0a6d03b1074e4",
-      "byte_size": 75497
-    },
-    {
-      "uri": "https://xbrl.sec.gov/dei/2025/dei-2025.xsd",
-      "sha256": "d6f84278744794000dea74d93eb49bf19483271d037a6b65c53697bc0caa18fe",
-      "byte_size": 74204
-    },
-    {
-      "uri": "https://xbrl.sec.gov/dei/2026/dei-2026.xsd",
-      "sha256": "678f0bb9560a5c6a6679ecc134ead63e3a3b999946d1b8cfe59b29002098756e",
-      "byte_size": 74237
-    },
-    {
-      "uri": "https://xbrl.sec.gov/ecd/2023/ecd-2023.xsd",
-      "sha256": "1acb063fd11d35496518589072d9e50138eed8b5965e1b5b349249556c24e451",
-      "byte_size": 156403
-    },
-    {
-      "uri": "https://xbrl.sec.gov/ecd/2023/ecd-sub-2023.xsd",
-      "sha256": "0b91c12a41121250b07fa617af975bb855fa642f6923292a401525df41829f6b",
-      "byte_size": 145299
-    },
-    {
-      "uri": "https://xbrl.sec.gov/ecd/2024/ecd-2024.xsd",
-      "sha256": "8db96ac449485078c0133a0bd4c7a523e7c86782387a98551c610de3aff8b9f9",
-      "byte_size": 175869
-    },
-    {
-      "uri": "https://xbrl.sec.gov/ecd/2024/ecd-sub-2024.xsd",
-      "sha256": "54e52e4d3e9ddc3da67e7b228c4e44ba02e1fcf3b7f29231b2f4ba43ff996011",
-      "byte_size": 168803
-    },
-    {
-      "uri": "https://xbrl.sec.gov/ecd/2025/ecd-2025.xsd",
-      "sha256": "730691096fe90e516b6434594e7c050bcd71458b0823be01e4f121267f2bfe1d",
-      "byte_size": 188353
-    },
-    {
-      "uri": "https://xbrl.sec.gov/ecd/2025/ecd-sub-2025.xsd",
-      "sha256": "c1bf4bda50c4ec7b6e9973880245309f3c5366e6bea604e534c82d1aecfac88c",
-      "byte_size": 169069
-    },
-    {
-      "uri": "https://xbrl.sec.gov/ecd/2026/ecd-2026.xsd",
-      "sha256": "77fbf3ab1ecfd6068f4c532ffb3015b92ae47dca58b2f4f3c3477822467979f5",
-      "byte_size": 188353
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2020/exch-2020-01-31.xsd",
-      "sha256": "153b063623912068d9b38ca89439e109e441952a4081c114c5f5654c3d8e19ca",
-      "byte_size": 316748
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2021/exch-2021.xsd",
-      "sha256": "d8cec54e68d6046ccfdb0cb0c3c71227b9fb2778bd6b9b5dfc43825902eb1c17",
-      "byte_size": 336092
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2021/exch-2021_dep.xsd",
-      "sha256": "4e3eabcb1f1c245b61d4b33f2361daeb9cba0a2fc175a709376919742d858261",
-      "byte_size": 1279
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2021/exch-2021_doc.xsd",
-      "sha256": "8c15c7f08c6f4d49ec85f82a77901843a6d1311eda4075e74861daa6492f48ec",
-      "byte_size": 868218
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2021/exch-2021_ref.xsd",
-      "sha256": "dbf2ded784ea4e89c4914d6a6db6d7324fc46f9d1a61332cb5e37133538e3988",
-      "byte_size": 1578
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2021/exch-entire-2021.xsd",
-      "sha256": "2e35b03ee80245edeec9c99031e76d220ea6d3f14bedb578aff26f5756324693",
-      "byte_size": 1850623
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2022/exch-2022.xsd",
-      "sha256": "b32973130f7c6ea1d8113466e3dcbabb90fe8faa572a4cf286a18ce665cd023f",
-      "byte_size": 346955
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2022/exch-2022_dep.xsd",
-      "sha256": "dda9b2fd3fb541ba5fec3c7a4bdf6a97d59ef7bab08795b860f1b1f64f46b2a1",
-      "byte_size": 1279
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2022/exch-2022_doc.xsd",
-      "sha256": "b637e09ad56ea482f3f51dfdb2818738eca872eb2dd945f159418a94d93f73ba",
-      "byte_size": 897207
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2022/exch-2022_ref.xsd",
-      "sha256": "f9f09991e8a03cfbdc33a539cd0ea1c8183e8be5ea864373f2dbd21834d0fa43",
-      "byte_size": 1578
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2022/exch-entire-2022.xsd",
-      "sha256": "f000e1b92059a8025665f9438768d37cd8e5c87c2ae91e1595c2f902aa356609",
-      "byte_size": 1863479
-    },
-    {
-      "uri": "https://xbrl.sec.gov/exch/2024/exch-2024.xsd",
-      "sha256": "81183626137da463297815f115c60fe6f4e042c30d1c5764440fa7cb8a06a8d0",
-      "byte_size": 362010
-    },
-    {
-      "uri": "https://xbrl.sec.gov/naics/2017/naics-2017-01-31.xsd",
-      "sha256": "ce8c92f401f8cc9273967ce0191755b68da4ef776c1661506004af03afc3f2a7",
-      "byte_size": 210277
-    },
-    {
-      "uri": "https://xbrl.sec.gov/naics/2021/naics-2021.xsd",
-      "sha256": "478ebbaea5bd4ce55d8880a5ccc3345a3995aac41b91c9425512b7744b414629",
-      "byte_size": 207959
-    },
-    {
-      "uri": "https://xbrl.sec.gov/naics/2021/naics-2021_doc.xsd",
-      "sha256": "82e11f3887975291e0c9f7eb322d62944b0c8677742c437f46a29244a4b9b6b2",
-      "byte_size": 581010
-    },
-    {
-      "uri": "https://xbrl.sec.gov/naics/2021/naics-entire-2021.xsd",
-      "sha256": "244556f5ee5b33ab9968ee91c26a374e1a1fa98002cb1f6edb36190481723203",
-      "byte_size": 898873
-    },
-    {
-      "uri": "https://xbrl.sec.gov/naics/2022/naics-2022.xsd",
-      "sha256": "d8ad699004c9de15131361274989da6bb25e3fa7985b324553d36ed3200863c6",
-      "byte_size": 212309
-    },
-    {
-      "uri": "https://xbrl.sec.gov/naics/2022/naics-2022_doc.xsd",
-      "sha256": "c22f1d6353d571a8609e32a2a6402a231c0f83bf317c46fa3a0382b3c82f7859",
-      "byte_size": 547926
-    },
-    {
-      "uri": "https://xbrl.sec.gov/naics/2022/naics-entire-2022.xsd",
-      "sha256": "cffe3301a6c397885d0f580bc9ba1706507a1327e18133236346f3be38d75236",
-      "byte_size": 876520
-    },
-    {
-      "uri": "https://xbrl.sec.gov/naics/2024/naics-2024.xsd",
-      "sha256": "f23294813ac5e9309ea7a0f2555afef7a00c562ab09ccfdd99d3fa313ef29dca",
-      "byte_size": 180074
-    },
-    {
-      "uri": "https://xbrl.sec.gov/sic/2020/sic-2020-01-31.xsd",
-      "sha256": "10e5b5c5acade172fd0f33573d23c5a0c24417328129f41954e18fb1aa8a5c2b",
-      "byte_size": 76104
-    },
-    {
-      "uri": "https://xbrl.sec.gov/sic/2021/sic-2021.xsd",
-      "sha256": "dab516345611baa2b0fc7901721612b313c619ff3bf08e2d598a7b87d4bcba78",
-      "byte_size": 77658
-    },
-    {
-      "uri": "https://xbrl.sec.gov/sic/2021/sic-2021_doc.xsd",
-      "sha256": "07e07fff466a585465315d6e7749d46f5e5bb9ee68f2d41c860dc0cc239b4960",
-      "byte_size": 200998
-    },
-    {
-      "uri": "https://xbrl.sec.gov/sic/2021/sic-entire-2021.xsd",
-      "sha256": "177dd72639e12bfdfe388a1681d871545693aecb030cc691f9a68c6007d360dd",
-      "byte_size": 336149
-    },
-    {
-      "uri": "https://xbrl.sec.gov/sic/2022/sic-2022.xsd",
-      "sha256": "4231463b071e81d82d72289549b827a136169870e0d1fbb227806e879faf6c49",
-      "byte_size": 77658
-    },
-    {
-      "uri": "https://xbrl.sec.gov/sic/2022/sic-2022_doc.xsd",
-      "sha256": "e5b64070ffce816442a40bd6542bfe7ddf2b845a4c7348b7aff48f6bb0d36245",
-      "byte_size": 200998
-    },
-    {
-      "uri": "https://xbrl.sec.gov/sic/2022/sic-entire-2022.xsd",
-      "sha256": "bf41e320cfef972b15147110e42d1ae4aa27acc68561c61a33661ae24b5a4613",
-      "byte_size": 320331
-    },
-    {
-      "uri": "https://xbrl.sec.gov/sic/2024/sic-2024.xsd",
-      "sha256": "f428d46c8562471c91a7806f4ef641160d14cf7dfd07a6d51afc4a835671b091",
-      "byte_size": 77491
-    },
-    {
-      "uri": "https://xbrl.sec.gov/stpr/2018/stpr-2018-01-31.xsd",
-      "sha256": "dc7c94a9c39877b0b89b6e2811dcae288a4f90dae09daef395eaafcf213b712a",
-      "byte_size": 14238
-    },
-    {
-      "uri": "https://xbrl.sec.gov/stpr/2021/stpr-2021.xsd",
-      "sha256": "559012476f7c083861423854af467f9fde3c27671605ea2fe759c552c8929800",
-      "byte_size": 11890
-    },
-    {
-      "uri": "https://xbrl.sec.gov/stpr/2021/stpr-entire-2021.xsd",
-      "sha256": "71aee34694fa53885bba9f64d6a87399285157b6f12ca94b77161c318f5c3d55",
-      "byte_size": 45575
-    },
-    {
-      "uri": "https://xbrl.sec.gov/stpr/2022/stpr-2022.xsd",
-      "sha256": "74417432ee3f51a3404b70edd2e60e56bd947f457f66c6fee372b3aaa583f499",
-      "byte_size": 11890
-    },
-    {
-      "uri": "https://xbrl.sec.gov/stpr/2022/stpr-entire-2022.xsd",
-      "sha256": "9520d53186765971f1bc060199e885e130825af1e95201da6839462fbf81cbe4",
-      "byte_size": 42707
-    },
-    {
-      "uri": "https://xbrl.sec.gov/stpr/2024/stpr-2024.xsd",
-      "sha256": "3d6f5a2093d6360788961cbe4daabb3e3c4673ad5fba7addd2c08e2aa9fd2d6b",
-      "byte_size": 12052
-    },
-    {
-      "uri": "https://xbrl.sec.gov/stpr/2025/stpr-2025.xsd",
-      "sha256": "f72b24f3a5003087e8692545ffbf92545e84bf26acb160fcb5f1b5e9a59a5461",
-      "byte_size": 11955
-    },
-    {
-      "uri": "https://xbrl.sec.gov/stpr/2026/stpr-2026.xsd",
-      "sha256": "111c2a0ca6f9fedd383d215303fb714957d036e2fce6a663235197636453113e",
-      "byte_size": 11955
+      "uri": "https://xbrl.fasb.org/us-gaap/2023/dis/us-gaap-dis-edco-pre-2023.xml",
+      "sha256": "22d252cf003f4e5bfcc5a395e106f8fbee43f98f1337c6837c51c50d7bd1748a",
+      "byte_size": 54222
     }
   ]
 }

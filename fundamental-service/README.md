@@ -577,15 +577,17 @@ Rebuild the captured taxonomy dependencies in a new cache directory:
 ```sh
 uv run --frozen --project fundamental-service python \
   fundamental-service/scripts/rebuild_taxonomy_cache.py \
-  --manifest fundamental-service/tests/fixtures/annual-statements/issue494-v18-taxonomy-resources.json \
+  --manifest fundamental-service/tests/fixtures/annual-statements/issue494-sec-taxonomy-resources-part-1.json \
+  --manifest fundamental-service/tests/fixtures/annual-statements/issue494-sec-taxonomy-resources-part-2.json \
   --destination /path/to/new-taxonomy-cache \
   --allow-network
 ```
 
 Set `FUNDAMENTAL_SEC_USER_AGENT` to your SEC contact before network preparation.
-The manifest pins each resource URI, byte count and SHA-256, plus the complete
-cache hash. HTTPS retrieval preserves the original URI as the cache key. V18
-CSV retrieval uses the fixed official source commit. Changed upstream bytes,
+The two manifest fragments pin all resource URIs, byte counts and SHA-256 hashes,
+plus one complete cache hash. Pass both fragments. Omitted fragments, duplicate
+resources or different cache hashes fail. HTTPS retrieval preserves the original
+URI as the cache key. DQC retrieval uses fixed official source commits. Changed upstream bytes,
 corrupt retained files and unexpected cache files fail without replacement.
 Operational lock files are excluded from this retained input. To rebuild from
 retained bytes without network, replace `--allow-network` with

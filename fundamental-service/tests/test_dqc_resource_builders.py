@@ -106,3 +106,43 @@ def test_cache_rebuild_never_downloads_implicitly(tmp_path: Path):
     changed["uri"] = "https://xbrl.fasb.org/../outside.xsd"
     with pytest.raises(ValueError, match="relative cache path"):
         taxonomy.TaxonomyResource.model_validate(changed)
+
+
+def test_manifest_fragments_rebuild_one_complete_cache_and_refuse_omissions(
+    tmp_path: Path,
+):
+    source = tmp_path / "source"
+    first = _manifest(source)
+    resource = first.resources[0]
+    second = resource.model_copy(
+        update={"uri": "https://xbrl.fasb.org/second.xsd", "retrieval_uri": None}
+    )
+    (source / second.cache_path).write_bytes(
+        (source / resource.cache_path).read_bytes()
+    )
+    digest = taxonomy._directory_hash(source)
+    fragments = []
+    for ordinal, item in enumerate((resource, second)):
+        path = tmp_path / f"part-{ordinal}.json"
+        path.write_text(
+            first.model_copy(
+                update={"cache_sha256": digest, "resources": (item,)}
+            ).model_dump_json()
+        )
+        fragments.append(path)
+    destination = tmp_path / "rebuilt"
+    with pytest.raises(ValueError, match="composite hash differs"):
+        taxonomy.rebuild(
+            taxonomy.load_manifest(fragments[:1]), destination, retained_cache=source
+        )
+    assert (
+        taxonomy.rebuild(
+            taxonomy.load_manifest(fragments), destination, retained_cache=source
+        )
+        == digest
+    )
+    with pytest.raises(ValueError, match="unique and sorted"):
+        taxonomy.load_manifest((fragments[0], fragments[0]))
+    fragments[1].write_text(first.model_dump_json())
+    with pytest.raises(ValueError, match="pin one complete cache"):
+        taxonomy.load_manifest(fragments)

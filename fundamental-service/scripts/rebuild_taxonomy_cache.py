@@ -7,6 +7,7 @@ import hashlib
 import os
 import tempfile
 import time
+from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 from typing import Literal
 from urllib.parse import urlsplit
@@ -77,6 +78,24 @@ class TaxonomyManifest(BaseModel):
         if paths != tuple(sorted(set(paths))):
             raise ValueError("taxonomy cache paths must be unique and sorted")
         return self
+
+
+def load_manifest(paths: Sequence[Path]) -> TaxonomyManifest:
+    manifests = tuple(
+        TaxonomyManifest.model_validate_json(path.read_bytes()) for path in paths
+    )
+    if not manifests or len({manifest.cache_sha256 for manifest in manifests}) != 1:
+        raise ValueError("taxonomy manifest fragments must pin one complete cache")
+    return TaxonomyManifest(
+        protocol="arelle-taxonomy-cache-manifest-v1",
+        cache_sha256=manifests[0].cache_sha256,
+        resources=tuple(
+            sorted(
+                (item for manifest in manifests for item in manifest.resources),
+                key=lambda item: item.cache_path,
+            )
+        ),
+    )
 
 
 def _retain(path: Path, payload: bytes, staging_directory: Path) -> None:
@@ -153,12 +172,12 @@ def rebuild(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--manifest", type=Path, action="append", required=True)
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--retained-cache", type=Path)
     parser.add_argument("--allow-network", action="store_true")
     args = parser.parse_args()
-    manifest = TaxonomyManifest.model_validate_json(args.manifest.read_bytes())
+    manifest = load_manifest(args.manifest)
     digest = rebuild(
         manifest,
         args.destination,
