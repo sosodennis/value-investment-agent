@@ -23,6 +23,8 @@ from .dqc_rulesets import DqcRulesetCatalogV1
 from .dqc_applicability import dqc_applicability_policy_digest
 from .automatic_source_mapping import (
     AutomaticSecIngestionRequestV1,
+    AutomaticStatementSecIngestionRequestV1,
+    AutomaticSourceRequestV1,
     AutomaticSourceMappingAuthority,
 )
 from .contracts import (
@@ -567,7 +569,10 @@ class SecAcquisitionUseCase:
             "supported_filing_years": self.settings.supported_filing_years,
             "supported_filing_forms": self.settings.supported_filing_forms,
         }
-        if isinstance(request, AutomaticSecIngestionRequestV1):
+        if isinstance(
+            request,
+            (AutomaticSecIngestionRequestV1, AutomaticStatementSecIngestionRequestV1),
+        ):
             payload["automatic_mapping_authority"] = (
                 self._automatic_authority().runtime_pin(request)
             )
@@ -834,9 +839,12 @@ class SecAcquisitionUseCase:
             scope.verify()
 
     def _prepared_filing(
-        self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
+        self, request: SecIngestionRequestV1 | AutomaticSourceRequestV1
     ) -> _SelectedFiling | None:
-        if not isinstance(request, AutomaticSecIngestionRequestV1):
+        if not isinstance(
+            request,
+            (AutomaticSecIngestionRequestV1, AutomaticStatementSecIngestionRequestV1),
+        ):
             return None
         reference = request.original_preparation
         if reference is None:
@@ -878,7 +886,11 @@ class SecAcquisitionUseCase:
             validation_profile_id=request.validation_profile_id,
         )
         if (
-            prepared.issue_codes
+            (
+                prepared.issue_codes
+                and not isinstance(request, AutomaticStatementSecIngestionRequestV1)
+            )
+            or item.issue_codes
             or prepared.retryable
             or prepared.request.runtime != runtime
             or request.parser_version != runtime.arelle_version
@@ -907,7 +919,7 @@ class SecAcquisitionUseCase:
         return self._catalog_filing(original)
 
     def retained_acquisition(
-        self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
+        self, request: SecIngestionRequestV1 | AutomaticSourceRequestV1
     ) -> SecIngestionResponseV1 | None:
         """Read a completed exact-runtime acquisition without provider/parser I/O."""
         payload = self._runtime_key_payload(request, self._validation_profile(request))
@@ -918,7 +930,7 @@ class SecAcquisitionUseCase:
 
     def execute(
         self,
-        request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1,
+        request: SecIngestionRequestV1 | AutomaticSourceRequestV1,
         *,
         caller_principal: str,
         organization_id: str,
@@ -1167,7 +1179,7 @@ class SecAcquisitionUseCase:
 
     def _acquire_and_publish(
         self,
-        request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1,
+        request: SecIngestionRequestV1 | AutomaticSourceRequestV1,
         *,
         acquisition_key: str,
         key_payload: dict[str, object],
@@ -1186,7 +1198,13 @@ class SecAcquisitionUseCase:
                 if original_reads is not None
                 else None,
             )
-            if isinstance(request, AutomaticSecIngestionRequestV1)
+            if isinstance(
+                request,
+                (
+                    AutomaticSecIngestionRequestV1,
+                    AutomaticStatementSecIngestionRequestV1,
+                ),
+            )
             else None
         )
         adapter = self.adapter
@@ -1269,7 +1287,13 @@ class SecAcquisitionUseCase:
         preparation = self.ingestion.prepare_filing(
             build_checks=original_reads.builds if original_reads is not None else None,
             parser_delivery_revision=request.source_revision
-            if isinstance(request, AutomaticSecIngestionRequestV1)
+            if isinstance(
+                request,
+                (
+                    AutomaticSecIngestionRequestV1,
+                    AutomaticStatementSecIngestionRequestV1,
+                ),
+            )
             else None,
             source_adapter=adapter,
             identity=request.identity,
@@ -1343,8 +1367,15 @@ class SecAcquisitionUseCase:
         status: Literal["created", "degraded", "abstain"]
         if required_missing:
             issue_codes.add("REQUIRED_FACTS_UNAVAILABLE")
-            status = "abstain"
-            quality = QualityStatus.ABSTAIN
+            if (
+                isinstance(request, AutomaticStatementSecIngestionRequestV1)
+                and preparation.facts
+            ):
+                status = "degraded"
+                quality = QualityStatus.PROVISIONAL
+            else:
+                status = "abstain"
+                quality = QualityStatus.ABSTAIN
         elif (
             not set(request.required_fields) <= verified_fields
             or preparation.snapshot.coverage_status is not QualityStatus.VERIFIED

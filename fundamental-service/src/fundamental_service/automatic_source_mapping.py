@@ -17,6 +17,8 @@ from .automatic_mapping import (
 from .automatic_mapping_batch import (
     AutomaticMappingBatchDecisionV1,
     AutomaticMappingBatchRequestV1,
+    StatementMappingBatchDecisionV1,
+    StatementMappingBatchRequestV1,
 )
 from .automatic_mapping_runner import (
     approve_mapping_batch,
@@ -31,18 +33,26 @@ from .ingestion_mapping import (
     IngestionMappingResolverPort,
     ValidatedOriginalV1,
 )
+from .issuer_classification import IssuerClassificationRequestV1
 from .policies import executable_model_specs
 from .public_acquisition import PublicSourceCutoffV1
 from .parser_action_evidence import require_parser_action_evidence
 from .parser_action_identity import ParserBuildChecks
 from .serialization import sha256_digest
+from .registered_statement_rows import require_registered_primary_statement_scope
 from .snapshots import ContentAddressedStore, SnapshotError
+from .statement_issuer_scope import (
+    reproduce_statement_issuer_classification,
+    require_statement_issuer_scope,
+)
 from .taxonomy_evidence import (
     TAXONOMY_CACHE_ARCHIVE_ROLE,
     build_taxonomy_cache_archive,
     taxonomy_cache_archive_digest,
 )
 from .valuation_requirements import automatic_source_requirements_profile
+from .statement_contracts import StatementProfileV1
+from .statement_profiles import annual_statement_profile, statement_executable_digest
 
 
 class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
@@ -101,6 +111,46 @@ class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
         return self
 
 
+class AutomaticStatementSecIngestionRequestV1(SecSourceRequestV1):
+    protocol: Literal["automatic-statement-sec-ingestion-v1"] = (
+        "automatic-statement-sec-ingestion-v1"
+    )
+    source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    evaluator_id: str = Field(min_length=1, max_length=128)
+    mapping_policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mapping_version: str = Field(min_length=1, max_length=128)
+    statement_profile: StatementProfileV1
+    original_preparation: ArtifactRefV1
+    public_source_cutoff: None = None
+
+    @model_validator(mode="after")
+    def statement_source_is_pinned(self) -> AutomaticStatementSecIngestionRequestV1:
+        profile = annual_statement_profile(
+            executable_digest=statement_executable_digest()
+        )
+        if (
+            self.statement_profile != profile
+            or tuple(sorted(self.required_fields))
+            != tuple(sorted(row.row_id for row in profile.rows))
+            or self.coverage_profile != profile.profile_id
+            or self.identity_basis != "original-filing-dei-v1"
+            or self.filing.accession_number is None
+            or self.filing.forms != ("10-K",)
+            or self.supplemental_filing_policy is not None
+            or self.original_preparation.role != "sec-original-preparation-v1"
+            or self.original_preparation.media_type != "application/json"
+        ):
+            raise ValueError(
+                "statement acquisition requires the exact original and installed row profile"
+            )
+        return self
+
+
+AutomaticSourceRequestV1 = (
+    AutomaticSecIngestionRequestV1 | AutomaticStatementSecIngestionRequestV1
+)
+
+
 class MappingPublisherPort(Protocol):
     def publish_mapping(self, mapping: CanonicalMappingV1) -> None: ...
 
@@ -116,7 +166,7 @@ class AutomaticSourceMappingAuthority:
     taxonomy_cache_dir: Path
     taxonomy_cache_sha256: str
 
-    def runtime_pin(self, request: AutomaticSecIngestionRequestV1) -> str:
+    def runtime_pin(self, request: AutomaticSourceRequestV1) -> str:
         require_automatic_mapping_authority(
             request.evaluator_id,
             trust_roots=self.trust_roots,
@@ -143,7 +193,7 @@ class AutomaticSourceMappingAuthority:
 
     def resolver_for(
         self,
-        request: AutomaticSecIngestionRequestV1,
+        request: AutomaticSourceRequestV1,
         *,
         build_checks: ParserBuildChecks | None = None,
     ) -> IngestionMappingResolverPort:
@@ -214,7 +264,7 @@ class AutomaticSourceMappingAuthority:
 @dataclass(frozen=True)
 class _AutomaticSourceMappingResolver:
     authority: AutomaticSourceMappingAuthority
-    request: AutomaticSecIngestionRequestV1
+    request: AutomaticSourceRequestV1
     build_checks: ParserBuildChecks
 
     def resolve(self, validated: ValidatedOriginalV1) -> IngestionMappingResolutionV1:
@@ -233,6 +283,37 @@ class _AutomaticSourceMappingResolver:
                 "validated original differs from the pinned acquisition",
             )
         refs = []
+        if isinstance(request, AutomaticStatementSecIngestionRequestV1):
+            if original.report_period_end is None:
+                raise DataReleaseError(
+                    "STATEMENT_ISSUER_CLASSIFICATION_UNAVAILABLE",
+                    "annual statements require an established original report period",
+                )
+            classification = reproduce_statement_issuer_classification(
+                request=IssuerClassificationRequestV1(
+                    issuer_id=request.cik,
+                    accession_number=original.source.accession_number,
+                    report_period_end=original.report_period_end,
+                    valuation_at=request.valuation_timestamp,
+                ),
+                captured_sources=validated.captured_sources,
+                content=authority.content,
+            )
+            publication = authority.artifacts.put_with_receipt(
+                "annual-statement-issuer-classification-"
+                + classification.output_digest,
+                classification,
+            )
+            refs.append(
+                ArtifactRefV1(
+                    artifact_id=publication.artifact.artifact_id,
+                    content_hash=publication.artifact.content_hash,
+                    media_type=publication.artifact.media_type,
+                    role="annual-statement-issuer-classification-v1",
+                )
+            )
+            require_statement_issuer_scope(classification)
+            require_registered_primary_statement_scope(original)
         for identity, record in require_parser_action_evidence(
             original,
             artifacts=authority.artifacts,
@@ -283,7 +364,7 @@ class _AutomaticSourceMappingResolver:
                 )
             )
         unique = {ref.artifact_id: ref for ref in refs}
-        batch_request = AutomaticMappingBatchRequestV1(
+        common = dict(
             source_revision=request.source_revision,
             evaluator_id=request.evaluator_id,
             original=original,
@@ -291,11 +372,22 @@ class _AutomaticSourceMappingResolver:
             security_identity=validated.identity,
             evidence_refs=tuple(unique[key] for key in sorted(unique)),
             mapping_version=request.mapping_version,
-            model_version=request.model_version,
-            requirements=automatic_source_requirements_profile(
-                request.model_id, request.requirements_digest
-            ),
         )
+        batch_request: AutomaticMappingBatchRequestV1 | StatementMappingBatchRequestV1
+        if isinstance(request, AutomaticStatementSecIngestionRequestV1):
+            batch_request = StatementMappingBatchRequestV1.model_validate(
+                {**common, "statement_profile": request.statement_profile}
+            )
+        else:
+            batch_request = AutomaticMappingBatchRequestV1.model_validate(
+                {
+                    **common,
+                    "model_version": request.model_version,
+                    "requirements": automatic_source_requirements_profile(
+                        request.model_id, request.requirements_digest
+                    ),
+                }
+            )
         receipt = approve_mapping_batch(
             batch_request,
             artifacts=authority.artifacts,
@@ -311,7 +403,11 @@ class _AutomaticSourceMappingResolver:
                 "MAPPING_AUTOMATIC_DECISION_HASH_MISMATCH",
                 "retained batch decision differs from its digest",
             )
-        batch = AutomaticMappingBatchDecisionV1.model_validate_json(raw)
+        batch: AutomaticMappingBatchDecisionV1 | StatementMappingBatchDecisionV1
+        if isinstance(request, AutomaticStatementSecIngestionRequestV1):
+            batch = StatementMappingBatchDecisionV1.model_validate_json(raw)
+        else:
+            batch = AutomaticMappingBatchDecisionV1.model_validate_json(raw)
         mappings: list[CanonicalMappingV1] = []
         issues: list[IssueV1] = []
         missing: list[str] = []

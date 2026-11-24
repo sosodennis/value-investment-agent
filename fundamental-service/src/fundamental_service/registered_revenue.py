@@ -9,6 +9,10 @@ from .original_issuer import (
     parser_input_matches_registered_original,
 )
 from .serialization import sha256_digest
+from .registered_statement_rows import (
+    registered_primary_concept,
+    select_primary_statement_observations,
+)
 
 CONTRACT_REVENUE = "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax"
 REVENUE_SCOPE_VERSION = "original-bound-base-revenue-v2"
@@ -57,6 +61,9 @@ _ORIGINALS = {
 
 
 def registered_revenue_concept(original: OriginalIssuerEvidenceV1) -> str | None:
+    primary = registered_primary_concept(original, "revenue")
+    if primary is not None:
+        return primary
     if (original.source.cik, original.source.accession_number) in _ORIGINALS:
         return CONTRACT_REVENUE
     return None
@@ -70,6 +77,13 @@ class RevenueSelection:
 
 
 def select_registered_revenue(original: OriginalIssuerEvidenceV1) -> RevenueSelection:
+    if registered_primary_concept(original, "revenue") is not None:
+        primary = select_primary_statement_observations(original, "revenue")
+        return RevenueSelection(
+            selected=primary.selected,
+            rejected=primary.rejected,
+            reason_codes=primary.reason_codes,
+        )
     entry = _ORIGINALS.get((original.source.cik, original.source.accession_number))
     if entry is None:
         return RevenueSelection(reason_codes=("MAPPING_REVENUE_SCOPE_UNREVIEWED",))

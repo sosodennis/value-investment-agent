@@ -232,3 +232,7 @@ def annual_statement_profile(*, executable_digest: str) -> StatementProfileV1:
         comparability_policy="actual-annual-periods-no-annualization-v1",
         executable_digest=executable_digest,
     )
+
+
+def statement_row_definitions() -> tuple[StatementRowDefinitionV1, ...]:
+    return _ROWS
