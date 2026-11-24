@@ -447,11 +447,15 @@ class OriginalPreparation:
         return self._discovery.read(request.annual.artifact_id)
 
     def read_validation(
-        self, artifact_id: str, *, build_checks: ParserBuildChecks | None = None
+        self,
+        artifact_id: str,
+        *,
+        build_checks: ParserBuildChecks | None = None,
+        original_checks: OriginalIssuerEvidenceChecks | None = None,
     ) -> OriginalValidationEvidenceV1:
         reference = self.reference(artifact_id, "sec-original-validation-v1")
         payload = self._bytes(reference)
-        original_checks = OriginalIssuerEvidenceChecks()
+        original_checks = original_checks or OriginalIssuerEvidenceChecks()
         try:
             evidence = OriginalValidationEvidenceV1.model_validate_json(
                 payload, context=original_checks
@@ -671,7 +675,10 @@ class OriginalPreparation:
         return evidence
 
     def read_with_validations(
-        self, artifact_id: str
+        self,
+        artifact_id: str,
+        *,
+        original_checks: OriginalIssuerEvidenceChecks | None = None,
     ) -> tuple[OriginalPreparationEvidenceV1, tuple[OriginalValidationEvidenceV1, ...]]:
         """Return preparation and the original validations checked in this read."""
         reference = self.reference(artifact_id, "sec-original-preparation-v1")
@@ -685,8 +692,13 @@ class OriginalPreparation:
         request = evidence.request
         annual = self._annual(request)
         build_checks = self._build_checks or ParserBuildChecks()
+        original_checks = original_checks or OriginalIssuerEvidenceChecks()
         validations = tuple(
-            self.read_validation(f.validation.artifact_id, build_checks=build_checks)
+            self.read_validation(
+                f.validation.artifact_id,
+                build_checks=build_checks,
+                original_checks=original_checks,
+            )
             for f in evidence.filings
         )
         record = self._artifacts.get(artifact_id)

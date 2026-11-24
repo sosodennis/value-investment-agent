@@ -236,7 +236,9 @@ def _verify_statement_release_membership(
             "STATEMENT_RELEASE_PREPARATION_MISMATCH",
             "statement original preparation reference differs",
         )
-    prepared, validations = originals.read_with_validations(reference.artifact_id)
+    prepared, validations = originals.read_with_validations(
+        reference.artifact_id, original_checks=mapping_checks.originals
+    )
     projection = envelope.projection
     if projection.discovery_ref != prepared.request.annual:
         raise DataReleaseError(

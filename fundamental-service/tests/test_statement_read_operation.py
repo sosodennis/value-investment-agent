@@ -1,7 +1,9 @@
+import json
 from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import text
 
 from fundamental_service import statement_mapping_evidence, statement_releases
@@ -22,8 +24,14 @@ from fundamental_service.metadata import (
 from fundamental_service.mapping_input_storage import (
     mapping_input_report_dependency,
     read_mapping_batch_input,
+    resolve_mapping_input,
+)
+from fundamental_service.original_issuer import (
+    OriginalIssuerEvidenceChecks,
+    OriginalIssuerEvidenceV1,
 )
 from fundamental_service.replay import ArtifactStore
+from fundamental_service.serialization import canonical_bytes
 from fundamental_service.snapshots import SnapshotError
 from test_automatic_source_mapping import statement_source_case
 from test_statement_releases import release_case
@@ -106,6 +114,187 @@ def membership(release, statement, value, options, *, artifacts=None, facts=None
         artifacts=artifacts or value.artifacts,
         source_revision=options["source_revision"],
     )
+
+
+def test_membership_reuses_checked_originals_only_in_its_own_read(
+    tmp_path, monkeypatch
+):
+    value, release, statement, options = release_case(tmp_path, monkeypatch)
+    expected = membership(release, statement, value, options)
+    prepared_reports = {}
+    original_read = value.service.read_with_validations
+    mapping_read = statement_mapping_evidence.read_mapping_batch_input
+    original_validate = OriginalIssuerEvidenceV1.validate_original_evidence
+    semantic_checks = []
+    reused_reports = []
+
+    def prepared(*args, **kwargs):
+        result = original_read(*args, **kwargs)
+        prepared_reports.update(
+            (item.request.filing.accession_number, item.original.report)
+            for item in result[1]
+            if item.original is not None
+        )
+        return result
+
+    def mapped(*args, **kwargs):
+        result = mapping_read(*args, **kwargs)
+        original = result[1].original
+        assert original.report is prepared_reports[original.source.accession_number]
+        reused_reports.append(original.report)
+        return result
+
+    def validated(original):
+        semantic_checks.append(original.output_digest)
+        return original_validate(original)
+
+    monkeypatch.setattr(value.service, "read_with_validations", prepared)
+    monkeypatch.setattr(statement_mapping_evidence, "read_mapping_batch_input", mapped)
+    monkeypatch.setattr(
+        OriginalIssuerEvidenceV1, "validate_original_evidence", validated
+    )
+    for operation in range(2):
+        assert membership(release, statement, value, options) == expected
+        assert len(semantic_checks) == operation + 1
+    assert len(reused_reports) == 2
+    assert reused_reports[0] is not reused_reports[1]
+    assert statement.statements.tables[0].rows[0].cells[0].fact.value == 140
+
+
+@pytest.mark.parametrize(
+    "limits",
+    (
+        {"max_report_bytes": 0},
+        {"max_report_bytes": 1},
+        {"max_reports": 1},
+        {"max_verified_entries": 0},
+    ),
+)
+def test_preparation_and_mapping_preserve_decisions_when_original_checks_evict(
+    tmp_path, monkeypatch, limits
+):
+    from test_automatic_mapping import case
+
+    value, release, statement, options = release_case(tmp_path, monkeypatch)
+    expected = membership(release, statement, value, options)
+    monkeypatch.setattr(
+        automatic_mapping_evidence,
+        "OriginalIssuerEvidenceChecks",
+        lambda: OriginalIssuerEvidenceChecks(**limits),
+    )
+    checks = AutomaticMappingEvidenceChecks()
+    _, validations = value.service.read_with_validations(
+        statement.original_preparation.artifact_id, original_checks=checks.originals
+    )
+    other, *_ = case(tmp_path / "other", observation_changes={"value": "150"})
+    checks.originals.validate(other.original)
+    reference = next(
+        ref
+        for ref in statement.projection.facts[0].mapping_evidence_refs
+        if ref.role == "statement-mapping-batch-decision-v1"
+    )
+    actual = statement_mapping_evidence.verify_statement_mapping_outcomes(
+        reference,
+        original=validations[0].original,
+        artifacts=value.artifacts,
+        source_revision=options["source_revision"],
+        profile=statement.projection.profile,
+        mapping_version=statement.mapping_version,
+        evidence_checks=checks,
+    )
+    assert actual == StatementMappingBatchDecisionV1.model_validate_json(
+        value.artifacts.read(reference.artifact_id)
+    )
+    assert membership(release, statement, value, options) == expected
+
+
+@pytest.mark.parametrize("mutation", ("output_digest", "decision_at"))
+def test_prepared_report_does_not_authorize_changed_mapping_headers(
+    tmp_path, monkeypatch, mutation
+):
+    value, _, statement, _ = release_case(tmp_path, monkeypatch)
+    checks = AutomaticMappingEvidenceChecks()
+    value.service.read_with_validations(
+        statement.original_preparation.artifact_id, original_checks=checks.originals
+    )
+    batch_ref = next(
+        ref
+        for ref in statement.projection.facts[0].mapping_evidence_refs
+        if ref.role == "statement-mapping-batch-decision-v1"
+    )
+    batch = StatementMappingBatchDecisionV1.model_validate_json(
+        value.artifacts.read(batch_ref.artifact_id)
+    )
+    input_ref, request = read_mapping_batch_input(
+        batch.input_digest,
+        StatementMappingBatchRequestV1,
+        artifacts=value.artifacts,
+        original_checks=checks.originals,
+        input_digests=checks.identities,
+    )
+    changed = json.loads(value.artifacts.read(input_ref.artifact_id))
+    changed["original"][mutation] = (
+        "0" * 64
+        if mutation == "output_digest"
+        else request.original.decision_at.replace(tzinfo=None).isoformat()
+    )
+    with pytest.raises(ValidationError):
+        resolve_mapping_input(
+            canonical_bytes(changed),
+            StatementMappingBatchRequestV1,
+            artifacts=value.artifacts,
+            original_checks=checks.originals,
+            input_digests=checks.identities,
+        )
+    assert (
+        read_mapping_batch_input(
+            batch.input_digest,
+            StatementMappingBatchRequestV1,
+            artifacts=value.artifacts,
+            original_checks=checks.originals,
+            input_digests=checks.identities,
+        )[1]
+        == request
+    )
+
+
+def test_mapping_rechecks_report_bytes_after_preparation_has_checked_them(
+    tmp_path, monkeypatch
+):
+    value, _, statement, options = release_case(tmp_path, monkeypatch)
+    checks = AutomaticMappingEvidenceChecks()
+    _, validations = value.service.read_with_validations(
+        statement.original_preparation.artifact_id, original_checks=checks.originals
+    )
+    reference = next(
+        ref
+        for ref in statement.projection.facts[0].mapping_evidence_refs
+        if ref.role == "statement-mapping-batch-decision-v1"
+    )
+    batch = StatementMappingBatchDecisionV1.model_validate_json(
+        value.artifacts.read(reference.artifact_id)
+    )
+    input_ref, _ = read_mapping_batch_input(
+        batch.input_digest,
+        StatementMappingBatchRequestV1,
+        artifacts=value.artifacts,
+    )
+    report_ref, _ = mapping_input_report_dependency(
+        value.artifacts.read(input_ref.artifact_id)
+    )
+    path = next(value.artifacts.root.glob(report_ref.content_hash + ".*.artifact"))
+    path.write_bytes(b"corrupt retained report")
+    with pytest.raises(SnapshotError) as error:
+        statement_mapping_evidence.verify_statement_mapping_outcomes(
+            reference,
+            original=validations[0].original,
+            artifacts=value.artifacts,
+            source_revision=options["source_revision"],
+            profile=statement.projection.profile,
+            mapping_version=statement.mapping_version,
+            evidence_checks=checks,
+        )
+    assert error.value.code == "ARTIFACT_HASH_MISMATCH"
 
 
 @pytest.mark.parametrize(
