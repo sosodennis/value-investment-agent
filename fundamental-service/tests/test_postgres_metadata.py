@@ -5,6 +5,7 @@ import json
 import multiprocessing
 import os
 import time
+from contextvars import ContextVar
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -353,6 +354,8 @@ def _cross_process_ingestion_contenders(
         update={"policy_version": f"sec-public-pit-{run_id}"}
     )
     use_case = object.__new__(SecAcquisitionUseCase)
+    use_case._original_reads = ContextVar("original_preparation_reads", default=None)
+    use_case.capture_store = None
     use_case.metadata = metadata
     use_case.authorized_organizations = frozenset({"org-sec-ingestion-test"})
     use_case.settings = _test_sec_acquisition_settings(request)
@@ -2099,6 +2102,10 @@ def test_fifty_sec_ingestion_contenders_across_processes_publish_once(
         )
 
         use_case = object.__new__(SecAcquisitionUseCase)
+        use_case._original_reads = ContextVar(
+            "original_preparation_reads", default=None
+        )
+        use_case.capture_store = None
         use_case.metadata = metadata
         use_case.authorized_organizations = frozenset({"org-sec-ingestion-test"})
         use_case.settings = _test_sec_acquisition_settings(request)

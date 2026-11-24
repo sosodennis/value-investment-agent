@@ -1063,7 +1063,12 @@ class SecAcquisitionUseCase:
         """Read a completed exact-runtime acquisition without provider/parser I/O."""
         if self.capture_store is not None and self._original_reads.get() is None:
             with self.evidence_operation():
-                return self.retained_acquisition(request)
+                return self._retained_acquisition(request)
+        return self._retained_acquisition(request)
+
+    def _retained_acquisition(
+        self, request: SecIngestionRequestV1 | AutomaticSourceRequestV1
+    ) -> SecIngestionResponseV1 | None:
         payload = self._runtime_key_payload(request, self._validation_profile(request))
         prepared = self._prepared_filing(request)
         result = self.metadata.get_sec_ingestion(
@@ -1084,6 +1089,15 @@ class SecAcquisitionUseCase:
         audit_reuse: bool = True,
     ) -> SecIngestionResponseV1:
         try:
+            if organization_id not in self.authorized_organizations:
+                return self._execute(
+                    request,
+                    caller_principal=caller_principal,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    deadline_at=deadline_at,
+                    audit_reuse=audit_reuse,
+                )
             operation = (
                 self.evidence_operation()
                 if self._original_reads.get() is None
