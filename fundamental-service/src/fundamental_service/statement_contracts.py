@@ -259,6 +259,10 @@ class StatementProjectionInputV1(ReleaseModel):
         sources = {source.accession_number: source for source in self.source_outcomes}
         if len(sources) != len(self.source_outcomes):
             raise ValueError("STATEMENT_ORIGINAL_OUTCOME_DUPLICATE")
+        if len({column.original_accession for column in self.columns}) != len(
+            self.columns
+        ) or len({column.period_end for column in self.columns}) != len(self.columns):
+            raise ValueError("STATEMENT_ANNUAL_COLUMN_COLLISION")
         periods = [
             statement_period_id(self.scope, column.period) for column in self.columns
         ]
@@ -382,6 +386,8 @@ class StatementTableV1(ReleaseModel):
     @model_validator(mode="after")
     def rows_align_to_columns(self) -> StatementTableV1:
         periods = tuple(column.period_id for column in self.columns)
+        if len(set(periods)) != len(periods):
+            raise ValueError("STATEMENT_TABLE_PERIOD_DUPLICATE")
         for row in self.rows:
             if (
                 row.definition.statement != self.statement

@@ -37,6 +37,7 @@ from fundamental_service.statement_contracts import (
     StatementMissingEvidenceV1,
     StatementProjectionInputV1,
     StatementScopeV1,
+    StatementTableV1,
     StatementUnavailableSourceV1,
     UnavailableStatementCellV1,
     UnresolvedStatementPeriodV1,
@@ -452,6 +453,25 @@ def test_same_end_quarter_does_not_replace_full_annual_duration():
     result = project(replace_facts(request, (*request.facts, quarterly)))
     assert cell(result, "revenue").fact.value == Decimal("391035000000")
     assert "quarter" not in cell(result, "revenue").candidate_fact_ids
+
+
+def test_annual_columns_with_one_instant_cannot_duplicate_balance_sheet_identity():
+    request = request_for()
+    duplicate = request.columns[0].model_dump(mode="json")
+    duplicate["period"]["period_start"] = "2024-01-01"
+    payload = request.model_dump(mode="json")
+    payload["columns"].append(duplicate)
+    with pytest.raises(ValidationError, match="STATEMENT_ANNUAL_COLUMN_COLLISION"):
+        StatementProjectionInputV1.model_validate_json(canonical_bytes(payload))
+
+
+def test_statement_table_rejects_duplicate_period_and_cell_identity():
+    table = project(request_for()).tables[1].model_dump(mode="json")
+    table["columns"].append(table["columns"][0])
+    for row in table["rows"]:
+        row["cells"].append(row["cells"][0])
+    with pytest.raises(ValidationError, match="STATEMENT_TABLE_PERIOD_DUPLICATE"):
+        StatementTableV1.model_validate_json(canonical_bytes(table))
 
 
 def test_apple_reconciles_reported_cash_basis_without_manufacturing_fx():
