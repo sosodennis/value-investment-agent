@@ -275,6 +275,11 @@ async def test_standalone_artifact_reads_without_a_run_and_rejects_cross_org_or_
             app.dependency_overrides[require_current_user] = lambda: principal()
             response = await client.get(f"/api/v1/artifacts/{first}")
             assert response.status_code == 200
+            assert (
+                await client.get(
+                    f"/api/v1/artifacts/{first}?thread_id=another-owned-thread"
+                )
+            ).status_code == 404
             assert response.json()["data"]["ticker"] == "TEST"
             assert (
                 await client.get(f"/api/v1/artifacts/{first}?run_id=nonexistent")
@@ -287,3 +292,166 @@ async def test_standalone_artifact_reads_without_a_run_and_rejects_cross_org_or_
                 user="another-user"
             )
             assert (await client.get(f"/api/v1/artifacts/{first}")).status_code == 404
+
+
+async def test_new_statement_read_reuses_one_owned_thread_after_failure_and_lost_response(
+    scoped_user,
+):
+    from contextlib import asynccontextmanager
+    from datetime import UTC, datetime
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from sqlalchemy import func
+
+    from src.agents.fundamental.application.annual_statement_reader import (
+        AnnualStatementReaderService,
+    )
+    from src.agents.fundamental.application.annual_statement_reader_contracts import (
+        AnnualStatementReaderBinding,
+    )
+    from src.agents.fundamental.application.fundamental_service_port import (
+        FundamentalServiceFailure,
+    )
+    from src.agents.fundamental.composition.annual_statement_routes import (
+        build_annual_statement_router,
+    )
+    from src.agents.fundamental.interface.fundamental_service_contracts import (
+        FundamentalActiveReleaseV1,
+    )
+    from src.auth.entrypoint import require_current_user_mutation
+    from src.shared.artifacts.annual_statement_contracts import (
+        AnnualStatementsReadResponseV1,
+    )
+
+    fixture = (
+        Path(__file__).resolve().parents[3]
+        / "contracts/fixtures/annual-statements.v1.json"
+    )
+    response = AnnualStatementsReadResponseV1.model_validate_json(fixture.read_bytes())
+    binding = AnnualStatementReaderBinding(
+        issuer_id="0000000001",
+        ticker="TEST",
+        company_name="Example Issuer",
+        profile_id="annual-statements:explicit-test",
+        cutoff_at=datetime(2024, 12, 1, tzinfo=UTC),
+    )
+    active = FundamentalActiveReleaseV1.model_validate(
+        {
+            "active": {
+                "profile_id": binding.profile_id,
+                "manifest_digest": response.data_release_manifest_digest,
+                "revision": 1,
+                "activated_at": "2024-12-01T00:00:00Z",
+            },
+            "manifest": {
+                "profile_id": binding.profile_id,
+                "manifest_digest": response.data_release_manifest_digest,
+                "required_fields": ["revenue"],
+            },
+        }
+    )
+    client = SimpleNamespace(
+        read_active_release=AsyncMock(return_value=active),
+        read_annual_statements=AsyncMock(
+            side_effect=[
+                FundamentalServiceFailure(
+                    "UPSTREAM_UNAVAILABLE", "Unavailable", retryable=True
+                ),
+                response,
+                response,
+                response,
+            ]
+        ),
+    )
+    artifacts = ArtifactService(SqlAlchemyArtifactRepository())
+    ownership = OwnershipService(SqlAlchemyOwnershipRepository())
+
+    async def owns(user, thread, org):
+        return await ownership.owns(
+            user_id=user,
+            resource_type="thread",
+            resource_id=thread,
+            organization_id=org,
+        )
+
+    async def claim(user, thread, org):
+        return await ownership.claim(
+            user_id=user,
+            resource_type="thread",
+            resource_id=thread,
+            organization_id=org,
+        )
+
+    @asynccontextmanager
+    async def factory():
+        yield AnnualStatementReaderService(
+            client=client,
+            artifacts=artifacts,
+            bindings=(binding,),
+            owns_thread=owns,
+            claim_thread=claim,
+        )
+
+    app = FastAPI()
+    app.include_router(build_annual_statement_router(factory))
+    app.dependency_overrides[require_current_user_mutation] = lambda: Principal(
+        user_id=scoped_user,
+        subject=scoped_user,
+        email="scope@example.test",
+        organization_id="org-a",
+        membership_id="member",
+    )
+    intent = {
+        "kind": "new_thread",
+        "creation_id": str(uuid4()),
+        "issuer_id": "0000000001",
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as http:
+        failed = await http.post(
+            "/api/v1/fundamental/annual-statements/read", json=intent
+        )
+        assert failed.status_code == 502
+        discarded = await http.post(
+            "/api/v1/fundamental/annual-statements/read", json=intent
+        )
+        assert discarded.status_code == 200
+        retries = await asyncio.gather(
+            *(
+                http.post("/api/v1/fundamental/annual-statements/read", json=intent)
+                for _ in range(2)
+            )
+        )
+        assert all(item.status_code == 200 for item in retries)
+        assert retries[0].json() == retries[1].json() == discarded.json()
+    thread_id = retries[0].json()["thread_id"]
+    async with AsyncSessionLocal() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(OwnedResourceModel)
+                .where(
+                    OwnedResourceModel.resource_type == "thread",
+                    OwnedResourceModel.user_id == scoped_user,
+                )
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Artifact)
+                .where(Artifact.thread_id == thread_id)
+            )
+            == 1
+        )
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(WorkflowRunHistory)
+                .where(WorkflowRunHistory.thread_id == thread_id)
+            )
+            == 0
+        )

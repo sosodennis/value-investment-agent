@@ -47,6 +47,19 @@ fundamental_forward_evidence_router = (
 )
 
 
+def build_default_fundamental_annual_statement_router():
+    from src.agents.fundamental.application.wiring import (
+        build_default_annual_statement_router,
+    )
+
+    return build_default_annual_statement_router()
+
+
+fundamental_annual_statement_router = (
+    build_default_fundamental_annual_statement_router()
+)
+
+
 __all__ = [
     "FundamentalValuationIntentV1",
     "FundamentalAnalysisContext",
@@ -58,4 +71,5 @@ __all__ = [
     "build_fundamental_subgraph",
     "build_default_fundamental_forward_evidence_router",
     "fundamental_forward_evidence_router",
+    "fundamental_annual_statement_router",
 ]

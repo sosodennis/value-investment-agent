@@ -65,3 +65,55 @@ __all__ = [
     "get_fundamental_workflow_runner",
     "build_default_forward_evidence_research_service",
 ]
+
+
+def build_default_annual_statement_router():
+    from contextlib import asynccontextmanager
+
+    from src.agents.fundamental.application.annual_statement_reader import (
+        AnnualStatementReaderService,
+    )
+    from src.agents.fundamental.composition.annual_statement_routes import (
+        build_annual_statement_router,
+    )
+    from src.agents.fundamental.infrastructure.annual_statement_reader_config import (
+        load_annual_statement_reader_bindings,
+    )
+
+    @asynccontextmanager
+    async def factory():
+        client = HttpFundamentalServiceClient()
+        try:
+            yield AnnualStatementReaderService(
+                client=client,
+                artifacts=build_default_artifact_service(),
+                bindings=load_annual_statement_reader_bindings(),
+                owns_thread=_owns_scoped_thread,
+                claim_thread=_claim_scoped_thread,
+            )
+        finally:
+            await client.aclose()
+
+    return build_annual_statement_router(factory)
+
+
+async def _owns_scoped_thread(
+    subject_id: str, thread_id: str, organization_id: str
+) -> bool:
+    return await get_ownership_service().owns(
+        user_id=subject_id,
+        resource_type="thread",
+        resource_id=thread_id,
+        organization_id=organization_id,
+    )
+
+
+async def _claim_scoped_thread(
+    subject_id: str, thread_id: str, organization_id: str
+) -> bool:
+    return await get_ownership_service().claim(
+        user_id=subject_id,
+        resource_type="thread",
+        resource_id=thread_id,
+        organization_id=organization_id,
+    )

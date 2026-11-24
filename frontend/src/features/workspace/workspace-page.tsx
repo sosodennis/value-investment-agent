@@ -29,6 +29,8 @@ import { assessRevisionResult, revisionAttemptReducer } from './outputs/fundamen
 import type { FundamentalRevision, FundamentalRevisionControl } from './outputs/fundamental-analysis/valuation-revision';
 
 type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; initialPrompt?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
+const NO_WORKSPACE_OUTPUTS: Record<string, StandardAgentOutput | null> = {};
+const NO_WORKSPACE_STATUSES: Record<string, AgentStatus> = {};
 const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
 type ReportTab = 'activity' | 'fundamental_analysis' | 'technical_analysis' | 'financial_news_research' | 'debate';
 const reportTabs: { id: ReportTab; label: string }[] = [
@@ -46,10 +48,16 @@ const connectionLabels: Record<ConnectionState, string> = { disconnected: 'Disco
 
 export function WorkspacePage({ assistantId = 'agent', initialTicker = null, initialPrompt = null, autoStart = false, routeIntent = NEW_ANALYSIS_INTENT }: WorkspacePageProps) {
     const agent = useAgent(assistantId);
+    const isStatementReport = routeIntent.kind === 'statement-report';
+    const workspaceThreadId = isStatementReport ? routeIntent.threadId : agent.threadId;
+    const workspaceRunId = isStatementReport ? null : agent.runId;
+    const workspaceWorkflow = isStatementReport ? null : agent.workflow;
+    const workspaceOutputs = isStatementReport ? NO_WORKSPACE_OUTPUTS : agent.agentOutputs;
+    const workspaceStatuses = isStatementReport ? NO_WORKSPACE_STATUSES : agent.agentStatuses;
     const { loadHistory, sendMessage, isLoading } = agent;
     const [ticker, setTicker] = useState(initialTicker?.toUpperCase() ?? '');
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<ReportTab>('activity');
+    const [activeTab, setActiveTab] = useState<ReportTab>(routeIntent.kind === 'statement-report' ? 'fundamental_analysis' : 'activity');
     const [selectedEvidenceState, setSelectedEvidenceState] = useState<{ threadId: string | null; runId: string | null; id: string; displayValue?: string } | null>(null);
     const [fundamentalEvidenceInventory, setFundamentalEvidenceInventory] = useState<FundamentalEvidenceInventory | null>(null);
     const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
@@ -66,32 +74,32 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         role: config.role,
         description: config.description,
         avatar: config.avatar,
-        status: agent.agentStatuses[config.id] ?? 'idle',
-    })), [agent.agentStatuses]);
+        status: workspaceStatuses[config.id] ?? 'idle',
+    })), [workspaceStatuses]);
     const preferredAgentId = agents.find((item) => item.status === 'running' || item.status === 'attention')?.id ?? agents.find((item) => item.status !== 'idle')?.id ?? null;
-    const isActive = agent.workflow?.runStatus === 'running' || agent.workflow?.runStatus === 'queued' || agent.workflow?.runStatus === 'waiting';
+    const isActive = workspaceWorkflow?.runStatus === 'running' || workspaceWorkflow?.runStatus === 'queued' || workspaceWorkflow?.runStatus === 'waiting';
     const autoStartMessage = initialPrompt?.trim() || (initialTicker?.trim() ? `Valuate ${initialTicker.trim().toUpperCase()}` : null);
     const historyThreadId = routeIntent.kind === 'exact-run' ? routeIntent.threadId : null;
     const historyRunId = routeIntent.kind === 'exact-run' ? routeIntent.runId : null;
     const isHistoryRoute = routeIntent.kind !== 'new-analysis';
-    const hasPendingInput = agent.workflow?.threadId === agent.threadId && agent.workflow?.runId === agent.runId
-        && [...agent.workflow.interactions.values()].some((interaction) => interaction.status === 'pending');
+    const hasPendingInput = workspaceWorkflow?.threadId === workspaceThreadId && workspaceWorkflow?.runId === workspaceRunId
+        && [...workspaceWorkflow.interactions.values()].some((interaction) => interaction.status === 'pending');
     const evidenceAgent = useMemo(() => {
         const agentId = activeTab === 'activity' ? selectedAgentId ?? preferredAgentId : activeTab;
         return agents.find((item) => item.id === agentId) ?? null;
     }, [activeTab, agents, preferredAgentId, selectedAgentId]);
-    const previousFundamental = retainedFundamental?.revision.source.thread_id === agent.threadId ? retainedFundamental : null;
+    const previousFundamental = retainedFundamental?.revision.source.thread_id === workspaceThreadId ? retainedFundamental : null;
     const reportOutputs = useMemo(() => previousFundamental
-        ? { ...agent.agentOutputs, fundamental_analysis: previousFundamental.kind === 'accepted' ? previousFundamental.currentOutput : previousFundamental.previousOutput }
-        : agent.agentOutputs, [agent.agentOutputs, previousFundamental]);
-    const candidateOutput = previousFundamental?.kind === 'awaiting-result' ? agent.agentOutputs.fundamental_analysis : null;
+        ? { ...workspaceOutputs, fundamental_analysis: previousFundamental.kind === 'accepted' ? previousFundamental.currentOutput : previousFundamental.previousOutput }
+        : workspaceOutputs, [workspaceOutputs, previousFundamental]);
+    const candidateOutput = previousFundamental?.kind === 'awaiting-result' ? workspaceOutputs.fundamental_analysis : null;
     const candidateReference = candidateOutput?.reference ?? null;
     const candidateArtifact = useArtifact(candidateReference, parseFundamentalArtifact, 'fundamental_revision.artifact', 'financial_reports');
     useEffect(() => {
         if (!retainedFundamental || retainedFundamental.kind !== 'awaiting-result' || revisionOperation.current !== retainedFundamental.operationId) return;
-        if (agent.threadId !== retainedFundamental.revision.source.thread_id) return;
-        if (agent.runId !== retainedFundamental.expectedRunId) {
-            if (agent.runId !== retainedFundamental.revision.source.run_id) {
+        if (workspaceThreadId !== retainedFundamental.revision.source.thread_id) return;
+        if (workspaceRunId !== retainedFundamental.expectedRunId) {
+            if (workspaceRunId !== retainedFundamental.revision.source.run_id) {
                 revisionOperation.current = null;
                 dispatchRevision({ type: 'failed', operationId: retainedFundamental.operationId, code: 'REVISION_SOURCE_CHANGED', message: 'The active run changed before the revision result was confirmed.' });
             }
@@ -110,34 +118,34 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
             return;
         }
         if (candidateArtifact.data?.fundamental_service && candidateReference && candidateOutput) {
-            const candidate = projectFundamentalReport({ artifact: candidateArtifact.data.fundamental_service, reference: candidateReference, threadId: agent.threadId, ticker: candidateArtifact.data.ticker ?? ticker });
+            const candidate = projectFundamentalReport({ artifact: candidateArtifact.data.fundamental_service, reference: candidateReference, threadId: workspaceThreadId, ticker: candidateArtifact.data.ticker ?? ticker });
             const outcome = assessRevisionResult({ attempt: retainedFundamental, candidate, expectedRunId: retainedFundamental.expectedRunId });
             revisionOperation.current = null;
             dispatchRevision(outcome.kind === 'accepted'
                 ? { type: 'accepted', operationId: retainedFundamental.operationId, currentOutput: candidateOutput, currentReport: outcome.report }
                 : { type: 'failed', operationId: retainedFundamental.operationId, code: outcome.code, message: outcome.message });
-        } else if (!candidateReference && !agent.isLoading && !isActive && agent.workflow && ['completed', 'failed', 'cancelled'].includes(agent.workflow.runStatus)) {
+        } else if (!candidateReference && !agent.isLoading && !isActive && workspaceWorkflow && ['completed', 'failed', 'cancelled'].includes(workspaceWorkflow.runStatus)) {
             fail('REVISION_RESULT_UNAVAILABLE', 'The run ended without a new Fundamental report. The previous result and draft are retained.');
         }
-    }, [agent.isLoading, agent.runId, agent.threadId, agent.workflow, candidateArtifact.data, candidateArtifact.error, candidateOutput, candidateReference, isActive, retainedFundamental, ticker]);
+    }, [agent.isLoading, workspaceRunId, workspaceThreadId, workspaceWorkflow, candidateArtifact.data, candidateArtifact.error, candidateOutput, candidateReference, isActive, retainedFundamental, ticker]);
     useEffect(() => {
-        if (retainedFundamental && (retainedFundamental.revision.source.thread_id !== agent.threadId || isHistoryRoute || (retainedFundamental.kind === 'accepted' && retainedFundamental.currentReport.identity.runId !== agent.runId))) {
+        if (retainedFundamental && (retainedFundamental.revision.source.thread_id !== workspaceThreadId || isHistoryRoute || (retainedFundamental.kind === 'accepted' && retainedFundamental.currentReport.identity.runId !== workspaceRunId))) {
             revisionOperation.current = null;
             dispatchRevision({ type: 'cleared' });
         }
-    }, [agent.runId, agent.threadId, isHistoryRoute, retainedFundamental]);
+    }, [workspaceRunId, workspaceThreadId, isHistoryRoute, retainedFundamental]);
     const evidenceItems = useMemo(() => {
         if (!evidenceAgent) return [];
         const output = reportOutputs[evidenceAgent.id] ?? null;
-        if (!output) return [];
+        if (!output) return evidenceAgent.id === 'fundamental_analysis' && fundamentalEvidenceInventory?.sourceKey === fundamentalReportSourceKey({ threadId: workspaceThreadId, reference: null }) ? fundamentalEvidenceInventory.items : [];
         const viewModel = adaptAgentOutput(evidenceAgent.id, output, `workspace_evidence.${evidenceAgent.id}`);
         const items = buildEvidenceItems(evidenceAgent, viewModel);
-        return viewModel.kind === 'fundamental_analysis' && fundamentalEvidenceInventory?.sourceKey === fundamentalReportSourceKey({ threadId: agent.threadId, reference: viewModel.reference })
+        return viewModel.kind === 'fundamental_analysis' && fundamentalEvidenceInventory?.sourceKey === fundamentalReportSourceKey({ threadId: workspaceThreadId, reference: viewModel.reference })
             ? [...items, ...fundamentalEvidenceInventory.items]
             : items;
-    }, [reportOutputs, agent.threadId, evidenceAgent, fundamentalEvidenceInventory]);
-    const currentRunId = agent.runId ?? null;
-    const selectedItem = selectedEvidenceState?.threadId === agent.threadId && selectedEvidenceState?.runId === currentRunId
+    }, [reportOutputs, workspaceThreadId, evidenceAgent, fundamentalEvidenceInventory]);
+    const currentRunId = workspaceRunId ?? null;
+    const selectedItem = selectedEvidenceState?.threadId === workspaceThreadId && selectedEvidenceState?.runId === currentRunId
         ? evidenceItems.find((item) => item.id === selectedEvidenceState.id) ?? null
         : null;
     const selectedEvidence = selectedItem ? { ...selectedItem, displayValue: selectedEvidenceState?.displayValue ?? selectedItem.displayValue } : null;
@@ -146,7 +154,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         : { kind: 'available', isPending: isLoading || isActive || previousFundamental?.kind === 'starting' || previousFundamental?.kind === 'awaiting-result', attempt: previousFundamental, onRecalculate: recalculateFromFundamental };
 
     function handleSelectEvidence(item: EvidenceSelection) {
-        setSelectedEvidenceState({ threadId: agent.threadId, runId: currentRunId, id: item.id, displayValue: item.displayValue });
+        setSelectedEvidenceState({ threadId: workspaceThreadId, runId: currentRunId, id: item.id, displayValue: item.displayValue });
         if (typeof window !== 'undefined' && window.innerWidth < 1440 && !mobileEvidenceOpen) {
             const activeElement = document.activeElement;
             mobileEvidenceReturnFocus.current = activeElement instanceof HTMLElement
@@ -192,10 +200,10 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     }
 
     async function recalculateFromFundamental(revision: FundamentalRevision, sourceTicker: string) {
-        const output = previousFundamental?.kind === 'failed' ? previousFundamental.previousOutput : agent.agentOutputs.fundamental_analysis;
+        const output = previousFundamental?.kind === 'failed' ? previousFundamental.previousOutput : workspaceOutputs.fundamental_analysis;
         const report = previousFundamental?.kind === 'failed' ? previousFundamental.previousReport : loadedFundamental;
         if (isHistoryRoute || agent.isLoading || isActive || revisionOperation.current) throw new Error('A valuation run is already active or this report is read-only.');
-        if (revision.source.thread_id !== agent.threadId || revision.source.run_id !== agent.runId || output?.reference?.artifact_id !== revision.source.artifact_id || report?.kind !== 'valuation' || report.identity.preparationDigest !== revision.source.preparation_digest || report.identity.runId !== revision.source.run_id || report.identity.threadId !== revision.source.thread_id || report.identity.artifactId !== revision.source.artifact_id) throw new Error('The saved valuation source changed. Review the current report before recalculating.');
+        if (revision.source.thread_id !== workspaceThreadId || revision.source.run_id !== workspaceRunId || output?.reference?.artifact_id !== revision.source.artifact_id || report?.kind !== 'valuation' || report.identity.preparationDigest !== revision.source.preparation_digest || report.identity.runId !== revision.source.run_id || report.identity.threadId !== revision.source.thread_id || report.identity.artifactId !== revision.source.artifact_id) throw new Error('The saved valuation source changed. Review the current report before recalculating.');
         const operationId = crypto.randomUUID();
         revisionOperation.current = operationId;
         setSelectedEvidenceState(null);
@@ -246,7 +254,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             </SheetContent>
                         </Sheet>
                     </div>
-                    <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
+                    <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'statement-report' ? 'Annual statements' : routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || workspaceWorkflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>
                 <div className="flex items-center gap-2">
                     <ConnectionBadge state={agent.connectionState} />
@@ -258,7 +266,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 <div className="flex flex-wrap items-end gap-3">
                     <Field label="Company ticker" htmlFor="workspace-ticker" className="w-full max-w-sm"><Input id="workspace-ticker" autoComplete="off" value={ticker} onChange={(event) => setTicker(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={16} /></Field>
                     <Button type="submit" disabled={!ticker.trim() || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start analysis'}</Button>
-                    {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
+                    {workspaceThreadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={workspaceThreadId}>Thread {workspaceThreadId}</p>}
                 </div>
             </form>}
 
@@ -272,8 +280,8 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                         <section className="min-w-0 px-4 py-5 sm:px-6">
                     {routeIntent.kind === 'invalid-history' && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>History link is incomplete</AlertTitle><AlertDescription>This history link must include both a thread ID and a run ID. Return to dashboard history and open the run again.</AlertDescription></Alert>}
                     {agent.error && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>{routeIntent.kind === 'exact-run' ? 'Selected analysis run could not be loaded' : 'Workflow request failed'}</AlertTitle><AlertDescription className="break-words">{routeIntent.kind === 'exact-run' && historyRunId ? `Run ${historyRunId} for thread ${historyThreadId} is unavailable. ` : ''}{agent.error}</AlertDescription></Alert>}
-                    {routeIntent.kind === 'exact-run' && agent.isLoading && !agent.workflow && <p role="status" className="mb-4 text-sm text-muted-foreground">Loading selected analysis run {routeIntent.runId}…</p>}
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Run details</h2><p className="text-sm text-muted-foreground">{agent.workflow ? `Run ${agent.runId ?? agent.workflow.runId} · cursor ${agent.workflow.cursor}` : routeIntent.kind === 'exact-run' ? agent.error ? 'The selected historical run is unavailable.' : 'Loading the selected historical run.' : isHistoryRoute ? 'The selected history link is unavailable.' : 'Run a valuation to follow agent activity and reports.'}</p></div>{agent.workflow && <Badge variant={agent.workflow.runStatus === 'failed' ? 'destructive' : agent.workflow.runStatus === 'completed' ? 'success' : agent.workflow.runStatus === 'waiting' ? 'warning' : 'secondary'}>{agent.workflow.runStatus}</Badge>}</div>
+                    {routeIntent.kind === 'exact-run' && agent.isLoading && !workspaceWorkflow && <p role="status" className="mb-4 text-sm text-muted-foreground">Loading selected analysis run {routeIntent.runId}…</p>}
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">{routeIntent.kind === 'statement-report' ? 'Saved annual statement report' : 'Run details'}</h2><p className="text-sm text-muted-foreground">{routeIntent.kind === 'statement-report' ? 'Saved financial statements are independent of a valuation run.' : workspaceWorkflow ? `Run ${workspaceRunId ?? workspaceWorkflow.runId} · cursor ${workspaceWorkflow.cursor}` : routeIntent.kind === 'exact-run' ? agent.error ? 'The selected historical run is unavailable.' : 'Loading the selected historical run.' : isHistoryRoute ? 'The selected history link is unavailable.' : 'Run a valuation to follow agent activity and reports.'}</p></div>{workspaceWorkflow && <Badge variant={workspaceWorkflow.runStatus === 'failed' ? 'destructive' : workspaceWorkflow.runStatus === 'completed' ? 'success' : workspaceWorkflow.runStatus === 'waiting' ? 'warning' : 'secondary'}>{workspaceWorkflow.runStatus}</Badge>}</div>
                     <Tabs value={activeTab} onValueChange={(value) => { if (isReportTab(value)) setActiveTab(value); }}>
                         <TabsList aria-label="Workspace views" className="mb-4 h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0">
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} ref={tab.id === 'activity' ? activityTab : undefined} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
@@ -283,8 +291,8 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             <AlertDescription>This run needs a response. Review the request in Activity.</AlertDescription>
                             <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => { setActiveTab('activity'); activityTab.current?.focus(); }}>Open Activity</Button>
                         </Alert>}
-                        <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id} forceMount={item.id === 'fundamental_analysis' && previousFundamental ? true : undefined} hidden={activeTab !== item.id}><ReportPanel threadId={agent.threadId} runId={agent.runId} tab={item.id} outputs={reportOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} onEvidenceInventory={setFundamentalEvidenceInventory} onReportReady={setLoadedFundamental} selectedEvidenceId={selectedEvidence?.id} revisionControl={revisionControl} /></TabsContent>)}
+                        <TabsContent value="activity"><ActivityPanel workflow={workspaceWorkflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id} forceMount={item.id === 'fundamental_analysis' && previousFundamental ? true : undefined} hidden={activeTab !== item.id}><ReportPanel threadId={workspaceThreadId} runId={workspaceRunId} tab={item.id} outputs={reportOutputs} statuses={workspaceStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} onEvidenceInventory={setFundamentalEvidenceInventory} onReportReady={setLoadedFundamental} selectedEvidenceId={selectedEvidence?.id} revisionControl={revisionControl} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>

@@ -13,6 +13,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from src.agents.fundamental.entrypoint import (
+    fundamental_annual_statement_router,
     fundamental_forward_evidence_router,
 )
 from src.analysis_runtime.application.ports import OwnerPort
@@ -175,6 +176,7 @@ app.include_router(llm_settings_router)
 app.include_router(search_settings_router)
 app.include_router(analysis_runtime_router)
 app.include_router(fundamental_forward_evidence_router)
+app.include_router(fundamental_annual_statement_router)
 app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(client_debug_router)

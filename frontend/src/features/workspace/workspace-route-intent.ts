@@ -1,13 +1,22 @@
 export type WorkspaceRouteIntent =
     | { kind: 'new-analysis' }
     | { kind: 'exact-run'; threadId: string; runId: string }
+    | { kind: 'statement-report'; threadId: string; artifactId: string }
     | { kind: 'invalid-history' };
 
 export function parseWorkspaceRouteIntent(searchParams: Pick<URLSearchParams, 'getAll'>): WorkspaceRouteIntent {
     const threadIds = searchParams.getAll('thread_id');
     const runIds = searchParams.getAll('run_id');
 
-    if (threadIds.length === 0 && runIds.length === 0) return { kind: 'new-analysis' };
+    if (threadIds.length === 0 && runIds.length === 0) {
+        const statementThreads = searchParams.getAll('statement_thread');
+        const statementArtifacts = searchParams.getAll('statement_artifact');
+        if (statementThreads.length === 1 && statementArtifacts.length === 1 && statementThreads[0]?.trim() && statementArtifacts[0]?.trim()) {
+            return { kind: 'statement-report', threadId: statementThreads[0], artifactId: statementArtifacts[0] };
+        }
+        if (statementThreads.length || statementArtifacts.length) return { kind: 'invalid-history' };
+        return { kind: 'new-analysis' };
+    }
     if (threadIds.length !== 1 || runIds.length !== 1) return { kind: 'invalid-history' };
 
     const [threadId] = threadIds;

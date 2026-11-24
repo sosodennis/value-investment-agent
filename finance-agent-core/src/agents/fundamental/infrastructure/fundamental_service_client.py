@@ -34,6 +34,10 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalServiceErrorV1,
     FundamentalServiceResponseV1,
 )
+from src.shared.artifacts.annual_statement_contracts import (
+    AnnualStatementsReadRequestV1,
+    AnnualStatementsReadResponseV1,
+)
 from src.shared.artifacts.fundamental_contracts import (
     FundamentalFactsReadResultV1,
     FundamentalValuationEvidenceReadResultV1,
@@ -55,6 +59,7 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "resolve_identity": "/v1/identity/resolve",
     "resolve_snapshot": "/v1/data/snapshots/resolve",
     "read_facts": "/v1/data/facts",
+    "read_annual_statements": "/v1/data/annual-statements",
     "read_active_release": "/v1/data/releases/{profile_id}",
     "read_valuation_evidence": "/v1/valuation/evidence/facts",
     "prepare_valuation": "/v1/valuation/prepare",
@@ -391,6 +396,42 @@ class HttpFundamentalServiceClient:
                 retryable=False,
                 status_code=502,
             ) from exc
+
+    async def read_annual_statements(
+        self,
+        request: AnnualStatementsReadRequestV1,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> AnnualStatementsReadResponseV1:
+        response = await self.execute(
+            "read_annual_statements",
+            request.model_dump(mode="json"),
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            result = AnnualStatementsReadResponseV1.model_validate(response.result)
+        except ValidationError as exc:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned invalid annual statements",
+                retryable=False,
+                status_code=502,
+            ) from exc
+        if (
+            result.data_release_manifest_digest != request.data_release_manifest_digest
+            or result.statements.cutoff_at != request.cutoff_at
+        ):
+            raise FundamentalServiceFailure(
+                "STATEMENT_READ_BINDING_MISMATCH",
+                "Annual statements do not match the requested release and cutoff",
+                retryable=False,
+                status_code=502,
+            )
+        return result
 
     async def prepare_valuation(
         self,
