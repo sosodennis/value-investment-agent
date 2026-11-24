@@ -17,6 +17,10 @@ from zipfile import BadZipFile, ZipFile, ZipInfo
 
 from .contracts import RemovedByteRangeV1
 from .inline_xbrl import InlineDocumentSetError, submission_html_documents
+from .sec_html_representation_registry import (
+    REGISTERED_HTML_BLOCK_POLICY,
+    registered_html_block_representation,
+)
 from .serialization import sha256_digest
 from .snapshots import SnapshotError
 
@@ -86,13 +90,14 @@ _HTML_CRLF_RULE = (
     "indexed direct response after its unique terminal Akamai script is removed; "
     "retain all source hashes and the archive CRLF count"
 )
-_HTML_INTERTAG_LF_POLICY_ID = "sec-edgar-submission-html-crlf-intertag-lf-v1"
 _HTML_INTERTAG_LF_RULE = (
-    "use the unchanged accession-matched ZIP HTML only when replacing every "
-    "CRLF with LF and deleting the recorded LF bytes between parsed HTML tags "
-    "reproduces both the complete submission document and the indexed direct "
-    "response after its unique terminal Akamai script is removed; retain all "
-    "source hashes, the archive CRLF count and every deleted intertag LF offset"
+    "use the unchanged ZIP HTML for the exact registered issuer, accession and "
+    "primary document only when its bound archive, index, complete submission "
+    "and scriptless direct hashes reproduce the registered CRLF and block LF "
+    "offsets; the pinned schema and context proof establishes this retained "
+    "HTML block display representation, not lexical textblock equality or a "
+    "generic whitespace rule; preserve every original byte and string, bind the "
+    "proof digest and require the registered validation profile and taxonomy cache"
 )
 _MAX_STAGED_GRAPHICS_BYTES = 32 * 1024 * 1024
 _XML_LINE_END_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-v1"
@@ -285,57 +290,25 @@ def _submission_html_hash(
     return _digest(submission_source.content)
 
 
-class _IntertagLineParser(HTMLParser):
-    def __init__(self, content: bytes) -> None:
-        super().__init__(convert_charrefs=False)
-        self.content = content
-        self.line_starts = [0, *(match.end() for match in re.finditer(b"\n", content))]
-        self.tag_starts: set[int] = set()
-        self.tag_ends: set[int] = set()
-
-    def _offset(self) -> int:
-        line, column = self.getpos()
-        return self.line_starts[line - 1] + column
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        start = self._offset()
-        text = self.get_starttag_text()
-        assert text is not None
-        self.tag_starts.add(start)
-        self.tag_ends.add(start + len(text))
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self.handle_starttag(tag, attrs)
-
-    def handle_endtag(self, tag: str) -> None:
-        start = self._offset()
-        self.tag_starts.add(start)
-        self.tag_ends.add(self.content.index(b">", start) + 1)
-
-
-def _intertag_lf_removals(member: bytes, direct: bytes) -> tuple[int, ...] | None:
-    member_offset = direct_offset = 0
-    removed = []
-    while member_offset < len(member) and direct_offset < len(direct):
-        if member[member_offset] == direct[direct_offset]:
-            member_offset += 1
-            direct_offset += 1
-        elif member[member_offset - 1 : member_offset + 2] == b">\n<":
-            removed.append(member_offset)
-            member_offset += 1
-        else:
-            return None
-    if member_offset != len(member) or direct_offset != len(direct) or not removed:
-        return None
-    parser = _IntertagLineParser(member)
-    parser.feed(member.decode("latin-1"))
-    parser.close()
-    if any(
-        offset not in parser.tag_ends or offset + 1 not in parser.tag_starts
-        for offset in removed
+def require_registered_html_resource_scope(
+    *,
+    normalization_policy_id: str | None,
+    archive_member_hash: str,
+    validation_profile_digest: str,
+    taxonomy_cache_hash: str | None,
+) -> None:
+    if normalization_policy_id != REGISTERED_HTML_BLOCK_POLICY:
+        return
+    registered = registered_html_block_representation(archive_member_hash)
+    if (
+        registered is None
+        or validation_profile_digest != registered.validation_profile_digest
+        or taxonomy_cache_hash != registered.taxonomy_cache_hash
     ):
-        return None
-    return tuple(removed)
+        raise SnapshotError(
+            "SOURCE_HTML_REPRESENTATION_RESOURCE_SCOPE_MISMATCH",
+            "registered HTML representation requires its exact validation resources",
+        )
 
 
 def _html_line_representation(
@@ -367,14 +340,6 @@ def _html_line_representation(
         (b"</body></html>\n", b"</body>\n</html>\n")
     ):
         return None
-    line_ended_member = member.replace(b"\r\n", b"\n")
-    removed = (
-        ()
-        if line_ended_member == direct
-        else _intertag_lf_removals(line_ended_member, direct)
-    )
-    if removed is None:
-        return None
     submission_hash = _submission_html_hash(
         raw_response=raw_response,
         archive_index=archive_index,
@@ -384,9 +349,56 @@ def _html_line_representation(
     )
     if submission_hash is None:
         return None
+    line_ended_member = member.replace(b"\r\n", b"\n")
+    registered = None
+    removed: tuple[int, ...] = ()
+    if line_ended_member != direct:
+        registered = registered_html_block_representation(_digest(member))
+        if registered is None:
+            raise SnapshotError(
+                "SOURCE_HTML_REPRESENTATION_UNREGISTERED",
+                "HTML LF differences require an exact retained source registration",
+            )
+        base_uri = (
+            "https://www.sec.gov/Archives/edgar/data/"
+            f"{int(registered.issuer_id)}/{registered.accession_number.replace('-', '')}"
+        )
+        if (
+            raw_response.accession_number != registered.accession_number
+            or member_name != registered.primary_document
+            or raw_response.uri != base_uri + "/" + registered.primary_document
+            or archive_index.uri != base_uri + "/index.json"
+            or archive.uri != base_uri + f"/{registered.accession_number}-xbrl.zip"
+            or _digest(archive_index.content) != registered.archive_index_hash
+            or _digest(archive.content) != registered.archive_hash
+            or _digest(direct) != registered.scriptless_primary_hash
+            or submission_hash != registered.submission_hash
+            or member.count(b"\r\n") != registered.archive_crlf_count
+        ):
+            raise SnapshotError(
+                "SOURCE_HTML_REPRESENTATION_PROOF_MISMATCH",
+                "HTML source bytes differ from the registered representation proof",
+            )
+        removed = registered.deleted_lf_offsets
+        chunks = []
+        position = 0
+        for offset in removed:
+            if line_ended_member[offset - 1 : offset + 2] != b">\n<":
+                raise SnapshotError(
+                    "SOURCE_HTML_REPRESENTATION_PROOF_MISMATCH",
+                    "registered HTML block LF offsets do not match the original",
+                )
+            chunks.append(line_ended_member[position:offset])
+            position = offset + 1
+        chunks.append(line_ended_member[position:])
+        if b"".join(chunks) != direct:
+            raise SnapshotError(
+                "SOURCE_HTML_REPRESENTATION_PROOF_MISMATCH",
+                "registered HTML block LF reconstruction differs from source bytes",
+            )
     policy_id, rule = (
-        (_HTML_INTERTAG_LF_POLICY_ID, _HTML_INTERTAG_LF_RULE)
-        if removed
+        (REGISTERED_HTML_BLOCK_POLICY, _HTML_INTERTAG_LF_RULE)
+        if registered is not None
         else (_HTML_CRLF_POLICY_ID, _HTML_CRLF_RULE)
     )
     raw_hash = _digest(raw)
@@ -428,6 +440,16 @@ def _html_line_representation(
                 "submission_content_hash": submission_hash,
                 "archive_crlf_count": member.count(b"\r\n"),
                 "lf_member_deleted_intertag_lf_offsets": removed,
+                **(
+                    {
+                        "issuer_id": registered.issuer_id,
+                        "registration_proof_digest": registered.proof_digest,
+                        "validation_profile_digest": registered.validation_profile_digest,
+                        "taxonomy_cache_hash": registered.taxonomy_cache_hash,
+                    }
+                    if registered is not None
+                    else {}
+                ),
             }
         ),
         normalization_reason=rule,

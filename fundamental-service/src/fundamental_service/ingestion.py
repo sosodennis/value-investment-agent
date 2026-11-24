@@ -60,7 +60,11 @@ from .mapping_input_identity import MappingInputDigests
 from .parser_actions import ParserActions
 from .parser_action_identity import ParserBuildChecks
 from .replay import ArtifactRecordV1
-from .sec_integrity import assess_filing_response, extract_referenced_graphics
+from .sec_integrity import (
+    assess_filing_response,
+    extract_referenced_graphics,
+    require_registered_html_resource_scope,
+)
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
 from .sec_source import SecSourceCapturePort, sec_source_register
 from .serialization import canonical_bytes, sha256_digest
@@ -653,6 +657,16 @@ class SecIngestionService:
             report = parse_representation(
                 normalized_path, "normalized", parser_input_hash
             )
+            for item_assessment in (
+                assessment,
+                *(item for _, item in inline_assessments),
+            ):
+                require_registered_html_resource_scope(
+                    normalization_policy_id=item_assessment.normalization_policy_id,
+                    archive_member_hash=item_assessment.archive_member_hash,
+                    validation_profile_digest=report.validation_profile_digest,
+                    taxonomy_cache_hash=report.taxonomy_cache_hash,
+                )
             require_sec_validation_evidence(report)
             if filing_date is not None and profile.dqc_applicability_digest is not None:
                 dqc_version: Literal["v18", "v31.0.3"] = (
@@ -677,6 +691,16 @@ class SecIngestionService:
                     "archive",
                     parser_input_hash if inline_integrity else archive_member_hash,
                 )
+                for item_assessment in (
+                    assessment,
+                    *(item for _, item in inline_assessments),
+                ):
+                    require_registered_html_resource_scope(
+                        normalization_policy_id=item_assessment.normalization_policy_id,
+                        archive_member_hash=item_assessment.archive_member_hash,
+                        validation_profile_digest=archive_report.validation_profile_digest,
+                        taxonomy_cache_hash=archive_report.taxonomy_cache_hash,
+                    )
                 require_sec_validation_evidence(archive_report)
                 if report.dqc_filing_context is not None:
                     archive_report = bind_dqc_filing_context(
@@ -1389,6 +1413,12 @@ class SecIngestionService:
                 taxonomy_cache_dir=taxonomy_cache_dir,
                 source_content_hash=normalized_hash,
             )
+            require_registered_html_resource_scope(
+                normalization_policy_id=assessment.normalization_policy_id,
+                archive_member_hash=assessment.archive_member_hash,
+                validation_profile_digest=parser_report.validation_profile_digest,
+                taxonomy_cache_hash=parser_report.taxonomy_cache_hash,
+            )
             require_sec_validation_evidence(parser_report)
             archive_report = parser_report
             if assessment.relation == "normalized":
@@ -1398,6 +1428,12 @@ class SecIngestionService:
                     taxonomy_version=taxonomy_version,
                     taxonomy_cache_dir=taxonomy_cache_dir,
                     source_content_hash=archive_member_hash,
+                )
+                require_registered_html_resource_scope(
+                    normalization_policy_id=assessment.normalization_policy_id,
+                    archive_member_hash=assessment.archive_member_hash,
+                    validation_profile_digest=archive_report.validation_profile_digest,
+                    taxonomy_cache_hash=archive_report.taxonomy_cache_hash,
                 )
                 require_sec_validation_evidence(archive_report)
                 if fact_semantic_digest(parser_report) != fact_semantic_digest(
