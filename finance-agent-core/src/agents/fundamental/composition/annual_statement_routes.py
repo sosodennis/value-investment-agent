@@ -1,5 +1,3 @@
-"""HTTP composition for the authenticated, thread-owned statement reader."""
-
 from __future__ import annotations
 
 from collections.abc import Callable

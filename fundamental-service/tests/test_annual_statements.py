@@ -1,5 +1,3 @@
-"""Statement behavior over frozen original numbers with synthetic mapping authority."""
-
 from datetime import UTC, date, datetime
 from decimal import Decimal, localcontext
 from itertools import permutations

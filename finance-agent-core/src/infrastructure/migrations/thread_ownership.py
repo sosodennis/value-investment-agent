@@ -1,5 +1,3 @@
-"""Bind thread ownership to one organization without creating synthetic runs."""
-
 from __future__ import annotations
 
 from sqlalchemy import text

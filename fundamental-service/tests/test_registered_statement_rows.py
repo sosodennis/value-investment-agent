@@ -1,5 +1,3 @@
-"""Reviewed primary rows select source concepts, never stored golden amounts."""
-
 from dataclasses import replace
 from datetime import date
 import hashlib

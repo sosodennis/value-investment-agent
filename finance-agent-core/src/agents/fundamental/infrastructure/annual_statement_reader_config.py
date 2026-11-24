@@ -1,5 +1,3 @@
-"""Explicit deployment selectors for published annual statement readers."""
-
 from __future__ import annotations
 
 import os

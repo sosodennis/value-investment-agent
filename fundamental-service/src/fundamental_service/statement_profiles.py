@@ -1,5 +1,3 @@
-"""The registered major-row annual statement profile and executable identity."""
-
 from __future__ import annotations
 
 import hashlib

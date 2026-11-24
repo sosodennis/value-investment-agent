@@ -1,5 +1,3 @@
-"""Lossless caller DTOs for service-owned annual statements; no financial policy."""
-
 from __future__ import annotations
 
 import hashlib

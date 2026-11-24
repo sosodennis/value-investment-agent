@@ -1,5 +1,3 @@
-"""The historical SEC original owns statement company-scope decisions."""
-
 import pytest
 
 from fundamental_service.data_releases import DataReleaseError

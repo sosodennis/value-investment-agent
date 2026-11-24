@@ -1,5 +1,3 @@
-"""Reviewed primary statement row locators; no reported amounts."""
-
 from dataclasses import dataclass
 from datetime import date
 

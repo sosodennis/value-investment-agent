@@ -1,5 +1,3 @@
-"""Pure release-bound annual statement selection and accounting reconciliation."""
-
 from __future__ import annotations
 
 from datetime import timedelta

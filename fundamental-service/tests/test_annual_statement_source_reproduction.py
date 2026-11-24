@@ -19,7 +19,7 @@ from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import FilesystemContentStore
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
-import reproduce_annual_statement_sources as command  # noqa: E402
+import reproduce_annual_statement_sources as command
 
 CIK = "0000320193"
 ACCESSION = "0000320193-24-000123"

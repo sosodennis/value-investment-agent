@@ -1,5 +1,3 @@
-"""Keep the unchanged V18 resource package alive for one parser worker."""
-
 import hashlib
 import tempfile
 from collections.abc import Iterator

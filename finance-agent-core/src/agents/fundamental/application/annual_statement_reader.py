@@ -1,5 +1,3 @@
-"""Read prepared statements independently of valuation and retain exact evidence."""
-
 from __future__ import annotations
 
 import json

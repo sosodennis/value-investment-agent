@@ -1,5 +1,3 @@
-"""One frozen selection retains every original's distinct runtime and outcome."""
-
 import pytest
 from pydantic import ValidationError
 

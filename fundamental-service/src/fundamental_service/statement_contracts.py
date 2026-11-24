@@ -1,5 +1,3 @@
-"""Versioned annual statement periods, cell evidence, and coverage outcomes."""
-
 from __future__ import annotations
 
 from datetime import date, timedelta

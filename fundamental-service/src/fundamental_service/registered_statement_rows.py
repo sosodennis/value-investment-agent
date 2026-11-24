@@ -1,9 +1,3 @@
-"""Reviewed primary-row scopes bound to immutable original filing bytes.
-
-Only concepts and periods are registered; reported amounts come from validated
-canonical facts. The matching primary rows are retained in the #494 source audit.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

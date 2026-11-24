@@ -203,7 +203,6 @@ async def test_unscoped_thread_cannot_be_claimed_until_exact_retained_history_pr
             user_id=scoped_user,
             organization_id="org-a",
         )
-    # Wrong-principal history is not cascade-owned by the test user.
     async with AsyncSessionLocal() as session:
         await session.execute(
             delete(WorkflowRunHistory).where(

@@ -1,5 +1,3 @@
-"""Authenticated workspace read intents and deployment catalog projections."""
-
 from __future__ import annotations
 
 from typing import Annotated, Literal
