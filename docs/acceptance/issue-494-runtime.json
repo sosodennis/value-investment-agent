@@ -1,11 +1,11 @@
 {
   "issue": 494,
   "branch": "codex/issue-494-annual-statements",
-  "commit": "1af75185124d4e8c4a75195be011466d2a0e2a45",
-  "status": "WIP",
+  "commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+  "status": "VERIFIED",
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent",
-    "browser_session": "CUA IAB browser2 tab3; http://127.0.0.1:23181/workspace?statement_creation=e6497b9b-c483-430b-bf75-f9ef4d0851f1",
+    "browser_session": "fresh Playwright Chromium context; current configured reader; http://127.0.0.1:23181/workspace",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-494-app",
@@ -19,11 +19,11 @@
       "container_port": 8000,
       "published_port": 23180,
       "url": "http://127.0.0.1:23180",
-      "env_file_sha256": "7e442ba9b3a0a89109bfe5aa14ddfcbe7933bbcf1ed119d290f4074fabc4e61d",
+      "env_file_sha256": "4ff1ada781dd64674f637ad9a65856db3c4bf113620edb8ab875d92954eecd34",
       "compose_file_sha256": {
         "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/docker-compose.yml": "a3b91ca3e91c9928185f49e2f8e509a728f9766e783a6abd13a6c5abfc5ab411",
         "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue325-app-fundamental.yml": "ca735fd3f59e70d68c6e0c2d2d9816d3e4df4ce00d3b031440b4c75fb41464e4",
-        "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/app-runtime.yml": "6ca86567dca2ae2487d8512362d317ba3f6bb49473514cbd55925e6c3c8a9a20"
+        "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/app-runtime.yml": "82c104b1a3bfcd54ac096cbc98333371620b0720790b651e90c2176fa9d783d1"
       }
     },
     "fundamental": {
@@ -44,7 +44,8 @@
         "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml": "80a1d825662d3f39c7c91b9d83c954b1bc818c89d150b3da19f30b3f46a432d9",
         "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/fundamental-runtime.yml": "018eb4427db001d5467c973d1ec8dd093357053935ae7620df446ba55cf572a5"
       }
-    }
+    },
+    "zoom_browser_session": "isolated Playwright Chromium 156; tabs.getZoom 1 -> 2 -> 1; 200% source-cell/focus checks passed on retained Apple statement; own profile closed"
   },
   "published_ports": {
     "backend": 23180,
@@ -59,14 +60,15 @@
   "sec_identity_required": true,
   "readiness": {
     "status": "ready",
+    "contract_version": "internal.v1",
     "capabilities": {
       "identity_resolution_configured": true
     }
   },
   "runtime_inputs": {
-    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/data-release-trust-roots.json": "91d44f191739599780a28fff35656d29322feeb4c55ebd0941b39e2c5ab3ec35",
-    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/model-trust-roots.json": "e028955bce6656f57ea442e76a4a090b8abb98e025948e9d987e19db41cacbc0",
-    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/statement-release-policy.json": "a39faca69261783f12857801b2fc1f4e2649b6de470beaee824cf9f37117fb97"
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/data-release-trust-roots.json": "f54e2759521b037e5290f5d90674cbe6774a5dbbbd874c059a1430ada5da1df9",
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/model-trust-roots.json": "60358a9dd5b9801d74e5b8a581532addbcf48cf09bc2df2cceb210147372adcf",
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/statement-release-policy.json": "a85fbb4ddcafdf36a0deca0f4cf6b94df5340f7f488c6fbc734acb62fc0020b1"
   },
   "resources": {
     "plugins": {
@@ -92,80 +94,193 @@
     "fundamental-postgres",
     "fundamental-service"
   ],
-  "preflight": "passed exact 1af75185124d4e8c4a75195be011466d2a0e2a45, SEC identity required; see preflight-1af75185.log",
-  "schema_version": 1,
-  "checks": [
-    {
-      "name": "acceptance-preflight",
-      "status": "pass",
-      "command": "python3 /tmp/issue494-source-review/run-preflight.py",
-      "exit_code": 0,
-      "tested_commit": "1af75185124d4e8c4a75195be011466d2a0e2a45"
-    },
-    {
-      "name": "formal-annual-statement-flow",
-      "status": "fail",
-      "command": "python3 /tmp/issue494-source-review/run-formal-operators.py",
-      "exit_code": 0,
-      "tested_commit": "1af75185124d4e8c4a75195be011466d2a0e2a45",
-      "result": "All four operators completed and activated, but every annual statement cell is unavailable. Independent accounting check rejected aapl-historical at 0/120 reported cells. Operator exit 0 does not prove positive statement acceptance."
-    },
-    {
-      "name": "acquisition-boundary-focused-postgres",
-      "status": "pass",
-      "command": "pytest test_preparation_fact_scope.py test_postgres_metadata.py with isolated FUNDAMENTAL_TEST_DATABASE_URL",
-      "exit_code": 0,
-      "tested_commit": "fe7e71c8",
-      "result": "88 passed, 0 skipped; independently reran the prior six failures, 6 passed"
-    },
-    {
-      "name": "statement-scope-and-release-focused",
-      "status": "pass",
-      "command": "pytest test_mapping_security_scope.py test_statement_releases.py test_automatic_mapping.py test_automatic_mapping_security.py test_sec_rebuild.py test_statement_preparation.py -ra",
-      "exit_code": 0,
-      "tested_commit": "568d3c79",
-      "result": "129 passed, 1 PostgreSQL skip; skipped restart test separately rerun against isolated PostgreSQL: 1 passed"
-    },
-    {
-      "name": "backend-annual-reader",
-      "status": "pass",
-      "command": "uv run --frozen --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental/test_annual_statement_reader.py -q",
-      "exit_code": 0,
-      "tested_commit": "568d3c79",
-      "result": "19 passed"
-    },
-    {
-      "name": "frontend-checks",
-      "status": "pass",
-      "command": "npm run lint && npm run typecheck && npm run test -- --run",
-      "exit_code": 0,
-      "tested_commit": "568d3c79",
-      "result": "64 test files, 546 passed; lint and typecheck passed"
-    },
-    {
-      "name": "sec-integrity-independent-review",
-      "status": "fail",
-      "command": "independent source review plus production content-context counterexamples",
-      "exit_code": 1,
-      "tested_commit": "275e1b71",
-      "result": "#516 passed; #518 requires content-context restrictions before runtime acceptance"
-    }
-  ],
-  "blockers": [
-    "#509 full Linux coverage",
-    "#511 standalone thread ownership formal workflow",
-    "#512 failed-original semantics",
-    "#513 source organization authorization",
-    "#514 original header dates",
-    "#515 prepared original identity and source metadata formal workflow",
-    "#516 historical DEI security selection",
-    "#517 approved canonical statement issuer scope",
-    "#518 Microsoft HTML representation integrity; independent content-context finding requires a follow-up"
-  ],
-  "next_step": "Finish #518 content-context restriction and independent review, then rebuild at a new exact commit and repeat formal four-case, full service suite, authenticated API, workspace and accounting acceptance.",
+  "preflight": "passed exact 31b2483d064e5aee8b3ea6bc79e391eeec6ae7a5 with REQUIRE_SEC_IDENTITY_RESOLUTION=1; preflight-31b2483d.log",
   "runtime_resource_limits": {
     "parser_virtual_memory_bytes": 3221225472,
     "container_memory": "4GiB",
     "parser_concurrency": 1
+  },
+  "feature_acceptance": "Four frozen SEC cases passed formal validation, accounting, authenticated API, all 500 workspace cells, touch/keyboard, history and true browser zoom; main delivery remains a separate gate.",
+  "reader_runtime_variant": {
+    "name": "current",
+    "cutoff_at": "2026-11-24T00:00:00Z",
+    "configured_readers": [
+      {
+        "issuer_id": "0000320193",
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "profile_id": "annual-statements:104df12c9b92f574f485c2b06cb6247976f4f9eddb19718b71394195c66b4e86",
+        "cutoff_at": "2026-11-24T00:00:00Z",
+        "security_id": "AAPL",
+        "security_scope": "issuer"
+      },
+      {
+        "issuer_id": "0000789019",
+        "ticker": "MSFT",
+        "company_name": "Microsoft Corporation",
+        "profile_id": "annual-statements:eacc1df6b9bb24b95cf6a3c73e7aec11c010fcde7bbaab90ba77fc892a213cd3",
+        "cutoff_at": "2026-11-24T00:00:00Z",
+        "security_id": "MSFT",
+        "security_scope": "issuer"
+      }
+    ],
+    "previous_app_env_sha256": "7b929d53cbe1fd5965c52c751012a32a500e624b27325e99ea6d5a38acd388f4"
+  },
+  "diagnostic_override": "removed after phase timing; standard image command and diagnostics disabled",
+  "annual_read_timeout_configuration": {
+    "transport_attempt_seconds": 30,
+    "public_absolute_deadline_seconds": 30,
+    "service_max_request_seconds": 60,
+    "observed_msft_execution_seconds": 24.496,
+    "proxy_timeout_seconds": 60,
+    "reason": "use entire caller remaining budget for strict five-original replay; early retries cannot finish a valid 24s read"
+  },
+  "materialization_commit": "31b2483d064e5aee8b3ea6bc79e391eeec6ae7a5",
+  "verification_trust": "retained 31b verification suite and signing authority; serving read does not issue new candidates",
+  "schema_version": 1,
+  "blockers": [],
+  "resolved_issues_pending_main": [
+    509,
+    511,
+    512,
+    513,
+    514,
+    515,
+    516,
+    517,
+    518,
+    519,
+    520
+  ],
+  "next_step": "Merge PR #510 after its current head checks pass; verify main contents and behavior, then close issues and clean only issue-owned resources.",
+  "checks": [
+    {
+      "name": "acceptance-preflight",
+      "status": "pass",
+      "command": "scripts/acceptance_preflight.sh with the exact recorded tuple and REQUIRE_SEC_IDENTITY_RESOLUTION=1",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "Source-equal isolated runtime, readiness and config passed; diagnostics override removed."
+    },
+    {
+      "name": "formal-sec-validation-release",
+      "status": "pass",
+      "command": "python -m fundamental_service.statement_preparation_runner --original-count 5 with the recorded cohort, resources and operator authority",
+      "exit_code": 0,
+      "tested_commit": "31b2483d064e5aee8b3ea6bc79e391eeec6ae7a5",
+      "result": "4 cases; 14 distinct originals; sec-efm-dqc, offline, 8 release gates per case; warnings retained; signatures and mapping approvals verified."
+    },
+    {
+      "name": "official-retained-replay",
+      "status": "pass",
+      "command": "Repeat the four official operator requests using the pinned materialization image and identical retained inputs",
+      "exit_code": 0,
+      "tested_commit": "31b2483d064e5aee8b3ea6bc79e391eeec6ae7a5",
+      "result": "4/4 outputs byte-identical; original evidence and hashes retained."
+    },
+    {
+      "name": "independent-accounting",
+      "status": "pass",
+      "command": "Independent original-document, candidate-selection and Decimal checks",
+      "exit_code": 0,
+      "tested_commit": "31b2483d064e5aee8b3ea6bc79e391eeec6ae7a5",
+      "result": "490 reported values, 10 explicit Apple FX missing; 70 reconciliation passed and 10 full-FX unresolved; 14 publication timestamps verified."
+    },
+    {
+      "name": "authenticated-api",
+      "status": "pass",
+      "command": "POST /api/v1/fundamental/annual-statements/read and GET exact thread artifact for both issuers and both cutoffs",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "4/4 cases; each repeated result/reference identical and equal to its materialized response; saved artifacts owner protected."
+    },
+    {
+      "name": "formal-workspace-playwright",
+      "status": "pass",
+      "command": "npx playwright test --config e2e/fundamental-report-live.config.ts annual-statements.live.spec.ts with real reader bindings",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "4/4 runs exit0; all500 cells inspected; keyboard/focus, touch, history reload, light/dark and320/390/768/1440px; no Agent."
+    },
+    {
+      "name": "real-browser-zoom",
+      "status": "pass",
+      "command": "Isolated Chromium tabs.setZoom/getZoom with viewport=null and the retained saved statement",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "Zoom1->2->1; DPR1->2; outer size unchanged; CSSzoom1; three tables inspected, focus returned, profile closed."
+    },
+    {
+      "name": "authorization-refusal",
+      "status": "pass",
+      "command": "Real authenticated API owner/CSRF/input negatives and signed service wrong-cutoff/unknown-manifest reads",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "401/403/404/422 correct named refusals; no blank-success fallback."
+    },
+    {
+      "name": "deadline-json",
+      "status": "pass",
+      "command": "Two concurrent strict public reads through the production Next rewrite",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "One200 and one408 application/json DEADLINE_EXCEEDED at the original30s caller deadline; no generic500."
+    },
+    {
+      "name": "restart-read",
+      "status": "pass",
+      "command": "Remove diagnostic overrides, restart Fundamental Service and repeat current API reads",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "Both current statements retain identical statement, manifest, artifact and reference; four saved URLs independently reopened."
+    },
+    {
+      "name": "fundamental-full-suite",
+      "status": "pass",
+      "command": "uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -ra",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "5695 passed,14 existing resource/platform skips,0 failed. Frozen positive sources separately executed strict formal validation."
+    },
+    {
+      "name": "python-static-and-architecture",
+      "status": "pass",
+      "command": "Ruff0.14.10 check/format; mypy1.19.1; service/core architecture guards",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "74 changedPython files format,46 source/script files mypy; all passed."
+    },
+    {
+      "name": "frontend-and-codegen",
+      "status": "pass",
+      "command": "npm run lint; npm run typecheck; npm run test -- --run; bash scripts/generate-contracts.sh",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "546 frontend tests passed; lint/typecheck/codegen passed and generated diff clean."
+    },
+    {
+      "name": "independent-engineering-and-live-review",
+      "status": "pass",
+      "command": "Independent source-integrity, DQC, acquisition, mapping/cash, core/UI, read-scope and real-page reviews",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "No unresolved accepted finding. Final UI verifier checked exact head/base and stable patch d492b38a6f635567c81b1d4b6da02bd8bdfb5d13 in its own checkout."
+    },
+    {
+      "name": "required-implementation-ci",
+      "status": "pass",
+      "command": "GitHub Actions run45389478762",
+      "exit_code": 0,
+      "tested_commit": "9b36d41af28241dabe374cb61efa5251d276291b",
+      "result": "All required checks passed at9b36d41a; later acceptance-only head checks remain required before merge."
+    }
+  ],
+  "evidence": {
+    "release_url": "https://github.com/sosodennis/value-investment-agent/releases/tag/issue-494-annual-statements-v1",
+    "archive_sha256": "abde2d1af3b06bd70ee78b6865661d7fa49a7e86ff53da12ca869c231add36c9",
+    "source_revision_materialization": "31b2483d064e5aee8b3ea6bc79e391eeec6ae7a5",
+    "serving_revision": "9b36d41af28241dabe374cb61efa5251d276291b",
+    "raw_documents_in_share_package": false,
+    "evidence_contains_credentials": false
   }
 }
