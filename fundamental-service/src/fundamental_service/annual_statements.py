@@ -615,6 +615,7 @@ def _reconcile(table: StatementTableV1) -> tuple[StatementReconciliationV1, ...]
                 " + ".join(
                     f"{coefficient} * {role}" for role, coefficient in category_terms
                 ),
+                cash_basis=True,
             )
             if (
                 isinstance(fx, UnavailableStatementCellV1)

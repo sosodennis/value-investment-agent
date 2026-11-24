@@ -647,14 +647,19 @@ def test_same_retained_input_is_order_independent_and_decimal_context_isolated()
     assert original.statement_id == repeated.statement_id
 
 
-def test_microsoft_legacy_fx_basis_is_not_promoted_by_a_balanced_sum():
-    result = project(request_for(("0001564590-20-034944",)))
+@pytest.mark.parametrize("accession", ("0001564590-20-034944", "0001564590-21-039151"))
+def test_microsoft_legacy_fx_basis_is_not_promoted_by_a_balanced_sum(accession):
+    result = project(request_for((accession,)))
     checks = {check.check_id: check for check in result.reconciliations}
     assert isinstance(
         cell(result, "effect_of_exchange_rates_on_cash"), ReportedStatementCellV1
     )
     assert checks["cash_rollforward_with_fx"].status == "unresolved"
     assert checks["cash_rollforward_with_fx"].issue_codes == (
+        "STATEMENT_CASH_DEFINITION_UNRESOLVED",
+    )
+    assert checks["cash_categories_to_reported_change"].status == "unresolved"
+    assert checks["cash_categories_to_reported_change"].issue_codes == (
         "STATEMENT_CASH_DEFINITION_UNRESOLVED",
     )
     assert checks["reported_cash_change"].difference == Decimal(0)
