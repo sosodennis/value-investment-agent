@@ -59,11 +59,17 @@ from fundamental_service.metadata import (
     PostgresContentStore,
     PostgresMetadataStore,
     PostgresSnapshotRepository,
+    metadata_operation_budget,
 )
 from fundamental_service.operations import OperationsConfig
 from fundamental_service.policies import PolicyRecordV1, initial_model_specs
 from fundamental_service.replay import ArtifactPublicationDeadlineExceeded
-from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
+from fundamental_service.sec_source import (
+    SecEdgarSourceAdapter,
+    SecRequestPolicy,
+    SecSourceError,
+    sec_deadline_exceeded,
+)
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.source_acquisition import SecAcquisitionUseCase
@@ -1091,6 +1097,201 @@ def test_postgres_sec_request_slot_matches_source_adapter_callback(
     source = adapter.capture_company_facts("0000320193")
 
     assert source.source_id == "sec-companyfacts"
+
+
+@pytest.mark.parametrize(
+    ("entry", "statement_fragment"),
+    [
+        ("capture", "SELECT pg_try_advisory_lock"),
+        ("index", "INSERT INTO fundamental.parser_action_results"),
+        ("pacing", "UPDATE fundamental.sec_provider_rate_limits"),
+    ],
+)
+def test_fiscal_metadata_entries_share_deadline(
+    metadata, tmp_path, monkeypatch, entry, statement_fragment
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    action_key = sha256_digest(uuid4().hex)
+    artifact_id = f"fiscal-operation-budget-{action_key}"
+    artifacts.put_with_receipt(artifact_id, {"value": "immutable"})
+    acquisition = SimpleNamespace(metadata=metadata)
+    acquisition._capture_lock = SecAcquisitionUseCase._capture_lock.__get__(acquisition)
+    sql_started, sql_cancelled = Event(), Event()
+    connection_returned = Event()
+    opened = False
+    execute = AsyncConnection.execute
+
+    async def slow_sql(connection, statement, *args, **kwargs):
+        result = await execute(connection, statement, *args, **kwargs)
+        if statement_fragment in str(statement) and not sql_started.is_set():
+            sql_started.set()
+            try:
+                await execute(connection, text("SELECT pg_sleep(1.5)"))
+            except asyncio.CancelledError:
+                sql_cancelled.set()
+                raise
+        return result
+
+    def checked_in(*_args):
+        if sql_started.is_set():
+            connection_returned.set()
+
+    def open_response(_request, *, timeout):
+        nonlocal opened
+        opened = True
+        raise AssertionError(f"HTTP opened with stale remaining time {timeout}")
+
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=open_response,
+        request_slot=metadata.reserve_sec_provider_request_slot,
+    )
+    monkeypatch.setattr(AsyncConnection, "execute", slow_sql)
+    pool = metadata._runner._engine.sync_engine.pool
+    event.listen(pool, "checkin", checked_in)
+    try:
+        start = time.monotonic()
+        deadline = datetime.now(UTC) + timedelta(seconds=0.35)
+        with (
+            SecAcquisitionUseCase._fiscal_metadata_operation(deadline),
+            pytest.raises(SecSourceError, match="deadline"),
+        ):
+            if entry == "capture":
+                with acquisition._capture_lock(action_key):
+                    pytest.fail("expired capture lock entered source acquisition")
+            elif entry == "index":
+                metadata.publish_parser_action_result(action_key, artifact_id)
+            else:
+                adapter.capture_company_facts("0000320193", deadline_at=deadline)
+        assert time.monotonic() - start < 1, "caller waited for the untimed SQL"
+        assert sql_started.is_set()
+        assert sql_cancelled.wait(3), "PostgreSQL wait was never cancelled"
+        assert connection_returned.wait(3), "cancelled connection was never returned"
+    finally:
+        event.remove(pool, "checkin", checked_in)
+    assert not opened
+    assert metadata.parser_action_result(action_key) is None
+    lease = metadata.try_acquire_ingestion_lock(action_key)
+    assert lease is not None
+    metadata.release_ingestion_lock(lease)
+    metadata.publish_parser_action_result(action_key, artifact_id)
+    metadata.publish_parser_action_result(action_key, artifact_id)
+    assert metadata.parser_action_result(action_key) == artifact_id
+
+
+def test_fiscal_index_checks_deadline_at_commit(metadata, tmp_path, monkeypatch):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    action_key = sha256_digest(uuid4().hex)
+    artifact_id = f"fiscal-operation-commit-{action_key}"
+    artifacts.put_with_receipt(artifact_id, {"value": "immutable"})
+    expired = Event()
+    exit_transaction = AsyncTransaction.__aexit__
+
+    async def expire_at_commit(transaction, exc_type, exc_value, traceback):
+        if exc_type is None and not expired.is_set():
+            expired.set()
+        return await exit_transaction(transaction, exc_type, exc_value, traceback)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncTransaction, "__aexit__", expire_at_commit)
+        with (
+            metadata_operation_budget(
+                lambda: 0 if expired.is_set() else 3, sec_deadline_exceeded
+            ),
+            pytest.raises(SecSourceError, match="deadline"),
+        ):
+            metadata.publish_parser_action_result(action_key, artifact_id)
+
+    assert metadata.parser_action_result(action_key) is None
+    metadata.publish_parser_action_result(action_key, artifact_id)
+    metadata.publish_parser_action_result(action_key, artifact_id)
+    assert metadata.parser_action_result(action_key) == artifact_id
+
+
+def test_fiscal_metadata_scopes_isolate_actors_and_release_expired_lease(metadata):
+    first_key = sha256_digest(uuid4().hex)
+    second_key = sha256_digest(uuid4().hex)
+    first_expired = Event()
+    both_started = Barrier(2, timeout=3)
+
+    def first_actor():
+        with metadata_operation_budget(
+            lambda: 0 if first_expired.is_set() else 3, sec_deadline_exceeded
+        ):
+            lease = metadata.try_acquire_ingestion_lock(first_key)
+            assert lease is not None
+            first_expired.set()
+            both_started.wait()
+            with (
+                metadata_operation_budget(lambda: 5, sec_deadline_exceeded),
+                pytest.raises(SecSourceError, match="deadline"),
+            ):
+                metadata.try_acquire_ingestion_lock(second_key)
+            metadata.release_ingestion_lock(lease)
+            with pytest.raises(SecSourceError, match="deadline"):
+                metadata.parser_action_result(first_key)
+        return metadata.try_acquire_ingestion_lock(first_key)
+
+    def second_actor():
+        with metadata_operation_budget(lambda: 5, sec_deadline_exceeded):
+            both_started.wait()
+            lease = metadata.try_acquire_ingestion_lock(second_key)
+            assert lease is not None
+            metadata.release_ingestion_lock(lease)
+        assert metadata.parser_action_result(second_key) is None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(first_actor)
+        second = executor.submit(second_actor)
+        lease = first.result(timeout=5)
+        second.result(timeout=5)
+    assert lease is not None
+    metadata.release_ingestion_lock(lease)
+
+
+def test_fiscal_metadata_close_completes_cancelled_lock_cleanup(metadata, monkeypatch):
+    acquisition_key = sha256_digest(uuid4().hex)
+    execute = AsyncConnection.execute
+    cancellation_finished = Event()
+
+    async def slow_lock(connection, statement, *args, **kwargs):
+        result = await execute(connection, statement, *args, **kwargs)
+        if str(statement).startswith("SELECT pg_try_advisory_lock"):
+            try:
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                await asyncio.sleep(0.15)
+                cancellation_finished.set()
+                raise
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncConnection, "execute", slow_lock)
+        with (
+            SecAcquisitionUseCase._fiscal_metadata_operation(
+                datetime.now(UTC) + timedelta(seconds=0.35)
+            ),
+            pytest.raises(SecSourceError, match="deadline"),
+        ):
+            metadata.try_acquire_ingestion_lock(acquisition_key)
+        metadata.close()
+
+    assert cancellation_finished.is_set()
+    assert DATABASE_URL is not None
+    observer = PostgresMetadataStore(DATABASE_URL)
+    observer.start()
+    try:
+        lease = observer.try_acquire_ingestion_lock(acquisition_key)
+        assert lease is not None
+        observer.release_ingestion_lock(lease)
+    finally:
+        observer.close()
 
 
 def test_versioned_releases_and_mappings_are_durable_and_immutable(

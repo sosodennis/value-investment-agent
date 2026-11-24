@@ -159,11 +159,20 @@ class FiscalValidationMatchedV1(_FiscalValidationCompleteV1):
 class FiscalValidationCompleteRefusedV1(_FiscalValidationCompleteV1):
     kind: Literal["complete_refused"] = "complete_refused"
     issue_codes: RefusalCodes
+    rejection_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def check_refusal(self) -> FiscalValidationCompleteRefusedV1:
         if self.claim.status != "refused" or self.issue_codes != self.claim.issue_codes:
             raise ValueError("fiscal refusal requires the exact refused issuer claim")
+        if self.rejection_ref is not None and (
+            self.integrity.quality_decision != "block"
+            or self.rejection_ref.role != "sec-ingestion-rejection"
+            or self.rejection_ref.media_type != "application/json"
+        ):
+            raise ValueError("fiscal rejection reference has the wrong role or type")
         return self
 
 
@@ -275,6 +284,11 @@ class FiscalOriginalValidationEvidenceV1(_FiscalValidationModel):
             values.update(receipt.content_hash for receipt in self.outcome.responses)
             values.update(ref.content_hash for ref in self.outcome.action_refs)
             values.update(self.outcome.integrity.parser_content_hashes)
+            if (
+                isinstance(self.outcome, FiscalValidationCompleteRefusedV1)
+                and self.outcome.rejection_ref is not None
+            ):
+                values.add(self.outcome.rejection_ref.content_hash)
         return tuple(sorted(values))
 
 

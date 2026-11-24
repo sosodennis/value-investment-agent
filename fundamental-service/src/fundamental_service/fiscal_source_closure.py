@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, datetime
 from functools import partial
 from typing import Protocol
@@ -136,6 +136,9 @@ class FiscalSourceClosure:
         source: FiscalSourceValidationPort | None,
         capture_lock: Callable[[str, datetime], AbstractContextManager[None]],
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        operation: Callable[
+            [datetime], AbstractContextManager[None]
+        ] = lambda _: nullcontext(),
     ) -> None:
         self._discovery = discovery
         self._artifacts = artifacts
@@ -143,6 +146,7 @@ class FiscalSourceClosure:
         self._source = source
         self._capture_lock = capture_lock
         self._clock = clock
+        self._operation = operation
 
     def _before_deadline(self, deadline_at: datetime) -> float:
         now = self._clock()
@@ -257,15 +261,22 @@ class FiscalSourceClosure:
     def read(
         self, artifact_id: str, *, deadline_at: datetime
     ) -> FiscalOriginalValidationEvidenceV1:
-        reader = _FiscalArtifactRead(
-            self._artifacts, partial(self._before_deadline, deadline_at)
-        )
-        self._before_deadline(deadline_at)
-        self._configured_source()
-        return self._read(artifact_id, reader, deadline_at)
+        with self._operation(deadline_at):
+            reader = _FiscalArtifactRead(
+                self._artifacts, partial(self._before_deadline, deadline_at)
+            )
+            self._before_deadline(deadline_at)
+            self._configured_source()
+            return self._read(artifact_id, reader, deadline_at)
 
     def read_matched(
         self, ref: ArtifactRefV1, *, deadline_at: datetime
+    ) -> ValidatedFiscalOriginalV1:
+        with self._operation(deadline_at):
+            return self._read_matched(ref, deadline_at)
+
+    def _read_matched(
+        self, ref: ArtifactRefV1, deadline_at: datetime
     ) -> ValidatedFiscalOriginalV1:
         reader = _FiscalArtifactRead(
             self._artifacts, partial(self._before_deadline, deadline_at)
@@ -286,6 +297,12 @@ class FiscalSourceClosure:
 
     def execute(
         self, request: FiscalOriginalValidationRequestV1, *, deadline_at: datetime
+    ) -> tuple[FiscalOriginalValidationEvidenceV1, ArtifactPublicationV1]:
+        with self._operation(deadline_at):
+            return self._execute(request, deadline_at)
+
+    def _execute(
+        self, request: FiscalOriginalValidationRequestV1, deadline_at: datetime
     ) -> tuple[FiscalOriginalValidationEvidenceV1, ArtifactPublicationV1]:
         check_deadline = partial(self._before_deadline, deadline_at)
         check_deadline()

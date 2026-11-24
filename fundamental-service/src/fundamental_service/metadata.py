@@ -13,15 +13,16 @@ import hashlib
 import json
 import sys
 import tempfile
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
 from concurrent.futures import Future, wait
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import Context, ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import resources
 from pathlib import Path
 from threading import Event, Lock, Thread
-from typing import Any, BinaryIO, Literal
+from typing import Any, BinaryIO, Literal, TypeVar
 from uuid import uuid4
 
 from sqlalchemy import bindparam, event, text
@@ -65,6 +66,46 @@ from .snapshots import SnapshotError, SnapshotRepository
 
 SCHEMA = "fundamental"
 SCHEMA_VERSION = "fundamental-metadata-v2"
+_T = TypeVar("_T")
+
+
+@dataclass(frozen=True)
+class _MetadataBudget:
+    remaining: Callable[[], float]
+    expired: Callable[[], SnapshotError]
+
+    def check(self) -> float:
+        remaining = self.remaining()
+        if remaining <= 0:
+            raise self.expired()
+        return remaining
+
+
+_metadata_budget: ContextVar[_MetadataBudget | None] = ContextVar(
+    "metadata_operation_budget", default=None
+)
+
+
+@contextmanager
+def metadata_operation_budget(
+    remaining: Callable[[], float], expired: Callable[[], SnapshotError]
+) -> Iterator[None]:
+    """Apply a caller deadline to metadata work submitted within this scope."""
+    parent = _metadata_budget.get()
+
+    def remaining_with_parent() -> float:
+        return min(parent.check(), remaining()) if parent is not None else remaining()
+
+    token = _metadata_budget.set(_MetadataBudget(remaining_with_parent, expired))
+    try:
+        yield
+    finally:
+        _metadata_budget.reset(token)
+
+
+def _check_metadata_budget() -> None:
+    if (budget := _metadata_budget.get()) is not None:
+        budget.check()
 
 
 def _async_database_url(database_url: str) -> str:
@@ -80,6 +121,8 @@ class _AsyncRunner:
         self._loop = asyncio.new_event_loop()
         self._ready = Event()
         self._thread = Thread(target=self._serve, name="fundamental-db", daemon=True)
+        self._scoped_tasks: set[asyncio.Task[object]] = set()
+        self._cleanup_tasks: set[asyncio.Task[None]] = set()
         self._engine: AsyncEngine = create_async_engine(
             _async_database_url(database_url),
             pool_pre_ping=True,
@@ -94,21 +137,119 @@ class _AsyncRunner:
         self._ready.set()
         self._loop.run_forever()
 
-    def run(self, coroutine: Any, *, publication_timeout: float | None = None) -> Any:
+    def run(
+        self,
+        coroutine: Coroutine[object, object, _T],
+        *,
+        publication_timeout: float | None = None,
+        cleanup: bool = False,
+    ) -> _T:
         if not self._thread.is_alive():
+            coroutine.close()
             raise RuntimeError("database event loop is unavailable")
-        future: Future[Any] = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
-        if publication_timeout is None:
-            return future.result(timeout=15)
-        if wait((future,), timeout=publication_timeout).done:
-            return future.result()
-        future.cancel()
-        raise ArtifactPublicationDeadlineExceeded()
+        budget = _metadata_budget.get()
+        if cleanup or budget is None:
+            token = _metadata_budget.set(None)
+            try:
+                future = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
+            finally:
+                _metadata_budget.reset(token)
+            if publication_timeout is None:
+                return future.result(timeout=15)
+            if wait((future,), timeout=publication_timeout).done:
+                return future.result()
+            future.cancel()
+            raise ArtifactPublicationDeadlineExceeded()
+        return self._run_scoped(coroutine, budget)
+
+    def _run_scoped(
+        self, coroutine: Coroutine[object, object, _T], budget: _MetadataBudget
+    ) -> _T:
+        try:
+            budget.check()
+        except BaseException:
+            coroutine.close()
+            raise
+        cancelled = Event()
+        timer: asyncio.Timeout | None = None
+
+        async def bounded() -> _T:
+            nonlocal timer
+            try:
+                if cancelled.is_set():
+                    raise budget.expired()
+                timeout = asyncio.timeout(budget.check())
+            except BaseException:
+                coroutine.close()
+                raise
+            timer = timeout
+            task = asyncio.current_task()
+            assert task is not None
+            self._scoped_tasks.add(task)
+            try:
+                async with timeout:
+                    result = await coroutine
+                    budget.check()
+            except TimeoutError:
+                if timeout.expired():
+                    raise budget.expired() from None
+                raise
+            finally:
+                timer = None
+                self._scoped_tasks.discard(task)
+            return result
+
+        def expire_async_wait() -> None:
+            # Both waiters use one timer so cancellation cannot interrupt cleanup.
+            if timer is not None and not timer.expired():
+                timer.reschedule(self._loop.time())
+
+        future: Future[_T] = asyncio.run_coroutine_threadsafe(bounded(), self._loop)
+        try:
+            if wait((future,), timeout=budget.check()).done:
+                return future.result()
+            raise budget.expired()
+        finally:
+            if not future.done():
+                cancelled.set()
+                self._loop.call_soon_threadsafe(expire_async_wait)
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[AsyncConnection]:
+        budget = _metadata_budget.get()
+
+        def check_commit_deadline(_connection: Connection) -> None:
+            if budget is not None:
+                budget.check()
+
+        async with self._engine.begin() as connection:
+            if budget is not None:
+                event.listen(
+                    connection.sync_connection, "commit", check_commit_deadline
+                )
+            yield connection
+            if budget is not None:
+                budget.check()
+
+    def defer_cleanup(self, coroutine: Coroutine[object, object, None]) -> None:
+        def start_cleanup() -> None:
+            task = self._loop.create_task(coroutine)
+            self._cleanup_tasks.add(task)
+            task.add_done_callback(self._cleanup_tasks.discard)
+
+        self._loop.call_soon_threadsafe(start_cleanup, context=Context())
+
+    async def _dispose(self) -> None:
+        if self._scoped_tasks:
+            await asyncio.gather(*self._scoped_tasks, return_exceptions=True)
+        if self._cleanup_tasks:
+            await asyncio.gather(*self._cleanup_tasks, return_exceptions=True)
+        await self._engine.dispose()
 
     def close(self) -> None:
         if self._thread.is_alive():
             try:
-                self.run(self._engine.dispose())
+                self.run(self._dispose(), cleanup=True)
             finally:
                 self._loop.call_soon_threadsafe(self._loop.stop)
                 self._thread.join(timeout=5)
@@ -339,7 +480,13 @@ class PostgresMetadataStore:
         advisory_key = int.from_bytes(
             bytes.fromhex(acquisition_key[:16]), "big", signed=True
         )
-        return self._runner.run(self._try_acquire_ingestion_lock(advisory_key))
+        lease = IngestionLockLease(uuid4().hex, advisory_key)
+        try:
+            return self._runner.run(self._try_acquire_ingestion_lock(lease))
+        except BaseException:
+            if _metadata_budget.get() is not None:
+                self._runner.defer_cleanup(self._release_ingestion_lock(lease.lease_id))
+            raise
 
     def reserve_sec_provider_request_slot(self, min_interval_seconds: float) -> float:
         self._require_ready()
@@ -354,7 +501,7 @@ class PostgresMetadataStore:
     async def _reserve_sec_provider_request_slot(
         self, min_interval_seconds: float
     ) -> float:
-        async with self._runner._engine.begin() as connection:
+        async with self._runner.transaction() as connection:
             await connection.execute(
                 text(
                     "INSERT INTO fundamental.sec_provider_rate_limits "
@@ -389,31 +536,39 @@ class PostgresMetadataStore:
         return float(row["wait_seconds"])
 
     async def _try_acquire_ingestion_lock(
-        self, advisory_key: int
+        self, lease: IngestionLockLease
     ) -> IngestionLockLease | None:
         connection = await self._runner._engine.connect()
         try:
             result = await connection.execute(
                 text("SELECT pg_try_advisory_lock(:advisory_key)"),
-                {"advisory_key": advisory_key},
+                {"advisory_key": lease.advisory_key},
             )
             acquired = bool(result.scalar_one())
+            _check_metadata_budget()
             await connection.commit()
             if not acquired:
                 await connection.close()
                 return None
-            lease = IngestionLockLease(uuid4().hex, advisory_key)
+            _check_metadata_budget()
             self._ingestion_lock_connections[lease.lease_id] = (
-                advisory_key,
+                lease.advisory_key,
                 connection,
             )
             return lease
-        except Exception:
-            await connection.close()
+        except BaseException:
+            await self._discard_lock_connection(connection)
             raise
 
     def release_ingestion_lock(self, lease: IngestionLockLease) -> None:
-        self._runner.run(self._release_ingestion_lock(lease.lease_id))
+        self._runner.run(self._release_ingestion_lock(lease.lease_id), cleanup=True)
+
+    @staticmethod
+    async def _discard_lock_connection(connection: AsyncConnection) -> None:
+        try:
+            await connection.invalidate()
+        finally:
+            await connection.close()
 
     async def _release_ingestion_lock(self, lease_id: str) -> None:
         held = self._ingestion_lock_connections.pop(lease_id, None)
@@ -421,14 +576,17 @@ class PostgresMetadataStore:
             return
         advisory_key, connection = held
         try:
-            if not connection.closed:
-                await connection.execute(
-                    text("SELECT pg_advisory_unlock(:advisory_key)"),
-                    {"advisory_key": advisory_key},
-                )
-                await connection.commit()
-        finally:
-            await connection.close()
+            async with asyncio.timeout(5):
+                if not connection.closed:
+                    await connection.execute(
+                        text("SELECT pg_advisory_unlock(:advisory_key)"),
+                        {"advisory_key": advisory_key},
+                    )
+                    await connection.commit()
+                await connection.close()
+        except BaseException:
+            await self._discard_lock_connection(connection)
+            raise
 
     def get_sec_ingestion(
         self,
@@ -1469,7 +1627,7 @@ class PostgresMetadataStore:
     async def _register_content(
         self, content_hash: str, media_type: str, byte_length: int
     ) -> None:
-        async with self._runner._engine.begin() as connection:
+        async with self._runner.transaction() as connection:
             await connection.execute(
                 text(
                     "INSERT INTO fundamental.content_objects"
@@ -1492,6 +1650,13 @@ class PostgresMetadataStore:
         publication_budget: Callable[[], float] | None = None,
     ) -> bool:
         self._require_ready()
+        if _metadata_budget.get() is not None:
+            if publication_budget is None:
+                return self._runner.run(self._publish_scoped_artifact(record))
+            with metadata_operation_budget(
+                publication_budget, ArtifactPublicationDeadlineExceeded
+            ):
+                return self._runner.run(self._publish_scoped_artifact(record))
         remaining = check_publication_budget(publication_budget)
         return bool(
             self._runner.run(
@@ -1499,6 +1664,10 @@ class PostgresMetadataStore:
                 publication_timeout=remaining,
             )
         )
+
+    async def _publish_scoped_artifact(self, record: ArtifactRecordV1) -> bool:
+        async with self._runner.transaction() as connection:
+            return await self._put_artifact_reference(connection, record)
 
     async def _publish_artifact(
         self, record: ArtifactRecordV1, publication_budget: Callable[[], float] | None
@@ -1600,7 +1769,7 @@ class PostgresMetadataStore:
     async def _publish_parser_action_result(
         self, action_key: str, artifact_id: str
     ) -> None:
-        async with self._runner._engine.begin() as connection:
+        async with self._runner.transaction() as connection:
             await connection.execute(
                 text(
                     "INSERT INTO fundamental.parser_action_results(action_key, artifact_id) "
@@ -1794,7 +1963,7 @@ class PostgresMetadataStore:
             if self._closed:
                 return
             try:
-                self._runner.run(self._release_all_ingestion_locks())
+                self._runner.run(self._release_all_ingestion_locks(), cleanup=True)
             finally:
                 self._runner.close()
                 self._ready = False
@@ -1825,6 +1994,7 @@ class PostgresContentStore:
         self._metadata = metadata
 
     def put(self, content: bytes, *, media_type: str) -> str:
+        _check_metadata_budget()
         content_hash = self._filesystem.put(content, media_type=media_type)
         self._metadata.register_content(
             content_hash, media_type=media_type, byte_length=len(content)
@@ -1832,6 +2002,7 @@ class PostgresContentStore:
         return content_hash
 
     def get(self, content_hash: str, *, media_type: str) -> bytes:
+        _check_metadata_budget()
         content = self._filesystem.get(content_hash, media_type=media_type)
         self._metadata.register_content(
             content_hash, media_type=media_type, byte_length=len(content)

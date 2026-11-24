@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
@@ -420,12 +420,16 @@ class FiscalDiscovery:
         content: ContentAddressedStore,
         capture_lock: Callable[[str], AbstractContextManager[None]],
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        operation: Callable[
+            [datetime], AbstractContextManager[None]
+        ] = lambda _: nullcontext(),
     ) -> None:
         self._provider = provider
         self._artifacts = artifacts
         self._content = content
         self._capture_lock = capture_lock
         self._clock = clock
+        self._operation = operation
 
     @staticmethod
     def _uri(filename: str) -> str:
@@ -599,11 +603,14 @@ class FiscalDiscovery:
     def read(
         self, artifact_id: str, *, deadline_at: datetime
     ) -> FiscalDiscoveryEvidenceV1:
-        check_deadline = partial(self._before_deadline, deadline_at)
-        record = self._current_record(artifact_id, check_deadline)
-        if record is None:
-            raise SnapshotError("ARTIFACT_NOT_FOUND", "fiscal discovery is unavailable")
-        return self._read(artifact_id, record, check_deadline).evidence
+        with self._operation(deadline_at):
+            check_deadline = partial(self._before_deadline, deadline_at)
+            record = self._current_record(artifact_id, check_deadline)
+            if record is None:
+                raise SnapshotError(
+                    "ARTIFACT_NOT_FOUND", "fiscal discovery is unavailable"
+                )
+            return self._read(artifact_id, record, check_deadline).evidence
 
     def read_for_validation(
         self, artifact_id: str, accession_number: str, *, deadline_at: datetime
@@ -612,13 +619,16 @@ class FiscalDiscovery:
         FiscalFilingV1,
         tuple[tuple[str, ArtifactRecordV1 | None], ...],
     ]:
-        check_deadline = partial(self._before_deadline, deadline_at)
-        record = self._current_record(artifact_id, check_deadline)
-        if record is None:
-            raise SnapshotError("ARTIFACT_NOT_FOUND", "fiscal discovery is unavailable")
-        verified = self._read(
-            artifact_id, record, check_deadline, target_accession=accession_number
-        )
+        with self._operation(deadline_at):
+            check_deadline = partial(self._before_deadline, deadline_at)
+            record = self._current_record(artifact_id, check_deadline)
+            if record is None:
+                raise SnapshotError(
+                    "ARTIFACT_NOT_FOUND", "fiscal discovery is unavailable"
+                )
+            verified = self._read(
+                artifact_id, record, check_deadline, target_accession=accession_number
+            )
         if (
             verified.evidence.is_retry_attempt
             or verified.target is None
@@ -738,6 +748,12 @@ class FiscalDiscovery:
         request: FiscalDiscoveryRequestV1,
         *,
         deadline_at: datetime,
+    ) -> tuple[FiscalDiscoveryEvidenceV1, ArtifactPublicationV1]:
+        with self._operation(deadline_at):
+            return self._execute(request, deadline_at)
+
+    def _execute(
+        self, request: FiscalDiscoveryRequestV1, deadline_at: datetime
     ) -> tuple[FiscalDiscoveryEvidenceV1, ArtifactPublicationV1]:
         check_deadline = partial(self._before_deadline, deadline_at)
         check_deadline()

@@ -11,6 +11,7 @@ from typing import Literal, Protocol, TypeVar
 
 from pydantic import AwareDatetime, Field
 
+from .artifact_evidence import EvidenceArtifactReader
 from .contracts import StrictModel
 from .replay import ArtifactRecordV1
 from .sec_source import (
@@ -121,11 +122,19 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
         content: ContentAddressedStore,
         capture_lock: Callable[[str], AbstractContextManager[None]],
         check_deadline: Callable[[], object] = lambda: None,
+        replay_reader: EvidenceArtifactReader | None = None,
+        publish_receipt: Callable[[str, object, tuple[str, ...]], object] | None = None,
     ) -> None:
         super().__init__(delegate.policy)
         self._delegate = delegate
         self.scope = scope
-        self._receipts = receipts
+        self._receipts: EvidenceArtifactReader = replay_reader or receipts
+        self._replay_only = replay_reader is not None
+        self._publish_receipt = publish_receipt or (
+            lambda identity, value, dependencies: receipts.put(
+                identity, value, dependencies
+            )
+        )
         self._content = content
         self._capture_lock = capture_lock
         self._check_deadline = check_deadline
@@ -152,6 +161,10 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
             receipt, _, response = retained
             self._observed[uri] = receipt
             return response
+        if self._replay_only:
+            raise SnapshotError(
+                "SEC_CAPTURE_MISSING", "required scoped SEC capture is missing"
+            )
         key = artifact_id.removeprefix("sec-response:")
         archive_key = self._archive_key(uri)
         with self._capture_lock(archive_key or key):
@@ -217,10 +230,10 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
                         accession_number=self.scope.accession_number,
                         **stored.model_dump(),
                     )
-                    self._receipts.put(archive_id, archived, (content_hash,))
+                    self._publish_receipt(archive_id, archived, (content_hash,))
             receipt = SecResponseReceiptV1(scope=self.scope, **stored.model_dump())
             self._check_deadline()
-            self._receipts.put(artifact_id, receipt, (stored.content_hash,))
+            self._publish_receipt(artifact_id, receipt, (stored.content_hash,))
             self._check_deadline()
             self._observed[uri] = receipt
             return response
