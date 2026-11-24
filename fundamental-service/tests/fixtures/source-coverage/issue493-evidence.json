@@ -1,0 +1,169 @@
+{
+  "protocol": "source-coverage-portable-evidence-v1",
+  "issue": 493,
+  "implementation_commit": "bc52a6a59d157865060a130386b00501916030b3",
+  "cohort_frozen_commit": "a6220db071df8fc39e70bbbee8cc70f2da8b6533",
+  "release_url": "https://github.com/sosodennis/value-investment-agent/releases/tag/issue-493-source-coverage-v1",
+  "archive": {
+    "url": "https://github.com/sosodennis/value-investment-agent/releases/download/issue-493-source-coverage-v1/issue493-evidence-v1.tar.gz",
+    "sha256": "512ab606420e002b42130f3baa68f4d36c9abae8cce5036dcef16a655fcfdcaf",
+    "bytes": 325479,
+    "file_count": 50,
+    "internal_manifest": "package-manifest.json"
+  },
+  "repository_inputs": {
+    "fundamental-service/tests/fixtures/source-coverage/issue493-cohort.json": "4bab59e99e99af7e86ba8b62a24f5d141df45fd9b7288c5ce08d332d0b56bbab",
+    "fundamental-service/tests/fixtures/source-coverage/issue493-matrix.json": "ca0c6ce00a153bd621f0dcbec67a0f022423930a17e137983157c6e095c44d5e",
+    "fundamental-service/tests/fixtures/sec-edgar/capture_manifest.json": "b15468dec2c85c163ad3ef86b4ee4b8096bb71aa699f960a3981b235da4f88da",
+    "fundamental-service/tests/fixtures/sec-edgar/arelle-taxonomy-cache-2024.zip": "c4b12e9078bae2a14f1576c9a05a2679f13f824cb02feeac94cfff77e21d278e",
+    "fundamental-service/uv.lock": "229bc76c75019d54df8c1cba240839bacf01e56d7493f4bc615e058c4e5f6f11"
+  },
+  "runtime_identity": {
+    "arelle-release": "2.47.4",
+    "pydantic": "2.14.2",
+    "python": "3.12.12"
+  },
+  "policy": {
+    "version": "free-market-source-use-v5",
+    "digest": "e6b7b31dfd37f8d7c5b7c3547b4cccf86b24029db609ba05689e344b3fd2b597"
+  },
+  "reports": {
+    "result.json": {
+      "sha256": "639d63ae43cd4d3931aedee3845c577e8eed42cd1369efaa5b7dafe07e4a88ea"
+    },
+    "replay-proof.json": {
+      "sha256": "8cd5441641cbdebb03bf75a7725317eb587133d9d68af113ccbde3eb2b33ee20"
+    },
+    "replay_probe.py": {
+      "sha256": "fc1a8b18ac54cb162ee8fd592b1f24df569cab944195978f552ae39ce319e3fa"
+    },
+    "verification-summary.json": {
+      "sha256": "51adf0273a9de95118d00aa30f0af5f65d5864011e4a42b3be8bbba1ba4641db"
+    },
+    "focused-tests.txt": {
+      "sha256": "65c3fb22f50899f8396a9175cafb3b62cccac2701f9c563c2d7bd5b99d0f3b6c"
+    },
+    "ruff.txt": {
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "format.txt": {
+      "sha256": "eee76f865de5a9f2456950f710ae5d5f9b5bd0ea02aa54f614c5eed6642a0bfd"
+    },
+    "mypy.txt": {
+      "sha256": "f9b031e5c45aa702cd4fef028d465551cb20a2c4698e0913c7b00766b20ac4d8"
+    },
+    "architecture.txt": {
+      "sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+    }
+  },
+  "sec_results": [
+    {
+      "case_id": "aapl-fy2024-original",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "archive_sha256": "c19944b22ee101abbfd69b2e6fa4f30e0ec511ad276fdbb3cf3ef5dce3938fee",
+      "parsing": "parsed",
+      "fact_count": 1127,
+      "calculation_qualification": "SEC_VALIDATION_REQUIRED",
+      "parser_artifact_id": "source-coverage-parser:aapl-fy2024-original",
+      "parser_artifact_sha256": "616188afb8b76814a1ac9bc0e5c8c27f3c7570d6b2eb65704d50419dc2437694"
+    },
+    {
+      "case_id": "tsla-fy2023-original",
+      "source_sha256": "450428c73c70775ccc288b2ac48ac2d6b81a128357fe6e92f0cf3ab76a05322e",
+      "archive_sha256": "078b4b6ecfcb19653af5b75e87435104eb015094da70c050d9c568e1a43d1ec4",
+      "parsing": "partial",
+      "fact_count": 276,
+      "calculation_qualification": "SEC_VALIDATION_REQUIRED",
+      "parser_artifact_id": "source-coverage-parser:tsla-fy2023-original",
+      "parser_artifact_sha256": "918f3000c5dfe6980ee6f278af310ccc706caaf8878ad9bae6d1b19771c2da14"
+    },
+    {
+      "case_id": "tsla-fy2024-amendment",
+      "source_sha256": "ac21201742aa3e815678e0f1dad7605b9f659423966981497b1e1e285233a432",
+      "archive_sha256": "90f1933fa37f4937af8a88f70206274b2e6594496f27ed16445f807469761036",
+      "parsing": "unsupported",
+      "fact_count": 0,
+      "calculation_qualification": "SEC_VALIDATION_REQUIRED",
+      "parser_artifact_id": "source-coverage-parser:tsla-fy2024-amendment",
+      "parser_artifact_sha256": "5d7728fb4cb1e3de7e0ceba98bdc43bf930e427b10f68ef469f07cc3fa10592c"
+    }
+  ],
+  "public_results": {
+    "changed_terms_mutation_check": {
+      "status": "refused",
+      "issue_codes": [
+        "SOURCE_USE_TERMS_CHANGED"
+      ]
+    },
+    "earlier_cutoff": {
+      "status": "refused",
+      "issue_codes": [
+        "SOURCE_NOT_AVAILABLE_AT_VALUATION"
+      ]
+    },
+    "missing_terms": {
+      "status": "refused",
+      "issue_codes": [
+        "SOURCE_USE_TERMS_MISSING"
+      ]
+    },
+    "no_policy_rule_mutation_check": {
+      "status": "refused",
+      "issue_codes": [
+        "SOURCE_USE_POLICY_MISSING"
+      ]
+    },
+    "normal_preparation": {
+      "status": "admitted",
+      "issue_codes": []
+    },
+    "raw_data_redistribution": {
+      "status": "refused",
+      "issue_codes": [
+        "SOURCE_USE_PURPOSE_UNSUPPORTED"
+      ]
+    },
+    "wrong_policy_digest": {
+      "status": null,
+      "issue_codes": [
+        "SOURCE_ADMISSION_POLICY_MISMATCH"
+      ]
+    }
+  },
+  "replay": {
+    "after_state_sha256": "9dea3db89389c147377409fae5e75dcf9726eb297c6d675a6243a68d6b65b819",
+    "before_state_sha256": "9dea3db89389c147377409fae5e75dcf9726eb297c6d675a6243a68d6b65b819",
+    "evidence_files": 39,
+    "http_and_parser_entrypoints": "disabled_by_raising_patches",
+    "input_bytes_sha256": "7e59d1cad316c147424289fa9f22d496b1e11467450980dffb5dc9333f09db49",
+    "protocol": "source-coverage-real-retained-replay-probe-v1",
+    "result_sha256": "639d63ae43cd4d3931aedee3845c577e8eed42cd1369efaa5b7dafe07e4a88ea",
+    "same_output_bytes": true,
+    "unchanged_bytes_size_mtime_ns": true
+  },
+  "limitations": [
+    "SEC parse-only, not EFM/DQC completion or canonical ingestion",
+    "Tesla standard facts unavailable under fixed 2024 taxonomy cache; source QName presence preserved (#507)",
+    "NYFed terms whole-document pin mismatch (#506)",
+    "BEA/NYU numerical workbook coverage not exercised",
+    "No default ALFRED/Yahoo/Nasdaq grant; no IR permission established",
+    "No Twelve Data activation",
+    "No financial completeness, valuation qualification, legal certification or market-wide coverage claim"
+  ],
+  "supported_history_threshold": null,
+  "independent_review": {
+    "status": "approved; required CI and main verification remain separate",
+    "implementation_commit": "bc52a6a59d157865060a130386b00501916030b3",
+    "report_url": "https://github.com/sosodennis/value-investment-agent/releases/download/issue-493-source-coverage-v1/issue493-independent-review.md",
+    "sha256": "1ddbe043a295acbe32b43a3f5c699fda176103f9c81dc63b32b78b415ed4060e",
+    "portable_download_verified": true,
+    "findings": "Two P2 findings corrected; all four counterexamples independently refused after correction",
+    "comment_review": {
+      "url": "https://github.com/sosodennis/value-investment-agent/releases/download/issue-493-source-coverage-v1/issue493-comment-review.md",
+      "sha256": "60c3ec584287396c43d5096e81eb22639ab0dd9924417b620230ae20507ee435",
+      "accepted_deletions": 2,
+      "must_kill": 0,
+      "final_inventory": "CLI help docstring and one E402 style suppression only"
+    }
+  }
+}

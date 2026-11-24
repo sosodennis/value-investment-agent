@@ -37,8 +37,8 @@ PYTHONPATH=finance-agent-core uv run --frozen --extra dev --project fundamental-
   --output /tmp/issue493-replay/result.json
 ```
 
-預設不連網。缺少或損壞的 receipt、original、parser report、terms 或 profile pin
-會失敗，不會補抓或修復。結果輸出必須放在 evidence directory 之外。
+預設不連網。重播已完成的證據集時，缺少或損壞的 receipt、original、parser report、
+terms 或 profile pin 會失敗，不會補抓或修復。結果輸出必須放在 evidence directory 之外。
 SEC retained report 的來源、內容完整性、runtime、taxonomy 與 profile 仍會重新核對，
 再從 report 重算觀察；不信任舊的 summary。
 
@@ -49,6 +49,17 @@ Public 成功案例的 cutoff 是原始 request 與實際 capture availability �
 同一指令再跑一次，結果應相同，retained inputs 的 bytes 與 mtime 不變；
 不呼叫 HTTP 或 parser。新環境須使用相同鎖定依賴，identity 不同不能宣稱 identical-input reuse。
 工具首次為未保存的 SEC input 產生 parse-only report 時會執行 parser，之後才可談 reuse。
+
+證據包另附真實 retained-input probe，可在停用 HTTP 與 parser 入口時重跑，
+逐檔比較 bytes、大小與 mtime，並核對輸出與包內結果完全一致：
+
+```sh
+PYTHONPATH=finance-agent-core uv run --frozen --extra dev --project fundamental-service python \
+  /tmp/issue493-replay/reports/replay_probe.py \
+  --evidence-dir /tmp/issue493-replay/evidence \
+  --expected-result /tmp/issue493-replay/reports/result.json \
+  --output /tmp/issue493-replay/replay-proof.json
+```
 
 ## 明確重新取得 public 來源
 
