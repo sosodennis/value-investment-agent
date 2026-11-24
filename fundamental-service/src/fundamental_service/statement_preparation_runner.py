@@ -11,6 +11,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from pydantic import AwareDatetime, TypeAdapter
 from sqlalchemy.exc import SQLAlchemyError
 
 from .annual_discovery_service import AnnualDiscovery
@@ -157,7 +158,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Read installed statement, mapping, validation and release suite pins",
     )
     parser.add_argument("--cik")
-    parser.add_argument("--cutoff-at", help="Explicit ISO 8601 cutoff with timezone")
+    parser.add_argument(
+        "--cutoff-at",
+        type=TypeAdapter(AwareDatetime).validate_python,
+        help="Explicit ISO 8601 cutoff with timezone",
+    )
     parser.add_argument(
         "--original-count",
         type=int,

@@ -129,6 +129,13 @@ def prepare_annual_statements(
             status_code=403,
             retryable=False,
         )
+    if organization_id not in acquisition.authorized_organizations:
+        raise ServiceError(
+            "INGESTION_NOT_AUTHORIZED",
+            "organization is not authorized for SEC data acquisition",
+            status_code=403,
+            retryable=False,
+        )
     if (
         application.snapshot_repository is None
         or application.fact_repository is None
