@@ -1,5 +1,3 @@
-"""Statement purpose uses formal acquisition, mapping, signing and canary owners."""
-
 import base64
 from types import SimpleNamespace
 

@@ -1,5 +1,3 @@
-"""Reproduce statement mapping abstentions with the existing mapping evaluator."""
-
 from __future__ import annotations
 from typing import Literal
 

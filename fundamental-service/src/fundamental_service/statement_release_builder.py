@@ -1,5 +1,3 @@
-"""Assemble statement releases from the existing retained canonical publications."""
-
 from __future__ import annotations
 
 from typing import Protocol

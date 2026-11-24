@@ -1,5 +1,3 @@
-"""Retained annual-statement release purpose and source/fact membership."""
-
 from __future__ import annotations
 
 from typing import Final, Literal, Protocol
