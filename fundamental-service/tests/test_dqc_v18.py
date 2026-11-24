@@ -221,18 +221,29 @@ def test_v18_filing_date_identity_survives_retained_replay(tmp_path: Path):
         bind_dqc_filing_context(report, wrong_context)
 
 
-def test_retained_apple_2022_completes_full_v18_offline_and_preserves_primary_numbers(
+@pytest.mark.parametrize(
+    "accession",
+    [
+        "0001564590-21-039151",
+        "0000320193-21-000105",
+        "0000320193-22-000108",
+    ],
+)
+def test_retained_original_completes_full_v18_offline_and_preserves_primary_numbers(
     tmp_path: Path,
+    accession: str,
 ):
     names = (
         "ISSUE494_V18_CATALOG_PATH",
         "ISSUE494_V18_EDGAR_DIR",
         "ISSUE494_V18_XULE_DIR",
         "ISSUE494_V18_CACHE_DIR",
-        "ISSUE494_V18_APPLE_2022_ARCHIVE_PATH",
+        "ISSUE494_V18_CAPTURE_ROOT",
     )
     if not all(os.environ.get(name) for name in names):
-        pytest.skip("pinned V18 resources and retained Apple FY2022 are not configured")
+        pytest.skip(
+            "pinned V18 resources and retained SEC originals are not configured"
+        )
     catalog = DqcRulesetCatalogV1.model_validate_json(
         Path(os.environ[names[0]]).read_bytes()
     )
@@ -257,9 +268,7 @@ def test_retained_apple_2022_completes_full_v18_offline_and_preserves_primary_nu
         ).read_bytes()
     )
     original = next(
-        item
-        for item in golden["filings"]
-        if item["accession_number"] == "0000320193-22-000108"
+        item for item in golden["filings"] if item["accession_number"] == accession
     )
     cohort = json.loads(
         (
@@ -276,7 +285,13 @@ def test_retained_apple_2022_completes_full_v18_offline_and_preserves_primary_nu
         for record in filing["source_records"]
         if record["uri"].endswith("-xbrl.zip")
     )
-    archive_path = Path(os.environ[names[4]])
+    archive_hash = archive_receipt["content_hash"]
+    archive_path = (
+        Path(os.environ[names[4]])
+        / "content"
+        / archive_hash[:2]
+        / (archive_hash + ".bin")
+    )
     assert (
         hashlib.sha256(archive_path.read_bytes()).hexdigest()
         == archive_receipt["content_hash"]
@@ -287,7 +302,8 @@ def test_retained_apple_2022_completes_full_v18_offline_and_preserves_primary_nu
     report = parse_filing_offline(
         filing_path,
         profile=profile,
-        taxonomy_version="us-gaap-2022",
+        taxonomy_version="us-gaap-"
+        + filing["taxonomy_namespaces"]["us-gaap"].split("/")[-1],
         taxonomy_cache_dir=Path(os.environ[names[3]]),
         source_content_hash=hashlib.sha256(filing_path.read_bytes()).hexdigest(),
     )
@@ -295,9 +311,9 @@ def test_retained_apple_2022_completes_full_v18_offline_and_preserves_primary_nu
     bound = bind_dqc_filing_context(
         report,
         DqcFilingContextV1(
-            issuer_id="0000320193",
+            issuer_id=filing["issuer_id"],
             accession_number=original["accession_number"],
-            filing_date=date(2022, 10, 28),
+            filing_date=date.fromisoformat(filing["filing_date"]),
             dqc_version="v18",
             policy_digest=dqc_applicability_policy_digest("v18"),
         ),
@@ -305,7 +321,7 @@ def test_retained_apple_2022_completes_full_v18_offline_and_preserves_primary_nu
     assert bound.validation_engines == ("sec-efm", "dqc-us")
     assert bound.network_attempt_count == 0
     assert bound.blocking_finding_codes() == ()
-    selected = catalog.select(("http://fasb.org/us-gaap/2022",))
+    selected = catalog.select((filing["taxonomy_namespaces"]["us-gaap"],))
     assert (
         f"dqc-full-taxonomy-ruleset-v1:{selected.taxonomy_namespace}:{selected.sha256}"
         in bound.validation_evidence

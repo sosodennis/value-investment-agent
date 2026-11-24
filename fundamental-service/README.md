@@ -561,6 +561,7 @@ Use the EDGAR plugin from
 
 Mount `catalog.json` and its three derived ZIPs read-only, then set
 `FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH` to the container catalog path.
+Each catalog `path` must name the ZIP's mounted container location.
 This setting is separate from the modern catalog. Each request must select the
 matching profile explicitly. V18 evaluates its original constants without
 EDGAR's precomputed constants from a different taxonomy. Its filing-date policy
@@ -570,6 +571,33 @@ The parser activates the unchanged official resource package for its entire
 validation lifetime. It replaces Xule's package extraction lifecycle, which
 otherwise deletes the temporary ZIP before resource-backed assertions run.
 Completion requires both package activation and source-constant evidence.
+
+Rebuild the captured taxonomy dependencies in a new cache directory:
+
+```sh
+uv run --frozen --project fundamental-service python \
+  fundamental-service/scripts/rebuild_taxonomy_cache.py \
+  --manifest fundamental-service/tests/fixtures/annual-statements/issue494-v18-taxonomy-resources.json \
+  --destination /path/to/new-taxonomy-cache \
+  --allow-network
+```
+
+Set `FUNDAMENTAL_SEC_USER_AGENT` to your SEC contact before network preparation.
+The manifest pins each resource URI, byte count and SHA-256, plus the complete
+cache hash. HTTPS retrieval preserves the original URI as the cache key. V18
+CSV retrieval uses the fixed official source commit. Changed upstream bytes,
+corrupt retained files and unexpected cache files fail without replacement.
+Operational lock files are excluded from this retained input. To rebuild from
+retained bytes without network, replace `--allow-network` with
+`--retained-cache /path/to/verified-cache`.
+
+Run the three original-filing integration cases with
+`ISSUE494_V18_CATALOG_PATH`, `ISSUE494_V18_EDGAR_DIR`, `ISSUE494_V18_XULE_DIR`,
+`ISSUE494_V18_CACHE_DIR` and `ISSUE494_V18_CAPTURE_ROOT` set. The capture root is
+the SEC capture store for the fixed `issue494-cohort.json` originals. Run
+`uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests/test_dqc_v18.py -q`.
+These cases verify the original archive hash, full offline validation, exact
+namespace selection and all independently recorded primary statement values.
 
 `FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH` optionally names a deployment JSON
 catalog. Bind-mount the catalog and its official full DQC v31.0.3 ruleset files

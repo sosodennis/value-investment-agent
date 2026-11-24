@@ -76,7 +76,6 @@ def _manifest(root: Path):
             {
                 "uri": "https://xbrl.fasb.org/example.xsd",
                 "retrieval_uri": "https://xbrl.fasb.org/example.xsd",
-                "cache_path": "https/xbrl.fasb.org/example.xsd",
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 "byte_size": path.stat().st_size,
             }
@@ -104,6 +103,6 @@ def test_cache_rebuild_never_downloads_implicitly(tmp_path: Path):
     with pytest.raises(ValueError, match="is unavailable"):
         taxonomy.rebuild(manifest, tmp_path / "target")
     changed = manifest.resources[0].model_dump()
-    changed["cache_path"] = "../outside.xsd"
+    changed["uri"] = "https://xbrl.fasb.org/../outside.xsd"
     with pytest.raises(ValueError, match="relative cache path"):
         taxonomy.TaxonomyResource.model_validate(changed)

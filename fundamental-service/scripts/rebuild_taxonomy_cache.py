@@ -23,15 +23,14 @@ class TaxonomyResource(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     uri: str
-    retrieval_uri: str
-    cache_path: str
+    retrieval_uri: str | None = None
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     byte_size: int = Field(gt=0, le=MAX_RESOURCE_BYTES)
 
     @model_validator(mode="after")
     def exact_cache_location(self) -> TaxonomyResource:
         uri = urlsplit(self.uri)
-        retrieval = urlsplit(self.retrieval_uri)
+        retrieval = urlsplit(self.download_uri)
         path = PurePosixPath(self.cache_path)
         if (
             uri.scheme not in {"http", "https"}
@@ -44,7 +43,6 @@ class TaxonomyResource(BaseModel):
             or path.is_absolute()
             or ".." in path.parts
             or "\\" in self.cache_path
-            or self.cache_path != f"{uri.scheme}/{uri.netloc}{uri.path}"
             or retrieval.scheme != "https"
             or retrieval.hostname != uri.hostname
             or retrieval.username
@@ -55,6 +53,15 @@ class TaxonomyResource(BaseModel):
         ):
             raise ValueError("taxonomy URI must match its relative cache path")
         return self
+
+    @property
+    def cache_path(self) -> str:
+        uri = urlsplit(self.uri)
+        return f"{uri.scheme}/{uri.netloc}{uri.path}"
+
+    @property
+    def download_uri(self) -> str:
+        return self.retrieval_uri or self.uri.replace("http://", "https://", 1)
 
 
 class TaxonomyManifest(BaseModel):
@@ -72,13 +79,15 @@ class TaxonomyManifest(BaseModel):
         return self
 
 
-def _retain(path: Path, payload: bytes) -> None:
+def _retain(path: Path, payload: bytes, staging_directory: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         if path.read_bytes() != payload:
             raise ValueError("retained taxonomy resource differs from its pin")
         return
-    descriptor, temporary = tempfile.mkstemp(prefix=".resource-", dir=path.parent)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=".taxonomy-resource-", dir=staging_directory
+    )
     try:
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(payload)
@@ -120,7 +129,7 @@ def rebuild(
                     )
                 time.sleep(0.25)
             request = Request(
-                item.retrieval_uri,
+                item.download_uri,
                 headers={
                     "User-Agent": user_agent
                     or "value-investment-agent/taxonomy-resources"
@@ -135,7 +144,7 @@ def rebuild(
             or hashlib.sha256(payload).hexdigest() != item.sha256
         ):
             raise ValueError(f"taxonomy resource differs from its pin: {item.uri}")
-        _retain(target, payload)
+        _retain(target, payload, destination.parent)
     digest = _directory_hash(destination)
     if digest != manifest.cache_sha256:
         raise ValueError("taxonomy cache composite hash differs from its manifest")
