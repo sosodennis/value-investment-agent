@@ -36,7 +36,11 @@ from .issuer_market_preparation import (
     IssuerMarketPreparationRequestV1,
 )
 from .market_source_selection import DailyMarketRatePolicyV1
-from .original_preparation import OriginalPreparation, OriginalPreparationReads
+from .original_preparation import (
+    OriginalPreparation,
+    OriginalPreparationReads,
+    OriginalPreparationRequestV1,
+)
 from .policies import ModelSpecV1, executable_model_specs
 from .public_acquisition import PublicSourceAcquisitionRequestV1
 from .public_admission import PublicSourceAdmissionRequestV1
@@ -548,6 +552,11 @@ class OriginalSourcePlan:
             if self._original_reads is not None
             else self._originals.read_with_validations(reference.artifact_id)
         )
+        if not isinstance(prepared.request, OriginalPreparationRequestV1):
+            raise SnapshotError(
+                "ORIGINAL_SOURCE_PLAN_PURPOSE_MISMATCH",
+                "valuation source plans require their own original preparation purpose",
+            )
         codes = set(prepared.issue_codes)
         if not prepared.filings:
             codes.add("ORIGINAL_SOURCE_PLAN_FILINGS_MISSING")

@@ -66,6 +66,7 @@ from .original_preparation import (
     OriginalValidationEvidenceV1,
     OriginalValidationRequestV1,
     OriginalValidationRuntimeV1,
+    StatementOriginalPreparationRequestV1,
 )
 from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
 from .public_acquisition import read_public_source_acquisition
@@ -913,14 +914,26 @@ class SecAcquisitionUseCase:
             declared_source_revision=request.source_revision,
             validation_profile_id=request.validation_profile_id,
         )
+        if isinstance(
+            prepared.request, StatementOriginalPreparationRequestV1
+        ) and not isinstance(request, AutomaticStatementSecIngestionRequestV1):
+            raise SnapshotError(
+                "ORIGINAL_PREPARATION_PURPOSE_MISMATCH",
+                "statement original preparation cannot authorize valuation ingestion",
+            )
         if (
             (
                 prepared.issue_codes
                 and not isinstance(request, AutomaticStatementSecIngestionRequestV1)
             )
             or item.issue_codes
-            or prepared.retryable
-            or prepared.request.runtime != runtime
+            or (
+                prepared.retryable
+                and not isinstance(request, AutomaticStatementSecIngestionRequestV1)
+            )
+            or validation.retryable
+            or prepared.request.runtime_for(request.filing.accession_number or "")
+            != runtime
             or request.parser_version != runtime.arelle_version
             or request.taxonomy_manifest_id != runtime.taxonomy_manifest_id
             or request.taxonomy_version != runtime.taxonomy_version
