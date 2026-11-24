@@ -83,8 +83,9 @@ def test_prepared_original_identity_survives_later_submissions_capture(
     )
 
 
+@pytest.mark.parametrize("cross_midnight", (False, True))
 def test_current_cutoff_preserves_original_selection_on_acquisition_and_replay(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, cross_midnight
 ):
     from fundamental_service.current_preparation import (
         CurrentSourcePreparation,
@@ -103,13 +104,39 @@ def test_current_cutoff_preserves_original_selection_on_acquisition_and_replay(
     )
 
     value = case(tmp_path / "source", monkeypatch)
-    prepared, _ = execute(value)
     request, *_ = source_case(tmp_path / "request")
+    preparation_request = value.request
+    if cross_midnight:
+        requested_at = request.valuation_timestamp.replace(hour=23, minute=55)
+        annual, _ = value.discovery.execute(
+            value.annual_request.model_copy(
+                update={"valuation_timestamp": requested_at}
+            ),
+            deadline_at=value.deadline,
+        )
+        preparation_request = value.request.model_copy(
+            update={
+                "annual": value.service.reference(
+                    annual.artifact_id, "sec-original-annual-discovery-v1"
+                )
+            }
+        )
+        filing_date = annual.selection.selected[0].filing_date
+        lookback = (requested_at.date() - filing_date).days
+        request = request.model_copy(
+            update={
+                "valuation_timestamp": requested_at,
+                "filing": request.filing.model_copy(update={"lookback_days": lookback}),
+            }
+        )
+    prepared, _ = execute(value, preparation_request)
     original_ref = value.service.reference(
         prepared.artifact_id, "sec-original-preparation-v1"
     )
     request = request.model_copy(update={"original_preparation": original_ref})
     requested_at = request.valuation_timestamp
+    if cross_midnight:
+        assert acquire(request, value.acquisition).snapshot_id is not None
     effective_at = requested_at + timedelta(seconds=600)
     provider = Provider()
     provider.source = replace(
@@ -146,25 +173,140 @@ def test_current_cutoff_preserves_original_selection_on_acquisition_and_replay(
         prepared.filings[0].validation.artifact_id
     )
     assert validation.original.decision_at == requested_at
+
+    from fundamental_service.operations import ServiceError
+
+    def missing_release(_request):
+        raise ServiceError(
+            "SNAPSHOT_NOT_FOUND",
+            "no activated release",
+            status_code=404,
+            retryable=False,
+        )
+
+    def incomplete_valuation(*args, **kwargs):
+        pytest.fail("an incomplete original cannot authorize valuation")
+
     runner = SourcePreparationRunner(
         application=SimpleNamespace(
             snapshot=lambda key: value.metadata.snapshots[key],
             artifact_store=value.artifacts,
+            resolve_snapshot=missing_release,
+            fact_repository=SimpleNamespace(get=value.metadata.facts.__getitem__),
+            prepare_valuation=incomplete_valuation,
+            calculate_valuation=incomplete_valuation,
         ),
         metadata=value.metadata,
         acquisition=value.acquisition,
         artifacts=value.artifacts,
         canary=None,
+        public_acquisition=public,
     )
     groups = runner._plan_mappings(plan)
     assert groups and groups[0]
+    from fundamental_service.automatic_data_release import AutomaticDataReleasePolicyV1
+    from fundamental_service.data_releases import ArtifactRefV1
+    from fundamental_service.preparation_release import assemble_preparation_release
+
+    batch = value.artifacts.get(first.mapping_evidence_ref)
+    release = assemble_preparation_release(
+        plan=plan,
+        snapshot=snapshot,
+        facts=tuple(value.metadata.facts[key] for key in first.canonical_fact_ids),
+        mappings=tuple(
+            value.metadata.mappings[ref.decision_id]
+            for group in groups
+            for ref in group
+        ),
+        batch_refs=(
+            ArtifactRefV1(
+                artifact_id=batch.artifact_id,
+                content_hash=batch.content_hash,
+                media_type=batch.media_type,
+                role="automatic-mapping-batch-decision-v1",
+            ),
+        ),
+        artifacts=value.artifacts,
+        policy=AutomaticDataReleasePolicyV1(
+            profile_id=plan.release_profile_id,
+            scope="security",
+            model_id=plan.model_id,
+            model_version=frozen.model_version,
+            mapping_version=frozen.mapping_version,
+            requirements_profile_digest=plan.requirements_profile.digest,
+            parser_version=snapshot.parser_version,
+            quality_profile_digest="1" * 64,
+            validation_profile_digest=snapshot.validation_profile_digest,
+            verifier_id="synthetic-machine",
+            workflow_identity="synthetic/automatic",
+        ),
+        working_capital_policy=None,
+        conditional_capital_policy=None,
+        prepared_refs=(),
+    )
+    assert release.source_plan == plan
+    from fundamental_service.automatic_release_evidence import (
+        require_automatic_release_sources,
+    )
+    from fundamental_service.automatic_data_release import AutomaticDataReleaseRequestV1
+    from fundamental_service.preparation_release import (
+        read_preparation_release_artifact,
+    )
+
+    assert require_automatic_release_sources(
+        release.manifest,
+        release.content,
+        snapshots=SimpleNamespace(get=lambda key: value.metadata.snapshots[key]),
+        mappings=SimpleNamespace(get_mapping=value.metadata.mappings.__getitem__),
+        artifacts=value.artifacts,
+        validation_profile_digest=snapshot.validation_profile_digest,
+    )
+    published = value.artifacts.put_with_receipt(
+        "synthetic-current-assembled-release-" + release.manifest.manifest_digest,
+        release,
+    )
+    released = read_preparation_release_artifact(
+        value.artifacts,
+        ArtifactRefV1(
+            artifact_id=published.artifact.artifact_id,
+            content_hash=published.artifact.content_hash,
+            media_type=published.artifact.media_type,
+            role="automatic-preparation-release-v1",
+        ),
+        AutomaticDataReleaseRequestV1,
+    )
+    assert released == release
     again = acquire(frozen, value.acquisition)
     assert again.status == "reused" and again.snapshot_id == first.snapshot_id
     assert runner._plan_mappings(plan) == groups
     assert value.acquisition._original_reads.get() is None
 
+    from fundamental_service.preparation_runner import SourcePreparationEvidenceV1
+
+    def prepare_current():
+        return runner.run(
+            plan,
+            actor_id="caller",
+            organization_id="org",
+            correlation_id="current-original-regression",
+            deadline_at=value.deadline,
+            prepare_only=True,
+        )
+
+    receipt = prepare_current()
+    report = SourcePreparationEvidenceV1.model_validate_json(
+        value.artifacts.read(receipt.artifact.artifact_id)
+    )
+    assert report.public_source_cutoff == plan.public_source_cutoff
+    assert report.status == "blocked"
+    assert report.preparation is report.calculation is None
+    assert "non_operating_assets" in report.source_outcomes[0].missing_evidence
+    calls = value.state.provider_calls, value.state.parser_calls
+    replay = prepare_current()
+    assert not replay.wrote and replay.artifact == receipt.artifact
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+
     from pydantic import ValidationError
-    from fundamental_service.operations import ServiceError
 
     cutoff = frozen.public_source_cutoff
     with pytest.raises(ValidationError):
@@ -202,7 +344,7 @@ def test_current_cutoff_preserves_original_selection_on_acquisition_and_replay(
         acquire(changed, value.acquisition)
     assert error.value.code == "ORIGINAL_PREPARATION_INVALID"
     assert (value.state.provider_calls, value.state.parser_calls) == calls
-    assert len(value.metadata.acquisitions) == 1
+    assert len(value.metadata.acquisitions) == (2 if cross_midnight else 1)
 
 
 def _prepared_case(tmp_path, monkeypatch):

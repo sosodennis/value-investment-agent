@@ -964,8 +964,7 @@ class SecAcquisitionUseCase:
             or original_history_identity_key(item.identity, policy)
             != original_history_identity_key(request.identity, policy)
             or original.filing.filing_date
-            < request.valuation_timestamp.date()
-            - timedelta(days=request.filing.lookback_days)
+            < selection_at.date() - timedelta(days=request.filing.lookback_days)
         ):
             raise SnapshotError(
                 "ORIGINAL_PREPARATION_INVALID", "pinned original scope differs"
