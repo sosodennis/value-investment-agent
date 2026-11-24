@@ -23,6 +23,8 @@ from .statement_contracts import (
     StatementProfileV1,
     StatementScopeV1,
     StatementAnnualColumnV1,
+    DurationStatementPeriodV1,
+    InstantStatementPeriodV1,
     StatementMissingEvidenceV1,
     statement_period_id,
 )
@@ -135,6 +137,7 @@ def statement_missing_evidence(
     observed_fields: set[str],
 ) -> tuple[StatementMissingEvidenceV1, ...]:
     missing = []
+    definitions = {row.row_id: row for row in batch.statement_profile.rows}
     for role in batch.roles:
         if role.normalized_field in observed_fields:
             continue
@@ -157,11 +160,18 @@ def statement_missing_evidence(
         ):
             status = "unsupported"
             reason = "The installed mapping policy cannot establish this primary statement row."
+        period = column.period
+        if definitions[
+            role.normalized_field
+        ].statement == "balance_sheet" and isinstance(
+            period, DurationStatementPeriodV1
+        ):
+            period = InstantStatementPeriodV1(instant=period.period_end)
         missing.append(
             StatementMissingEvidenceV1.model_validate(
                 dict(
                     row_id=role.normalized_field,
-                    period_id=statement_period_id(scope, column.period),
+                    period_id=statement_period_id(scope, period),
                     missing=MissingValueV1(status=status, reason=reason),
                     quality_status=QualityStatus.PROVISIONAL,
                     issue_codes=codes,

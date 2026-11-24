@@ -362,3 +362,21 @@ def test_statement_candidate_survives_postgres_restart_without_overwriting_input
         assert inventory(content_root) == before
     finally:
         metadata.close()
+
+
+def test_missing_balance_sheet_row_keeps_retained_mapping_reason(tmp_path, monkeypatch):
+    _, _, statement, _ = release_case(tmp_path, monkeypatch)
+    table = next(
+        table
+        for table in statement.statements.tables
+        if table.statement == "balance_sheet"
+    )
+    row = next(row for row in table.rows if row.definition.row_id == "total_assets")
+    missing = next(
+        item
+        for item in statement.projection.missing_evidence
+        if item.row_id == "total_assets"
+    )
+    assert row.cells[0].issue_codes == missing.issue_codes
+    assert row.cells[0].evidence_refs == missing.evidence_refs
+    assert row.cells[0].missing == missing.missing
