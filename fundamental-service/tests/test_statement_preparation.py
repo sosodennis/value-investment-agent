@@ -1,5 +1,3 @@
-"""The production statement operator uses source owners without an Agent run."""
-
 from types import SimpleNamespace
 
 import pytest

@@ -1,5 +1,3 @@
-"""Prepare, sign, publish and read annual statements through existing owners."""
-
 from __future__ import annotations
 
 from datetime import datetime
