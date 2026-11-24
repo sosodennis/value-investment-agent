@@ -1,0 +1,1016 @@
+{
+  "protocol": "source-use-research-matrix-v1",
+  "checked_on": "2026-11-24",
+  "rows": [
+    {
+      "row_id": "sec-statements",
+      "data_definition": "原始年度/季度三表、附註與原始標準及自訂XBRL事實",
+      "owner": "sec",
+      "source_ids": [
+        "sec-filing",
+        "sec-filing-archive",
+        "sec-submissions"
+      ],
+      "provider_id": null,
+      "metric_ids": [],
+      "source_profiles": [
+        "sec-pit-v1",
+        "sec-public-us-v1"
+      ],
+      "original_urls": [
+        "https://data.sec.gov/submissions/CIK0000320193.json",
+        "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+        "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+        "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"
+      ],
+      "free_scope": "無帳號或API key；本票只採公開EDGAR metadata與申報原文，不將發行人文書當作§105政府作品。",
+      "update_and_cost": "10-K年度、10-Q季度及修訂隨申報更新；無供應商費，需持續維護taxonomy、parser、mapping及rate limits。原文保留採既有store，不重複下載。",
+      "time_and_coverage": "本票僅固定三個accession。申報accepted_at、報告期間與captured_at分開；CompanyFacts現時空值不證明原始披露缺失。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "raw_display": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        },
+        "redistribution": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        }
+      },
+      "evidence_refs": [
+        "sec-access",
+        "sec-developer"
+      ],
+      "downstream_impact": "支持#494/#496建立來源定位；本票不證明完整三表或指標所需mapping。"
+    },
+    {
+      "row_id": "sec-history",
+      "data_definition": "原版與修訂版的年度/季度歷史與原始可得日",
+      "owner": "sec",
+      "source_ids": [
+        "sec-filing",
+        "sec-filing-archive",
+        "sec-submissions"
+      ],
+      "provider_id": null,
+      "metric_ids": [],
+      "source_profiles": [
+        "sec-pit-v1",
+        "sec-public-us-v1"
+      ],
+      "original_urls": [
+        "https://data.sec.gov/submissions/CIK0000320193.json",
+        "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+        "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+        "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"
+      ],
+      "free_scope": "無帳號或API key；本票只採公開EDGAR metadata與申報原文，不將發行人文書當作§105政府作品。",
+      "update_and_cost": "10-K年度、10-Q季度及修訂隨申報更新；無供應商費，需持續維護taxonomy、parser、mapping及rate limits。原文保留採既有store，不重複下載。",
+      "time_and_coverage": "本票僅固定三個accession。申報accepted_at、報告期間與captured_at分開；CompanyFacts現時空值不證明原始披露缺失。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "raw_display": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        },
+        "redistribution": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        }
+      },
+      "evidence_refs": [
+        "sec-access",
+        "sec-developer"
+      ],
+      "downstream_impact": "支持#494，#495另驗季度與TTM。Apple含52/53週比較，不年化或推定可比；修訂範圍須核對。"
+    },
+    {
+      "row_id": "sec-shares",
+      "data_definition": "DEI期末股數、加權平均基本/稀釋股數與股別contexts",
+      "owner": "sec",
+      "source_ids": [
+        "sec-filing",
+        "sec-filing-archive",
+        "sec-submissions"
+      ],
+      "provider_id": null,
+      "metric_ids": [],
+      "source_profiles": [
+        "sec-pit-v1",
+        "sec-public-us-v1"
+      ],
+      "original_urls": [
+        "https://data.sec.gov/submissions/CIK0000320193.json",
+        "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+        "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+        "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"
+      ],
+      "free_scope": "無帳號或API key；本票只採公開EDGAR metadata與申報原文，不將發行人文書當作§105政府作品。",
+      "update_and_cost": "10-K年度、10-Q季度及修訂隨申報更新；無供應商費，需持續維護taxonomy、parser、mapping及rate limits。原文保留採既有store，不重複下載。",
+      "time_and_coverage": "本票僅固定三個accession。申報accepted_at、報告期間與captured_at分開；CompanyFacts現時空值不證明原始披露缺失。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "raw_display": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        },
+        "redistribution": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        }
+      },
+      "evidence_refs": [
+        "sec-access",
+        "sec-developer"
+      ],
+      "downstream_impact": "支持#494/#499來源研究；期末與期間平均不得互換，security identity仍由原始DEI owner驗證。"
+    },
+    {
+      "row_id": "sec-sbc",
+      "data_definition": "股權報酬費用、現金流調整及award附註",
+      "owner": "sec",
+      "source_ids": [
+        "sec-filing",
+        "sec-filing-archive",
+        "sec-submissions"
+      ],
+      "provider_id": null,
+      "metric_ids": [],
+      "source_profiles": [
+        "sec-pit-v1",
+        "sec-public-us-v1"
+      ],
+      "original_urls": [
+        "https://data.sec.gov/submissions/CIK0000320193.json",
+        "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+        "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+        "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"
+      ],
+      "free_scope": "無帳號或API key；本票只採公開EDGAR metadata與申報原文，不將發行人文書當作§105政府作品。",
+      "update_and_cost": "10-K年度、10-Q季度及修訂隨申報更新；無供應商費，需持續維護taxonomy、parser、mapping及rate limits。原文保留採既有store，不重複下載。",
+      "time_and_coverage": "本票僅固定三個accession。申報accepted_at、報告期間與captured_at分開；CompanyFacts現時空值不證明原始披露缺失。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "raw_display": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        },
+        "redistribution": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        }
+      },
+      "evidence_refs": [
+        "sec-access",
+        "sec-developer"
+      ],
+      "downstream_impact": "支持#496/#499；SBC expense不等於完整awards inventory，不能自動解除claims completeness拒絕。"
+    },
+    {
+      "row_id": "sec-claims",
+      "data_definition": "債務、租賃、preferred、noncontrolling、awards與其他資本claims披露",
+      "owner": "sec",
+      "source_ids": [
+        "sec-filing",
+        "sec-filing-archive",
+        "sec-submissions"
+      ],
+      "provider_id": null,
+      "metric_ids": [],
+      "source_profiles": [
+        "sec-pit-v1",
+        "sec-public-us-v1"
+      ],
+      "original_urls": [
+        "https://data.sec.gov/submissions/CIK0000320193.json",
+        "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+        "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+        "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"
+      ],
+      "free_scope": "無帳號或API key；本票只採公開EDGAR metadata與申報原文，不將發行人文書當作§105政府作品。",
+      "update_and_cost": "10-K年度、10-Q季度及修訂隨申報更新；無供應商費，需持續維護taxonomy、parser、mapping及rate limits。原文保留採既有store，不重複下載。",
+      "time_and_coverage": "本票僅固定三個accession。申報accepted_at、報告期間與captured_at分開；CompanyFacts現時空值不證明原始披露缺失。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "raw_display": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        },
+        "redistribution": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        }
+      },
+      "evidence_refs": [
+        "sec-access",
+        "sec-developer"
+      ],
+      "downstream_impact": "支持#499/#500的原文追溯；缺少concept不代表不存在claim，本票不建立完整claims inventory。"
+    },
+    {
+      "row_id": "sec-segments-kpi",
+      "data_definition": "分部、地區、產品維度披露與申報內公司KPI",
+      "owner": "sec",
+      "source_ids": [
+        "sec-filing",
+        "sec-filing-archive",
+        "sec-submissions"
+      ],
+      "provider_id": null,
+      "metric_ids": [],
+      "source_profiles": [
+        "sec-pit-v1",
+        "sec-public-us-v1"
+      ],
+      "original_urls": [
+        "https://data.sec.gov/submissions/CIK0000320193.json",
+        "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+        "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+        "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"
+      ],
+      "free_scope": "無帳號或API key；本票只採公開EDGAR metadata與申報原文，不將發行人文書當作§105政府作品。",
+      "update_and_cost": "10-K年度、10-Q季度及修訂隨申報更新；無供應商費，需持續維護taxonomy、parser、mapping及rate limits。原文保留採既有store，不重複下載。",
+      "time_and_coverage": "本票僅固定三個accession。申報accepted_at、報告期間與captured_at分開；CompanyFacts現時空值不證明原始披露缺失。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "SEC明示任何人可免費access/download；使用可識別聯絡User-Agent、節流及既有immutable retention，僅保留本票所需原文。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限公開申報的事實性財務觀察、內部可追溯分析及自行計算數值；以SEC公開資料用途為依據，非SEC授予申報人著作權。附公司、accession、期間與原始連結；不複製敘述或整張表。"
+        },
+        "raw_display": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        },
+        "redistribution": {
+          "status": "unconfirmed",
+          "reason": "EDGAR公開取得不構成對申報人著作的全面授權；本票不建立原文展示或再分發權。"
+        }
+      },
+      "evidence_refs": [
+        "sec-access",
+        "sec-developer"
+      ],
+      "downstream_impact": "支持#502按原文逐公司拓展；自訂概念與維度不自動成為可比指標。"
+    },
+    {
+      "row_id": "treasury-10y",
+      "data_definition": "每日10年期Treasury par yield，以percent原始觀察重現；非SOFR也非issuer borrowing cost",
+      "owner": "macro",
+      "source_ids": [
+        "treasury-yields"
+      ],
+      "provider_id": "us-treasury",
+      "metric_ids": [
+        "us.treasury_par_yield_10y"
+      ],
+      "source_profiles": [
+        "treasury-par-yield-xml-10y-v1"
+      ],
+      "original_urls": [
+        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=2026",
+        "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm"
+      ],
+      "free_scope": "免費、無帳號或key；僅Treasury自己的par-yield observations。",
+      "update_and_cost": "營業日更新；無供應商費，需保存annual XML與terms、維護schema及freshness。",
+      "time_and_coverage": "正式capture availability為實際取得時點。2026 mutable XML不是歷史vintage；觀察日期不證明當時可得。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "本deployment catalog不允許raw_data_redistribution；外部§105範圍不取代runtime用途核准。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "本deployment catalog不允許raw_data_redistribution；外部§105範圍不取代runtime用途核准。"
+        }
+      },
+      "evidence_refs": [
+        "us-government-works-terms"
+      ],
+      "downstream_impact": "供既有risk-free policy選擇；不解除issuer policy/release/計算gate。引用U.S. Department of the Treasury並標明衍生計算及無背書。"
+    },
+    {
+      "row_id": "bea-current",
+      "data_definition": "現行NIPA表1.1.5 nominal GDP level，供明示CAGR政策取用",
+      "owner": "macro",
+      "source_ids": [
+        "bea-nipa-current"
+      ],
+      "provider_id": "bea-nipa-current",
+      "metric_ids": [
+        "us.nominal_gdp"
+      ],
+      "source_profiles": [
+        "bea-current-nipa-gdp-capture-v1"
+      ],
+      "original_urls": [
+        "https://apps.bea.gov/national/Release/XLS/Survey/Section1All_xls.xlsx",
+        "https://www.bea.gov/help/guidelines-for-citing-bea"
+      ],
+      "free_scope": "免費公開aggregate；不啟用BEA帳號或API key。",
+      "update_and_cost": "GDP定期release及修訂；無供應商費，需配對release/workbook、維護表位及freshness。",
+      "time_and_coverage": "當前capture後可用。沒有驗本次GDP workbook；不能回推先前估值日可得。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "本deployment catalog不允許raw_data_redistribution；外部§105範圍不取代runtime用途核准。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "本deployment catalog不允許raw_data_redistribution；外部§105範圍不取代runtime用途核准。"
+        }
+      },
+      "evidence_refs": [
+        "bea-citation-terms",
+        "us-government-works-terms"
+      ],
+      "downstream_impact": "可供既有terminal growth policy，不能把GDP當公司增長。引用BEA/NIPA table1.1.5及release，註明自行計算且無BEA背書。"
+    },
+    {
+      "row_id": "bea-vintage",
+      "data_definition": "歷史BEA nominal GDP vintage與對應官方release publication",
+      "owner": "macro",
+      "source_ids": [
+        "bea-gdp-release",
+        "bea-nipa-archive"
+      ],
+      "provider_id": "bea-nipa",
+      "metric_ids": [
+        "us.nominal_gdp"
+      ],
+      "source_profiles": [
+        "bea-nipa-gdp-vintage-v1"
+      ],
+      "original_urls": [
+        "https://apps.bea.gov/HistData/Files/Releases/GDP_and_PI/",
+        "https://www.bea.gov/news/",
+        "https://www.bea.gov/help/guidelines-for-citing-bea"
+      ],
+      "free_scope": "免費公開aggregate；不啟用BEA帳號或API key。",
+      "update_and_cost": "GDP定期release及修訂；無供應商費，需配對release/workbook、維護表位及freshness。",
+      "time_and_coverage": "必須配對官方publication evidence；本票僅核對用途條款，未宣稱任意archive年度已有可重現vintage。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "限美國政府自行產生的公開aggregate事實與本票分析；§105(a)及既有來源policy basis。衍生展示仍需正式admission並保留來源引用，不能暗示機關背書。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "本deployment catalog不允許raw_data_redistribution；外部§105範圍不取代runtime用途核准。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "本deployment catalog不允許raw_data_redistribution；外部§105範圍不取代runtime用途核准。"
+        }
+      },
+      "evidence_refs": [
+        "bea-citation-terms",
+        "us-government-works-terms"
+      ],
+      "downstream_impact": "可供既有terminal growth policy，不能把GDP當公司增長。引用BEA/NIPA table1.1.5及release，註明自行計算且無BEA背書。"
+    },
+    {
+      "row_id": "sofr",
+      "data_definition": "New York Fed overnight SOFR觀察，不是10年risk-free或公司借款率",
+      "owner": "macro",
+      "source_ids": [
+        "new-york-fed-sofr"
+      ],
+      "provider_id": "new-york-fed",
+      "metric_ids": [
+        "us.sofr_overnight"
+      ],
+      "source_profiles": [
+        "new-york-fed-markets-api-sofr-v1"
+      ],
+      "original_urls": [
+        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json",
+        "https://www.newyorkfed.org/privacy/termsofuse"
+      ],
+      "free_scope": "現有免費公開API候選；本票只抓條款，未啟用任何key。",
+      "update_and_cost": "工作日更新、可修訂；條款/引用要求需維護，目前需重新核對whole-document pin。",
+      "time_and_coverage": "本票未抓SOFR資料；新的terms hash與pin不同，不宣稱admitted。",
+      "rights": {
+        "acquisition": {
+          "status": "unconfirmed",
+          "reason": "2026-11-24保留terms整頁hash與現行policy pin不符；不得把新頁面自行升格授權。"
+        },
+        "storage": {
+          "status": "unconfirmed",
+          "reason": "2026-11-24保留terms整頁hash與現行policy pin不符；不得把新頁面自行升格授權。"
+        },
+        "analysis": {
+          "status": "unconfirmed",
+          "reason": "2026-11-24保留terms整頁hash與現行policy pin不符；不得把新頁面自行升格授權。"
+        },
+        "derived_display": {
+          "status": "unconfirmed",
+          "reason": "2026-11-24保留terms整頁hash與現行policy pin不符；不得把新頁面自行升格授權。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "現行policy不允許raw_data_redistribution，且本次terms pin不符。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "現行policy不允許raw_data_redistribution，且本次terms pin不符。"
+        }
+      },
+      "evidence_refs": [
+        "new-york-fed-use-terms"
+      ],
+      "downstream_impact": "限制依賴SOFR的功能，不阻擋Treasury、SEC或BEA。後續核對§Permissible Use與reference rate notice，不以SOFR替代issuer debt cost。"
+    },
+    {
+      "row_id": "alfred-vintage",
+      "data_definition": "ALFRED DGS10，以明確vintage_date取得的Treasury constant maturity序列；經濟口徑與par yield不同",
+      "owner": "macro",
+      "source_ids": [
+        "alfred-vintage"
+      ],
+      "provider_id": "alfred",
+      "metric_ids": [
+        "us.treasury_par_yield_10y"
+      ],
+      "source_profiles": [
+        "alfred-dgs10-csv-vintage-v1"
+      ],
+      "original_urls": [
+        "https://alfred.stlouisfed.org/graph/alfredgraph.csv",
+        "https://fred.stlouisfed.org/terms-of-use/"
+      ],
+      "free_scope": "公開CSV候選；免費不等於已建立特定資料與用途權限。",
+      "update_and_cost": "來源隨vintage更新；需維護publication/timezone與來源權利，不新增帳號或key。",
+      "time_and_coverage": "本票未取得或核對任意vintage；預設無grant。",
+      "rights": {
+        "acquisition": {
+          "status": "unconfirmed",
+          "reason": "ALFRED parser存在但預設policy沒有admission rule；本票未保留FRED條款原文或資料。"
+        },
+        "storage": {
+          "status": "unconfirmed",
+          "reason": "ALFRED parser存在但預設policy沒有admission rule；本票未保留FRED條款原文或資料。"
+        },
+        "analysis": {
+          "status": "unconfirmed",
+          "reason": "ALFRED parser存在但預設policy沒有admission rule；本票未保留FRED條款原文或資料。"
+        },
+        "derived_display": {
+          "status": "unconfirmed",
+          "reason": "ALFRED parser存在但預設policy沒有admission rule；本票未保留FRED條款原文或資料。"
+        },
+        "raw_display": {
+          "status": "unconfirmed",
+          "reason": "ALFRED parser存在但預設policy沒有admission rule；本票未保留FRED條款原文或資料。"
+        },
+        "redistribution": {
+          "status": "unconfirmed",
+          "reason": "ALFRED parser存在但預設policy沒有admission rule；本票未保留FRED條款原文或資料。"
+        }
+      },
+      "evidence_refs": [],
+      "downstream_impact": "歷史risk-free前提未成立時保留SOURCE_USE_POLICY_MISSING；不以當前capture填歷史cutoff。"
+    },
+    {
+      "row_id": "industry-capital-proxy",
+      "data_definition": "美國industry equity beta、pretax debt cost與debt/equity capital weights；不是issuer估計",
+      "owner": "reference",
+      "source_ids": [
+        "damodaran-reference"
+      ],
+      "provider_id": "damodaran-public-aggregates",
+      "metric_ids": [
+        "industry.equity_beta",
+        "industry.pre_tax_cost_of_debt",
+        "industry.debt_weight",
+        "industry.equity_weight"
+      ],
+      "source_profiles": [
+        "damodaran-us-industry-capital-xls-v1"
+      ],
+      "original_urls": [
+        "https://pages.stern.nyu.edu/~adamodar/pc/datasets/wacc.xls",
+        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+      ],
+      "free_scope": "免費加工後彙總表；排除底層商業company資料。",
+      "update_and_cost": "通常年度更新；本票未實測workbook。無供應商費，需持續維護版本、header、methodology、staleness及terms pin。",
+      "time_and_coverage": "只有terms本次核對成功；workbook數值coverage未測。年份檔名或更新註記不能證明歷史publication。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "現行runtime僅準備及衍生估值展示，沒有整表或底層company dataset再分發權限。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "現行runtime僅準備及衍生估值展示，沒有整表或底層company dataset再分發權限。"
+        }
+      },
+      "evidence_refs": [
+        "damodaran-use-terms"
+      ],
+      "downstream_impact": "既有issuer分類/crosswalk及financial policy明示採用後才可作proxy，不用issuer現時market cap或借款利率冒充。"
+    },
+    {
+      "row_id": "industry-unlevered-proxy",
+      "data_definition": "Industry unlevered beta，不可直接替代equity beta",
+      "owner": "reference",
+      "source_ids": [
+        "damodaran-reference"
+      ],
+      "provider_id": "damodaran-public-aggregates",
+      "metric_ids": [
+        "industry.unlevered_beta"
+      ],
+      "source_profiles": [
+        "damodaran-us-unlevered-beta-xls-v1"
+      ],
+      "original_urls": [
+        "https://pages.stern.nyu.edu/~adamodar/pc/datasets/betas.xls",
+        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+      ],
+      "free_scope": "免費加工後彙總表；排除底層商業company資料。",
+      "update_and_cost": "通常年度更新；本票未實測workbook。無供應商費，需持續維護版本、header、methodology、staleness及terms pin。",
+      "time_and_coverage": "只有terms本次核對成功；workbook數值coverage未測。年份檔名或更新註記不能證明歷史publication。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "現行runtime僅準備及衍生估值展示，沒有整表或底層company dataset再分發權限。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "現行runtime僅準備及衍生估值展示，沒有整表或底層company dataset再分發權限。"
+        }
+      },
+      "evidence_refs": [
+        "damodaran-use-terms"
+      ],
+      "downstream_impact": "若模型需要equity beta，保留金融口徑拒絕；parser/admission可用不等於金融政策可互換。"
+    },
+    {
+      "row_id": "country-erp-proxy",
+      "data_definition": "Country total ERP與tax reference；不是issuer全部地理revenue risk或觀察到的投資績效",
+      "owner": "reference",
+      "source_ids": [
+        "damodaran-reference"
+      ],
+      "provider_id": "damodaran-public-aggregates",
+      "metric_ids": [
+        "country.equity_risk_premium",
+        "country.tax_rate"
+      ],
+      "source_profiles": [
+        "damodaran-country-erp-tax-xlsx-v2"
+      ],
+      "original_urls": [
+        "https://pages.stern.nyu.edu/~adamodar/pc/datasets/ctryprem.xlsx",
+        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+      ],
+      "free_scope": "免費加工後彙總表；排除底層商業company資料。",
+      "update_and_cost": "通常年度更新；本票未實測workbook。無供應商費，需持續維護版本、header、methodology、staleness及terms pin。",
+      "time_and_coverage": "只有terms本次核對成功；workbook數值coverage未測。年份檔名或更新註記不能證明歷史publication。",
+      "rights": {
+        "acquisition": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "storage": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "analysis": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "derived_display": {
+          "status": "evidence_supported",
+          "reason": "現行policy依publisher公開分享processed data的文字，僅涵蓋受限industry/country aggregate profiles。NYU terms whole-document hash本次符合；數值仍需provider及admission核對，引用Aswath Damodaran, NYU Stern。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "現行runtime僅準備及衍生估值展示，沒有整表或底層company dataset再分發權限。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "現行runtime僅準備及衍生估值展示，沒有整表或底層company dataset再分發權限。"
+        }
+      },
+      "evidence_refs": [
+        "damodaran-use-terms"
+      ],
+      "downstream_impact": "原始jurisdiction及versioned crosswalk選擇country row；published ERP不是CDS spread，tax lookup year單獨保留。"
+    },
+    {
+      "row_id": "company-ir-kpi",
+      "data_definition": "企業營運KPI、投資人簡報與IR敘述披露；依公司及期間條件覆蓋",
+      "owner": "research",
+      "source_ids": [],
+      "provider_id": null,
+      "metric_ids": [],
+      "source_profiles": [],
+      "original_urls": [
+        "https://investor.apple.com/",
+        "https://ir.tesla.com/"
+      ],
+      "free_scope": "候選公開IR；免費與允許實際用途均須逐公司核對。",
+      "update_and_cost": "季度/年度及事件更新；需持續人工語義核對，沒有可比較量測的維護工時。",
+      "time_and_coverage": "SEC已披露者走SEC原文；IR不以一般網站可見性推定資料可重用，未宣稱coverage。",
+      "rights": {
+        "acquisition": {
+          "status": "unconfirmed",
+          "reason": "需逐公司核對IR資料定義、免費取得、條款、穩定下載與retention/display範圍。本票沒有可安裝的IR授權或parser。"
+        },
+        "storage": {
+          "status": "unconfirmed",
+          "reason": "需逐公司核對IR資料定義、免費取得、條款、穩定下載與retention/display範圍。本票沒有可安裝的IR授權或parser。"
+        },
+        "analysis": {
+          "status": "unconfirmed",
+          "reason": "需逐公司核對IR資料定義、免費取得、條款、穩定下載與retention/display範圍。本票沒有可安裝的IR授權或parser。"
+        },
+        "derived_display": {
+          "status": "unconfirmed",
+          "reason": "需逐公司核對IR資料定義、免費取得、條款、穩定下載與retention/display範圍。本票沒有可安裝的IR授權或parser。"
+        },
+        "raw_display": {
+          "status": "unconfirmed",
+          "reason": "需逐公司核對IR資料定義、免費取得、條款、穩定下載與retention/display範圍。本票沒有可安裝的IR授權或parser。"
+        },
+        "redistribution": {
+          "status": "unconfirmed",
+          "reason": "需逐公司核對IR資料定義、免費取得、條款、穩定下載與retention/display範圍。本票沒有可安裝的IR授權或parser。"
+        }
+      },
+      "evidence_refs": [],
+      "downstream_impact": "#502可先用SEC分部披露；IR缺口只限制依賴該KPI輸出，不能補零或泛用代理值。"
+    },
+    {
+      "row_id": "yahoo-daily-price",
+      "data_definition": "USD Nasdaq/NYSE普通股最近完整日線close，非adjclose；不能重建舊日未調整價",
+      "owner": "quote",
+      "source_ids": [
+        "yahoo-chart-daily-close"
+      ],
+      "provider_id": "yahoo-chart-daily-close",
+      "metric_ids": [
+        "common_share.price"
+      ],
+      "source_profiles": [
+        "yahoo-us-equity-latest-completed-daily-close-capture-v1"
+      ],
+      "original_urls": [
+        "https://query2.finance.yahoo.com/v8/finance/chart/",
+        "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html"
+      ],
+      "free_scope": "無key的既有profile不代表provider允許自動取用；本票不抓新quote。",
+      "update_and_cost": "日線更新；需維護交易日、split、currency、exchange與terms。商業/第三方用途權利未成立。",
+      "time_and_coverage": "只接受最新完整交易日與capture後availability；歷史adjustment及後續split保留拒絕。本票無真實quote coverage。",
+      "rights": {
+        "acquisition": {
+          "status": "unconfirmed",
+          "reason": "未提供或驗證Yahoo/provider自動取得授權。personal-local只是操作者個人非商業本機決定，不可轉為第三方或商業服務權限。"
+        },
+        "storage": {
+          "status": "unconfirmed",
+          "reason": "未提供或驗證Yahoo/provider自動取得授權。personal-local只是操作者個人非商業本機決定，不可轉為第三方或商業服務權限。"
+        },
+        "analysis": {
+          "status": "unconfirmed",
+          "reason": "未提供或驗證Yahoo/provider自動取得授權。personal-local只是操作者個人非商業本機決定，不可轉為第三方或商業服務權限。"
+        },
+        "derived_display": {
+          "status": "unconfirmed",
+          "reason": "未提供或驗證Yahoo/provider自動取得授權。personal-local只是操作者個人非商業本機決定，不可轉為第三方或商業服務權限。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "personal-local設定排除raw redistribution、commercial及第三方服務；default policy也沒有Yahoo rule。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "personal-local設定排除raw redistribution、commercial及第三方服務；default policy也沒有Yahoo rule。"
+        }
+      },
+      "evidence_refs": [
+        "personal-local-policy"
+      ],
+      "downstream_impact": "#503須先取得適用供應商權利。#504市場倍數、#505反向DCF及quote-dependent claims不能因矩陣或personal-local設定宣稱完成；其他SEC功能可持續。"
+    },
+    {
+      "row_id": "nasdaq-historical-candidate",
+      "data_definition": "歷史日終price的既有format reproducer；未建立可用quote來源",
+      "owner": "research",
+      "source_ids": [
+        "nasdaq-historical-close"
+      ],
+      "provider_id": "nasdaq-historical-close",
+      "metric_ids": [
+        "common_share.price"
+      ],
+      "source_profiles": [
+        "nasdaq-historical-close-capture-v1"
+      ],
+      "original_urls": [
+        "https://api.nasdaq.com/api/quote/",
+        "https://www.nasdaq.com/legal",
+        "https://www.nasdaq.com/terms-of-use"
+      ],
+      "free_scope": "公開endpoint/parser不等於免費允許用途；既有研究記錄legacy terms URL 404。",
+      "update_and_cost": "日線候選，接口/terms需維護；本票不新增capture，不新增費用。",
+      "time_and_coverage": "本票未重做#394調查、未抓quote；來源權利未成立。",
+      "rights": {
+        "acquisition": {
+          "status": "refused",
+          "reason": "既有來源研究記錄現行legal限制自動取得及儲存；未提供個別permission，default policy沒有rule，不啟用來源。"
+        },
+        "storage": {
+          "status": "refused",
+          "reason": "既有來源研究記錄現行legal限制自動取得及儲存；未提供個別permission，default policy沒有rule，不啟用來源。"
+        },
+        "analysis": {
+          "status": "unconfirmed",
+          "reason": "既有parser只重現格式；沒有production capture registration與授權。本票不實測此來源。"
+        },
+        "derived_display": {
+          "status": "unconfirmed",
+          "reason": "既有parser只重現格式；沒有production capture registration與授權。本票不實測此來源。"
+        },
+        "raw_display": {
+          "status": "refused",
+          "reason": "既有來源研究記錄現行legal限制自動取得及儲存；未提供個別permission，default policy沒有rule，不啟用來源。"
+        },
+        "redistribution": {
+          "status": "refused",
+          "reason": "既有來源研究記錄現行legal限制自動取得及儲存；未提供個別permission，default policy沒有rule，不啟用來源。"
+        }
+      },
+      "evidence_refs": [
+        "quote-research"
+      ],
+      "downstream_impact": "#503保留來源選擇責任，不以此profile供市場倍數或反向DCF。排除Twelve Data，不刪既有adapter或歷史證據。"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "us-government-works-terms",
+      "uri": "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm",
+      "checked_on": "2026-11-24",
+      "content_sha256": "be9a8a2918c3f674506e80087565ce9f5479ea358394313daf02e3aa0a1491ba",
+      "boundary": "whole document",
+      "quote": "Copyright protection under this title is not available for any work of the United States Government",
+      "status": "captured",
+      "artifact_ref": "public-source-acquisition:ea020006ed6ecd2e714a1eaf47723b691ffe6d2045bae3c5e460fc81b1388fbb",
+      "selected_content_sha256": null,
+      "content_scope": null
+    },
+    {
+      "evidence_id": "damodaran-use-terms",
+      "uri": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html",
+      "checked_on": "2026-11-24",
+      "content_sha256": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+      "boundary": "whole document",
+      "quote": "I hope you find this data useful and there are no strings attached.",
+      "status": "captured",
+      "artifact_ref": "public-source-acquisition:a1b7f26a7779977c1fa2ac28e9b0e70e1e92dc749b1fd47c93e42948741f49ca",
+      "selected_content_sha256": null,
+      "content_scope": null
+    },
+    {
+      "evidence_id": "bea-citation-terms",
+      "uri": "https://www.bea.gov/help/guidelines-for-citing-bea",
+      "checked_on": "2026-11-24",
+      "content_sha256": "b3ac846fb496991dc508d248a88fcca78a28d9296b3891c5ceae6defc51775cc",
+      "boundary": "article[about=\"/help/guidelines-for-citing-bea\"]",
+      "quote": "Citations are appreciated and appropriate.",
+      "status": "captured",
+      "artifact_ref": "public-source-acquisition:83412032ca654c55090ddc293cb44448211ba45195ecfd83d46f98525aa31f5a",
+      "selected_content_sha256": "fa84365aa8063550b72f95fd50735201d26bd736fe7e13ee4da8cfd8a2bc721c",
+      "content_scope": {
+        "protocol": "exact-html-element-v1",
+        "tag": "article",
+        "attribute": "about",
+        "value": "/help/guidelines-for-citing-bea"
+      }
+    },
+    {
+      "evidence_id": "new-york-fed-use-terms",
+      "uri": "https://www.newyorkfed.org/privacy/termsofuse",
+      "checked_on": "2026-11-24",
+      "content_sha256": "98aa87b286221e831288a952a8f6d8ec44d610a74a03e13051899c652ba9acd5",
+      "boundary": "whole document",
+      "quote": "If you modify any of the Content, you must clearly label the modified Content",
+      "status": "captured",
+      "artifact_ref": "public-source-acquisition:e5547b532e57f97a30f24c9e32cabef19b7065386db4f4aebc87d3d5fbd2d413",
+      "selected_content_sha256": null,
+      "content_scope": null
+    },
+    {
+      "evidence_id": "sec-access",
+      "uri": "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data",
+      "checked_on": "2026-11-24",
+      "content_sha256": "76ea181dc5b9d2e2930b097bdfd166f6cec998410bf8471fe01abf67562170e3",
+      "boundary": "Accessing EDGAR Data; Fair access",
+      "quote": "Anyone can access and download this information for free",
+      "status": "captured",
+      "artifact_ref": "research-pages/sec-access.html",
+      "selected_content_sha256": null,
+      "content_scope": null
+    },
+    {
+      "evidence_id": "sec-developer",
+      "uri": "https://www.sec.gov/about/developer-resources",
+      "checked_on": "2026-11-24",
+      "content_sha256": "bc8e11b8553870ac477929c39dc348277983418871e48e4e878779769f05975f",
+      "boundary": "Fair Access",
+      "quote": "Current guidelines limit each user to a total of no more than 10 requests per second",
+      "status": "captured",
+      "artifact_ref": "research-pages/sec-developer.html",
+      "selected_content_sha256": null,
+      "content_scope": null
+    },
+    {
+      "evidence_id": "personal-local-policy",
+      "uri": "https://github.com/sosodennis/value-investment-agent/blob/ce46eaad7883de2bb7b66cf2dd0c9d938d95c106/docs/acceptance/issue-361-personal-local-source-policy.md",
+      "checked_on": "2026-11-24",
+      "content_sha256": "a6e3f6038bdd10456fe8daa667ba4431668a7950cb0c1b542ad26920c39524f3",
+      "boundary": "Evidence limits",
+      "quote": "No separate provider authorization for automated collection has been supplied or verified.",
+      "status": "captured",
+      "artifact_ref": "research-pages/personal-local-policy.md",
+      "selected_content_sha256": null,
+      "content_scope": null
+    },
+    {
+      "evidence_id": "quote-research",
+      "uri": "https://github.com/sosodennis/value-investment-agent/blob/ce46eaad7883de2bb7b66cf2dd0c9d938d95c106/fundamental-service/docs/market-input-providers.md",
+      "checked_on": "2026-11-24",
+      "content_sha256": "9eb488748e9357065960f15ba7adc74dbcdb174f7f743050f5d4eed25578a681",
+      "boundary": "Source suitability / Quote permission",
+      "quote": "No production Nasdaq admission, new quote capture registration or permission exception is introduced.",
+      "status": "captured",
+      "artifact_ref": "research-pages/quote-research.md",
+      "selected_content_sha256": null,
+      "content_scope": null
+    }
+  ]
+}
