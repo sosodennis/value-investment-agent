@@ -1,7 +1,11 @@
 from __future__ import annotations
 from typing import Literal
 
-from .artifact_evidence import EvidenceArtifactReader, read_retained_artifact
+from .artifact_evidence import (
+    EvidenceArtifactReader,
+    read_retained_artifact,
+    retained_artifact_operation,
+)
 from .automatic_mapping import (
     AutomaticMappingRequestV1,
     automatic_mapping_policy_digest,
@@ -39,94 +43,97 @@ def verify_statement_mapping_outcomes(
     source_revision: str,
     profile: StatementProfileV1,
     mapping_version: str,
+    evidence_checks: AutomaticMappingEvidenceChecks | None = None,
 ) -> StatementMappingBatchDecisionV1:
-    batch = StatementMappingBatchDecisionV1.model_validate_json(
-        read_retained_artifact(artifacts, reference)
-    )
-    checks = AutomaticMappingEvidenceChecks()
-    _, request = read_mapping_batch_input(
-        batch.input_digest,
-        StatementMappingBatchRequestV1,
-        artifacts=artifacts,
-        original_checks=checks.originals,
-        input_digests=checks.identities,
-    )
-    if (
-        request.original != original
-        or request.statement_profile != profile
-        or batch.statement_profile != profile
-        or request.source_revision != source_revision
-        or batch.source_revision != source_revision
-        or batch.policy_digest != automatic_mapping_policy_digest()
-        or request.mapping_version != mapping_version
-    ):
-        raise DataReleaseError(
-            "STATEMENT_MAPPING_OUTCOME_CONTEXT_MISMATCH",
-            "statement mapping outcomes differ from their original source and installed policy",
+    checks = evidence_checks or AutomaticMappingEvidenceChecks()
+    reader = checks.reader(artifacts)
+    with retained_artifact_operation(reader, (reference.artifact_id,)) as artifacts:
+        batch = StatementMappingBatchDecisionV1.model_validate_json(
+            read_retained_artifact(artifacts, reference)
         )
-    contents = {
-        ref.content_hash: read_retained_artifact(artifacts, ref)
-        for ref in request.evidence_refs
-    }
-    for role in batch.roles:
-        proposals = automatic_mapping_proposals(
-            role.normalized_field,
-            mapping_version=mapping_version,
-            original=original,
-            observed_only=True,
+        _, request = read_mapping_batch_input(
+            batch.input_digest,
+            StatementMappingBatchRequestV1,
+            artifacts=artifacts,
+            original_checks=checks.originals,
             input_digests=checks.identities,
         )
-        outcomes = role.proposal_decisions()
-        if not proposals:
-            if (
-                len(outcomes) != 1
-                or role.status != "abstain"
-                or role.reason_codes != ("MAPPING_AUTOMATIC_RULE_UNSUPPORTED",)
-                or role.decision is not None
-                or role.approval is not None
-            ):
-                raise DataReleaseError(
-                    "STATEMENT_MAPPING_OUTCOME_MISMATCH",
-                    "unsupported statement role differs from its evaluator outcome",
-                )
-            continue
-        if len(outcomes) != len(proposals):
+        if (
+            request.original != original
+            or request.statement_profile != profile
+            or batch.statement_profile != profile
+            or request.source_revision != source_revision
+            or batch.source_revision != source_revision
+            or batch.policy_digest != automatic_mapping_policy_digest()
+            or request.mapping_version != mapping_version
+        ):
             raise DataReleaseError(
-                "STATEMENT_MAPPING_OUTCOME_MISMATCH",
-                "statement mapping alternatives differ from the installed policy",
+                "STATEMENT_MAPPING_OUTCOME_CONTEXT_MISMATCH",
+                "statement mapping outcomes differ from their original source and installed policy",
             )
-        for proposal, outcome in zip(proposals, outcomes, strict=True):
-            single = AutomaticMappingRequestV1.model_validate(
-                {
-                    "source_revision": request.source_revision,
-                    "evaluator_id": request.evaluator_id,
-                    "original": request.original,
-                    "integrity": request.integrity,
-                    "evidence_refs": request.evidence_refs,
-                    "security_identity": request.security_identity,
-                    "proposal": proposal,
-                },
-                context=checks.originals,
+        contents = {
+            ref.content_hash: read_retained_artifact(artifacts, ref)
+            for ref in request.evidence_refs
+        }
+        for role in batch.roles:
+            proposals = automatic_mapping_proposals(
+                role.normalized_field,
+                mapping_version=mapping_version,
+                original=original,
+                observed_only=True,
+                input_digests=checks.identities,
             )
-            expected = evaluate_automatic_mapping(
-                single, contents=contents, evidence_checks=checks
-            )
-            if outcome.decision is None:
+            outcomes = role.proposal_decisions()
+            if not proposals:
+                if (
+                    len(outcomes) != 1
+                    or role.status != "abstain"
+                    or role.reason_codes != ("MAPPING_AUTOMATIC_RULE_UNSUPPORTED",)
+                    or role.decision is not None
+                    or role.approval is not None
+                ):
+                    raise DataReleaseError(
+                        "STATEMENT_MAPPING_OUTCOME_MISMATCH",
+                        "unsupported statement role differs from its evaluator outcome",
+                    )
+                continue
+            if len(outcomes) != len(proposals):
                 raise DataReleaseError(
                     "STATEMENT_MAPPING_OUTCOME_MISMATCH",
-                    "statement mapping evaluation lacks its retained decision",
+                    "statement mapping alternatives differ from the installed policy",
                 )
-            raw = read_retained_artifact(artifacts, outcome.decision)
-            if (
-                raw != canonical_bytes(expected)
-                or outcome.status != expected.status
-                or outcome.reason_codes != expected.reason_codes
-            ):
-                raise DataReleaseError(
-                    "STATEMENT_MAPPING_OUTCOME_MISMATCH",
-                    "statement row mapping outcome does not reproduce",
+            for proposal, outcome in zip(proposals, outcomes, strict=True):
+                single = AutomaticMappingRequestV1.model_validate(
+                    {
+                        "source_revision": request.source_revision,
+                        "evaluator_id": request.evaluator_id,
+                        "original": request.original,
+                        "integrity": request.integrity,
+                        "evidence_refs": request.evidence_refs,
+                        "security_identity": request.security_identity,
+                        "proposal": proposal,
+                    },
+                    context=checks.originals,
                 )
-    return batch
+                expected = evaluate_automatic_mapping(
+                    single, contents=contents, evidence_checks=checks
+                )
+                if outcome.decision is None:
+                    raise DataReleaseError(
+                        "STATEMENT_MAPPING_OUTCOME_MISMATCH",
+                        "statement mapping evaluation lacks its retained decision",
+                    )
+                raw = read_retained_artifact(artifacts, outcome.decision)
+                if (
+                    raw != canonical_bytes(expected)
+                    or outcome.status != expected.status
+                    or outcome.reason_codes != expected.reason_codes
+                ):
+                    raise DataReleaseError(
+                        "STATEMENT_MAPPING_OUTCOME_MISMATCH",
+                        "statement row mapping outcome does not reproduce",
+                    )
+        return batch
 
 
 def statement_missing_evidence(

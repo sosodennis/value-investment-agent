@@ -7,7 +7,12 @@ from pydantic import Field, model_validator
 
 from .annual_statements import project_annual_statements
 from .annual_discovery import AnnualFilingV1
-from .artifact_evidence import EvidenceArtifactReader, read_retained_artifact
+from .artifact_evidence import (
+    EvidenceArtifactReader,
+    read_retained_artifact,
+    retained_artifact_operation,
+)
+from .automatic_mapping_evidence import AutomaticMappingEvidenceChecks
 from .contracts import (
     CanonicalFactV1,
     MissingValueV1,
@@ -188,6 +193,42 @@ def verify_statement_release_membership(
     mappings: StatementMappingReader,
     artifacts: EvidenceArtifactReader,
     source_revision: str,
+) -> StatementReleaseChecksV1:
+    artifact_ids = tuple(
+        sorted(
+            {
+                reference.artifact_id
+                for reference in (*manifest.artifact_refs, *manifest.taxonomy_refs)
+            }
+        )
+    )
+    with retained_artifact_operation(artifacts, artifact_ids) as artifacts:
+        return _verify_statement_release_membership(
+            manifest,
+            envelope,
+            originals=originals,
+            content=content,
+            snapshots=snapshots,
+            facts=facts,
+            mappings=mappings,
+            artifacts=artifacts,
+            source_revision=source_revision,
+            mapping_checks=AutomaticMappingEvidenceChecks(),
+        )
+
+
+def _verify_statement_release_membership(
+    manifest: DataReleaseManifestV1,
+    envelope: StatementReleaseEnvelopeV1,
+    *,
+    originals: OriginalPreparation,
+    content: ContentAddressedStore,
+    snapshots: StatementSnapshotReader,
+    facts: StatementFactReader,
+    mappings: StatementMappingReader,
+    artifacts: EvidenceArtifactReader,
+    source_revision: str,
+    mapping_checks: AutomaticMappingEvidenceChecks,
 ) -> StatementReleaseChecksV1:
     reference = envelope.original_preparation
     if originals.reference(reference.artifact_id, reference.role) != reference:
@@ -398,6 +439,7 @@ def verify_statement_release_membership(
             source_revision=source_revision,
             profile=projection.profile,
             mapping_version=envelope.mapping_version,
+            evidence_checks=mapping_checks,
         )
         expected_missing.extend(
             statement_missing_evidence(
