@@ -286,6 +286,7 @@ def automatic_mapping_policy_digest() -> str:
                     "original_issuer.py",
                     "regulatory_validation.py",
                     "sec_integrity.py",
+                    "sec_html_representation_registry.py",
                     "serialization.py",
                     "taxonomy_evidence.py",
                 )
