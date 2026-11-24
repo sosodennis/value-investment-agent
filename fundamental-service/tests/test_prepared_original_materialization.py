@@ -163,6 +163,47 @@ def test_current_cutoff_preserves_original_selection_on_acquisition_and_replay(
     assert runner._plan_mappings(plan) == groups
     assert value.acquisition._original_reads.get() is None
 
+    from pydantic import ValidationError
+    from fundamental_service.operations import ServiceError
+
+    cutoff = frozen.public_source_cutoff
+    with pytest.raises(ValidationError):
+        type(cutoff).model_validate(
+            cutoff.model_dump() | {"requested_at": requested_at + timedelta(seconds=1)}
+        )
+    with pytest.raises(ValidationError):
+        type(frozen).model_validate(
+            frozen.model_dump()
+            | {"valuation_timestamp": effective_at + timedelta(seconds=1)}
+        )
+    capture = cutoff.captures[0]
+    changed_cutoff = cutoff.model_copy(
+        update={
+            "captures": (
+                capture.model_copy(update={"media_type": "application/changed"}),
+            )
+        }
+    )
+    changed = type(frozen).model_validate(
+        frozen.model_dump() | {"public_source_cutoff": changed_cutoff.model_dump()}
+    )
+    calls = value.state.provider_calls, value.state.parser_calls
+    with pytest.raises(ServiceError) as error:
+        acquire(changed, value.acquisition)
+    assert error.value.code == "CURRENT_CAPTURE_MISMATCH"
+    changed = frozen.model_copy(
+        update={
+            "original_preparation": original_ref.model_copy(
+                update={"content_hash": "0" * 64}
+            )
+        }
+    )
+    with pytest.raises(ServiceError) as error:
+        acquire(changed, value.acquisition)
+    assert error.value.code == "ORIGINAL_PREPARATION_INVALID"
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+    assert len(value.metadata.acquisitions) == 1
+
 
 def _prepared_case(tmp_path, monkeypatch):
     value = case(tmp_path / "source", monkeypatch, statement_original=True)
@@ -310,3 +351,144 @@ def test_cached_prepared_acquisition_rechecks_admitted_evidence_before_return(
     assert tuple(value.metadata.acquisitions.values()) == (result,)
     if target in {"source_bytes", "membership"}:
         assert inventory(value.artifacts.root) == before
+
+
+@pytest.mark.parametrize("scoped", (False, True))
+@pytest.mark.parametrize("reader", ("publish", "execute", "retained"))
+def test_prepared_build_drift_refuses_at_publication_and_cached_read_boundaries(
+    tmp_path, monkeypatch, reader, scoped
+):
+    from contextlib import nullcontext
+    import fundamental_service.parser_action_identity as identity
+
+    configuration = ["original image"]
+    monkeypatch.setattr(
+        identity, "_immutable_build_configuration", lambda: (configuration[0], ())
+    )
+    monkeypatch.setattr(identity, "_runtime_identity", lambda **kwargs: "2" * 64)
+    value, _, request, _ = _prepared_case(tmp_path, monkeypatch)
+    consumed = []
+    if reader == "publish":
+        prepare = value.acquisition.ingestion.prepare_original
+
+        def drift_after_materialization(**kwargs):
+            result = prepare(**kwargs)
+            scope = value.acquisition._original_reads.get()
+            scope.builds.current()
+            consumed.append(scope)
+            configuration[0] = "changed image"
+            return result
+
+        monkeypatch.setattr(
+            value.acquisition.ingestion, "prepare_original", drift_after_materialization
+        )
+    else:
+        acquire(request, value.acquisition)
+        get = value.metadata.get_sec_ingestion
+
+        def drift_after_admission(*args, **kwargs):
+            result = get(*args, **kwargs)
+            scope = value.acquisition._original_reads.get()
+            scope.builds.current()
+            consumed.append(scope)
+            configuration[0] = "changed image"
+            return result
+
+        monkeypatch.setattr(value.metadata, "get_sec_ingestion", drift_after_admission)
+    with pytest.raises(identity.IncompleteParserClosure, match="configuration changed"):
+        with value.acquisition.evidence_operation() if scoped else nullcontext():
+            if reader == "retained":
+                value.acquisition.retained_acquisition(request)
+            else:
+                acquire(request, value.acquisition)
+    assert consumed and consumed[0].closed and consumed[0]._journal.closed
+    assert value.acquisition._original_reads.get() is None
+    if reader == "publish":
+        assert (
+            not value.metadata.snapshots
+            and not value.metadata.facts
+            and not value.metadata.acquisitions
+        )
+
+
+def test_reconstructed_clock_cannot_replace_the_exact_prepared_original(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.automatic_mapping_batch import (
+        StatementMappingBatchDecisionV1,
+        StatementMappingBatchRequestV1,
+    )
+    from fundamental_service.data_releases import DataReleaseError
+    from fundamental_service.mapping_input_identity import MappingInputDigests
+    from fundamental_service.mapping_input_storage import (
+        publish_mapping_input,
+        read_mapping_batch_input,
+    )
+    from fundamental_service.operations import ServiceError
+    from fundamental_service.original_issuer import evaluate_original_issuer
+    from test_issuer_operating_release import inventory
+
+    value, _, request, _ = _prepared_case(tmp_path, monkeypatch)
+    result = acquire(request, value.acquisition)
+    batch = StatementMappingBatchDecisionV1.model_validate_json(
+        value.artifacts.read(result.mapping_evidence_ref)
+    )
+    _, batch_input = read_mapping_batch_input(
+        batch.input_digest, StatementMappingBatchRequestV1, artifacts=value.artifacts
+    )
+    rebuilt = evaluate_original_issuer(
+        batch_input.original.report,
+        source=batch_input.original.source.model_copy(
+            update={
+                "captured_at": batch_input.original.source.captured_at
+                + timedelta(seconds=1)
+            }
+        ),
+        decision_at=batch_input.original.decision_at,
+    )
+    assert rebuilt.report.facts == batch_input.original.report.facts
+    assert rebuilt.report.parsed_at != batch_input.original.report.parsed_at
+    changed = batch_input.model_copy(
+        update={
+            "original": rebuilt,
+            "integrity": batch_input.integrity.model_copy(
+                update={"captured_at": rebuilt.source.captured_at}
+            ),
+        }
+    )
+    publish_mapping_input(
+        changed,
+        rebuilt,
+        artifacts=value.artifacts,
+        evidence_refs=changed.evidence_refs,
+        batch=True,
+    )
+    digest = MappingInputDigests().input_digest(changed)
+    record = value.artifacts.put(
+        "synthetic-reconstructed-clock-" + digest,
+        batch.model_copy(update={"input_digest": digest}),
+    )
+    substituted = result.model_copy(update={"mapping_evidence_ref": record.artifact_id})
+    with pytest.raises(DataReleaseError) as error:
+        build_statement_release(
+            request.original_preparation,
+            (substituted,),
+            originals=value.service,
+            snapshots=SimpleNamespace(get=lambda key: value.metadata.snapshots[key]),
+            facts=SimpleNamespace(get=lambda key: value.metadata.facts[key]),
+            mappings=SimpleNamespace(
+                get_mapping=lambda key: value.metadata.mappings[key]
+            ),
+            artifacts=value.artifacts,
+            source_revision=request.source_revision,
+            mapping_version=request.mapping_version,
+        )
+    assert error.value.code == "STATEMENT_RELEASE_MAPPING_CONTEXT_MISMATCH"
+    key = next(iter(value.metadata.acquisitions))
+    value.metadata.acquisitions[key] = substituted
+    before = inventory(value.artifacts.root)
+    with pytest.raises(ServiceError) as error:
+        acquire(request, value.acquisition)
+    assert error.value.code == "ORIGINAL_PREPARATION_INVALID"
+    assert value.metadata.acquisitions[key] == substituted
+    assert inventory(value.artifacts.root) == before
