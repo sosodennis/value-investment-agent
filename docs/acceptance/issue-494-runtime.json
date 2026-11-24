@@ -5,7 +5,7 @@
   "status": "WIP",
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent",
-    "browser_session": "CUA IAB browser2 tab2; new tab required for updated tuple before UI acceptance",
+    "browser_session": "CUA IAB browser2 tab3; http://127.0.0.1:23181/workspace?statement_creation=e6497b9b-c483-430b-bf75-f9ef4d0851f1",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-494-app",
