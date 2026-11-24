@@ -1,6 +1,7 @@
 import base64
 from dataclasses import replace
 from datetime import timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -112,6 +113,28 @@ def release_case(
         statement_content=value.acquisition.content_store,
     )
     return value, release, statement, options
+
+
+def test_statement_release_reports_original_unclassified_monetary_observations(
+    tmp_path, monkeypatch
+):
+    value, _, statement, _ = release_case(tmp_path, monkeypatch)
+    revenue = next(
+        row
+        for table in statement.statements.tables
+        for row in table.rows
+        if row.definition.row_id == "revenue"
+    )
+    assert revenue.cells[0].status == "reported", revenue.cells[0]
+    assert revenue.cells[0].fact.value == Decimal("140")
+    original = value.service.read_validation(
+        statement.projection.source_outcomes[0].outcome_ref.artifact_id
+    ).original
+    assert any(
+        fact.concept == revenue.cells[0].fact.concept
+        and fact.security_scope == "unspecified"
+        for fact in original.report.facts
+    )
 
 
 @pytest.mark.parametrize("submissions_delay", (0, 600))

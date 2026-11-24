@@ -4847,6 +4847,8 @@ export interface components {
             reviewed_at?: string | null;
             /** Reviewer */
             reviewer?: string | null;
+            /** Security Scope */
+            security_scope?: "issuer" | null;
             /** Source Concept */
             source_concept: string;
             /**

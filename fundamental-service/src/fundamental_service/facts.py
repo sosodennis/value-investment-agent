@@ -247,6 +247,9 @@ class CanonicalMappingV1(BaseModel):
     reviewer: str | None = None
     reviewed_at: datetime | None = None
     status: Literal["approved", "provisional", "ambiguous", "rejected"]
+    security_scope: Literal["issuer"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     accounting_rules: AccountingRoleRules | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -256,6 +259,14 @@ class CanonicalMappingV1(BaseModel):
 
     @model_validator(mode="after")
     def extension_review(self) -> "CanonicalMappingV1":
+        if self.security_scope is not None and (
+            self.status != "approved"
+            or self.confidence != "high"
+            or (self.observation_scope is None and self.accounting_rules is None)
+        ):
+            raise ValueError(
+                "issuer scope requires a high-confidence source-bound approval"
+            )
         if self.observation_scope is not None and self.accounting_rules is not None:
             raise ValueError("direct observation scope cannot authorize computed roles")
         if (

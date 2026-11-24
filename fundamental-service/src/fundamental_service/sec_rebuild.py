@@ -240,6 +240,23 @@ def parsed_facts_to_candidates(
         dimensions = tuple(
             DimensionV1(name=name, member=member) for name, member in fact.dimensions
         )
+        if (
+            mapping is not None
+            and mapping.security_scope == "issuer"
+            and (
+                mapping.status != "approved"
+                or mapping.confidence != "high"
+                or observation_scope is None
+                or fact.security_scope not in {"unspecified", "issuer"}
+                or fact.consolidation_scope != "consolidated"
+                or dimensions
+                or unit != "iso4217:USD"
+            )
+        ):
+            raise SnapshotError(
+                "MAPPING_SECURITY_SCOPE_MISMATCH",
+                "issuer mapping requires its approved consolidated monetary observation",
+            )
         candidates.append(
             FactCandidateV1(
                 candidate_id=_candidate_id(
@@ -264,7 +281,8 @@ def parsed_facts_to_candidates(
                 dimensions=dimensions,
                 entity_scope=fact.entity_identifier or issuer_id,
                 consolidation_scope=fact.consolidation_scope,
-                security_scope=fact.security_scope,
+                security_scope=(mapping.security_scope if mapping else None)
+                or fact.security_scope,
                 as_of=as_of,
                 available_at=source.available_at,
                 filed_at=source.filed_at,
@@ -305,6 +323,16 @@ def _accounting_candidates(
 ) -> tuple[FactCandidateV1, ...]:
     rules = mapping.accounting_rules
     assert rules is not None
+    if mapping.security_scope == "issuer" and (
+        mapping.status != "approved"
+        or mapping.confidence != "high"
+        or rules.unit != "iso4217:USD"
+        or rules.currency != "USD"
+    ):
+        raise SnapshotError(
+            "MAPPING_SECURITY_SCOPE_MISMATCH",
+            "issuer mapping requires its approved monetary accounting rule",
+        )
     if (
         isinstance(source, OriginalOperatingSourceV1)
         != isinstance(rules, IssuerAccountingRoleRuleSetV1)
@@ -447,9 +475,12 @@ def _accounting_candidates(
                 dimensions=(),
                 entity_scope=issuer_id,
                 consolidation_scope="consolidated",
-                security_scope="issuer"
-                if isinstance(source, OriginalOperatingSourceV1)
-                else "security",
+                security_scope=mapping.security_scope
+                or (
+                    "issuer"
+                    if isinstance(source, OriginalOperatingSourceV1)
+                    else "security"
+                ),
                 as_of=datetime.combine(
                     period.period_end, datetime.min.time(), tzinfo=timezone.utc
                 ),

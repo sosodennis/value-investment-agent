@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -55,6 +56,27 @@ def read_intent(**values):
 
 def wire():
     return json.loads(FIXTURE.read_text())
+
+
+@pytest.mark.parametrize("scope", ["issuer", "class-a"])
+def test_statement_mapping_transport_retains_only_supported_explicit_scope(scope):
+    payload = wire()
+    statement = payload["statements"]
+    statement["candidate_evidence"][0]["mapping"]["security_scope"] = scope
+    statement["statement_id"] = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in statement.items() if key != "statement_id"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    if scope == "issuer":
+        result = AnnualStatementsReadResponseV1.model_validate(payload)
+        assert result.statements.candidate_evidence[0].mapping.security_scope == scope
+    else:
+        with pytest.raises(ValidationError):
+            AnnualStatementsReadResponseV1.model_validate(payload)
 
 
 def binding():

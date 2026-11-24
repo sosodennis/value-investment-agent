@@ -170,6 +170,7 @@ const parseStatementMappingV1 = object<Contracts['StatementMappingV1']>({
     reviewer: optional(union(text, nullValue)),
     reviewed_at: optional(union(timestamp, nullValue)),
     status: literal("approved", "provisional", "ambiguous", "rejected"),
+    security_scope: optional(union(literal("issuer"), nullValue)),
     accounting_rules: optional(union(dictionary(json), nullValue)),
     observation_scope: optional(union(dictionary(json), nullValue)),
 });

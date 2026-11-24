@@ -59,6 +59,9 @@ class StatementMappingV1(StatementTransportModel):
     reviewer: str | None = None
     reviewed_at: AwareDatetime | None = None
     status: Literal["approved", "provisional", "ambiguous", "rejected"]
+    security_scope: Literal["issuer"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     accounting_rules: dict[str, JsonValue] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )

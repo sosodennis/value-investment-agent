@@ -81,8 +81,8 @@ from .standard_accounting_representations import standard_accounting_representat
 from .statement_profiles import statement_row_definitions
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v43"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v43"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v44"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v44"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -747,6 +747,7 @@ def evaluate_automatic_mapping(
         )
         or proposal.accounting_rules is not None
         or proposal.observation_scope is not None
+        or proposal.security_scope is not None
         or proposal.status != "provisional"
     ):
         reasons.add("MAPPING_AUTOMATIC_RULE_UNSUPPORTED")
@@ -1047,6 +1048,10 @@ def evaluate_automatic_mapping(
             ),
             "observation_scope": scope,
         }
+        if proposal.normalized_field in {
+            row.row_id for row in statement_row_definitions()
+        }:
+            payload["security_scope"] = "issuer"
         if computed:
             anchor = DEPRECIATION
             if disclosed or option_cost:

@@ -5,6 +5,16 @@ import { parseAnnualStatements } from './annual-statements';
 const fixture = loadAnnualStatementFixture;
 
 describe('annual statement artifact boundary', () => {
+    it('preserves the approved issuer mapping target and rejects unknown scope', () => {
+        const raw = fixture();
+        const candidate = raw.statements.candidate_evidence[0];
+        if (!candidate) throw new Error('Expected candidate fixture');
+        Reflect.set(candidate.mapping, 'security_scope', 'issuer');
+        expect(parseAnnualStatements(raw).statements.candidate_evidence[0]?.mapping.security_scope).toBe('issuer');
+        Reflect.set(candidate.mapping, 'security_scope', 'class-a');
+        expect(() => parseAnnualStatements(raw)).toThrow(TypeError);
+    });
+
     it('retains exact Decimal, actual periods, source context and missing reasons', () => {
         const parsed = parseAnnualStatements(fixture());
         const first = parsed.statements.tables[0]?.rows[0]?.cells[0];

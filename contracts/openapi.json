@@ -10864,6 +10864,18 @@
             ],
             "title": "Reviewer"
           },
+          "security_scope": {
+            "anyOf": [
+              {
+                "const": "issuer",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Scope"
+          },
           "source_concept": {
             "title": "Source Concept",
             "type": "string"
