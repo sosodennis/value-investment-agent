@@ -1,0 +1,120 @@
+{
+  "issue": 494,
+  "branch": "codex/issue-494-annual-statements",
+  "commit": "715c48fb835f2fd542028d0594758f627faac23d",
+  "status": "WIP",
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent",
+    "browser_session": "CUA IAB browser2 tab2; http://127.0.0.1:23181/workspace",
+    "allowed_untracked_paths": [],
+    "app": {
+      "compose_project": "value-investment-agent-denniswong-494-app",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/docker-compose.yml",
+        "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue325-app-fundamental.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/app-runtime.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/app.env",
+      "service": "backend",
+      "container_port": 8000,
+      "published_port": 23180,
+      "url": "http://127.0.0.1:23180",
+      "env_file_sha256": "7e442ba9b3a0a89109bfe5aa14ddfcbe7933bbcf1ed119d290f4074fabc4e61d",
+      "compose_file_sha256": {
+        "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/docker-compose.yml": "a3b91ca3e91c9928185f49e2f8e509a728f9766e783a6abd13a6c5abfc5ab411",
+        "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue325-app-fundamental.yml": "ca735fd3f59e70d68c6e0c2d2d9816d3e4df4ce00d3b031440b4c75fb41464e4",
+        "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/app-runtime.yml": "6ca86567dca2ae2487d8512362d317ba3f6bb49473514cbd55925e6c3c8a9a20"
+      }
+    },
+    "fundamental": {
+      "compose_project": "value-investment-agent-denniswong-494-fundamental",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/fundamental-runtime.yml"
+      ],
+      "env_file": "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/fundamental.env",
+      "service": "fundamental-service",
+      "container_port": 8080,
+      "published_port": 23190,
+      "url": "http://127.0.0.1:23190",
+      "env_file_sha256": "ade54664f72a76585718f966b7205cb719ded5dd404239acfb159d5546770f94",
+      "compose_file_sha256": {
+        "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml": "9aa39254d0c2dfe4359587fbbae4c7aa527da71e1669ec9719fe5ff9d0fad264",
+        "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml": "80a1d825662d3f39c7c91b9d83c954b1bc818c89d150b3da19f30b3f46a432d9",
+        "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/fundamental-runtime.yml": "018eb4427db001d5467c973d1ec8dd093357053935ae7620df446ba55cf572a5"
+      }
+    }
+  },
+  "published_ports": {
+    "backend": 23180,
+    "frontend": 23181,
+    "app_postgres": 23182,
+    "redis": 23183,
+    "llm_provider": 23184,
+    "fundamental": 23190,
+    "fundamental_postgres": 23191,
+    "test_only_postgres": 23192
+  },
+  "sec_identity_required": true,
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "runtime_inputs": {
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/data-release-trust-roots.json": "f6437d552e9d031db68de39e3fc2aa2c24f27e8f9e7600112f548978a687f012",
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/model-trust-roots.json": "a2fb0422dca0870176c14de1648d8b91f8d735ce6816725dd5e3cd92fcd20b14",
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/statement-release-policy.json": "a39faca69261783f12857801b2fc1f4e2649b6de470beaee824cf9f37117fb97"
+  },
+  "resources": {
+    "plugins": {
+      "EDGAR": "054a21fa824797787acc2c6e98af4bb040c51bbee41b613cee1793db8fd144af",
+      "xule": "63123d67048019e3c49a0efde0e0aa8ec3eba0fc971da56ebd96dea8e40cd713"
+    },
+    "catalogs": {
+      "v31": "bd137e52ce8f0d9e68c7401863be43256f10b4d56d1761a42972a405bab991c9",
+      "v18": "bac9e4e284768e3df15d635eca45db63e213178dd82649ea5adec5b43c4ef8c6"
+    },
+    "taxonomy_cache_sha256": "fbcd82b406a2420f37bf17c7afc8baa823e7cfadd2308ccb8bfecf88648a9691"
+  },
+  "operator_private_material": "isolated operator-only named volume; not mounted to HTTP service",
+  "app_services": [
+    "postgres",
+    "redis",
+    "llm-provider-service",
+    "backend-migrations",
+    "backend",
+    "frontend"
+  ],
+  "fundamental_services": [
+    "fundamental-postgres",
+    "fundamental-service"
+  ],
+  "preflight": "passed exact 445504c6, SEC identity required; see preflight-445504c6.log",
+  "schema_version": 1,
+  "checks": [
+    {
+      "name": "acceptance-preflight",
+      "status": "pass",
+      "command": "python3 /tmp/issue494-source-review/run-preflight.py",
+      "exit_code": 0,
+      "tested_commit": "715c48fb835f2fd542028d0594758f627faac23d"
+    },
+    {
+      "name": "formal-annual-statement-flow",
+      "status": "not_run",
+      "command": "fundamental-prepare-statements; authenticated read; workspace inspection",
+      "exit_code": null
+    }
+  ],
+  "blockers": [
+    "#509 formal source-to-workspace coverage",
+    "#511 standalone thread ownership formal workflow",
+    "#512 failed original exact failure semantics formal workflow",
+    "#513 SEC authorization formal workflow",
+    "#514 submission dates formal workflow"
+  ],
+  "next_step": "四組固定issuer/cutoff正式operator、authenticated API/workspace、多尺寸互動、exact tests及獨立審閱；未全部通過前保持draft。"
+}
