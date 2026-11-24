@@ -1,11 +1,11 @@
 {
   "issue": 494,
   "branch": "codex/issue-494-annual-statements",
-  "commit": "6c0b7fe4434cc78f88dedd630c9c8a51e70e6a23",
+  "commit": "d0c7f4e537558073e15d974cb21db5be36c5fdf0",
   "status": "WIP",
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent",
-    "browser_session": "CUA IAB browser2 tab2; new tab required for updated tuple before next UI acceptance",
+    "browser_session": "CUA IAB browser2 tab2; new tab required for updated tuple before UI acceptance",
     "allowed_untracked_paths": [],
     "app": {
       "compose_project": "value-investment-agent-denniswong-494-app",
@@ -64,8 +64,8 @@
     }
   },
   "runtime_inputs": {
-    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/data-release-trust-roots.json": "72e6a2495c8770b5794631f1e064c2e7906316dd7282d320b91f80c25dacc6d9",
-    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/model-trust-roots.json": "1c40d85a71098d9bb5febebffd336b17b85250f90f98990532ac6ba5ab2935b0",
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/data-release-trust-roots.json": "91d44f191739599780a28fff35656d29322feeb4c55ebd0941b39e2c5ab3ec35",
+    "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/model-trust-roots.json": "e028955bce6656f57ea442e76a4a090b8abb98e025948e9d987e19db41cacbc0",
     "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/operator-public/statement-release-policy.json": "a39faca69261783f12857801b2fc1f4e2649b6de470beaee824cf9f37117fb97"
   },
   "resources": {
@@ -92,7 +92,7 @@
     "fundamental-postgres",
     "fundamental-service"
   ],
-  "preflight": "passed exact 6c0b7fe4434cc78f88dedd630c9c8a51e70e6a23, SEC identity required; see preflight-6c0b7fe4.log",
+  "preflight": "passed exact d0c7f4e537558073e15d974cb21db5be36c5fdf0, SEC identity required; see preflight-d0c7f4e5.log",
   "schema_version": 1,
   "checks": [
     {
@@ -100,7 +100,7 @@
       "status": "pass",
       "command": "python3 /tmp/issue494-source-review/run-preflight.py",
       "exit_code": 0,
-      "tested_commit": "6c0b7fe4434cc78f88dedd630c9c8a51e70e6a23"
+      "tested_commit": "d0c7f4e537558073e15d974cb21db5be36c5fdf0"
     },
     {
       "name": "formal-annual-statement-flow",
@@ -115,9 +115,9 @@
     "#512 failed original exact semantics",
     "#513 source organization authorization",
     "#514 original header dates",
-    "#515 prepared original identity formal workflow"
+    "#515 prepared original identity and source metadata formal workflow"
   ],
-  "next_step": "Exact-commit four-case operator and full suite are running; independent engineering and accounting review pending final outputs.",
+  "next_step": "Four formal frozen cases and exact full suite running; independent metadata probe now passes, remaining review and real page checks pending.",
   "runtime_resource_limits": {
     "parser_virtual_memory_bytes": 3221225472,
     "container_memory": "4GiB",
