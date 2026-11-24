@@ -223,7 +223,7 @@ def verify_matrix(
     ) != len(matrix.rows):
         raise ValueError("matrix repeats row or evidence identities")
     originals = {
-        item.uri: raw
+        item.evidence_id: raw
         for item in matrix.evidence
         if (raw := verify_evidence(item, evidence_dir, acquisitions)) is not None
     }
@@ -239,6 +239,11 @@ def verify_matrix(
     for row in matrix.rows:
         if not set(row.evidence_refs) <= evidence.keys():
             raise ValueError(f"matrix evidence reference absent: {row.row_id}")
+        row_originals = {
+            evidence[ref].uri: originals[ref]
+            for ref in row.evidence_refs
+            if ref in originals
+        }
         if any(
             getattr(row.rights, name).status == "evidence_supported"
             for name in Rights.model_fields
@@ -261,23 +266,36 @@ def verify_matrix(
         elif row.owner in {"macro", "reference"}:
             if not set(row.source_ids) <= public_ids:
                 raise ValueError(f"matrix source registration absent: {row.row_id}")
-            known_profiles = {
-                rule.source_version
-                for rule in policy.rules
-                if rule.source_id in row.source_ids
-                and rule.provider_id == row.provider_id
-                and rule.metric_id in row.metric_ids
-            }
-            known_profiles.update(
-                registration.profile.source_version
+            capture_profiles = tuple(
+                registration.profile
                 for registration in registrations
                 if registration.spec.source_id in row.source_ids
                 and isinstance(registration.profile, ReproducedMacroCaptureProfile)
             )
-            if not set(row.source_profiles) <= known_profiles:
-                raise ValueError(
-                    f"matrix installed source profile drifted: {row.row_id}"
-                )
+            if capture_profiles:
+                if (
+                    set(row.source_profiles)
+                    != {profile.source_version for profile in capture_profiles}
+                    or set(row.metric_ids)
+                    != {profile.series_id for profile in capture_profiles}
+                    or {row.provider_id}
+                    != {profile.provider.provider_id for profile in capture_profiles}
+                ):
+                    raise ValueError(
+                        f"matrix capture registration drifted: {row.row_id}"
+                    )
+            else:
+                known_profiles = {
+                    rule.source_version
+                    for rule in policy.rules
+                    if rule.source_id in row.source_ids
+                    and rule.provider_id == row.provider_id
+                    and rule.metric_id in row.metric_ids
+                }
+                if not set(row.source_profiles) <= known_profiles:
+                    raise ValueError(
+                        f"matrix installed source profile drifted: {row.row_id}"
+                    )
             for metric in row.metric_ids:
                 if row.owner == "macro":
                     supported_metric = any(
@@ -314,7 +332,7 @@ def verify_matrix(
                 "registry": "research_only"
                 if row.owner == "research"
                 else "registered",
-                "policy_projection": project_policy(row, policy, originals)
+                "policy_projection": project_policy(row, policy, row_originals)
                 if row.owner in {"macro", "reference", "quote"}
                 else None,
             }

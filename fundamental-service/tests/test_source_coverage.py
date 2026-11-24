@@ -449,3 +449,127 @@ def test_completed_sec_replay_cannot_repair_missing_report(
     monkeypatch.setattr(coverage, "parse_filing_offline", forbidden)
     with pytest.raises(ValueError, match="missing a retained parser report"):
         coverage.reproduce_sec(cohort, root)
+
+
+def test_supported_matrix_row_cannot_borrow_unreferenced_terms(
+    public_evidence, cohort, monkeypatch
+):
+    import verify_source_research_matrix as matrix
+
+    root = public_evidence
+    (root / "research-pages").mkdir()
+    (root / "research-pages/terms.html").write_bytes(TEST_TERMS)
+    unrelated = b"<html>Unrelated SEC access evidence.</html>"
+    (root / "research-pages/sec-access.html").write_bytes(unrelated)
+    terms = matrix.ResearchEvidence(
+        evidence_id="test-terms",
+        uri="https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm",
+        checked_on=AT.date(),
+        content_sha256=sha256(TEST_TERMS).hexdigest(),
+        boundary="whole document",
+        quote="Synthetic test-only government works notice.",
+        status="captured",
+        artifact_ref="research-pages/terms.html",
+    )
+    sec = terms.model_copy(
+        update={
+            "evidence_id": "sec-access",
+            "uri": "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data",
+            "content_sha256": sha256(unrelated).hexdigest(),
+            "quote": "Unrelated SEC access evidence.",
+            "artifact_ref": "research-pages/sec-access.html",
+        }
+    )
+    row = matrix_row(cohort)
+    supported = matrix.ResearchUse(
+        status="evidence_supported", reason="This row cites its exact test terms"
+    )
+    row = row.model_copy(
+        update={"rights": row.rights.model_copy(update={"analysis": supported})}
+    )
+    manifest = matrix.Matrix(
+        protocol="source-use-research-matrix-v1",
+        checked_on=AT.date(),
+        rows=(row,),
+        evidence=(terms, sec),
+    )
+    path = root / "matrix.json"
+    path.write_bytes(canonical_bytes(manifest))
+    acquisitions = PublicSourceAcquisition(
+        provider=PublicSourceAdapter(user_agent="Test <test@example.invalid>"),
+        artifacts=ArtifactStore(root / "artifacts"),
+        content=FilesystemContentStore(root / "content"),
+        capture_lock=lambda _: nullcontext(),
+    )
+    monkeypatch.setattr(
+        matrix,
+        "load_runtime_source_use_policy",
+        coverage.load_runtime_source_use_policy,
+    )
+    result = matrix.verify_matrix(path, root, acquisitions)
+    assert (
+        result["rows"][0]["policy_projection"]["rules"][0]["terms"][0]["matches"]
+        is True
+    )
+    wrong_reference = row.model_copy(update={"evidence_refs": ("sec-access",)})
+    path.write_bytes(
+        canonical_bytes(manifest.model_copy(update={"rows": (wrong_reference,)}))
+    )
+    with pytest.raises(ValueError, match="differs from installed policy/evidence"):
+        matrix.verify_matrix(path, root, acquisitions)
+    unconfirmed = wrong_reference.model_copy(
+        update={"rights": matrix_row(cohort).rights}
+    )
+    path.write_bytes(
+        canonical_bytes(manifest.model_copy(update={"rows": (unconfirmed,)}))
+    )
+    result = matrix.verify_matrix(path, root, acquisitions)
+    assert (
+        result["rows"][0]["policy_projection"]["rules"][0]["terms"][0]["matches"]
+        is None
+    )
+
+
+@pytest.mark.parametrize("changed_field", ["source_version", "series_id", "provider"])
+def test_matrix_rejects_capture_registration_drift_despite_unchanged_policy(
+    tmp_path, cohort, monkeypatch, changed_field
+):
+    from dataclasses import replace
+
+    import verify_source_research_matrix as matrix
+
+    row = matrix_row(cohort, evidence_refs=())
+    manifest = matrix.Matrix(
+        protocol="source-use-research-matrix-v1",
+        checked_on=AT.date(),
+        rows=(row,),
+        evidence=(),
+    )
+    path = tmp_path / "matrix.json"
+    path.write_bytes(canonical_bytes(manifest))
+    registrations = matrix.default_public_source_registrations()
+    changes = {
+        "source_version": "treasury-unreviewed-v2",
+        "series_id": "unreviewed.metric",
+        "provider": matrix.default_macro_providers()[0],
+    }
+    changed_registrations = tuple(
+        replace(
+            item,
+            profile=replace(item.profile, **{changed_field: changes[changed_field]}),
+        )
+        if item.spec.source_id == row.source_ids[0]
+        else item
+        for item in registrations
+    )
+    monkeypatch.setattr(
+        matrix, "default_public_source_registrations", lambda: changed_registrations
+    )
+    acquisitions = PublicSourceAcquisition(
+        provider=PublicSourceAdapter(user_agent="Test <test@example.invalid>"),
+        artifacts=ArtifactStore(tmp_path / "artifacts"),
+        content=FilesystemContentStore(tmp_path / "content"),
+        capture_lock=lambda _: nullcontext(),
+    )
+    with pytest.raises(ValueError, match="capture registration drifted"):
+        matrix.verify_matrix(path, tmp_path, acquisitions)
