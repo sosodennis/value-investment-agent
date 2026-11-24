@@ -1,0 +1,182 @@
+{
+  "protocol": "issue495-quarterly-ttm-cohort-v1",
+  "issue": 495,
+  "source_baseline": "9b76e799aa65a28dd77b19a65d732468f0817a18",
+  "scope": "Four frozen Apple and Microsoft SEC cohorts, each with eight report periods, 25 rows, and five rolling TTM windows",
+  "expectations_frozen_before_production": true,
+  "freeze_validation_state": {
+    "reference_fixture_review": "pending_independent_source_and_accounting_review",
+    "formal_validation_action": "pending",
+    "formal_ingestion_mapping_release": "pending",
+    "offline_resource_feasibility": {
+      "distinct_accessions_examined": 33,
+      "base_cache_no_blocking": 31,
+      "latest_msft_rechecked_on_ecd_cache": {
+        "accession": "0001193125-26-436133",
+        "blocking": [],
+        "facts": 1218,
+        "network_attempts": 0,
+        "cache_sha256": "af63b0b36d5cad6f2788e90fc323b56955ce581fd84e41330bac4ba765f3a6f0",
+        "report_sha256": "95a0f51f8c8d9b2c1091b93d49b8c20b40bab2f2caec8080313832b227b5bdb6",
+        "issue": "https://github.com/sosodennis/value-investment-agent/issues/522"
+      },
+      "remaining_raw_block": {
+        "accession": "0000950170-24-118967",
+        "code": "DQC.US.0015.5970",
+        "state": "active_error_block",
+        "issue": "https://github.com/sosodennis/value-investment-agent/issues/521"
+      }
+    }
+  },
+  "validation_note": "Offline resource feasibility and the independent numeric reference are distinct from formal validation, ingestion, mapping and release.",
+  "case_filing_bindings": 34,
+  "distinct_accessions": 33,
+  "scope_bound_response_receipts": 136,
+  "target_quarter_count": 32,
+  "prior_ytd_filings": 2,
+  "rolling_ttm_window_count": 20,
+  "statement_row_count": 25,
+  "promised_checker_cells": {
+    "quarter": 800,
+    "ttm": 500,
+    "total": 1300,
+    "annual_regression_cells": 500
+  },
+  "ui_coverage_method": {
+    "frequencies": [
+      "annual",
+      "quarter",
+      "ttm"
+    ],
+    "statements": [
+      "income_statement",
+      "balance_sheet",
+      "cash_flow"
+    ],
+    "required_widths_px": [
+      320,
+      390,
+      768,
+      1440
+    ],
+    "report_pane": "The actual workspace report pane, including a narrow-pane case.",
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "zoom": "Browser-native 200% zoom, verified from browser settings or effective viewport scale.",
+    "input_modes": [
+      "touch",
+      "keyboard"
+    ],
+    "focus": "Open a cell, inspect its source detail, close it, and verify focus returns to the selected cell.",
+    "cell_actions_per_case": {
+      "quarter": [
+        {
+          "row_id": "revenue",
+          "period_role": "latest_q4_within_case",
+          "state": "derived"
+        },
+        {
+          "row_id": "total_assets",
+          "period_role": "target_period_end",
+          "state": "reported"
+        },
+        {
+          "row_id": "operating_cash_flow",
+          "period_role": "q2_of_a_fiscal_year",
+          "state_by_issuer": {
+            "0000320193": "derived_from_ytd",
+            "0000789019": "direct_with_ytd_crosscheck"
+          }
+        },
+        {
+          "row_id": "cash_flow_beginning_balance",
+          "period_role": "q2_opening_boundary_at_day_before_start",
+          "state": "reported_instant"
+        },
+        {
+          "row_id": "cash_flow_ending_balance",
+          "period_role": "q2_closing_boundary_at_quarter_end",
+          "state": "reported_instant"
+        },
+        {
+          "row_id": "effect_of_exchange_rates_on_cash",
+          "period_role": "target_period_end",
+          "state": "missing_for_apple_reported_source"
+        }
+      ],
+      "ttm": [
+        {
+          "row_id": "revenue",
+          "period_role": "last_available_ttm_window",
+          "state": "derived_from_four_quarters"
+        },
+        {
+          "row_id": "total_assets",
+          "period_role": "last_available_ttm_window_end",
+          "state": "reported_instant"
+        },
+        {
+          "row_id": "operating_cash_flow",
+          "period_role": "last_available_ttm_window",
+          "state": "derived_from_four_quarters"
+        },
+        {
+          "row_id": "cash_flow_beginning_balance",
+          "period_role": "day_before_last_available_ttm_window_start",
+          "state": "reported_instant"
+        },
+        {
+          "row_id": "cash_flow_ending_balance",
+          "period_role": "last_available_ttm_window_end",
+          "state": "reported_instant"
+        },
+        {
+          "row_id": "effect_of_exchange_rates_on_cash",
+          "period_role": "last_available_ttm_window",
+          "state": "missing_for_apple_reported_source"
+        }
+      ],
+      "annual": [
+        {
+          "row_id": "revenue",
+          "period_role": "last_annual_period_in_existing_annual_fixture",
+          "state": "reported"
+        },
+        {
+          "row_id": "cash_and_equivalents",
+          "period_role": "last_annual_period_in_existing_annual_fixture",
+          "state": "reported"
+        },
+        {
+          "row_id": "operating_cash_flow",
+          "period_role": "last_annual_period_in_existing_annual_fixture",
+          "state": "reported"
+        },
+        {
+          "row_id": "effect_of_exchange_rates_on_cash",
+          "period_role": "last_annual_period_in_existing_annual_fixture",
+          "state_by_issuer": {
+            "0000320193": "missing",
+            "0000789019": "reported"
+          }
+        }
+      ]
+    },
+    "no_ui_operation_claims": "Data checker coverage does not count as UI interaction coverage. Record each browser operation and outcome separately.",
+    "workflow_actions": [
+      "At each required width switch annual, quarter, and TTM in the genuine workspace report pane, inspect the sampled cells for all three tables, and check local horizontal scroll without page overflow.",
+      "Repeat in light and dark themes with the actual narrow report pane. Set browser-native zoom to 200 percent through browser controls and record the effective viewport.",
+      "Use touch to open and dismiss a cell. Use Tab, Enter or Space, then Escape with the keyboard and verify visible focus returns to the originating cell.",
+      "Save the selected frequency and period URL, reload it, then go Back and Forward. Verify the period, cutoff, source identity and selection.",
+      "Switch rapidly while a previous response is delayed. Verify that the late response cannot replace the active frequency, period or cell evidence."
+    ]
+  },
+  "case_files": [
+    "cases/aapl-historical.json",
+    "cases/aapl-current.json",
+    "cases/msft-historical.json",
+    "cases/msft-current.json"
+  ]
+}
