@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Callable, Sequence
-from contextlib import nullcontext
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict
 
 from filelock import FileLock
 from pydantic import (
@@ -50,6 +50,13 @@ DEFAULT_COHORT = (
     Path(__file__).resolve().parents[1]
     / "tests/fixtures/annual-statements/issue494-cohort.json"
 )
+
+
+class FilingCaptureArguments(TypedDict):
+    cik: str
+    accession_number: str
+    filed_at: datetime
+    deadline_at: datetime
 
 
 class FrozenModel(BaseModel):
@@ -390,8 +397,10 @@ def capture_sources(
     locks = evidence_dir / "locks"
     locks.mkdir(parents=True, exist_ok=True)
 
-    def capture_lock(key: str) -> FileLock:
-        return FileLock(locks / f"{key}.lock", timeout=30)
+    @contextmanager
+    def capture_lock(key: str) -> Iterator[None]:
+        with FileLock(locks / f"{key}.lock", timeout=30):
+            yield
 
     discovery = AnnualDiscovery(
         provider=provider,
@@ -452,7 +461,7 @@ def capture_sources(
                 content=content,
                 capture_lock=capture_lock,
             )
-            kwargs = {
+            kwargs: FilingCaptureArguments = {
                 "cik": filing.issuer_id,
                 "accession_number": filing.accession_number,
                 "filed_at": filing.accepted_at,
