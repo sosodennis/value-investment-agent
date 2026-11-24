@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from pydantic import Field
+from pydantic import Field, TypeAdapter, model_validator
 
 from .automatic_release_evidence import require_automatic_release_sources
 from .parser_action_evidence import require_current_parser_action_refs
@@ -60,6 +60,11 @@ from .snapshots import SnapshotError
 from .source_admission import SourceUsePolicyV1
 from .source_admission_evidence import load_release_source_admissions
 from .source_plan_contracts import AutomaticSourcePreparationPlanV1
+from .statement_contracts import StatementProfileV1
+from .statement_profiles import annual_statement_profile, statement_executable_digest
+from .statement_releases import read_statement_release
+from .original_preparation import OriginalPreparation
+from .snapshots import ContentAddressedStore
 from .valuation_release_inputs import valuation_release_requirements
 from .valuation_requirements import (
     composite_working_capital_requirements_profile,
@@ -110,6 +115,36 @@ class AutomaticDataReleasePolicyV1(ReleaseModel):
     )
 
 
+class AutomaticStatementReleasePolicyV1(ReleaseModel):
+    protocol: Literal["automatic-statement-release-policy-v1"] = (
+        "automatic-statement-release-policy-v1"
+    )
+    scope: Literal["annual-statements"] = "annual-statements"
+    statement_profile: StatementProfileV1
+    mapping_version: str = Field(min_length=1)
+    parser_version: str = Field(min_length=1)
+    validation_profile_digests: tuple[str, ...] = Field(min_length=1)
+    verifier_id: str = Field(min_length=1)
+    workflow_identity: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def statement_policy_is_installed(self) -> AutomaticStatementReleasePolicyV1:
+        if self.statement_profile != annual_statement_profile(
+            executable_digest=statement_executable_digest()
+        ) or self.validation_profile_digests != tuple(
+            sorted(set(self.validation_profile_digests))
+        ):
+            raise ValueError(
+                "statement release policy requires the installed profile and distinct validation pins"
+            )
+        return self
+
+
+_AUTOMATIC_RELEASE_POLICY = TypeAdapter(
+    AutomaticDataReleasePolicyV1 | AutomaticStatementReleasePolicyV1
+)
+
+
 class AutomaticDataReleaseRequestV1(ReleaseModel):
     manifest: IssuerOperatingReleaseManifestV1 | DataReleaseManifestV1
     content: DataReleaseContentRequestV1
@@ -154,7 +189,7 @@ class AutomaticDataReleaseService:
         mappings: ReleaseMappingReader,
         artifacts: EvidenceArtifactStore,
         trust_roots: DataReleaseTrustRootsV1,
-        policy: AutomaticDataReleasePolicyV1,
+        policy: AutomaticDataReleasePolicyV1 | AutomaticStatementReleasePolicyV1,
         private_key: Ed25519PrivateKey,
         source_revision: str,
         quote_providers: tuple[QuoteSourceProviderPort, ...] = (),
@@ -163,6 +198,8 @@ class AutomaticDataReleaseService:
         source_use_policy: SourceUsePolicyV1 | None = None,
         policy_registry: PolicyRegistry | None = None,
         market_authority: AutomaticMarketAuthorityRuntime | None = None,
+        statement_originals: OriginalPreparation | None = None,
+        statement_content: ContentAddressedStore | None = None,
     ) -> None:
         self._snapshots, self._mappings, self._artifacts = (
             snapshots,
@@ -172,9 +209,7 @@ class AutomaticDataReleaseService:
         self._roots = DataReleaseTrustRootsV1.model_validate_json(
             canonical_bytes(trust_roots)
         )
-        self._policy = AutomaticDataReleasePolicyV1.model_validate_json(
-            canonical_bytes(policy)
-        )
+        self._policy = _AUTOMATIC_RELEASE_POLICY.validate_json(canonical_bytes(policy))
         self._key = private_key
         self._revision = source_revision
         self._source_use_policy = source_use_policy
@@ -193,11 +228,15 @@ class AutomaticDataReleaseService:
             macro_providers=macro_providers,
             reference_providers=reference_providers,
             source_use_policy=source_use_policy,
+            statement_originals=statement_originals,
+            statement_content=statement_content,
         )
 
     def _market_registry(
         self, request: AutomaticDataReleaseRequestV1
     ) -> tuple[PolicyRegistry | None, tuple[PolicyRecordV1, ...]]:
+        if isinstance(self._policy, AutomaticStatementReleasePolicyV1):
+            return None, ()
         authorization = self._policy.market_policy_authorization
         if authorization is None:
             return self._policy_registry, ()
@@ -277,6 +316,40 @@ class AutomaticDataReleaseService:
             raise DataReleaseError(
                 "AUTOMATIC_RELEASE_REVISION_MISMATCH",
                 "request revision must match the installed deployment",
+            )
+        statement = read_statement_release(manifest, artifacts=self._artifacts)
+        if isinstance(policy, AutomaticStatementReleasePolicyV1):
+            if (
+                statement is None
+                or request.source_plan is not None
+                or statement.projection.profile != policy.statement_profile
+                or statement.mapping_version != policy.mapping_version
+                or manifest.parser_version != policy.parser_version
+                or any(
+                    not isinstance(
+                        snapshot := self._snapshots.get(ref.snapshot_id),
+                        SourceSnapshotV1,
+                    )
+                    or snapshot.validation_profile_digest is None
+                    or snapshot.validation_profile_digest
+                    not in policy.validation_profile_digests
+                    for ref in manifest.snapshot_refs
+                )
+                or any(
+                    self._read_mapping(ref.mapping_id).mapping_version
+                    != policy.mapping_version
+                    for ref in manifest.mapping_refs
+                )
+            ):
+                raise DataReleaseError(
+                    "AUTOMATIC_RELEASE_POLICY_MISMATCH",
+                    "statement release must match its installed row, source, and validation policy",
+                )
+            return
+        if statement is not None:
+            raise DataReleaseError(
+                "AUTOMATIC_RELEASE_POLICY_MISMATCH",
+                "statement releases require their explicit deployment signing policy",
             )
         issuer_scope = isinstance(manifest, IssuerOperatingReleaseManifestV1)
         if isinstance(manifest, IssuerOperatingReleaseManifestV1):
@@ -460,14 +533,22 @@ class AutomaticDataReleaseService:
                     "AUTOMATIC_RELEASE_MARKET_POLICY_MISSING",
                     "security signing requires a checked deployment market policy for every snapshot",
                 )
-            regulatory = require_automatic_release_sources(
-                request.manifest,
-                request.content,
-                snapshots=self._snapshots,
-                mappings=self._mappings,
-                artifacts=self._artifacts,
-                validation_profile_digest=self._policy.validation_profile_digest,
-            )
+            if isinstance(self._policy, AutomaticStatementReleasePolicyV1):
+                regulatory = content.checked_regulatory_evidence_digests
+                if not regulatory:
+                    raise DataReleaseError(
+                        "AUTOMATIC_RELEASE_REGULATORY_EVIDENCE_MISSING",
+                        "statement signing requires independently validated source evidence",
+                    )
+            else:
+                regulatory = require_automatic_release_sources(
+                    request.manifest,
+                    request.content,
+                    snapshots=self._snapshots,
+                    mappings=self._mappings,
+                    artifacts=self._artifacts,
+                    validation_profile_digest=self._policy.validation_profile_digest,
+                )
             guard_execution_deadline(deadline_at)
             content_pub = self._artifacts.put_with_receipt(
                 "automatic-release-content-" + content.digest,

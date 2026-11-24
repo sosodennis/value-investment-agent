@@ -13,6 +13,7 @@ from .arelle_parser import ParsedXbrlFactV1
 from .data_releases import DataReleaseError, ReleaseModel
 from .registered_statement_row_registry import PRIMARY_STATEMENTS
 from .original_issuer import OriginalIssuerEvidenceV1
+from .statement_contracts import CashBasis
 from typing import Literal
 
 CASH_STATEMENT_ROLES = frozenset(
@@ -62,6 +63,34 @@ def require_registered_primary_statement_scope(
             "STATEMENT_ORIGINAL_SCOPE_MISMATCH",
             "reviewed original raw and canonical parser inputs differ",
         )
+
+
+def statement_cash_basis(
+    original: OriginalIssuerEvidenceV1, row_id: str, concept: str
+) -> CashBasis | None:
+    activities = {"operating_cash_flow", "investing_cash_flow", "financing_cash_flow"}
+    if row_id not in CASH_STATEMENT_ROLES | activities:
+        return None
+    scope = PRIMARY_STATEMENTS.get(
+        (original.source.cik, original.source.accession_number)
+    )
+    if scope is None:
+        return None
+    if row_id in activities:
+        concept = scope.cash_balance_concept
+    if concept in {
+        "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+        "us-gaap:CashAndCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect",
+        "us-gaap:EffectOfExchangeRateOnCashAndCashEquivalents",
+    }:
+        return "cash_and_equivalents"
+    if concept in {
+        "us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+        "us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect",
+        "us-gaap:EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations",
+    }:
+        return "cash_equivalents_and_restricted_cash"
+    return None
 
 
 class PrimaryStatementScopeEvidenceV1(ReleaseModel):

@@ -831,7 +831,7 @@ class SecAcquisitionUseCase:
             is_inline_xbrl=annual.is_inline_xbrl,
         )
 
-    def _original_preparation(self) -> OriginalPreparation:
+    def original_preparation(self) -> OriginalPreparation:
         if self.capture_store is None:
             raise SnapshotError("SEC_CAPTURE_STORE_UNAVAILABLE", "evidence unavailable")
         return OriginalPreparation(
@@ -853,7 +853,7 @@ class SecAcquisitionUseCase:
         if self.capture_store is None:
             yield
             return
-        scope = OriginalPreparationReads(self._original_preparation())
+        scope = OriginalPreparationReads(self.original_preparation())
         token = self._original_reads.set(scope)
         try:
             yield
@@ -884,7 +884,7 @@ class SecAcquisitionUseCase:
                 "original evidence store is unavailable",
             )
         scope = self._original_reads.get()
-        originals = scope.owner if scope is not None else self._original_preparation()
+        originals = scope.owner if scope is not None else self.original_preparation()
         if originals.reference(reference.artifact_id, reference.role) != reference:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "reference differs")
         cutoff = request.public_source_cutoff

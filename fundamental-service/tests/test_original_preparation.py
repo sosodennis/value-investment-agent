@@ -33,9 +33,16 @@ from test_automatic_source_acquisition import acquisition_case
 from test_automatic_source_mapping import source_case
 
 
-def case(tmp_path, monkeypatch, *, multiple_originals=False, historical_annual=False):
+def case(
+    tmp_path,
+    monkeypatch,
+    *,
+    multiple_originals=False,
+    historical_annual=False,
+    statement_original=False,
+):
     source, acquisition, state, metadata, artifacts = acquisition_case(
-        tmp_path, monkeypatch
+        tmp_path, monkeypatch, statement_original=statement_original
     )
     _, _, original, _, _ = source_case(tmp_path / "expected")
     delegate = acquisition.adapter._request

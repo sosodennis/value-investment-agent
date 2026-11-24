@@ -135,6 +135,15 @@ from ..replay import (
     replay_manifest,
 )
 from ..serialization import canonical_bytes, is_digest, sha256_digest
+from ..original_preparation import OriginalPreparation
+from ..statement_contracts import (
+    AnnualStatementsReadRequestV1,
+    AnnualStatementsReadResponseV1,
+)
+from ..statement_releases import (
+    read_statement_release,
+    verify_statement_release_membership,
+)
 from ..snapshots import (
     ContentAddressedStore,
     SnapshotError,
@@ -431,6 +440,7 @@ class FundamentalApplication:
     macro_providers: tuple[MacroSeriesProviderPort, ...] = ()
     reference_providers: tuple[MarketReferenceProviderPort, ...] = ()
     source_use_policy: SourceUsePolicyV1 | None = None
+    statement_originals: OriginalPreparation | None = None
     release_cache: CacheLifecycle = dataclass_field(
         default_factory=lambda: CacheLifecycle(max_entries=256),
         repr=False,
@@ -1315,6 +1325,72 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             ) from error
+
+    def read_annual_statements(
+        self,
+        request: AnnualStatementsReadRequestV1,
+        *,
+        deadline_at: datetime | None = None,
+    ) -> AnnualStatementsReadResponseV1:
+        if (
+            self.statement_originals is None
+            or self.content_store is None
+            or self.snapshot_repository is None
+            or self.fact_repository is None
+        ):
+            raise ServiceError(
+                "STATEMENT_READING_UNAVAILABLE",
+                "annual statement source dependencies are unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        manifest = self._data_release_manifest(request.data_release_manifest_digest)
+        try:
+            self._verify_current_release_artifacts(manifest, deadline_at=deadline_at)
+            envelope = read_statement_release(manifest, artifacts=self.artifact_store)
+            if envelope is None:
+                raise ServiceError(
+                    "STATEMENT_RELEASE_REQUIRED",
+                    "the pinned release does not contain annual statements",
+                    status_code=422,
+                    retryable=False,
+                )
+            if envelope.projection.cutoff_at != request.cutoff_at:
+                raise ServiceError(
+                    "STATEMENT_CUTOFF_MISMATCH",
+                    "the requested cutoff differs from the immutable statement release",
+                    status_code=422,
+                    retryable=False,
+                )
+            verification = self.metadata_store.get_data_release_verification(
+                manifest.manifest_digest
+            )
+            if not isinstance(verification, DataReleaseVerificationV1):
+                raise DataReleaseError(
+                    "DATA_RELEASE_VERIFICATION_UNAVAILABLE",
+                    "statement release verification is unavailable",
+                )
+            verify_statement_release_membership(
+                manifest,
+                envelope,
+                originals=self.statement_originals,
+                content=self.content_store,
+                snapshots=self.snapshot_repository,
+                facts=self.fact_repository,
+                mappings=self.metadata_store,
+                artifacts=self.artifact_store,
+                source_revision=verification.source_revision,
+            )
+            guard_execution_deadline(deadline_at)
+            return AnnualStatementsReadResponseV1(
+                contract_version="fundamental.annual-statements.v1",
+                data_release_manifest_digest=manifest.manifest_digest,
+                statements=envelope.statements,
+            )
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
 
     def read_facts(self, request: FactsReadRequestV1) -> FactsReadResponseV1:
         if self.fact_repository is None:

@@ -32,7 +32,7 @@ from fundamental_service.sec_source import (
 from fundamental_service.serialization import canonical_bytes
 from fundamental_service.snapshots import FilesystemSnapshotRepository
 from fundamental_service.source_acquisition import SecAcquisitionUseCase
-from test_automatic_source_mapping import source_case
+from test_automatic_source_mapping import source_case, statement_source_case
 from test_issuer_operating_release import inventory
 
 PROXY_BYTES = b"<html><body>synthetic definitive proxy</body></html>"
@@ -78,8 +78,13 @@ def acquisition_case(
     content=None,
     repository=None,
     historical_proxy=False,
+    statement_original=False,
 ):
-    request, authority, validated, source_artifacts, _ = source_case(tmp_path / "seed")
+    request, authority, validated, source_artifacts, _ = (
+        statement_source_case(tmp_path / "seed", monkeypatch)
+        if statement_original
+        else source_case(tmp_path / "seed")
+    )
     metadata = metadata or MemoryAcquisitions()
     artifacts = artifacts or ArtifactStore(tmp_path / "artifacts")
     content = content or authority.content
@@ -104,6 +109,14 @@ def acquisition_case(
         }
     )
     raw = content.get(original.source.content_hash, media_type="application/xml")
+    complete_submission = next(
+        (
+            source
+            for source in validated.captured_sources
+            if source.source_id == "sec-filing-submission"
+        ),
+        None,
+    )
     primary = original.source.uri.rsplit("/", 1)[1]
     schema = Path(primary).stem + ".xsd"
     package = io.BytesIO()
@@ -189,6 +202,16 @@ def acquisition_case(
                 value, media = index, "application/json"
             elif uri.endswith(".zip"):
                 value, media = package.getvalue(), "application/zip"
+            elif complete_submission is not None and uri.endswith(
+                "/" + original.source.accession_number + ".txt"
+            ):
+                value, media = (
+                    content.get(
+                        complete_submission.content_hash,
+                        media_type=complete_submission.media_type,
+                    ),
+                    complete_submission.media_type,
+                )
             elif uri.endswith("/" + proxy_document):
                 value, media = proxy_bytes, "text/html"
             else:

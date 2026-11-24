@@ -458,6 +458,18 @@ class AnnualStatementsV1(ReleaseModel):
         return self
 
 
+class AnnualStatementsReadRequestV1(ReleaseModel):
+    contract_version: Literal["fundamental.annual-statements.v1"]
+    data_release_manifest_digest: Digest
+    cutoff_at: AwareDatetime
+
+
+class AnnualStatementsReadResponseV1(ReleaseModel):
+    contract_version: Literal["fundamental.annual-statements.v1"]
+    data_release_manifest_digest: Digest
+    statements: AnnualStatementsV1
+
+
 def value_period(
     column: StatementColumnV1,
     role: ValuePeriodRole,

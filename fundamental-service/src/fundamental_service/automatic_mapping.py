@@ -917,10 +917,10 @@ def evaluate_automatic_mapping(
             original, proposal.normalized_field
         )
         reasons.update(cash.reason_codes)
-        if (
-            registered_primary_concept(original, proposal.normalized_field)
-            != proposal.source_concept
-        ):
+        primary_concept = registered_primary_concept(
+            original, proposal.normalized_field
+        )
+        if primary_concept is not None and primary_concept != proposal.source_concept:
             reasons.add("MAPPING_STATEMENT_ROW_CONCEPT_MISMATCH")
         assert rule is not None
         for fact in cash.selected:
