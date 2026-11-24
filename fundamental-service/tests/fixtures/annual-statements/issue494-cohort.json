@@ -1,0 +1,3131 @@
+{
+  "protocol": "issue494-annual-statements-cohort-v1",
+  "issue": 494,
+  "source_baseline": "2582ae07a1790fa7a3cb58fd6668acec5e31908f",
+  "scope": "SEC US-GAAP non-financial issuers; declared major rows, not complete financial statements and notes",
+  "history_coverage_target": 5,
+  "supported_history_threshold": null,
+  "expectations_frozen_before_production": true,
+  "raw_source_use": "retained originals for verification; issuer raw-document redistribution not authorized by this fixture",
+  "cases": [
+    {
+      "case_id": "aapl-historical",
+      "issuer_id": "0000320193",
+      "cutoff_at": "2024-11-02T00:00:00+00:00",
+      "discovery_artifact_id": "annual-discovery:d5c5e2bddcc0fa24ccbc394645857be8547f3f37c3dd9524ecba3f3632e23a90",
+      "discovery_evidence_digest": "5de75cfc4c5fd44333adeadc2713c5a462b2f25a39073cdf18d6fae581b9a3d1",
+      "requested_years": [
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "original_accessions": [
+        "0000320193-20-000096",
+        "0000320193-21-000105",
+        "0000320193-22-000108",
+        "0000320193-23-000106",
+        "0000320193-24-000123"
+      ],
+      "expected_after_implementation": "major_annual_statements_with_per_cell_status",
+      "validation_state_at_freeze": "not_run",
+      "selection_reason": "Five latest original annuals eligible at this explicit cutoff; runtime incompatibility cannot substitute an older original",
+      "discovery_artifact_ref": {
+        "artifact_id": "annual-discovery:d5c5e2bddcc0fa24ccbc394645857be8547f3f37c3dd9524ecba3f3632e23a90",
+        "content_hash": "5de75cfc4c5fd44333adeadc2713c5a462b2f25a39073cdf18d6fae581b9a3d1",
+        "retained_path": "artifacts/5de75cfc4c5fd44333adeadc2713c5a462b2f25a39073cdf18d6fae581b9a3d1.bacb769b46f6d169.artifact"
+      }
+    },
+    {
+      "case_id": "aapl-current",
+      "issuer_id": "0000320193",
+      "cutoff_at": "2026-11-24T00:00:00+00:00",
+      "discovery_artifact_id": "annual-discovery:144dd95ce057f9aab29f804e19b8325fd6444223ee313e44085ee97e56d03635",
+      "discovery_evidence_digest": "b91f6fbc1995e84f0923b098354fb94b5b63a1c7190880d78c2f9ea7b897add8",
+      "requested_years": [
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "original_accessions": [
+        "0000320193-22-000108",
+        "0000320193-23-000106",
+        "0000320193-24-000123",
+        "0000320193-25-000079",
+        "0000320193-26-000026"
+      ],
+      "expected_after_implementation": "major_annual_statements_with_per_cell_status",
+      "validation_state_at_freeze": "not_run",
+      "selection_reason": "Five latest original annuals eligible at this explicit cutoff; runtime incompatibility cannot substitute an older original",
+      "discovery_artifact_ref": {
+        "artifact_id": "annual-discovery:144dd95ce057f9aab29f804e19b8325fd6444223ee313e44085ee97e56d03635",
+        "content_hash": "b91f6fbc1995e84f0923b098354fb94b5b63a1c7190880d78c2f9ea7b897add8",
+        "retained_path": "artifacts/b91f6fbc1995e84f0923b098354fb94b5b63a1c7190880d78c2f9ea7b897add8.bacb769b46f6d169.artifact"
+      }
+    },
+    {
+      "case_id": "msft-historical",
+      "issuer_id": "0000789019",
+      "cutoff_at": "2024-11-02T00:00:00+00:00",
+      "discovery_artifact_id": "annual-discovery:6ae5f10f56bb636e31696a1db3d7490f335e0603033c44a235acecef93c65b33",
+      "discovery_evidence_digest": "26683a3d8f47341458163f2443f789734edab4322f743d2e183f4535a169b0c9",
+      "requested_years": [
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "original_accessions": [
+        "0000950170-23-035122",
+        "0000950170-24-087843",
+        "0001564590-20-034944",
+        "0001564590-21-039151",
+        "0001564590-22-026876"
+      ],
+      "expected_after_implementation": "major_annual_statements_with_per_cell_status",
+      "validation_state_at_freeze": "not_run",
+      "selection_reason": "Five latest original annuals eligible at this explicit cutoff; runtime incompatibility cannot substitute an older original",
+      "discovery_artifact_ref": {
+        "artifact_id": "annual-discovery:6ae5f10f56bb636e31696a1db3d7490f335e0603033c44a235acecef93c65b33",
+        "content_hash": "26683a3d8f47341458163f2443f789734edab4322f743d2e183f4535a169b0c9",
+        "retained_path": "artifacts/26683a3d8f47341458163f2443f789734edab4322f743d2e183f4535a169b0c9.bacb769b46f6d169.artifact"
+      }
+    },
+    {
+      "case_id": "msft-current",
+      "issuer_id": "0000789019",
+      "cutoff_at": "2026-11-24T00:00:00+00:00",
+      "discovery_artifact_id": "annual-discovery:2a3b0dc8355dd4a19bf5acd64bcedec2edbf1c22ffca9dff354d1752e8e488ba",
+      "discovery_evidence_digest": "0cde8056e1d2e334fc433d6ea747879b09e76c8d376a0f3f7db05ca18c9ffe72",
+      "requested_years": [
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "original_accessions": [
+        "0000950170-23-035122",
+        "0000950170-24-087843",
+        "0000950170-25-100235",
+        "0001193125-26-323660",
+        "0001564590-22-026876"
+      ],
+      "expected_after_implementation": "major_annual_statements_with_per_cell_status",
+      "validation_state_at_freeze": "not_run",
+      "selection_reason": "Five latest original annuals eligible at this explicit cutoff; runtime incompatibility cannot substitute an older original",
+      "discovery_artifact_ref": {
+        "artifact_id": "annual-discovery:2a3b0dc8355dd4a19bf5acd64bcedec2edbf1c22ffca9dff354d1752e8e488ba",
+        "content_hash": "0cde8056e1d2e334fc433d6ea747879b09e76c8d376a0f3f7db05ca18c9ffe72",
+        "retained_path": "artifacts/0cde8056e1d2e334fc433d6ea747879b09e76c8d376a0f3f7db05ca18c9ffe72.bacb769b46f6d169.artifact"
+      }
+    }
+  ],
+  "filings": [
+    {
+      "issuer_id": "0000320193",
+      "accepted_at": "2020-10-29T22:06:25Z",
+      "accession_number": "0000320193-20-000096",
+      "filing_date": "2020-10-30",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "aapl-20200926.htm",
+      "report_period_end": "2020-09-26",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000096/0000320193-20-000096-xbrl.zip",
+          "content_hash": "f35eabefc7b0c70bde8332def282cbb6ff7c293f5dc135fc050be540a4326ca8",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:43:54.712333Z",
+          "response_headers": [
+            [
+              "content-length",
+              "564770"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:43:54 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 30 Oct 2020 10:05:38 GMT"
+            ]
+          ],
+          "declared_size": 564770,
+          "received_size": 564770,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:2eb17a030f5e6d83960af084a1f2a4a027b22bf01a15728cb577155d889824a6",
+              "content_hash": "7a1928bff0def5032d7474c8f22b8c5b82fa6a9d8833ee3af57cde4b81112469",
+              "retained_path": "artifacts/7a1928bff0def5032d7474c8f22b8c5b82fa6a9d8833ee3af57cde4b81112469.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-20-000096",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000096/0000320193-20-000096.txt",
+          "content_hash": "79e20f91eb22d0e6de03159f2a3c4c0ebe5de632121384ccfcf01f463966482d",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:43:56.905041Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:43:56 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 30 Oct 2020 10:05:39 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 12502600,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:fce784693b5109d0738a6234c2ee68b1f0f55103405589deb5468b1f3a61ec6e",
+              "content_hash": "c6a475c81f11571547ce047200a4798df90c0e36f8f8b0847617c60db33cae07",
+              "retained_path": "artifacts/c6a475c81f11571547ce047200a4798df90c0e36f8f8b0847617c60db33cae07.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-20-000096",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000096/aapl-20200926.htm",
+          "content_hash": "247d6a992380d121caf77d37efa77d39572fb0e93e78537e9ba3f8e45d4f5fd2",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:43:55.673069Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:43:55 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 30 Oct 2020 10:05:46 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 2467422,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:8a43dcea58549f2a178cee3508544129be53adc3120a6e2364414d264d630b43",
+              "content_hash": "531c551c1f833cfbf3fcda4ec5a27d4ed5496827c69040f857d9084ece37ab0c",
+              "retained_path": "artifacts/531c551c1f833cfbf3fcda4ec5a27d4ed5496827c69040f857d9084ece37ab0c.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-20-000096",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000096/index.json",
+          "content_hash": "568994033faed89a95c8192670d68a3f4ba227a125bc4ec030c41e317d8b9a1c",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:43:54.071273Z",
+          "response_headers": [
+            [
+              "content-length",
+              "9804"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:43:54 GMT"
+            ]
+          ],
+          "declared_size": 9804,
+          "received_size": 9804,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:641875aff7aa5eb8bc6458ff895d3c4ecbd99fc26aef5970e99685d872710f04",
+              "content_hash": "1c390da017924d27f07204392aae5676472e8547ac8e0bd080b90e8a5c81f133",
+              "retained_path": "artifacts/1c390da017924d27f07204392aae5676472e8547ac8e0bd080b90e8a5c81f133.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-20-000096",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "srt": "http://fasb.org/srt/2020-01-31",
+        "country": "http://xbrl.sec.gov/country/2020-01-31",
+        "us-gaap": "http://fasb.org/us-gaap/2020-01-31",
+        "dei": "http://xbrl.sec.gov/dei/2020-01-31"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2020-01-31",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000320193",
+      "accepted_at": "2021-10-28T22:04:28Z",
+      "accession_number": "0000320193-21-000105",
+      "filing_date": "2021-10-29",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "aapl-20210925.htm",
+      "report_period_end": "2021-09-25",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019321000105/0000320193-21-000105-xbrl.zip",
+          "content_hash": "84282fcac0ee05d1b56718cf2feaea60c85a68c1951456aa1c735a318fd50aa0",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:43:58.150732Z",
+          "response_headers": [
+            [
+              "content-length",
+              "497560"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:43:57 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 29 Oct 2021 10:02:07 GMT"
+            ]
+          ],
+          "declared_size": 497560,
+          "received_size": 497560,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:bf038d1edfce428c3c6bc8a90522181ade21d06b1c0c7395276a9233b589b066",
+              "content_hash": "8749c3a82c29f8e14ed815c1f03aea4dc96283e1caf4291d0a04f0f9539c9ca5",
+              "retained_path": "artifacts/8749c3a82c29f8e14ed815c1f03aea4dc96283e1caf4291d0a04f0f9539c9ca5.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-21-000105",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019321000105/0000320193-21-000105.txt",
+          "content_hash": "fc28841903236990d6f79b9ffab95ebce1f86983221b3128173c1a1d3ecaecd0",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:00.245083Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:43:59 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 29 Oct 2021 10:02:08 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 10502096,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:214bc76a8cefca6046e8dfc2c358db92821af43311825b4a04fe3f21580b691b",
+              "content_hash": "267a0c07240f70c45fdfad243e72f9e65fab217f15bc5f619d03013a278b4d89",
+              "retained_path": "artifacts/267a0c07240f70c45fdfad243e72f9e65fab217f15bc5f619d03013a278b4d89.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-21-000105",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019321000105/aapl-20210925.htm",
+          "content_hash": "c21f651f9bb94b1d78944a9e91a263bcead4b417131ae797a46fee37d4d452b0",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:43:59.058353Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:43:58 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 29 Oct 2021 10:02:14 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 2051306,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:ac2c7daec748d28ac1b3ae1e8d9b329f5994a038ca0d6456804985cad752e8aa",
+              "content_hash": "a01c15f0018187a035a5f774cb52def490b29a8ce6214e6fe30704ee140b6787",
+              "retained_path": "artifacts/a01c15f0018187a035a5f774cb52def490b29a8ce6214e6fe30704ee140b6787.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-21-000105",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019321000105/index.json",
+          "content_hash": "3d65e20196e258e211ab014e896821f165b331f793ed9ab4773e768bc6bcef98",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:43:57.483957Z",
+          "response_headers": [
+            [
+              "content-length",
+              "8766"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:43:57 GMT"
+            ]
+          ],
+          "declared_size": 8766,
+          "received_size": 8766,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:e61d89d9250c2d5f1fd8adc54dedd77796892e0f716cf71717812e150e98eddd",
+              "content_hash": "bd12d1c859815d3d43eebb10c359a8054f9bc568a26d116a3dd3dd03b09f748c",
+              "retained_path": "artifacts/bd12d1c859815d3d43eebb10c359a8054f9bc568a26d116a3dd3dd03b09f748c.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-21-000105",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "srt": "http://fasb.org/srt/2021-01-31",
+        "country": "http://xbrl.sec.gov/country/2021",
+        "us-gaap": "http://fasb.org/us-gaap/2021-01-31",
+        "dei": "http://xbrl.sec.gov/dei/2021"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2021-01-31",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000320193",
+      "accepted_at": "2022-10-27T22:01:14Z",
+      "accession_number": "0000320193-22-000108",
+      "filing_date": "2022-10-28",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "aapl-20220924.htm",
+      "report_period_end": "2022-09-24",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000108/0000320193-22-000108-xbrl.zip",
+          "content_hash": "ec008d5a25a5ff95268d6e15a1c021c7b78fe2667385b561a55c2144c9fb739a",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:01.437629Z",
+          "response_headers": [
+            [
+              "content-length",
+              "480234"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:01 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 28 Oct 2022 10:01:37 GMT"
+            ]
+          ],
+          "declared_size": 480234,
+          "received_size": 480234,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:8c7e78da4635b5065126d026dcbe87def7f0a3ff6a72d2321a2bb1cf07361906",
+              "content_hash": "48ec98342cff5d11cc751769911854b2d83e0776deb11698504a9b3d014c3851",
+              "retained_path": "artifacts/48ec98342cff5d11cc751769911854b2d83e0776deb11698504a9b3d014c3851.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-22-000108",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:efe46d7f723b5ddf2a8c5618af8c8fa4a6dba20f0a37e309a66560abef6d488d",
+              "content_hash": "8a906b685d90ce11b08d58f2a9fd09e3677413b6cd5087bb45390c9f4b341c7c",
+              "retained_path": "artifacts/8a906b685d90ce11b08d58f2a9fd09e3677413b6cd5087bb45390c9f4b341c7c.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-22-000108",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000108/0000320193-22-000108.txt",
+          "content_hash": "b109cc5fadcd44a709ba28f5d379b83e68a2fec966ad1ab88df6b1fe9e2feab9",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:04.582275Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:03 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 28 Oct 2022 10:01:38 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 10332356,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:e5b2ee3bc096b2daee35806b8b0134fdbeb612e5980e88a4ccf64760f345f0b5",
+              "content_hash": "9985c178861915773f16c88429488c08827a24da3080d03cb4de96f3978dd9ac",
+              "retained_path": "artifacts/9985c178861915773f16c88429488c08827a24da3080d03cb4de96f3978dd9ac.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-22-000108",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:33a1f99637734e4644b5b8ed0a28512b5dfaf89fa5d99330bbfee030123e14c3",
+              "content_hash": "d0d7fb6d755d67756cf8bb5b1965cf8c822fdd6f52172027e386eabce6a1cc31",
+              "retained_path": "artifacts/d0d7fb6d755d67756cf8bb5b1965cf8c822fdd6f52172027e386eabce6a1cc31.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-22-000108",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000108/aapl-20220924.htm",
+          "content_hash": "b93dafe086e54e1e6bccffc5cd31bc9443b69ef3157a7b7e0d9dedef2ef61385",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:02.264607Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:01 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 28 Oct 2022 10:01:45 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 2049973,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:ec23514a268d1855abfe3349d78ddcf405177649ce5deaf6ab14bbd2124cb69b",
+              "content_hash": "d5e22f4c81b903a1073e15c5dc2064b00a3aa7eb76526f27ba37104b17fba028",
+              "retained_path": "artifacts/d5e22f4c81b903a1073e15c5dc2064b00a3aa7eb76526f27ba37104b17fba028.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-22-000108",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:bf68e1159d51faf6448f43d707be5493eaf61140d86a18ff36c52a423f864e2b",
+              "content_hash": "7e9677fc7b3e5a4fa0c3ad4992eda569b24767343eafd0b6fb569e65e14b4b64",
+              "retained_path": "artifacts/7e9677fc7b3e5a4fa0c3ad4992eda569b24767343eafd0b6fb569e65e14b4b64.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-22-000108",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000108/index.json",
+          "content_hash": "cbf00288e19179deafd950ee96420aa659ae593944fd9d3752d05c20c4f7a0af",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:00.727939Z",
+          "response_headers": [
+            [
+              "content-length",
+              "8768"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:00 GMT"
+            ]
+          ],
+          "declared_size": 8768,
+          "received_size": 8768,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:5ad55c0ef622432ac49a70e29ee39dc7d6b1219daa16ca2cef391efbddedfee0",
+              "content_hash": "09d49db9543a0bcf598390510dd823b130dc4b53d98e96cee6a1d5a072a59e4f",
+              "retained_path": "artifacts/09d49db9543a0bcf598390510dd823b130dc4b53d98e96cee6a1d5a072a59e4f.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-22-000108",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:f1c07f30eda1e808f0c483e8cf50c10f69685b2b6c3215635c22aa39643b0235",
+              "content_hash": "a437c5a9356b22f1b9861997d6e85c90a237c7090cdd70f2307235637e15462c",
+              "retained_path": "artifacts/a437c5a9356b22f1b9861997d6e85c90a237c7090cdd70f2307235637e15462c.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-22-000108",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "country": "http://xbrl.sec.gov/country/2022",
+        "us-gaap": "http://fasb.org/us-gaap/2022",
+        "dei": "http://xbrl.sec.gov/dei/2022",
+        "srt": "http://fasb.org/srt/2022"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2022",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000320193",
+      "accepted_at": "2023-11-02T22:08:27Z",
+      "accession_number": "0000320193-23-000106",
+      "filing_date": "2023-11-03",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "aapl-20230930.htm",
+      "report_period_end": "2023-09-30",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/0000320193-23-000106-xbrl.zip",
+          "content_hash": "8e49e035c72c5efcc461e7751ab24a9f755542eb0b979c667efeaac6e6569def",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:05.497828Z",
+          "response_headers": [
+            [
+              "content-length",
+              "403710"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:05 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 03 Nov 2023 10:01:54 GMT"
+            ]
+          ],
+          "declared_size": 403710,
+          "received_size": 403710,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:38b9a66e2c2ede2fea1b7b22aca3d1a105300caec6df6d019f1be085e5635f5b",
+              "content_hash": "d65ba73f40e3837bdeaf53f527eedeaf81ec95441599f30c2c9ac147395a5543",
+              "retained_path": "artifacts/d65ba73f40e3837bdeaf53f527eedeaf81ec95441599f30c2c9ac147395a5543.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-23-000106",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:6c30cb0467edd6620b0c1d1a6f8022a64efdc7b8d022dd8b96b2ce17e8ff8e7c",
+              "content_hash": "eeacd747e2d97a47d01dd2a77e656dca0d480d7d597c324e7a11a221e8e75b76",
+              "retained_path": "artifacts/eeacd747e2d97a47d01dd2a77e656dca0d480d7d597c324e7a11a221e8e75b76.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-23-000106",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/0000320193-23-000106.txt",
+          "content_hash": "a3bea4a328315b94271d83ef4e183884458a277c317c3d0b4f82ccc6a09c6c76",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:07.680025Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:06 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 03 Nov 2023 10:01:54 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 9569569,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:94d02fabb4e4418d9f78c5abe9383ab8ef191f97f4c0cf1df6ae6c686452e244",
+              "content_hash": "f10e1b8947bcbe8466c6b4a35c084972ffa52ece1d4c02b7c13117dc64b35d23",
+              "retained_path": "artifacts/f10e1b8947bcbe8466c6b4a35c084972ffa52ece1d4c02b7c13117dc64b35d23.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-23-000106",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:8ee8567f01f7c80788fffa1d56ed3fa581d8ec95355957d3398a4f6a50a96e47",
+              "content_hash": "9454e6fe05ff26d492628db606ca86e113c999de44c1027200252d18be744dc5",
+              "retained_path": "artifacts/9454e6fe05ff26d492628db606ca86e113c999de44c1027200252d18be744dc5.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-23-000106",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+          "content_hash": "c53b281e007596cfc861f3ad72e8eddcdce2908c8c51e4cc67d9555aaf83b568",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:06.355286Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:05 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 03 Nov 2023 10:02:03 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 1559040,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:34dbfd61ab45176b03e7a41bd6593d45402ab2b0ba9e7ddd92e27c4ff6b6c37e",
+              "content_hash": "eaf5a5894890e509180550613cdc350e9a016908b8a447066638686a3b9bed78",
+              "retained_path": "artifacts/eaf5a5894890e509180550613cdc350e9a016908b8a447066638686a3b9bed78.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-23-000106",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:c3b596b0d74aefbbdd1fccd1597a18d941ae1d69d5d4415d3e33d39f43b24add",
+              "content_hash": "3ad6d25c7fc3f2daa827e8011e67455a28c36e55bd6b7cff7208dbda8567a113",
+              "retained_path": "artifacts/3ad6d25c7fc3f2daa827e8011e67455a28c36e55bd6b7cff7208dbda8567a113.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-23-000106",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/index.json",
+          "content_hash": "b5ae9ad79fc64bd506babd69e570006c1e6e0d84995b10cd41df96aec649b12f",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:04.897169Z",
+          "response_headers": [
+            [
+              "content-length",
+              "9494"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:04 GMT"
+            ]
+          ],
+          "declared_size": 9494,
+          "received_size": 9494,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:4d59af56c89a8c4f1bba071e36bb5f420870bdd9efa611b2f99a5fe6d494d3fb",
+              "content_hash": "bd09a6815bc9af5d8c039f62037841f9eb03820107e1e485c80a4d88604e75a7",
+              "retained_path": "artifacts/bd09a6815bc9af5d8c039f62037841f9eb03820107e1e485c80a4d88604e75a7.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-23-000106",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:ad016e891e18c961b491f89d5309ded4982c4f734730f954aba5a7a673bb7eb7",
+              "content_hash": "2fff611271ff40382dcaa0c463e15edd431e08cd0b3a512f7c67e035e4685875",
+              "retained_path": "artifacts/2fff611271ff40382dcaa0c463e15edd431e08cd0b3a512f7c67e035e4685875.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-23-000106",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "dei": "http://xbrl.sec.gov/dei/2023",
+        "srt": "http://fasb.org/srt/2023",
+        "country": "http://xbrl.sec.gov/country/2023",
+        "us-gaap": "http://fasb.org/us-gaap/2023",
+        "ecd": "http://xbrl.sec.gov/ecd/2023"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2023",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000320193",
+      "accepted_at": "2024-11-01T10:01:36Z",
+      "accession_number": "0000320193-24-000123",
+      "filing_date": "2024-11-01",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "aapl-20240928.htm",
+      "report_period_end": "2024-09-28",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/0000320193-24-000123-xbrl.zip",
+          "content_hash": "c19944b22ee101abbfd69b2e6fa4f30e0ec511ad276fdbb3cf3ef5dce3938fee",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:08.690762Z",
+          "response_headers": [
+            [
+              "content-length",
+              "458550"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:08 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 01 Nov 2024 10:05:02 GMT"
+            ]
+          ],
+          "declared_size": 458550,
+          "received_size": 458550,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:70af4b0b24222185fa6a8ba0457a95b7d593f31e5eeede21b667d9ed554c6625",
+              "content_hash": "92244d9ca6acd4a479e156f1c9e9822cdb151fb5d9f93e764db64cbbb429ea95",
+              "retained_path": "artifacts/92244d9ca6acd4a479e156f1c9e9822cdb151fb5d9f93e764db64cbbb429ea95.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-24-000123",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:8979f7fca7b33c75a46a9b62b7855928aa18f4d6e7180753d86c2d01cb41c5b6",
+              "content_hash": "d78084f1a5125f1cb0d61b4e4d6b5130293167606d7b638df4b0952cb845b8cd",
+              "retained_path": "artifacts/d78084f1a5125f1cb0d61b4e4d6b5130293167606d7b638df4b0952cb845b8cd.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-24-000123",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/0000320193-24-000123.txt",
+          "content_hash": "347c28e05fd61467c0ce9f4c0b8a264670011b9afb07930e2233a46dbb73914b",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:11.191803Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:10 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 01 Nov 2024 10:05:02 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 9759333,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:0bbebcfb1e2eaef3ac54e7997d30feba6efb2dd6c6155745519f83e33c5047b8",
+              "content_hash": "1780121b8cb25e5932fd700aa98fa0a69e4ab1b3e40c5e12b15894319f342e11",
+              "retained_path": "artifacts/1780121b8cb25e5932fd700aa98fa0a69e4ab1b3e40c5e12b15894319f342e11.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-24-000123",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:74a62fd472944a1b5112436e277bc5989695fa6beb03f11fb075496b20c76e46",
+              "content_hash": "ac0d3fa8ecbea3ae055059dd06a1ef786717c20a5da9776b6ec2810094a1c644",
+              "retained_path": "artifacts/ac0d3fa8ecbea3ae055059dd06a1ef786717c20a5da9776b6ec2810094a1c644.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-24-000123",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+          "content_hash": "40c460d3eed32c7394fe651374bb2a6c43f5082098d1a32d5e7516d50110b0bb",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:10.021248Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:09 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 01 Nov 2024 10:05:09 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 1503896,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:4329a303f5847f78440e76f1209e063c8119f3585588f20495bbbe7a84b54279",
+              "content_hash": "a6f9e29f6cefa04f86b25f0739f83a56507e85a0fbbc9abe7d099974095dfa7d",
+              "retained_path": "artifacts/a6f9e29f6cefa04f86b25f0739f83a56507e85a0fbbc9abe7d099974095dfa7d.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-24-000123",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:1bfb82613882d16554b77f36c2b481f54817bea99e9317fe7a40dec2d948b4f4",
+              "content_hash": "ca4818266fb18dc342ee1171971d3e3db6b9749cfbdd16676f90a971b97cbddd",
+              "retained_path": "artifacts/ca4818266fb18dc342ee1171971d3e3db6b9749cfbdd16676f90a971b97cbddd.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-24-000123",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/index.json",
+          "content_hash": "556272b4254475f458cdf6395db66c5aaee90d0a0618dc429767bfe96a75bace",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:08.043129Z",
+          "response_headers": [
+            [
+              "content-length",
+              "10170"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:08 GMT"
+            ]
+          ],
+          "declared_size": 10170,
+          "received_size": 10170,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:600ab56ee3def4eead580a8ecd8433b2e20bb37727de7fe0c9ed0caf28f13dcd",
+              "content_hash": "c17113f52f36360ffd16230af39132c2b5c44b8144b059d47c6744130316dfca",
+              "retained_path": "artifacts/c17113f52f36360ffd16230af39132c2b5c44b8144b059d47c6744130316dfca.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-24-000123",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:dc7b82094180e29f4b456a90f232ab7eac2298561b51c72d30ec9223885b27bd",
+              "content_hash": "c2aa753063b5df88bd544dca1788542ecc5250319c4357a27f829253c6e1e510",
+              "retained_path": "artifacts/c2aa753063b5df88bd544dca1788542ecc5250319c4357a27f829253c6e1e510.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-24-000123",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "country": "http://xbrl.sec.gov/country/2024",
+        "dei": "http://xbrl.sec.gov/dei/2024",
+        "ecd": "http://xbrl.sec.gov/ecd/2024",
+        "srt": "http://fasb.org/srt/2024",
+        "us-gaap": "http://fasb.org/us-gaap/2024"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2024",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000320193",
+      "accepted_at": "2025-10-31T10:01:26Z",
+      "accession_number": "0000320193-25-000079",
+      "filing_date": "2025-10-31",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "aapl-20250927.htm",
+      "report_period_end": "2025-09-27",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/0000320193-25-000079-xbrl.zip",
+          "content_hash": "b866968e851df2476ac98358634e1b341265aa61e51e36632c755c30a8f91250",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:12.864614Z",
+          "response_headers": [
+            [
+              "content-length",
+              "399390"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:12 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 31 Oct 2025 10:07:08 GMT"
+            ]
+          ],
+          "declared_size": 399390,
+          "received_size": 399390,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:1b6d3ae35cdc80afdcd86b23d1679e1e1018560743501437d3fa5bbeccdf606a",
+              "content_hash": "9d89fed213a33c22e8c7c748308b44a4fc5adfa4ed4648680e4054b1b556b3e4",
+              "retained_path": "artifacts/9d89fed213a33c22e8c7c748308b44a4fc5adfa4ed4648680e4054b1b556b3e4.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-25-000079",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/0000320193-25-000079.txt",
+          "content_hash": "60f22bb90bb8e46894019fd57c27df69abd192f3f0f4183c4345d786426f3391",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:14.840718Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:14 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 31 Oct 2025 10:07:08 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 9392337,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:068db360d2bcf8fb51b1aeebec99615fd4e2644a3b5052de314af761fda6815f",
+              "content_hash": "60a592daf0a2923174d51492d466bc922a4965fbd1a36296b944116209ca23a4",
+              "retained_path": "artifacts/60a592daf0a2923174d51492d466bc922a4965fbd1a36296b944116209ca23a4.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-25-000079",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+          "content_hash": "96d412db63c241eeae57639bf03e040d774ed991442733c9a140e89739abbe8d",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:13.691473Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:13 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 31 Oct 2025 10:07:08 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 1520324,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:2f92b4042029a2cd5798cbbda6edaf36e3ad125a36cd59c78b74ba96aab35402",
+              "content_hash": "681568da3b9babef1368e8477428e0bf4164d22f4857ae0ab8adc1204b93e4d4",
+              "retained_path": "artifacts/681568da3b9babef1368e8477428e0bf4164d22f4857ae0ab8adc1204b93e4d4.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-25-000079",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/index.json",
+          "content_hash": "d61dde83df2dde7d63041e443321eab963b245e4c0090ba6240ce1711329de83",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:12.106290Z",
+          "response_headers": [
+            [
+              "content-length",
+              "8936"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:12 GMT"
+            ]
+          ],
+          "declared_size": 8936,
+          "received_size": 8936,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:5341e929d97237a189cf01977cd623e5cffbb06ee62dfef3945c80584628f22e",
+              "content_hash": "e48aa54bc5f438bed74407a1374b4ee74099af89fcef45d82f53027f918f072c",
+              "retained_path": "artifacts/e48aa54bc5f438bed74407a1374b4ee74099af89fcef45d82f53027f918f072c.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-25-000079",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "dei": "http://xbrl.sec.gov/dei/2025",
+        "country": "http://xbrl.sec.gov/country/2025",
+        "srt": "http://fasb.org/srt/2025",
+        "ecd": "http://xbrl.sec.gov/ecd/2025",
+        "us-gaap": "http://fasb.org/us-gaap/2025"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2025",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000320193",
+      "accepted_at": "2026-11-03T13:05:15Z",
+      "accession_number": "0000320193-26-000026",
+      "filing_date": "2026-11-03",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "aapl-20260926.htm",
+      "report_period_end": "2026-09-26",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000026/0000320193-26-000026-xbrl.zip",
+          "content_hash": "eb6ff1af2db1ffd06268db637f6ff46538ca6b9fcf0ab4e2b485ba8eddb06a79",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:15.916508Z",
+          "response_headers": [
+            [
+              "content-length",
+              "457244"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:15 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 03 Nov 2026 13:05:55 GMT"
+            ]
+          ],
+          "declared_size": 457244,
+          "received_size": 457244,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:cf4b1e65aa69beed887d15a5d08022a006ef6fa0d848b08ed4a1761ad2ef7b65",
+              "content_hash": "1856239e08becd179e51c532fcca406e657afdab0ba7d8b9deb39dd51b47683e",
+              "retained_path": "artifacts/1856239e08becd179e51c532fcca406e657afdab0ba7d8b9deb39dd51b47683e.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-26-000026",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000026/0000320193-26-000026.txt",
+          "content_hash": "edd39e7620e992bf51f3a8e82e383cc3d2faf931bdebf41b2d22dd50b872d380",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:18.002582Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:17 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 03 Nov 2026 13:05:55 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 10902198,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:f6a2c8123714b7bce6dabb0a8d597e0b3fb154ad3f32e836fc9830351b3b2a10",
+              "content_hash": "71c9e10232519b431a09921fec65d4aa2257245e69a5718ccda30434fc6bc9c3",
+              "retained_path": "artifacts/71c9e10232519b431a09921fec65d4aa2257245e69a5718ccda30434fc6bc9c3.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-26-000026",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000026/aapl-20260926.htm",
+          "content_hash": "502cdd211c5335ef05b94f58e84bedb6cf5d58489c934feb92d77d194998cdbd",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:16.699221Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:16 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 03 Nov 2026 13:05:55 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 1650119,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:84732eb7f3df708d563b763979e8416459fa4cd5e1dab6596abc3bf6942c0a5f",
+              "content_hash": "957995864c6870a84fa695078a2ff2e36c51f813baaab0d1044699163380a8ef",
+              "retained_path": "artifacts/957995864c6870a84fa695078a2ff2e36c51f813baaab0d1044699163380a8ef.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-26-000026",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000026/index.json",
+          "content_hash": "a757c90e9ddb917b01b138273759f0eaf44a7b61b181822c8c3b0aa163b9f79d",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:15.151957Z",
+          "response_headers": [
+            [
+              "content-length",
+              "10411"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:15 GMT"
+            ]
+          ],
+          "declared_size": 10411,
+          "received_size": 10411,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:2c4e27173cecfddf5068203ad0a49fc15f8075f369e4e803b38de963ab021d87",
+              "content_hash": "287475e07d1f6188aa6a3ad1a0a74d4919767c25de984f97adc8a889bcc21b04",
+              "retained_path": "artifacts/287475e07d1f6188aa6a3ad1a0a74d4919767c25de984f97adc8a889bcc21b04.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000320193-26-000026",
+                "cik": "0000320193",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "dei": "http://xbrl.sec.gov/dei/2026",
+        "us-gaap": "http://fasb.org/us-gaap/2026",
+        "srt": "http://fasb.org/srt/2026",
+        "country": "http://xbrl.sec.gov/country/2026",
+        "ecd": "http://xbrl.sec.gov/ecd/2026"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2026",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000789019",
+      "accepted_at": "2023-07-27T20:01:56Z",
+      "accession_number": "0000950170-23-035122",
+      "filing_date": "2023-07-27",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "msft-20230630.htm",
+      "report_period_end": "2023-06-30",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/0000950170-23-035122-xbrl.zip",
+          "content_hash": "914cb7a2643efe16eec2e34949afc8a5c1effcfd0bd188d71995eabbfc165180",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:20.655432Z",
+          "response_headers": [
+            [
+              "content-length",
+              "526992"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:20 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 27 Jul 2023 20:03:09 GMT"
+            ]
+          ],
+          "declared_size": 526992,
+          "received_size": 526992,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:560c232514d5528ad72c31e75ce41eb71f20ba606e857be69d113d85ea4b6a7c",
+              "content_hash": "6b8f1908f8df6c38ef98830db3cf6c59047f0effa9c2b6ae2008126a96713c6f",
+              "retained_path": "artifacts/6b8f1908f8df6c38ef98830db3cf6c59047f0effa9c2b6ae2008126a96713c6f.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-23-035122",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:72a1491596eca308fc0e8e0daa7b45148ca346eb50c525497ac8ae682a82addb",
+              "content_hash": "7771675d753807d01155a8999ed50558c4d6cf9ef22000bad260eb1164793939",
+              "retained_path": "artifacts/7771675d753807d01155a8999ed50558c4d6cf9ef22000bad260eb1164793939.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-23-035122",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/0000950170-23-035122.txt",
+          "content_hash": "25643504869832e040eb3c2716af7609dd7289854381fa847be2eeebe4c9f5b2",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:23.838240Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:22 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 27 Jul 2023 20:03:10 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 40966463,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:f80aa199ad44c61b6fcacd5ab0f50d9939162410ef5cbbc9906dd9ca7c92f5b7",
+              "content_hash": "d74d84c03e088e5223c9b5091686dfb939a851ddf6a5215218fbc91e53dcce65",
+              "retained_path": "artifacts/d74d84c03e088e5223c9b5091686dfb939a851ddf6a5215218fbc91e53dcce65.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-23-035122",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:20624bd0beedcec7804dbdb473af73e23f017dfdb1acac284e6e70c8e583d094",
+              "content_hash": "ace026ca6394d1ff33bfb869cd006e474799ac9bb2c96f65a4113930c25f2fbf",
+              "retained_path": "artifacts/ace026ca6394d1ff33bfb869cd006e474799ac9bb2c96f65a4113930c25f2fbf.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-23-035122",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/index.json",
+          "content_hash": "822271d894ee7bcac93cb0b0cc14ae934171a565d8ee75072091d21eed970b5e",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:19.801800Z",
+          "response_headers": [
+            [
+              "content-length",
+              "12890"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:19 GMT"
+            ]
+          ],
+          "declared_size": 12890,
+          "received_size": 12890,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:88f9be1993225713eaba9425efff27f53d13b46f82bda672ed09caee60ece5cb",
+              "content_hash": "7be65f143de7e2566ff48a7fb4ad27866c19b83ce5805c3d522d229895c71a41",
+              "retained_path": "artifacts/7be65f143de7e2566ff48a7fb4ad27866c19b83ce5805c3d522d229895c71a41.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-23-035122",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:52c5995f23a9a27003195ee2dab7ef859c2fe92251dc4e586a02092cacc6a789",
+              "content_hash": "84a7d08710188a538e7cac45424bcc652664cc2f52ecffa88ca092400152e52a",
+              "retained_path": "artifacts/84a7d08710188a538e7cac45424bcc652664cc2f52ecffa88ca092400152e52a.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-23-035122",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+          "content_hash": "5ac3868026e907cd8316298af5bd88b095ed0f1dd6b5580b507bcb9fe2cfc6dd",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:21.781634Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:20 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 27 Jul 2023 20:03:24 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 9963707,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:fa2e11384380b2b907ee811924628973206a660df3f97b4881ce51c215532c5b",
+              "content_hash": "1cc4a75d38271605d09c78a3f817b47a42e5118045f0ab303231722f5346213b",
+              "retained_path": "artifacts/1cc4a75d38271605d09c78a3f817b47a42e5118045f0ab303231722f5346213b.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-23-035122",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:3e23203313bb62b3fa9c2cfbf807eb5f1d267c623ccf4f5db22173f7a2ac8e26",
+              "content_hash": "b102aa913889d1919877c11e138777eac8a242903456736187b6b8784432c4dc",
+              "retained_path": "artifacts/b102aa913889d1919877c11e138777eac8a242903456736187b6b8784432c4dc.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-23-035122",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "dei": "http://xbrl.sec.gov/dei/2023",
+        "us-gaap": "http://fasb.org/us-gaap/2023",
+        "ecd": "http://xbrl.sec.gov/ecd/2023",
+        "country": "http://xbrl.sec.gov/country/2023",
+        "srt": "http://fasb.org/srt/2023"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2023",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000789019",
+      "accepted_at": "2024-07-30T20:06:22Z",
+      "accession_number": "0000950170-24-087843",
+      "filing_date": "2024-07-30",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "msft-20240630.htm",
+      "report_period_end": "2024-06-30",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/0000950170-24-087843-xbrl.zip",
+          "content_hash": "5a7653632f53c2529c4da82d25043fc52f05bfbe536837345aa5904560d92a82",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:24.798849Z",
+          "response_headers": [
+            [
+              "content-length",
+              "551435"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:24 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jul 2024 20:09:20 GMT"
+            ]
+          ],
+          "declared_size": 551435,
+          "received_size": 551435,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:ae0414afcd84a8a4bb7553139304f10ea9476d164d1cd5cf63cf903006264269",
+              "content_hash": "215d749b2f320fab7bb559f692fa0169c121c84390fe482d1afaa11681f4246d",
+              "retained_path": "artifacts/215d749b2f320fab7bb559f692fa0169c121c84390fe482d1afaa11681f4246d.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-24-087843",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:cca5052a6e17b1c31e337effccf5bfcf2bac805b8eee9961485219539235d954",
+              "content_hash": "b69e471da08eaf9fa7e176968b3e672cb2580c3c3911c30dddafaa364dc3d25e",
+              "retained_path": "artifacts/b69e471da08eaf9fa7e176968b3e672cb2580c3c3911c30dddafaa364dc3d25e.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-24-087843",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/0000950170-24-087843.txt",
+          "content_hash": "56c7efc2d90a2372035653cc9fd873829b83f4adb178c1f32e484a48e0d809bb",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:27.731413Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:26 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jul 2024 20:09:20 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 30375960,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:f7c4be8db98a477dfea0ee985e1a4d58c12452591a70a66289def3eea16f85d3",
+              "content_hash": "7f10c82100084e656797747a8cd68eed38560040b8db2bc313779def59588b61",
+              "retained_path": "artifacts/7f10c82100084e656797747a8cd68eed38560040b8db2bc313779def59588b61.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-24-087843",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:07d6802950051ec706e12acef37dc09de20b2d7b76fb8159b8e23e9477bea885",
+              "content_hash": "57764da58f677188c24ccbe70067b0c258ab32d9bfad32bd699265ccd2d767b5",
+              "retained_path": "artifacts/57764da58f677188c24ccbe70067b0c258ab32d9bfad32bd699265ccd2d767b5.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-24-087843",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/index.json",
+          "content_hash": "5692bbfccc76991d2cba6f4ddf2a8db9487dfce51ac5dded0b2607660a65a966",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:24.170133Z",
+          "response_headers": [
+            [
+              "content-length",
+              "13604"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:24 GMT"
+            ]
+          ],
+          "declared_size": 13604,
+          "received_size": 13604,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:a1b657ce5c0e11fd8cd307fa4765957ca172e278c0ba8c20d44658d1e631cf39",
+              "content_hash": "7998eb3eb80c667febc080ecedcebcdfd1a73501e7aa2ba26c23f4887e2bb881",
+              "retained_path": "artifacts/7998eb3eb80c667febc080ecedcebcdfd1a73501e7aa2ba26c23f4887e2bb881.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-24-087843",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:6b228fffdf6e0b2ab040b8c3e8a7f7ff50dfe8bb5b94ba5a08cd213c0c2435f4",
+              "content_hash": "6016521d3ace8e7dd3c79e91c9986a9666b987b1d993fb3447f645c93bb070b5",
+              "retained_path": "artifacts/6016521d3ace8e7dd3c79e91c9986a9666b987b1d993fb3447f645c93bb070b5.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-24-087843",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/msft-20240630.htm",
+          "content_hash": "321fd42528989d20b979a438c1fd185260e45e4c902a9089524aad1e6146f65d",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:25.895280Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:25 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jul 2024 20:09:31 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 6861027,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:2a59a46aae0a527b5f835089d6c8a399dda5bf3cf43aa85e162faac7f176dc88",
+              "content_hash": "16fce710e24b24b7f30609b2f6288d6307811c18c4e48c9fa9a264decd1c2ff3",
+              "retained_path": "artifacts/16fce710e24b24b7f30609b2f6288d6307811c18c4e48c9fa9a264decd1c2ff3.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-24-087843",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:430a0ffab05a6935ee68b3d6e47d50aadab758c16a1c9e12c81535a6c6cd6c7c",
+              "content_hash": "40fdb33d646060c4009d9739202eabd7e1f45e77abdb31366082aabfa935c1ba",
+              "retained_path": "artifacts/40fdb33d646060c4009d9739202eabd7e1f45e77abdb31366082aabfa935c1ba.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-24-087843",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "us-gaap": "http://fasb.org/us-gaap/2023",
+        "country": "http://xbrl.sec.gov/country/2023",
+        "srt": "http://fasb.org/srt/2023",
+        "dei": "http://xbrl.sec.gov/dei/2023",
+        "ecd": "http://xbrl.sec.gov/ecd/2023"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2023",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000789019",
+      "accepted_at": "2025-07-30T20:11:40Z",
+      "accession_number": "0000950170-25-100235",
+      "filing_date": "2025-07-30",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "msft-20250630.htm",
+      "report_period_end": "2025-06-30",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/0000950170-25-100235-xbrl.zip",
+          "content_hash": "686c646c38390117a4c85515f3aa585cab888b20612222fe5e2263bbd0e4630a",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:41.690391Z",
+          "response_headers": [
+            [
+              "content-length",
+              "547941"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:41 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 30 Jul 2025 20:12:17 GMT"
+            ]
+          ],
+          "declared_size": 547941,
+          "received_size": 547941,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:701aa92e9c4a839d68fec01db5d84e49f67faa246335a64100a07191f3a22a88",
+              "content_hash": "1f7932ceba49e555731b00c6ba8c3d3e7ceb1ea404143cce94f6f5fd3746ed6d",
+              "retained_path": "artifacts/1f7932ceba49e555731b00c6ba8c3d3e7ceb1ea404143cce94f6f5fd3746ed6d.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-25-100235",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/0000950170-25-100235.txt",
+          "content_hash": "37e72a2b7e332899a583fe0655e1b45ec7dc53ea9b07c089bbbc78f1098e931f",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:44.441545Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:43 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 30 Jul 2025 20:12:17 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 34889671,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:e7b7d64ac78eca0ccbdb8ce6504fbb0f1476734245904465d5ea5314c12dc0f0",
+              "content_hash": "57cfc6f3fe713775b48ce305c8f54f634e85c4a82c45d54cef3fa9bec4667c35",
+              "retained_path": "artifacts/57cfc6f3fe713775b48ce305c8f54f634e85c4a82c45d54cef3fa9bec4667c35.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-25-100235",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/index.json",
+          "content_hash": "34b9f7c8d3c5b64232b37b3a8d71f1cd408421365c35d6cc16c1371bde153a5d",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:40.942237Z",
+          "response_headers": [
+            [
+              "content-length",
+              "12101"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:40 GMT"
+            ]
+          ],
+          "declared_size": 12101,
+          "received_size": 12101,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:b0a36b97efa4601751de36b61a93cf0a74ca4a5bf315c7994c2e7a124c76dac9",
+              "content_hash": "b3bb7b31b590871a2ac693406288468d4d05155de85c3a34e2a98dc52602eac9",
+              "retained_path": "artifacts/b3bb7b31b590871a2ac693406288468d4d05155de85c3a34e2a98dc52602eac9.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-25-100235",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/msft-20250630.htm",
+          "content_hash": "bd12d1d000a291b2169e28cfc9e56dc38a7f3a8ef0ff78706c3df7fe042e5698",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:42.751630Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:42 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 30 Jul 2025 20:12:17 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 8158183,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:8b943b6170ffccc821140de084845fe8e399d4b0024a8a39e9d6d1379ecdf5d5",
+              "content_hash": "ee7d9871eff84b1d56a19749bfbee390e8ccaad2aef04167bb547196970549a2",
+              "retained_path": "artifacts/ee7d9871eff84b1d56a19749bfbee390e8ccaad2aef04167bb547196970549a2.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0000950170-25-100235",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "us-gaap": "http://fasb.org/us-gaap/2024",
+        "country": "http://xbrl.sec.gov/country/2024",
+        "srt": "http://fasb.org/srt/2024",
+        "dei": "http://xbrl.sec.gov/dei/2024",
+        "ecd": "http://xbrl.sec.gov/ecd/2024"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2024",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000789019",
+      "accepted_at": "2026-07-29T20:08:01Z",
+      "accession_number": "0001193125-26-323660",
+      "filing_date": "2026-07-29",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "msft-20260630.htm",
+      "report_period_end": "2026-06-30",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/0001193125-26-323660-xbrl.zip",
+          "content_hash": "4fa5764ea5baeb6c4cf9b57a980fabad8decf0e30847a1d7c8c4fbb7c1a4ea09",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:45.505422Z",
+          "response_headers": [
+            [
+              "content-length",
+              "532447"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:45 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 29 Jul 2026 20:08:56 GMT"
+            ]
+          ],
+          "declared_size": 532447,
+          "received_size": 532447,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:37b6328693c44e5588173176719ff851c3e26896ad780893287a65ef1b8cc4a7",
+              "content_hash": "1c8c8455ea93f876a587af523210cfc0e7ec24fc8f34260fa49352b6de9acaf0",
+              "retained_path": "artifacts/1c8c8455ea93f876a587af523210cfc0e7ec24fc8f34260fa49352b6de9acaf0.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001193125-26-323660",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/0001193125-26-323660.txt",
+          "content_hash": "a4cef60615c42685dcf0c080a56cd1be85ce09071c97050c78589a5167e26bff",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:48.660533Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:47 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 29 Jul 2026 20:08:56 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 36328553,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:e9f8040368d58908e54ab523f3a86a0b34ba6debff3a65f61f2f9a06049bf3e7",
+              "content_hash": "5ea9c75e335a963b634abb06471d1152eaed5c21b017aa08d52babf3ce12f620",
+              "retained_path": "artifacts/5ea9c75e335a963b634abb06471d1152eaed5c21b017aa08d52babf3ce12f620.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001193125-26-323660",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/index.json",
+          "content_hash": "bf17f342b5ffc274ba7a8ea55dd0837915546613ccb44b04705c73fd31966ae0",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:44.802644Z",
+          "response_headers": [
+            [
+              "content-length",
+              "12486"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:44 GMT"
+            ]
+          ],
+          "declared_size": 12486,
+          "received_size": 12486,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:776fa8d2ecac0a3ae6ca4cd33a2d346986840e3c59524f1feac2d41ca5912aa0",
+              "content_hash": "e69c3e8836ee3bd3839062ffd07055a91e1af15247007592734ffa2ba218aede",
+              "retained_path": "artifacts/e69c3e8836ee3bd3839062ffd07055a91e1af15247007592734ffa2ba218aede.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001193125-26-323660",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm",
+          "content_hash": "e4289989cfa36551f347a28312cb21ac4ca272816e03c90c11b0673862dc0a0d",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:46.712707Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:45 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 29 Jul 2026 20:08:56 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 8585617,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:0bf10ec75b453b8e79a7c37e7549a8ce555bbce2dabec3fb97a3b8ace6b00754",
+              "content_hash": "f11e90354ac6a56d92980cf5d61e1c29f26852ddb22583b33dc396628d5f447c",
+              "retained_path": "artifacts/f11e90354ac6a56d92980cf5d61e1c29f26852ddb22583b33dc396628d5f447c.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001193125-26-323660",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "us-gaap": "http://fasb.org/us-gaap/2025",
+        "country": "http://xbrl.sec.gov/country/2025",
+        "srt": "http://fasb.org/srt/2025",
+        "dei": "http://xbrl.sec.gov/dei/2025",
+        "ecd": "http://xbrl.sec.gov/ecd/2025"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2025",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000789019",
+      "accepted_at": "2020-07-31T00:44:46Z",
+      "accession_number": "0001564590-20-034944",
+      "filing_date": "2020-07-30",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "msft-10k_20200630.htm",
+      "report_period_end": "2020-06-30",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459020034944/0001564590-20-034944-xbrl.zip",
+          "content_hash": "d1f764a1e8eb0c222ce26dfc9b3ef5cba1cf4a66ded917fc052248f896372516",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:28.781636Z",
+          "response_headers": [
+            [
+              "content-length",
+              "415221"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:28 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 18 Sep 2020 10:07:51 GMT"
+            ]
+          ],
+          "declared_size": 415221,
+          "received_size": 415221,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:12fdc92f7561f264fee23163cb87fc830014641983e2ed6f7ba3133826c83ca4",
+              "content_hash": "9c5b704d41740c7a40afddfb43d9e5ba009aa64b11882ca226da117660785775",
+              "retained_path": "artifacts/9c5b704d41740c7a40afddfb43d9e5ba009aa64b11882ca226da117660785775.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-20-034944",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459020034944/0001564590-20-034944.txt",
+          "content_hash": "9d3d278dd79802fe2a2cc8d38b883de9f57a534bb7de4fb88d62933d14b2318f",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:31.783718Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:30 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 18 Sep 2020 10:07:52 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 27648382,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:2e3f23558567ac4d34e7d6ede5144fd9f212823964e4308f8d48569b397af8ff",
+              "content_hash": "b47bcfb6acb9aa048c75c0b23cc22a16ff486a1e285b01bb3808195e1797d041",
+              "retained_path": "artifacts/b47bcfb6acb9aa048c75c0b23cc22a16ff486a1e285b01bb3808195e1797d041.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-20-034944",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459020034944/index.json",
+          "content_hash": "4560294b1ced82b917f1a930a775828a261b92174661e0c8c2fdb9dcead2d1d2",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:28.064924Z",
+          "response_headers": [
+            [
+              "content-length",
+              "13379"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:28 GMT"
+            ]
+          ],
+          "declared_size": 13379,
+          "received_size": 13379,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:adc368da1d39649c2f9f605b66c655379a258bd1c27eae126cd5f57a19485bf3",
+              "content_hash": "3165e65adeba5358b5b4fff626f7c9457266eb05f65aaa610ddfc6851d893e30",
+              "retained_path": "artifacts/3165e65adeba5358b5b4fff626f7c9457266eb05f65aaa610ddfc6851d893e30.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-20-034944",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459020034944/msft-10k_20200630.htm",
+          "content_hash": "99d1dfdd564d8e7cc42fa9c6c3b44c0bc131fece7e6638f28e24ec7cb49faa7a",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:29.838901Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:29 GMT"
+            ],
+            [
+              "last-modified",
+              "Fri, 18 Sep 2020 10:08:05 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 6623161,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:1f8f381e9b40bcd942a155b1a2d7ef7d69db23878438c471ad90c6787b937a96",
+              "content_hash": "99d93540e61d4eb03faf347f59961a4a5eb692021e85738347af5e0ad4c8d89e",
+              "retained_path": "artifacts/99d93540e61d4eb03faf347f59961a4a5eb692021e85738347af5e0ad4c8d89e.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-20-034944",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "us-gaap": "http://fasb.org/us-gaap/2020-01-31",
+        "srt": "http://fasb.org/srt/2020-01-31",
+        "exch": "http://xbrl.sec.gov/exch/2020-01-31",
+        "dei": "http://xbrl.sec.gov/dei/2019-01-31",
+        "country": "http://xbrl.sec.gov/country/2020-01-31"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2020-01-31",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000789019",
+      "accepted_at": "2021-07-29T20:21:55Z",
+      "accession_number": "0001564590-21-039151",
+      "filing_date": "2021-07-29",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "msft-10k_20210630.htm",
+      "report_period_end": "2021-06-30",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459021039151/0001564590-21-039151-xbrl.zip",
+          "content_hash": "00a1d8fc1f6b5cfb435695c568d4db776dfa03ca4ba9cde6f273c6f985e4a9c1",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:32.804187Z",
+          "response_headers": [
+            [
+              "content-length",
+              "411045"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:32 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 29 Jul 2021 20:30:44 GMT"
+            ]
+          ],
+          "declared_size": 411045,
+          "received_size": 411045,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:53baaf20b591d17ad0e4e1447ada401c6d023d8d9c7d281f694c40e207ae767e",
+              "content_hash": "4f19e4a6b1fb043706cfacea7eae7afcdfc4877e9d88d7ca6dfd21ad09c912ec",
+              "retained_path": "artifacts/4f19e4a6b1fb043706cfacea7eae7afcdfc4877e9d88d7ca6dfd21ad09c912ec.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-21-039151",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459021039151/0001564590-21-039151.txt",
+          "content_hash": "5dd507e073126e733443b7065ef7ce9eaa82095ad20631f040e1b4ee7547edf0",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:35.726025Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:34 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 29 Jul 2021 20:30:44 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 26907098,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:4cecf4af15a0588fb8961eb40b3fd6921a5f0f2e3d0829dce636b9ad4557c40a",
+              "content_hash": "e24083e0ec3c5a04364eff3da49aa629417edc3281ba7831f53ab620e6b2c9d8",
+              "retained_path": "artifacts/e24083e0ec3c5a04364eff3da49aa629417edc3281ba7831f53ab620e6b2c9d8.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-21-039151",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459021039151/index.json",
+          "content_hash": "dd5579a52c355d4dd78471612acaccdb583eb7cd7bb4eb11e49395729d81a028",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:32.133073Z",
+          "response_headers": [
+            [
+              "content-length",
+              "12801"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:32 GMT"
+            ]
+          ],
+          "declared_size": 12801,
+          "received_size": 12801,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:32293a2071fccdad139c9697a209e63175b91fd50e71c689717a9b465a81837b",
+              "content_hash": "3100ff0bb357e7f1af41e6fc61f8c4eb224d5a04954f00b6e35a0d79fd7b2644",
+              "retained_path": "artifacts/3100ff0bb357e7f1af41e6fc61f8c4eb224d5a04954f00b6e35a0d79fd7b2644.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-21-039151",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459021039151/msft-10k_20210630.htm",
+          "content_hash": "0168b995b37d463102f295f989710294eb61b98db1636a9384ea1ccc276dddcb",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:33.896907Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:33 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 29 Jul 2021 20:30:53 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 6332679,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:0d5084632cfe028c722b890f003da3290f2ce0b55dd69523e24470335401c20f",
+              "content_hash": "379442a67077edee5d9636860cae6b78ac2446f4d07db56706c6ae5f1070ecb5",
+              "retained_path": "artifacts/379442a67077edee5d9636860cae6b78ac2446f4d07db56706c6ae5f1070ecb5.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-21-039151",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "us-gaap": "http://fasb.org/us-gaap/2020-01-31",
+        "srt": "http://fasb.org/srt/2020-01-31",
+        "exch": "http://xbrl.sec.gov/exch/2020-01-31",
+        "dei": "http://xbrl.sec.gov/dei/2020-01-31",
+        "country": "http://xbrl.sec.gov/country/2020-01-31"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2020-01-31",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    },
+    {
+      "issuer_id": "0000789019",
+      "accepted_at": "2022-07-28T20:06:19Z",
+      "accession_number": "0001564590-22-026876",
+      "filing_date": "2022-07-28",
+      "form": "10-K",
+      "is_inline_xbrl": true,
+      "is_xbrl": true,
+      "primary_document": "msft-10k_20220630.htm",
+      "report_period_end": "2022-06-30",
+      "source_records": [
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459022026876/0001564590-22-026876-xbrl.zip",
+          "content_hash": "01fd1e92f458cbb72c2db7a66d78fab5535ae307c901064c557beea409ca60c5",
+          "http_status": 200,
+          "media_type": "application/zip",
+          "captured_at": "2026-11-24T02:44:36.625118Z",
+          "response_headers": [
+            [
+              "content-length",
+              "408012"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:36 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 28 Jul 2022 20:07:35 GMT"
+            ]
+          ],
+          "declared_size": 408012,
+          "received_size": 408012,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:f224fe35354a32eb62ee509a4a53b21ffa35902c25f3e19e3bc4cfdb37d75a21",
+              "content_hash": "173ad05029528b06247437d565f24bd20635d9121bd965d0863f448e81a2fc6d",
+              "retained_path": "artifacts/173ad05029528b06247437d565f24bd20635d9121bd965d0863f448e81a2fc6d.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-22-026876",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:31842b52909914d53c9783c7754a4490882edad434b3a7a1b3bcbaa4b1dbbcb4",
+              "content_hash": "d0fbb94fa008c28d47223b3873edb331179988a9bef01675ac2d268c6e930149",
+              "retained_path": "artifacts/d0fbb94fa008c28d47223b3873edb331179988a9bef01675ac2d268c6e930149.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-22-026876",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459022026876/0001564590-22-026876.txt",
+          "content_hash": "6c37d5fa9a3ebbe0188c5f0f0f37e6c1cfe713d704f035c557ccb18cd14ea93f",
+          "http_status": 200,
+          "media_type": "text/plain",
+          "captured_at": "2026-11-24T02:44:39.267592Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:38 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 28 Jul 2022 20:07:35 GMT"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 26423137,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:cb4f84bf62a0e3092fd920511a61a2cdf42f295670f3ef1d3fb06b1da64b5b6e",
+              "content_hash": "a4ecb6f1a33177bb9cd34c9b33dee6fbf17dfa8a8f98ccf3299264ffe160eea3",
+              "retained_path": "artifacts/a4ecb6f1a33177bb9cd34c9b33dee6fbf17dfa8a8f98ccf3299264ffe160eea3.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-22-026876",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:29114c138b7e317a4672cb58cce679d586d0a4b112567cc8da3e74948afc7869",
+              "content_hash": "1c89f7af058761aee1d2b8d8750e7217642e50f200b43a8414ffbb2a3aebf0c1",
+              "retained_path": "artifacts/1c89f7af058761aee1d2b8d8750e7217642e50f200b43a8414ffbb2a3aebf0c1.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-22-026876",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459022026876/index.json",
+          "content_hash": "422322860a1265d2ec8cdd45bf0ff4ab262d564c8d14b6aed071dae47307a092",
+          "http_status": 200,
+          "media_type": "application/json",
+          "captured_at": "2026-11-24T02:44:36.036437Z",
+          "response_headers": [
+            [
+              "content-length",
+              "12891"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:36 GMT"
+            ]
+          ],
+          "declared_size": 12891,
+          "received_size": 12891,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:647202faf843ae2c124d65acdfdfb43697283fde5451a7c93cb8f970a3a94f6c",
+              "content_hash": "afd81f87afe8ecffeba3e92bf07ce4cb84df2e59bee1c44c31ba6ed50a65d826",
+              "retained_path": "artifacts/afd81f87afe8ecffeba3e92bf07ce4cb84df2e59bee1c44c31ba6ed50a65d826.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-22-026876",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:2a22bc26e5f47bf416af583cd5e85185b1c03f720593594b4ecc27074ae102c2",
+              "content_hash": "1440a1122e0fdc33b13df962f0754609f50d58ef3d95cc98e374adeb8366959e",
+              "retained_path": "artifacts/1440a1122e0fdc33b13df962f0754609f50d58ef3d95cc98e374adeb8366959e.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-22-026876",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459022026876/msft-10k_20220630.htm",
+          "content_hash": "2732aabedd18ec1709b1b0f9144d4e99fee4e3788453626f4efa01b9cbc2b749",
+          "http_status": 200,
+          "media_type": "text/html",
+          "captured_at": "2026-11-24T02:44:37.695325Z",
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 02:44:37 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 28 Jul 2022 20:07:47 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "declared_size": null,
+          "received_size": 6215971,
+          "receipt_refs": [
+            {
+              "artifact_id": "sec-response:f5fb4db98275fe195a7a44c120304ba29b85249a51c59803ab682fa0bae8d606",
+              "content_hash": "d5e065d19905de962ded19cb3cd24ce2b19ecdc37c077b0169ee7d8703d1486a",
+              "retained_path": "artifacts/d5e065d19905de962ded19cb3cd24ce2b19ecdc37c077b0169ee7d8703d1486a.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-22-026876",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2024-11-02T00:00:00Z"
+              }
+            },
+            {
+              "artifact_id": "sec-response:0c75d48e6152d44b7ff8ffeb9f1a06cf60017be0070949bdbfd83a3a55b5749e",
+              "content_hash": "50b65bd9e9cfd01174de1318279858e0cabca7eecf748ae9ab619f67c8b69844",
+              "retained_path": "artifacts/50b65bd9e9cfd01174de1318279858e0cabca7eecf748ae9ab619f67c8b69844.bacb769b46f6d169.artifact",
+              "schema_version": "sec-response-receipt.v1",
+              "scope": {
+                "accession_number": "0001564590-22-026876",
+                "cik": "0000789019",
+                "source_profile": "issue494-original-inspection-v1",
+                "valuation_timestamp": "2026-11-24T00:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomy_namespaces": {
+        "us-gaap": "http://fasb.org/us-gaap/2022",
+        "srt": "http://fasb.org/srt/2022",
+        "exch": "http://xbrl.sec.gov/exch/2022",
+        "dei": "http://xbrl.sec.gov/dei/2022",
+        "country": "http://xbrl.sec.gov/country/2022"
+      },
+      "required_validation": {
+        "mode": "sec-efm-dqc",
+        "offline": true,
+        "arelle_version": "2.47.4",
+        "exact_us_gaap_namespace": "http://fasb.org/us-gaap/2022",
+        "requirements": [
+          "Complete original Inline XBRL package, extension DTS and applicable dependencies",
+          "Pinned SEC EFM and full DQC rules applicable to the source taxonomy and filing date",
+          "Preserved completion evidence, warnings, blocking findings and signatures"
+        ]
+      },
+      "expected_source_result": "major_rows_available_after_formal_validation_and_mapping",
+      "validation_state_at_freeze": "not_run",
+      "resource_gap_at_freeze": "Full pinned offline DTS and applicable DQC resources have not yet been proven for this original; source availability is not validation success"
+    }
+  ],
+  "supported_rows": {
+    "income_statement": [
+      "revenue",
+      "cost_of_revenue",
+      "gross_profit",
+      "operating_income",
+      "income_before_tax",
+      "income_tax_expense",
+      "net_income"
+    ],
+    "balance_sheet": [
+      "cash_and_equivalents",
+      "operating_current_receivables",
+      "inventory",
+      "current_assets",
+      "property_plant_and_equipment",
+      "total_assets",
+      "operating_current_payables",
+      "current_liabilities",
+      "total_liabilities",
+      "total_equity",
+      "liabilities_and_equity"
+    ],
+    "cash_flow": [
+      "operating_cash_flow",
+      "investing_cash_flow",
+      "financing_cash_flow",
+      "effect_of_exchange_rates_on_cash",
+      "net_change_in_cash",
+      "cash_flow_beginning_balance",
+      "cash_flow_ending_balance"
+    ]
+  },
+  "major_row_policy": {
+    "mapping_owner": "Fundamental Service source-bound mapping authority",
+    "source_priority": [
+      "original SEC Inline XBRL accession package with full applicable validation",
+      "eligible later comparative or re-reported fact after publication, retaining original candidate"
+    ],
+    "unsupported_mapping": "unresolved; no label or tag-name guessing",
+    "missing_value_policy": "Never fill zero; distinguish missing, unresolved, unsupported and not_applicable with reason",
+    "annual_comparability": "Exact duration/instant, issuer, currency/unit, consolidation, dimensions and security scope; 52/53-week and fiscal-calendar differences remain visible",
+    "cash_definition": "Keep cash-flow cash definition and balance-sheet cash separate; no assumed FX zero",
+    "sign_and_precision": "Source Inline XBRL sign/scale/decimals and actual printed statement; Decimal and versioned reported-precision tolerance",
+    "version_selection": "fact-level cutoff; preserve all candidates; latest eligible publication per exact fact key; scope unknown refuses amendment replacement; Part III does not replace unrelated facts"
+  },
+  "required_resource_identity": {
+    "arelle_release": "2.47.4",
+    "efm_release": "26.3",
+    "edgar_source_commit": "4891c4c9889c77af247428ceff4fa7cc52d534ea",
+    "xule_release": "30055",
+    "xule_source_commit": "7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc",
+    "modern_dqc_release": "v31.0.3",
+    "validation_mode": "sec-efm-dqc",
+    "runtime_profile_requirement": "Use a reviewed exact profile with complete applicable EFM/DQC, exact per-original taxonomy namespace and immutable resource hashes. Profile availability is not established by this fixture. Historical namespaces require their compatible full rules, not a renamed modern binding."
+  }
+}

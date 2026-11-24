@@ -1,0 +1,516 @@
+{
+  "protocol": "issue494-annual-statements-boundaries-v1",
+  "issue": 494,
+  "note": "Acceptance inputs and expected behavior frozen before production implementation. Synthetic mutations are not issuer facts. Existing #493 parse-only outcomes do not establish statement eligibility.",
+  "cases": [
+    {
+      "case_id": "original-before-later-comparative",
+      "scenario": "FY2023 revenue original is published; FY2024 later comparative is not yet published",
+      "expected": {
+        "value": "383285000000",
+        "selected_accession": "0000320193-23-000106",
+        "later_comparative_eligible": false
+      },
+      "cutoff_at": "2024-01-01T00:00:00Z",
+      "row_id": "revenue",
+      "period_end": "2023-09-30",
+      "candidate_accessions": [
+        "0000320193-23-000106",
+        "0000320193-24-000123"
+      ]
+    },
+    {
+      "case_id": "later-comparative-after-publication",
+      "scenario": "Same fiscal period after FY2024 publication",
+      "expected": {
+        "value": "383285000000",
+        "selected_accession": "0000320193-24-000123",
+        "selection_reason": "latest_eligible_available_fact_for_exact_key"
+      },
+      "cutoff_at": "2024-11-02T00:00:00Z",
+      "row_id": "revenue",
+      "period_end": "2023-09-30",
+      "candidate_accessions": [
+        "0000320193-23-000106",
+        "0000320193-24-000123"
+      ]
+    },
+    {
+      "case_id": "tesla-original-missing-dts",
+      "scenario": "Replay original #493 retained input under its fixed 2024-only taxonomy cache",
+      "expected": {
+        "source_available": true,
+        "parse_only_status": "partial",
+        "parse_only_fact_count": 276,
+        "canonical_qualification": "refused",
+        "issue_code": "SEC_VALIDATION_REQUIRED",
+        "not_disclosed_claim": false
+      },
+      "source": {
+        "uri": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+        "sha256": "450428c73c70775ccc288b2ac48ac2d6b81a128357fe6e92f0cf3ab76a05322e",
+        "path": "tesla-2024-original-tsla-20231231.htm",
+        "accession_number": "0001628280-24-002390",
+        "publication_at": "2024-01-29T01:34:42+00:00"
+      },
+      "resource_blocker": 507,
+      "required_namespace": "http://fasb.org/us-gaap/2023",
+      "original_expectation_must_not_change": true
+    },
+    {
+      "case_id": "tesla-amendment-missing-dts",
+      "scenario": "Replay original #493 retained input under its fixed 2024-only taxonomy cache",
+      "expected": {
+        "source_available": true,
+        "parse_only_status": "unsupported",
+        "parse_only_fact_count": 0,
+        "canonical_qualification": "refused",
+        "issue_code": "SEC_VALIDATION_REQUIRED",
+        "not_disclosed_claim": false
+      },
+      "source": {
+        "uri": "https://www.sec.gov/Archives/edgar/data/1318605/000110465925042659/tm252787d2_10ka.htm",
+        "sha256": "ac21201742aa3e815678e0f1dad7605b9f659423966981497b1e1e285233a432",
+        "path": "tesla-2025-amendment-tm252787d2_10ka.htm",
+        "accession_number": "0001104659-25-042659",
+        "publication_at": "2025-04-30T21:08:56+00:00"
+      },
+      "resource_blocker": 507,
+      "required_namespace": "http://fasb.org/us-gaap/2023",
+      "original_expectation_must_not_change": true
+    },
+    {
+      "case_id": "part-iii-amendment-unknown-scope",
+      "scenario": "Retained Tesla FY2024 10-K/A is not a complete statement replacement",
+      "expected": {
+        "status": "unresolved",
+        "issue_code": "FACT_AMENDMENT_SCOPE_UNKNOWN",
+        "does_not_replace_unrelated_statement_keys": true,
+        "fy2023_cannot_fill_fy2024": true
+      },
+      "accession_number": "0001104659-25-042659",
+      "amends_accession": "0001628280-25-003063",
+      "amendment_scope": "unknown",
+      "original_scope_must_not_be_rewritten": true
+    },
+    {
+      "case_id": "dimension-is-not-consolidated-total",
+      "scenario": "Apple product revenue has a real product dimension and same duration as total revenue",
+      "expected": {
+        "status": "rejected_candidate",
+        "must_not_equal_consolidated_revenue": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "source_context_id": "c-13",
+      "source_inline_id": "f-60",
+      "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "dimension": {
+        "axis": "srt:ProductOrServiceAxis",
+        "member": "us-gaap:ProductMember"
+      },
+      "value": "294866000000"
+    },
+    {
+      "case_id": "unapproved-custom-concept",
+      "scenario": "Original custom concept is present but no approved statement-row mapping is supplied",
+      "expected": {
+        "status": "unresolved",
+        "reason": "mapping_unavailable",
+        "must_not_guess_from_label_or_local_name": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "source_inline_id": "f-123",
+      "source_context_id": "c-1",
+      "concept_qname": "aapl:OtherComprehensiveIncomeLossDerivativeInstrumentGainLossbeforeReclassificationafterTax"
+    },
+    {
+      "case_id": "equal-precision-conflict",
+      "scenario": "Synthetic duplicate of exact source fact key changes value at equal decimals",
+      "expected": {
+        "status": "refused",
+        "issue_code": "FACT_CONFLICT",
+        "must_retain_both_candidates": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "row_id": "revenue",
+      "synthetic_mutation": {
+        "duplicate_value": "391036000000",
+        "original_value": "391035000000",
+        "decimals": -6,
+        "same_complete_fact_key": true
+      },
+      "synthetic": true
+    },
+    {
+      "case_id": "latest-original-unsupported",
+      "scenario": "Newest cutoff-eligible original lacks its required runtime resources",
+      "expected": {
+        "status": "unsupported",
+        "must_keep_newest_original": true,
+        "must_not_substitute_older_original": true
+      },
+      "base_case_ids": [
+        "aapl-current",
+        "msft-current"
+      ],
+      "synthetic_mutation": {
+        "latest_original_runtime_supported": false
+      },
+      "synthetic": true
+    },
+    {
+      "case_id": "reported-zero",
+      "scenario": "Microsoft comparative short-term debt is explicitly reported as zero",
+      "expected": {
+        "status": "reported",
+        "value": "0",
+        "must_not_be_missing": true
+      },
+      "issuer_id": "0000789019",
+      "accession_number": "0000950170-24-087843",
+      "table_index": 26,
+      "row_index": 33,
+      "fact_index": 1,
+      "concept_qname": "us-gaap:CommercialPaper",
+      "source_context_id": "C_005805a9-264e-4b1d-93ea-497c67cc9a68",
+      "lexical_value": "0",
+      "period_end": "2023-06-30",
+      "scale": 6
+    },
+    {
+      "case_id": "reported-negative",
+      "scenario": "Apple financing cash flow is a reported negative amount",
+      "expected": {
+        "status": "reported",
+        "value": "-121983000000"
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "row_id": "financing_cash_flow"
+    },
+    {
+      "case_id": "fx-not-separately-presented",
+      "scenario": "Apple primary cash-flow statement has no separate FX row",
+      "expected": {
+        "status": "missing",
+        "reason": "not_separately_presented_in_this_primary_cash_flow_statement",
+        "full_activity_with_fx_check": "unresolved",
+        "must_not_supply_zero": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "row_id": "effect_of_exchange_rates_on_cash",
+      "not_a_claim_about_all_notes_or_other_filings": true
+    },
+    {
+      "case_id": "present-but-unparsed",
+      "scenario": "Delete the parser observation for an original raw table value",
+      "expected": {
+        "status": "error",
+        "reason": "source_present_but_unparsed",
+        "must_not_be_missing_disclosure": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "row_id": "operating_cash_flow",
+      "synthetic_mutation": {
+        "parser_observation_removed": true
+      },
+      "synthetic": true
+    },
+    {
+      "case_id": "purpose-unconfirmed",
+      "scenario": "Source-use permission for derived statement display is unconfirmed",
+      "expected": {
+        "status": "unresolved",
+        "reason": "source_use_unconfirmed",
+        "must_not_display_value_as_authorized": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic_mutation": {
+        "derived_display_permission": "unconfirmed"
+      },
+      "synthetic": true
+    },
+    {
+      "case_id": "non-applicable-row",
+      "scenario": "A row has an explicit approved applicability rule declaring not applicable",
+      "expected": {
+        "status": "not_applicable",
+        "must_have_reason_and_policy_version": true,
+        "must_not_supply_zero": true
+      },
+      "synthetic": true,
+      "synthetic_input": {
+        "applicability": "not_applicable",
+        "reason": "registered_business_scope_excludes_row",
+        "policy_version": "fixture-only-applicability-v1"
+      }
+    },
+    {
+      "case_id": "fiscal-duration-not-comparable",
+      "scenario": "Two facts share end date but one is a transition duration",
+      "expected": {
+        "status": "not_comparable",
+        "must_preserve_both_period_keys": true,
+        "must_not_annualize": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "transition_period_start": "2024-04-01",
+        "period_end": "2024-09-28"
+      }
+    },
+    {
+      "case_id": "wrong-profile",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "profile_mismatch",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "validation_profile_digest",
+        "replacement": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "case_id": "wrong-taxonomy-hash",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "resource_hash_mismatch",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "taxonomy_content_hash",
+        "replacement": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "case_id": "validation-incomplete",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "validation_incomplete",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "dqc_completed",
+        "replacement": false
+      }
+    },
+    {
+      "case_id": "corrupt-artifact",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "content_hash_mismatch",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "artifact_bytes",
+        "replacement": "append byte 0x00 to retained artifact without changing declared content hash"
+      }
+    },
+    {
+      "case_id": "cross-issuer",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "issuer_scope_mismatch",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "issuer_id",
+        "replacement": "0000789019"
+      }
+    },
+    {
+      "case_id": "cross-source",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "source_scope_mismatch",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "source_content_hash",
+        "replacement": "321fd42528989d20b979a438c1fd185260e45e4c902a9089524aad1e6146f65d"
+      }
+    },
+    {
+      "case_id": "invalid-cutoff",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "timezone_required",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "cutoff_at",
+        "replacement": "2024-11-02T00:00:00"
+      }
+    },
+    {
+      "case_id": "duration-in-instant-row",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "period_type_mismatch",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "period_type",
+        "replacement": "duration"
+      }
+    },
+    {
+      "case_id": "unit-mismatch",
+      "scenario": "Synthetic boundary mutation of a frozen source-bound statement input",
+      "expected": {
+        "status": "refused",
+        "reason": "unit_mismatch",
+        "must_not_publish_success": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "synthetic": true,
+      "synthetic_mutation": {
+        "field": "unit_measure",
+        "replacement": "xbrli:shares"
+      }
+    },
+    {
+      "case_id": "cash-definition-mismatch",
+      "scenario": "Apple FY2023 balance cash excludes restricted cash and differs from cash-flow closing cash",
+      "expected": {
+        "status": "refused_for_cash_flow_rollforward",
+        "reason": "cash_definition_mismatch",
+        "balance_sheet_cash": "29965000000",
+        "cash_flow_ending_balance": "30737000000",
+        "must_not_add_balancing_plug": true
+      },
+      "base": {
+        "issuer_id": "0000320193",
+        "accession_number": "0000320193-24-000123",
+        "golden_ref": "issue494-golden.json",
+        "period_end": "2024-09-28"
+      },
+      "period_end": "2023-09-30"
+    },
+    {
+      "case_id": "identical-input-replay",
+      "scenario": "Read or replay the same retained originals and version pins twice",
+      "expected": {
+        "same_identity_and_output_hash": true,
+        "source_bytes_and_validation_evidence_unchanged": true,
+        "http_fallback": false
+      },
+      "base_case_ids": [
+        "aapl-historical",
+        "msft-historical",
+        "aapl-current",
+        "msft-current"
+      ]
+    }
+  ]
+}
