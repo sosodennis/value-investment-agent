@@ -13,11 +13,17 @@ class OwnershipService:
         user_id: str,
         resource_type: str,
         resource_id: str,
+        organization_id: str | None = None,
     ) -> bool:
         return await self._repository.claim(
             resource_type=resource_type,
             resource_id=resource_id,
             user_id=user_id,
+            **(
+                {"organization_id": organization_id}
+                if organization_id is not None
+                else {}
+            ),
         )
 
     async def owns(
@@ -26,10 +32,16 @@ class OwnershipService:
         user_id: str,
         resource_type: str,
         resource_id: str,
+        organization_id: str | None = None,
     ) -> bool:
         owner_id = await self._repository.owner_of(
             resource_type=resource_type,
             resource_id=resource_id,
+            **(
+                {"organization_id": organization_id}
+                if organization_id is not None
+                else {}
+            ),
         )
         return owner_id == user_id
 

@@ -178,9 +178,16 @@ async def run_history_migration(
 
 
 async def assert_migrations_complete() -> None:
+    from .thread_ownership import THREAD_OWNERSHIP_MIGRATION_ID
+
     async with AsyncSessionLocal() as session:
-        migration = await session.get(DatabaseMigration, HISTORY_MIGRATION_ID)
-    if migration is None or migration.completed_at is None:
+        migrations = [
+            await session.get(DatabaseMigration, migration_id)
+            for migration_id in (HISTORY_MIGRATION_ID, THREAD_OWNERSHIP_MIGRATION_ID)
+        ]
+    if any(
+        migration is None or migration.completed_at is None for migration in migrations
+    ):
         raise RuntimeError(
             "database migrations are pending; run "
             "python -m src.infrastructure.migrations.cli before starting the API"

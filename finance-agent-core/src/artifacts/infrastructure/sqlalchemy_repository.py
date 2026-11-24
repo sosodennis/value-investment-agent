@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from src.artifacts.domain.deduplication import artifact_content, references_artifact
 from src.artifacts.domain.envelope import parse_artifact_envelope
 from src.artifacts.domain.record import ArtifactRecord
+from src.auth.infrastructure.models import OwnedResourceModel
 from src.infrastructure.database import AsyncSessionLocal
 from src.infrastructure.models import (
     Artifact,
@@ -105,6 +106,12 @@ class SqlAlchemyArtifactRepository:
             )
             if run_id is not None:
                 statement = statement.where(WorkflowRunHistory.run_id == run_id)
+            else:
+                statement = select(OwnedResourceModel.resource_id).where(
+                    OwnedResourceModel.resource_type == "thread",
+                    OwnedResourceModel.resource_id == thread_id,
+                    OwnedResourceModel.organization_id == organization_id,
+                )
             return await session.scalar(statement) is not None
 
     async def is_agent_output_reference(

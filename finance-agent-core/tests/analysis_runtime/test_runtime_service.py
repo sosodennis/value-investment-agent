@@ -58,10 +58,14 @@ class Owner:
     def __init__(self, owned: set[str] | None = None) -> None:
         self.owned = {"thread"} if owned is None else owned
 
-    async def owns(self, *, principal_id: str, thread_id: str) -> bool:
+    async def owns(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
         return thread_id in self.owned
 
-    async def claim(self, *, principal_id: str, thread_id: str) -> bool:
+    async def claim(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
         self.owned.add(thread_id)
         return True
 
@@ -72,10 +76,16 @@ class BlockingClaimOwner(Owner):
         self.claim_started = asyncio.Event()
         self.release_claim = asyncio.Event()
 
-    async def claim(self, *, principal_id: str, thread_id: str) -> bool:
+    async def claim(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
         self.claim_started.set()
         await self.release_claim.wait()
-        return await super().claim(principal_id=principal_id, thread_id=thread_id)
+        return await super().claim(
+            principal_id=principal_id,
+            thread_id=thread_id,
+            organization_id=organization_id,
+        )
 
 
 class Runner:

@@ -102,11 +102,19 @@ def test_event_stream_response_disables_transforming_and_buffering() -> None:
 
 
 class Owner:
-    async def owns(self, *, principal_id: str, thread_id: str) -> bool:
+    async def owns(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
         return principal_id == "user-1" and thread_id == "thread-1"
 
-    async def claim(self, *, principal_id: str, thread_id: str) -> bool:
-        return await self.owns(principal_id=principal_id, thread_id=thread_id)
+    async def claim(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
+        return await self.owns(
+            principal_id=principal_id,
+            thread_id=thread_id,
+            organization_id=organization_id,
+        )
 
 
 class Runner:

@@ -53,14 +53,24 @@ from src.shared.kernel.rate_limit import close_rate_limiter
 
 
 class OwnedThreadPort(OwnerPort):
-    async def owns(self, *, principal_id: str, thread_id: str) -> bool:
+    async def owns(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
         return await get_ownership_service().owns(
-            user_id=principal_id, resource_type="thread", resource_id=thread_id
+            user_id=principal_id,
+            resource_type="thread",
+            resource_id=thread_id,
+            organization_id=organization_id,
         )
 
-    async def claim(self, *, principal_id: str, thread_id: str) -> bool:
+    async def claim(
+        self, *, principal_id: str, thread_id: str, organization_id: str
+    ) -> bool:
         return await get_ownership_service().claim(
-            user_id=principal_id, resource_type="thread", resource_id=thread_id
+            user_id=principal_id,
+            resource_type="thread",
+            resource_id=thread_id,
+            organization_id=organization_id,
         )
 
 

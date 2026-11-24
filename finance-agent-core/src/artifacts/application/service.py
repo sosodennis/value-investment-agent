@@ -5,7 +5,10 @@ import uuid
 from src.analysis_runtime.application.execution_context import (
     get_workflow_execution_context,
 )
-from src.artifacts.domain.deduplication import artifact_dedupe_key
+from src.artifacts.domain.deduplication import (
+    artifact_dedupe_key,
+    thread_artifact_dedupe_key,
+)
 from src.artifacts.domain.envelope import (
     ArtifactEnvelope,
     ArtifactPayload,
@@ -57,6 +60,30 @@ class ArtifactService:
             dedupe_key=dedupe_key,
         )
         return await self._repository.save(record)
+
+    async def save_thread_artifact(
+        self,
+        *,
+        data: ArtifactPayload,
+        artifact_type: str,
+        produced_by: str,
+        thread_id: str,
+    ) -> str:
+        envelope = build_artifact_envelope(
+            kind=artifact_type, produced_by=produced_by, data=data
+        )
+        return await self._repository.save(
+            ArtifactRecord(
+                artifact_id=str(uuid.uuid4()),
+                key=None,
+                thread_id=thread_id,
+                kind=artifact_type,
+                envelope=envelope,
+                dedupe_key=thread_artifact_dedupe_key(
+                    thread_id=thread_id, envelope=envelope
+                ),
+            )
+        )
 
     async def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         return await self._repository.get_by_id(artifact_id)
