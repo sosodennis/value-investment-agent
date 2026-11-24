@@ -31,8 +31,13 @@ KEY = Ed25519PrivateKey.from_private_bytes(
 )
 
 
-def release_case(tmp_path, monkeypatch):
-    value = case(tmp_path / "source", monkeypatch, statement_original=True)
+def release_case(tmp_path, monkeypatch, *, multiple_originals=False):
+    value = case(
+        tmp_path / "source",
+        monkeypatch,
+        statement_original=True,
+        multiple_originals=multiple_originals,
+    )
     prepared, _ = execute(value)
     request, *_ = statement_source_case(tmp_path / "request", monkeypatch)
     original_ref = value.service.reference(
@@ -378,3 +383,125 @@ def test_missing_balance_sheet_row_keeps_retained_mapping_reason(tmp_path, monke
     assert row.cells[0].issue_codes == missing.issue_codes
     assert row.cells[0].evidence_refs == missing.evidence_refs
     assert row.cells[0].missing == missing.missing
+
+
+@pytest.mark.parametrize(
+    "mutation", ["not_applicable", "invented_duration", "quality", "reason"]
+)
+def test_failed_original_cannot_be_relabelled_not_applicable_before_signing(
+    tmp_path, monkeypatch, mutation
+):
+    from fundamental_service.annual_statements import project_annual_statements
+    from fundamental_service.contracts import MissingValueV1, QualityStatus
+    from fundamental_service.statement_contracts import StatementUnavailableSourceV1
+    from fundamental_service.statement_profiles import statement_executable_digest
+    from fundamental_service.statement_releases import STATEMENT_RELEASE_ROLE
+
+    value, request, statement, options = release_case(
+        tmp_path, monkeypatch, multiple_originals=True
+    )
+    legitimate = AutomaticDataReleaseService(**options).verify_and_sign(request)
+    assert legitimate.decision.status == "passed", legitimate.decision.issue_codes
+    failed = next(
+        outcome
+        for outcome in statement.projection.source_outcomes
+        if isinstance(outcome, StatementUnavailableSourceV1)
+    )
+    claimed = MissingValueV1(
+        status="not_applicable",
+        reason="Caller declares the failed original not applicable",
+    )
+    outcome = failed
+    columns = statement.projection.columns
+    if mutation == "not_applicable":
+        outcome = failed.model_copy(update={"missing": claimed})
+        columns = tuple(
+            column.model_copy(
+                update={"period": column.period.model_copy(update={"missing": claimed})}
+            )
+            if column.original_accession == failed.accession_number
+            else column
+            for column in columns
+        )
+    elif mutation == "quality":
+        outcome = failed.model_copy(
+            update={"quality_status": QualityStatus.PROVISIONAL}
+        )
+    elif mutation == "reason":
+        outcome = failed.model_copy(
+            update={
+                "missing": failed.missing.model_copy(
+                    update={"reason": "No relevant facts were reported"}
+                )
+            }
+        )
+    else:
+        from datetime import timedelta
+        from fundamental_service.statement_contracts import DurationStatementPeriodV1
+
+        columns = tuple(
+            column.model_copy(
+                update={
+                    "period": DurationStatementPeriodV1(
+                        period_start=failed.report_period_end - timedelta(days=363),
+                        period_end=failed.report_period_end,
+                    )
+                }
+            )
+            if column.original_accession == failed.accession_number
+            else column
+            for column in columns
+        )
+    projection = statement.projection.model_copy(
+        update={
+            "source_outcomes": tuple(
+                outcome if source == failed else source
+                for source in statement.projection.source_outcomes
+            ),
+            "columns": columns,
+        }
+    )
+    envelope = statement.model_copy(
+        update={
+            "projection": projection,
+            "statements": project_annual_statements(
+                projection, executable_digest=statement_executable_digest()
+            ),
+        }
+    )
+    publication = value.artifacts.put_with_receipt(
+        "synthetic-relabelled-original-" + sha256_digest(envelope), envelope
+    )
+    old = next(
+        ref
+        for ref in request.manifest.artifact_refs
+        if ref.role == STATEMENT_RELEASE_ROLE
+    )
+    new = old.model_copy(
+        update={
+            "artifact_id": publication.artifact.artifact_id,
+            "content_hash": publication.artifact.content_hash,
+        }
+    )
+    payload = request.manifest.model_dump(exclude={"manifest_digest"}) | {
+        "artifact_refs": tuple(
+            new if ref == old else ref for ref in request.manifest.artifact_refs
+        )
+    }
+    manifest = type(request.manifest).model_validate_json(
+        canonical_bytes(payload | {"manifest_digest": sha256_digest(payload)})
+    )
+    content = request.content.model_copy(
+        update={
+            "evidence_refs": tuple(
+                new if ref == old else ref for ref in request.content.evidence_refs
+            )
+        }
+    )
+    refused = AutomaticDataReleaseService(**options).verify_and_sign(
+        request.model_copy(update={"manifest": manifest, "content": content})
+    )
+    assert (
+        refused.decision.status == "blocked" and refused.candidate_publication is None
+    )
+    assert "STATEMENT_RELEASE_UNAVAILABLE_UNPROVEN" in refused.decision.issue_codes

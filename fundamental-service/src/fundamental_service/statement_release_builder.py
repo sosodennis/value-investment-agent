@@ -10,8 +10,6 @@ from .automatic_mapping_batch import (
 )
 from .command_artifacts import EvidenceArtifactStore
 from .contracts import (
-    MissingValueV1,
-    QualityStatus,
     SecIngestionResponseV1,
     SourceSnapshotV1,
 )
@@ -40,10 +38,8 @@ from .statement_contracts import (
     StatementFactEvidenceV1,
     StatementProjectionInputV1,
     StatementScopeV1,
-    StatementUnavailableSourceV1,
     StatementMissingEvidenceV1,
     StatementSourceOutcomeV1,
-    UnresolvedStatementPeriodV1,
 )
 from .statement_profiles import annual_statement_profile, statement_executable_digest
 from .statement_releases import (
@@ -51,6 +47,7 @@ from .statement_releases import (
     StatementMappingReader,
     StatementReleaseEnvelopeV1,
     statement_release_namespace,
+    unavailable_statement_original,
 )
 from .statement_mapping_evidence import statement_missing_evidence
 
@@ -142,31 +139,11 @@ def build_statement_release(
         )
         refs.append(outcome_ref)
         if item.issue_codes:
-            missing = MissingValueV1(
-                status="unresolved", reason="; ".join(item.issue_codes)
+            outcome, column = unavailable_statement_original(
+                filing, outcome_ref, item.issue_codes
             )
-            outcomes.append(
-                StatementUnavailableSourceV1(
-                    accession_number=filing.accession_number,
-                    available_at=filing.accepted_at,
-                    report_period_end=filing.report_period_end,
-                    outcome_ref=outcome_ref,
-                    quality_status=QualityStatus.ABSTAIN,
-                    missing=missing,
-                    issue_codes=item.issue_codes,
-                )
-            )
-            columns.append(
-                StatementAnnualColumnV1(
-                    fiscal_label=f"FY{filing.report_period_end.year}",
-                    period=UnresolvedStatementPeriodV1(
-                        reported_period_end=filing.report_period_end,
-                        missing=missing,
-                        source_outcome_ref=outcome_ref,
-                    ),
-                    original_accession=filing.accession_number,
-                )
-            )
+            outcomes.append(outcome)
+            columns.append(column)
             if filing.accession_number in by_accession:
                 raise DataReleaseError(
                     "STATEMENT_INGESTION_SOURCE_MISMATCH",

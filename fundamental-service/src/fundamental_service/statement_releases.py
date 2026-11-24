@@ -6,8 +6,15 @@ from datetime import datetime
 from pydantic import Field, model_validator
 
 from .annual_statements import project_annual_statements
+from .annual_discovery import AnnualFilingV1
 from .artifact_evidence import EvidenceArtifactReader, read_retained_artifact
-from .contracts import CanonicalFactV1, SecIntegrityEvidenceV1, SourceSnapshotV1
+from .contracts import (
+    CanonicalFactV1,
+    MissingValueV1,
+    QualityStatus,
+    SecIntegrityEvidenceV1,
+    SourceSnapshotV1,
+)
 from .data_releases import (
     ArtifactRefV1,
     DataReleaseError,
@@ -32,6 +39,8 @@ from .statement_contracts import (
     StatementProjectionInputV1,
     StatementScopeV1,
     StatementMissingEvidenceV1,
+    StatementUnavailableSourceV1,
+    StatementAnnualColumnV1,
     UnresolvedStatementPeriodV1,
 )
 from .statement_issuer_scope import (
@@ -45,6 +54,31 @@ from .statement_mapping_evidence import (
 )
 
 STATEMENT_RELEASE_ROLE: Final = "annual-statement-release-input-v1"
+
+
+def unavailable_statement_original(
+    filing: AnnualFilingV1, outcome_ref: ArtifactRefV1, issue_codes: tuple[str, ...]
+) -> tuple[StatementUnavailableSourceV1, StatementAnnualColumnV1]:
+    missing = MissingValueV1(status="unresolved", reason="; ".join(issue_codes))
+    outcome = StatementUnavailableSourceV1(
+        accession_number=filing.accession_number,
+        available_at=filing.accepted_at,
+        report_period_end=filing.report_period_end,
+        outcome_ref=outcome_ref,
+        quality_status=QualityStatus.ABSTAIN,
+        missing=missing,
+        issue_codes=issue_codes,
+    )
+    column = StatementAnnualColumnV1(
+        fiscal_label=f"FY{filing.report_period_end.year}",
+        period=UnresolvedStatementPeriodV1(
+            reported_period_end=filing.report_period_end,
+            missing=missing,
+            source_outcome_ref=outcome_ref,
+        ),
+        original_accession=filing.accession_number,
+    )
+    return outcome, column
 
 
 class StatementReleaseEnvelopeV1(ReleaseModel):
@@ -244,9 +278,16 @@ def verify_statement_release_membership(
                 "statement source outcome differs from its retained original validation",
             )
         if not isinstance(outcome, StatementAvailableSourceV1):
-            if (
-                not prepared_item.issue_codes
-                or outcome.issue_codes != prepared_item.issue_codes
+            column = next(
+                column
+                for column in projection.columns
+                if column.original_accession == outcome.accession_number
+            )
+            if not prepared_item.issue_codes or (
+                outcome,
+                column,
+            ) != unavailable_statement_original(
+                request.filing, outcome.outcome_ref, prepared_item.issue_codes
             ):
                 raise DataReleaseError(
                     "STATEMENT_RELEASE_UNAVAILABLE_UNPROVEN",
