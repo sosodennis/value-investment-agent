@@ -107,6 +107,18 @@
       "status": "not_run",
       "command": "fundamental-prepare-statements; authenticated read; workspace inspection",
       "exit_code": null
+    },
+    {
+      "name": "service-suite",
+      "status": "pass",
+      "command": "ISSUE494_SEC_EVIDENCE_DIR and pinned V18/V31 runtime paths; uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -ra",
+      "exit_code": 0,
+      "tested_commit": "715c48fb835f2fd542028d0594758f627faac23d",
+      "result": "5402 passed, 14 skipped, 5 warnings; conditional skips do not establish SEC acceptance",
+      "evidence": {
+        "path": "/Users/denniswong/.codex/diagnostics/issue-494-annual-statements/runtime/service-suite-715c48fb.log",
+        "sha256": "32c164a18752c81a5b23189e481e0a926705203f5b0b534f84df23ab8cf69991"
+      }
     }
   ],
   "blockers": [
@@ -114,7 +126,8 @@
     "#511 standalone thread ownership formal workflow",
     "#512 failed original exact failure semantics formal workflow",
     "#513 SEC authorization formal workflow",
-    "#514 submission dates formal workflow"
+    "#514 submission dates formal workflow",
+    "#515 prepared original identity through canonical ingestion"
   ],
-  "next_step": "四組固定issuer/cutoff正式operator、authenticated API/workspace、多尺寸互動、exact tests及獨立審閱；未全部通過前保持draft。"
+  "next_step": "修正#515 owning acquisition/ingestion identity，完成Linux記憶體配置後重驗四組operator與API/workspace。"
 }
