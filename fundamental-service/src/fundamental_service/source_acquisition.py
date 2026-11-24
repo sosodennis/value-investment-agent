@@ -988,11 +988,17 @@ class SecAcquisitionUseCase:
         return _PreparedFiling(
             filing=self._catalog_filing(original),
             validated=validated,
-            sources=self._restore_original_sources(validated, runtime),
+            sources=self._restore_original_sources(
+                validated, runtime, filing_date=original.filing.filing_date
+            ),
         )
 
     def _restore_original_sources(
-        self, validated: ValidatedOriginalV1, runtime: OriginalValidationRuntimeV1
+        self,
+        validated: ValidatedOriginalV1,
+        runtime: OriginalValidationRuntimeV1,
+        *,
+        filing_date: date,
     ) -> tuple[CapturedSource, ...]:
         sources = []
         by_uri = {item.uri: item for item in validated.captured_sources}
@@ -1033,6 +1039,11 @@ class SecAcquisitionUseCase:
                     publication_at=retained.publication_at,
                     accession_number=retained.accession_number,
                     form=retained.form,
+                    filing_date=(
+                        filing_date
+                        if retained.source_id == "sec-filing-submission"
+                        else None
+                    ),
                     filed_at=retained.filed_at,
                     filing_version=retained.accession_number,
                     taxonomy_manifest_id=(

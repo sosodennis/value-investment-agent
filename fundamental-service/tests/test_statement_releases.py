@@ -1,4 +1,6 @@
 import base64
+from dataclasses import replace
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -31,12 +33,27 @@ KEY = Ed25519PrivateKey.from_private_bytes(
 )
 
 
-def release_case(tmp_path, monkeypatch, *, multiple_originals=False):
+def release_case(
+    tmp_path, monkeypatch, *, multiple_originals=False, submissions_delay=0
+):
     value = case(
         tmp_path / "source",
         monkeypatch,
         statement_original=True,
         multiple_originals=multiple_originals,
+    )
+    request_source = value.acquisition.adapter._request
+
+    def independent_capture_times(uri, *, deadline_at=None):
+        response = request_source(uri, deadline_at=deadline_at)
+        return replace(
+            response,
+            available_at=response.available_at
+            + timedelta(seconds=submissions_delay if "/submissions/" in uri else 0),
+        )
+
+    monkeypatch.setattr(
+        value.acquisition.adapter, "_request", independent_capture_times
     )
     prepared, _ = execute(value)
     request, *_ = statement_source_case(tmp_path / "request", monkeypatch)
@@ -97,10 +114,13 @@ def release_case(tmp_path, monkeypatch, *, multiple_originals=False):
     return value, release, statement, options
 
 
+@pytest.mark.parametrize("submissions_delay", (0, 600))
 def test_partial_statement_release_signs_existing_gates_and_replays_without_market_or_valuation(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, submissions_delay
 ):
-    value, request, statement, options = release_case(tmp_path, monkeypatch)
+    value, request, statement, options = release_case(
+        tmp_path, monkeypatch, submissions_delay=submissions_delay
+    )
     receipt = AutomaticDataReleaseService(**options).verify_and_sign(request)
     assert receipt.decision.status == "passed", receipt.decision.issue_codes
     candidate = AutomaticDataReleaseCandidateV1.model_validate_json(

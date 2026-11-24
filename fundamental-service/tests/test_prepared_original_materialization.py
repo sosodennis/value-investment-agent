@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import timedelta
+import pytest
 
 from test_automatic_source_acquisition import acquire
 from test_automatic_source_mapping import statement_source_case
@@ -64,6 +65,11 @@ def test_prepared_original_identity_survives_later_submissions_capture(
         assert record.available_at == retained.available_at
         assert record.captured_at == retained.captured_at
         assert record.publication_at == retained.publication_at
+        assert record.filing_date == (
+            validation.request.filing.filing_date
+            if retained.source_id == "sec-filing-submission"
+            else None
+        )
     build_statement_release(
         original_ref,
         (ingestion,),
@@ -156,3 +162,151 @@ def test_current_cutoff_preserves_original_selection_on_acquisition_and_replay(
     assert again.status == "reused" and again.snapshot_id == first.snapshot_id
     assert runner._plan_mappings(plan) == groups
     assert value.acquisition._original_reads.get() is None
+
+
+def _prepared_case(tmp_path, monkeypatch):
+    value = case(tmp_path / "source", monkeypatch, statement_original=True)
+    prepared, _ = execute(value)
+    request, *_ = statement_source_case(tmp_path / "request", monkeypatch)
+    request = request.model_copy(
+        update={
+            "original_preparation": value.service.reference(
+                prepared.artifact_id, "sec-original-preparation-v1"
+            )
+        }
+    )
+    validation = value.service.read_validation(
+        prepared.filings[0].validation.artifact_id
+    )
+    return value, prepared, request, validation
+
+
+def _corrupt_retained(value, prepared, validation, target, monkeypatch):
+    from fundamental_service.sec_capture import sec_response_artifact_id
+
+    if target == "source_bytes":
+        source = next(
+            s for s in validation.captured_sources if s.source_id == "sec-filing"
+        )
+        value.acquisition.content_store._path(
+            source.content_hash, source.media_type
+        ).write_bytes(b"changed")
+    elif target == "receipt_bytes":
+        response = validation.responses[0]
+        key = sec_response_artifact_id(response.scope, response.uri)
+        record = value.artifacts.get(key)
+        value.artifacts._artifact_path(
+            record.content_hash, record.media_type
+        ).write_bytes(b"{}")
+    elif target == "receipt_metadata":
+        response = validation.responses[0]
+        value.artifacts.invalidate(
+            sec_response_artifact_id(response.scope, response.uri)
+        )
+    elif target == "membership":
+        get = value.artifacts.get
+
+        def changed_membership(key):
+            record = get(key)
+            return (
+                record.model_copy(update={"dependency_hashes": ()})
+                if key == prepared.artifact_id
+                else record
+            )
+
+        monkeypatch.setattr(value.artifacts, "get", changed_membership)
+    elif target == "validation_metadata":
+        value.artifacts.invalidate(prepared.filings[0].validation.artifact_id)
+    else:
+        raise AssertionError(target)
+
+
+@pytest.mark.parametrize("scoped", (False, True))
+@pytest.mark.parametrize(
+    "target",
+    (
+        "source_bytes",
+        "receipt_bytes",
+        "receipt_metadata",
+        "membership",
+        "validation_metadata",
+    ),
+)
+def test_prepared_mutation_before_publication_refuses_without_snapshot_or_facts(
+    tmp_path, monkeypatch, target, scoped
+):
+    from contextlib import nullcontext
+    from fundamental_service.operations import ServiceError
+
+    value, prepared, request, validation = _prepared_case(tmp_path, monkeypatch)
+    prepare = value.acquisition.ingestion.prepare_original
+    consumed = []
+
+    def corrupt_after_materialization(**kwargs):
+        result = prepare(**kwargs)
+        consumed.append(value.acquisition._original_reads.get())
+        _corrupt_retained(value, prepared, validation, target, monkeypatch)
+        return result
+
+    monkeypatch.setattr(
+        value.acquisition.ingestion, "prepare_original", corrupt_after_materialization
+    )
+    with pytest.raises(ServiceError):
+        with value.acquisition.evidence_operation() if scoped else nullcontext():
+            acquire(request, value.acquisition)
+    assert consumed and consumed[0].closed and consumed[0]._journal.closed
+    assert value.acquisition._original_reads.get() is None
+    assert (
+        not value.metadata.snapshots
+        and not value.metadata.facts
+        and not value.metadata.acquisitions
+    )
+    calls = value.state.provider_calls, value.state.parser_calls
+    with pytest.raises(ServiceError):
+        acquire(request, value.acquisition)
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+
+
+@pytest.mark.parametrize("reader", ("execute", "retained"))
+@pytest.mark.parametrize(
+    "target",
+    (
+        "source_bytes",
+        "receipt_bytes",
+        "receipt_metadata",
+        "membership",
+        "validation_metadata",
+    ),
+)
+def test_cached_prepared_acquisition_rechecks_admitted_evidence_before_return(
+    tmp_path, monkeypatch, target, reader
+):
+    from fundamental_service.operations import ServiceError
+    from fundamental_service.snapshots import SnapshotError
+    from test_issuer_operating_release import inventory
+
+    value, prepared, request, validation = _prepared_case(tmp_path, monkeypatch)
+    result = acquire(request, value.acquisition)
+    before = inventory(value.artifacts.root)
+    get = value.metadata.get_sec_ingestion
+    consumed = []
+
+    def corrupt_after_admission(*args, **kwargs):
+        result = get(*args, **kwargs)
+        consumed.append(value.acquisition._original_reads.get())
+        _corrupt_retained(value, prepared, validation, target, monkeypatch)
+        return result
+
+    monkeypatch.setattr(value.metadata, "get_sec_ingestion", corrupt_after_admission)
+    calls = value.state.provider_calls, value.state.parser_calls
+    with pytest.raises((ServiceError, SnapshotError)):
+        if reader == "execute":
+            acquire(request, value.acquisition)
+        else:
+            value.acquisition.retained_acquisition(request)
+    assert consumed and consumed[0].closed and consumed[0]._journal.closed
+    assert value.acquisition._original_reads.get() is None
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+    assert tuple(value.metadata.acquisitions.values()) == (result,)
+    if target in {"source_bytes", "membership"}:
+        assert inventory(value.artifacts.root) == before

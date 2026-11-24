@@ -154,7 +154,7 @@ def test_statement_can_read_valid_original_when_another_original_needs_retry(
     assert prepared.retryable
     with value.acquisition.evidence_operation():
         selected = value.acquisition._prepared_filing(statement)
-        assert selected.accession_number == original.accession_number
+        assert selected.filing.accession_number == original.accession_number
 
 
 def test_statement_preparation_cannot_authorize_valuation_source(tmp_path, monkeypatch):

@@ -1,5 +1,6 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -1185,7 +1186,7 @@ def test_invalid_retained_acquisition_does_not_fall_back_to_provider(
         raise SnapshotError("INGESTION_KEY_COLLISION", "another retained request")
 
     monkeypatch.setattr(metadata, "get_sec_ingestion", reject)
-    with pytest.raises(SnapshotError, match="another retained request"):
+    with pytest.raises(ServiceError, match="another retained request") as error:
         use_case.execute(
             fixture.request,
             caller_principal="caller",
@@ -1194,6 +1195,8 @@ def test_invalid_retained_acquisition_does_not_fall_back_to_provider(
             deadline_at=datetime(2025, 1, 1, tzinfo=UTC),
             audit_reuse=False,
         )
+    assert error.value.code == "INGESTION_KEY_COLLISION"
+    assert error.value.status_code == 422
     assert metadata.lock_attempts == 0 and not metadata.audits
     assert fixture.state.provider_calls == fixture.state.parser_calls == 0
 
@@ -1231,6 +1234,10 @@ def test_authenticated_early_rejections_are_audited(
         update={"taxonomy_manifest_id": taxonomy_manifest_id}
     )
     use_case = object.__new__(SecAcquisitionUseCase)
+    use_case._original_reads = ContextVar(
+        "test-acquisition-original-reads", default=None
+    )
+    use_case.capture_store = None
     metadata = _AuditMetadata()
     use_case.metadata = metadata
     use_case.authorized_organizations = frozenset({"org-approved"})
