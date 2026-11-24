@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import wire from '../../../../contracts/fixtures/annual-statements.v1.json';
+import { loadAnnualStatementFixture } from '@/test-fixtures/annual-statements';
 import { parseAnnualStatements } from './annual-statements';
 
-const fixture = () => structuredClone(wire);
+const fixture = loadAnnualStatementFixture;
 
 describe('annual statement artifact boundary', () => {
     it('retains exact Decimal, actual periods, source context and missing reasons', () => {

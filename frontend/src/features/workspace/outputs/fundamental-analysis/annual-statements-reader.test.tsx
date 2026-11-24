@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import wire from '../../../../../../contracts/fixtures/annual-statements.v1.json';
+import { loadAnnualStatementFixture } from '@/test-fixtures/annual-statements';
 import { AnnualStatementsReader } from './annual-statements-reader';
 
 beforeEach(() => {
@@ -12,7 +12,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState({}, '', '/workspace'); });
 
 function savedEnvelope() {
-    return { kind: 'financial_reports', version: 'v1', produced_by: 'fundamental_analysis', created_at: '2024-12-01T00:00:00Z', data: { status: 'done', ticker: 'TEST', company_name: 'Example Issuer', model_type: 'annual_statements', financial_reports: [], annual_statements: wire } };
+    return { kind: 'financial_reports', version: 'v1', produced_by: 'fundamental_analysis', created_at: '2024-12-01T00:00:00Z', data: { status: 'done', ticker: 'TEST', company_name: 'Example Issuer', model_type: 'annual_statements', financial_reports: [], annual_statements: loadAnnualStatementFixture() } };
 }
 function reader(threadId: string | null = 'thread-1') {
     return <SWRConfig value={{ provider: () => new Map(), shouldRetryOnError: false }}><AnnualStatementsReader threadId={threadId} onEvidenceItems={vi.fn()} /></SWRConfig>;

@@ -1,13 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import wire from '../../../../../../contracts/fixtures/annual-statements.v1.json';
-import { parseAnnualStatements } from '@/types/agents/annual-statements';
+import { loadAnnualStatementFixture } from '@/test-fixtures/annual-statements';
 import { EvidenceInspector } from '../../workspace-evidence-inspector';
 import { projectAnnualStatements } from './annual-statements-model';
 import { AnnualStatementsTable } from './annual-statements-table';
 
 function report() {
-    return projectAnnualStatements({ response: parseAnnualStatements(wire), reference: { artifact_id: 'saved-statement', download_url: '/api/v1/artifacts/saved-statement', type: 'financial_reports' }, threadId: 'thread-1', companyName: 'Example Issuer', ticker: 'TEST' });
+    return projectAnnualStatements({ response: loadAnnualStatementFixture(), reference: { artifact_id: 'saved-statement', download_url: '/api/v1/artifacts/saved-statement', type: 'financial_reports' }, threadId: 'thread-1', companyName: 'Example Issuer', ticker: 'TEST' });
 }
 
 describe('annual statement comparison and inspection', () => {
