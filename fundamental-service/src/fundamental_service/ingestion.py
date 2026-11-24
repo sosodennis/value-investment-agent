@@ -655,13 +655,19 @@ class SecIngestionService:
             )
             require_sec_validation_evidence(report)
             if filing_date is not None and profile.dqc_applicability_digest is not None:
+                dqc_version: Literal["v18", "v31.0.3"] = (
+                    "v18" if profile.dqc_version == "v18" else "v31.0.3"
+                )
                 report = bind_dqc_filing_context(
                     report,
                     DqcFilingContextV1(
                         issuer_id=cik,
                         accession_number=accession_number,
                         filing_date=filing_date,
-                        policy_digest=dqc_applicability_policy_digest(),
+                        dqc_version=dqc_version,
+                        policy_digest=dqc_applicability_policy_digest(
+                            profile.dqc_version
+                        ),
                     ),
                 )
             archive_report = report

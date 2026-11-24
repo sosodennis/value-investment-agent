@@ -1326,6 +1326,10 @@ def create_runtime_app() -> FastAPI:
         dqc_ruleset_sha256=dqc_ruleset_sha256,
         dqc_ruleset_catalog_path=os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH")
         or None,
+        dqc_v18_ruleset_catalog_path=os.getenv(
+            "FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH"
+        )
+        or None,
         historical_dqc_dir=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR") or None,
         historical_dqc_sha256=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256")
         or None,

@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
 from .annual_discovery_service import AnnualDiscovery, AnnualDiscoveryArtifacts
-from .dqc_rulesets import DqcRulesetCatalogV1
+from .dqc_rulesets import DQC_V18_PROFILE_ID, DqcRulesetCatalogV1
 from .dqc_applicability import dqc_applicability_policy_digest
 from .automatic_source_mapping import (
     AutomaticSecIngestionRequestV1,
@@ -127,10 +127,17 @@ class SecAcquisitionSettings:
     historical_dqc_dir: Path | None = None
     historical_dqc_sha256: str | None = None
     dqc_ruleset_catalog: DqcRulesetCatalogV1 | None = None
+    dqc_v18_ruleset_catalog: DqcRulesetCatalogV1 | None = None
 
     def __post_init__(self) -> None:
         if self.dqc_ruleset_catalog is not None:
+            if self.dqc_ruleset_catalog.dqc_version != "v31.0.3":
+                raise ValueError("modern SEC catalog requires DQC v31.0.3")
             self.dqc_ruleset_catalog.verify_files()
+        if self.dqc_v18_ruleset_catalog is not None:
+            if self.dqc_v18_ruleset_catalog.dqc_version != "v18":
+                raise ValueError("V18 SEC catalog requires DQC v18")
+            self.dqc_v18_ruleset_catalog.verify_files()
         if (self.historical_dqc_dir is None) != (self.historical_dqc_sha256 is None):
             raise ValueError(
                 "historical DQC source and hash must be configured together"
@@ -528,6 +535,19 @@ class SecAcquisitionUseCase:
 
     def _profile_for_id(self, profile_id: str) -> ArelleValidationProfileV1:
         historical = historical_profile(profile_id)
+        v18 = profile_id == DQC_V18_PROFILE_ID
+        catalog = (
+            self.settings.dqc_v18_ruleset_catalog
+            if v18
+            else self.settings.dqc_ruleset_catalog
+        )
+        if v18 and catalog is None:
+            raise ServiceError(
+                "VALIDATION_RESOURCES_UNAVAILABLE",
+                "full DQC V18 catalog is not configured",
+                status_code=503,
+                retryable=False,
+            )
         if historical and self.settings.historical_dqc_dir is None:
             raise ServiceError(
                 "VALIDATION_RESOURCES_UNAVAILABLE",
@@ -535,22 +555,28 @@ class SecAcquisitionUseCase:
                 status_code=503,
                 retryable=False,
             )
+        default_binding = catalog.bindings[0] if v18 and catalog is not None else None
+        dqc_version = (
+            historical.dqc_version if historical else "v18" if v18 else "v31.0.3"
+        )
         return ArelleValidationProfileV1(
             profile_id=profile_id,
             validation_mode="sec-efm-dqc",
             edgar_plugin_dir=self.settings.edgar_plugin_dir,
             xule_plugin_dir=self.settings.xule_plugin_dir,
-            dqc_ruleset_path=self.settings.dqc_ruleset_path,
+            dqc_ruleset_path=default_binding.path
+            if default_binding is not None
+            else self.settings.dqc_ruleset_path,
             edgar_plugin_sha256=self.settings.edgar_plugin_sha256,
             xule_plugin_sha256=self.settings.xule_plugin_sha256,
-            dqc_ruleset_sha256=self.settings.dqc_ruleset_sha256,
-            dqc_ruleset_catalog=self.settings.dqc_ruleset_catalog
-            if not historical
-            else None,
-            dqc_version=historical.dqc_version if historical else "v31.0.3",
+            dqc_ruleset_sha256=default_binding.sha256
+            if default_binding is not None
+            else self.settings.dqc_ruleset_sha256,
+            dqc_ruleset_catalog=catalog if not historical else None,
+            dqc_version=dqc_version,
             dqc_applicability_digest=None
             if historical
-            else dqc_applicability_policy_digest(),
+            else dqc_applicability_policy_digest(dqc_version),
             historical_dqc_dir=self.settings.historical_dqc_dir if historical else None,
             historical_dqc_sha256=self.settings.historical_dqc_sha256
             if historical
@@ -603,7 +629,9 @@ class SecAcquisitionUseCase:
         *,
         declared_source_revision: str,
         validation_profile_id: Literal[
-            "sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"
+            "sec-efm-us-dqc-v31.0.3",
+            "sec-efm-us-dqc-v18-xule30055-build-v1",
+            "sec-efm-us-dqc-v1.0.0-historical",
         ] = "sec-efm-us-dqc-v31.0.3",
     ) -> OriginalValidationRuntimeV1:
         profile = self._profile_for_id(validation_profile_id)
@@ -2254,6 +2282,7 @@ def build_runtime_sec_acquisition(
     historical_dqc_dir: str | None = None,
     historical_dqc_sha256: str | None = None,
     dqc_ruleset_catalog_path: str | None = None,
+    dqc_v18_ruleset_catalog_path: str | None = None,
 ) -> SecAcquisitionUseCase | None:
     values = (
         service_token,
@@ -2292,6 +2321,11 @@ def build_runtime_sec_acquisition(
             Path(dqc_ruleset_catalog_path).read_bytes()
         )
         if dqc_ruleset_catalog_path
+        else None,
+        dqc_v18_ruleset_catalog=DqcRulesetCatalogV1.model_validate_json(
+            Path(dqc_v18_ruleset_catalog_path).read_bytes()
+        )
+        if dqc_v18_ruleset_catalog_path
         else None,
     )
     adapter = SecEdgarSourceAdapter(

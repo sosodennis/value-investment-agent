@@ -151,18 +151,27 @@ class FilesystemCanonicalFactRepository:
 class PinnedValidationProfile(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    profile_id: Literal["sec-efm-us-gaap-v1", "sec-efm-us-dqc-v1.0.0-historical"] = (
-        "sec-efm-us-gaap-v1"
-    )
+    profile_id: Literal[
+        "sec-efm-us-gaap-v1",
+        "sec-efm-us-dqc-v18-xule30055-build-v1",
+        "sec-efm-us-dqc-v1.0.0-historical",
+    ] = "sec-efm-us-gaap-v1"
     arelle_version: Literal["2.47.4"] = "2.47.4"
-    dqc_version: Literal["v31.0.3", "v1.0.0"] = "v31.0.3"
+    dqc_version: Literal["v31.0.3", "v18", "v1.0.0"] = "v31.0.3"
     xule_version: Literal["30055"] = "30055"
     profile_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def dqc_version_matches_profile(self) -> "PinnedValidationProfile":
         historical = self.profile_id == "sec-efm-us-dqc-v1.0.0-historical"
-        if self.dqc_version != ("v1.0.0" if historical else "v31.0.3"):
+        expected = (
+            "v1.0.0"
+            if historical
+            else "v18"
+            if self.profile_id == "sec-efm-us-dqc-v18-xule30055-build-v1"
+            else "v31.0.3"
+        )
+        if self.dqc_version != expected:
             raise ValueError("DQC version must match the pinned profile")
         return self
 

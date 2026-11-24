@@ -534,6 +534,43 @@ a snapshot. Identical runs reuse both the input plan and output report.
 
 ### Full DQC rulesets for multiple taxonomy years
 
+For the exact 2020-01-31, 2021-01-31 and 2022 US-GAAP namespaces, use
+`sec-efm-us-dqc-v18-xule30055-build-v1`. This profile keeps the official V18
+rules and resource package and rebuilds only their compiler representation for
+the pinned Xule 30055 runtime. It does not identify the derived ZIP as an
+upstream release. Build its separately pinned catalog from official source:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 uv run --frozen --extra dev --project fundamental-service python \
+  fundamental-service/scripts/prepare_dqc_v18_resources.py \
+  --destination /path/to/new-v18-resources \
+  --xule-plugin-directory /path/to/pinned-xule/plugin
+```
+
+The builder verifies the official source archive and every source hash against
+the original compiled inventory. It checks the complete assertion, function,
+constant, namespace and output-attribute sets, retains the original resource
+package bytes, and rejects a rebuilt ZIP that differs from the reviewed hash.
+Python 3.12.12, Arelle 2.47.4, Pyparsing 3.3.3 and the exact compiler-directory
+hash are required. `--source-archive` allows an already retained original archive
+to be reused without HTTP. Existing mismatched resources are never overwritten.
+The compiler is the `plugin` directory from
+[`xbrlus/xule` commit `7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc`](https://github.com/xbrlus/xule/tree/7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc).
+Use the EDGAR plugin from
+[`Arelle/EDGAR` commit `4891c4c9889c77af247428ceff4fa7cc52d534ea`](https://github.com/Arelle/EDGAR/tree/4891c4c9889c77af247428ceff4fa7cc52d534ea).
+
+Mount `catalog.json` and its three derived ZIPs read-only, then set
+`FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH` to the container catalog path.
+This setting is separate from the modern catalog. Each request must select the
+matching profile explicitly. V18 evaluates its original constants without
+EDGAR's precomputed constants from a different taxonomy. Its filing-date policy
+uses official V18 diagnostic dates; unknown dates remain blocking. Resource
+preparation does not establish filing validation, mapping or release approval.
+The parser activates the unchanged official resource package for its entire
+validation lifetime. It replaces Xule's package extraction lifecycle, which
+otherwise deletes the temporary ZIP before resource-backed assertions run.
+Completion requires both package activation and source-constant evidence.
+
 `FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH` optionally names a deployment JSON
 catalog. Bind-mount the catalog and its official full DQC v31.0.3 ruleset files
 read-only. Each catalog binding contains `taxonomy_namespace`, `path`, and

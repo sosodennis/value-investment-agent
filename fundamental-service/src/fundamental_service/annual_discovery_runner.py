@@ -264,7 +264,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--share-class")
     parser.add_argument(
         "--validation-profile-id",
-        choices=("sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"),
+        choices=(
+            "sec-efm-us-dqc-v31.0.3",
+            "sec-efm-us-dqc-v18-xule30055-build-v1",
+            "sec-efm-us-dqc-v1.0.0-historical",
+        ),
     )
     args = parser.parse_args(argv)
     if bool(args.source_plan_configuration) != bool(args.configuration_digest):

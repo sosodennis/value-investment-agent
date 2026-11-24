@@ -57,7 +57,9 @@ class OriginalValidationRuntimeV1(StrictModel):
     taxonomy_cache_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     validation_profile_id: Literal[
-        "sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"
+        "sec-efm-us-dqc-v31.0.3",
+        "sec-efm-us-dqc-v18-xule30055-build-v1",
+        "sec-efm-us-dqc-v1.0.0-historical",
     ] = "sec-efm-us-dqc-v31.0.3"
     supported_filing_years: tuple[int, ...]
     supported_filing_forms: tuple[str, ...]

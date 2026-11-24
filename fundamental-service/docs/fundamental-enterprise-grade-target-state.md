@@ -1306,6 +1306,23 @@ critical/fatal findings remain blocking; future findings remain in the report.
 This rule applies across issuers and does not establish accounting completeness
 or authorize an incomplete mapping or valuation.
 
+The exact 2020-01-31, 2021-01-31 and 2022 US-GAAP namespaces use the complete
+official V18 source at commit `cbb5f1f02d2f3f21b438a72a555127c4090d135b` under
+the distinct `sec-efm-us-dqc-v18-xule30055-build-v1` profile. The pinned Xule
+30055 compiler rebuilds the unchanged source into its supported representation.
+The derived artifact records its source, compiler and content hashes; it is not
+an upstream V18 compiled release or a V31 ruleset. Every original source hash
+and the complete assertion, function, constant and resource inventory must match
+the official release. V18 uses its own filing-date policy identity and official
+emitted dates. Missing dates, incomplete execution and critical or fatal findings
+remain blocking. The profile evaluates original constants without cross-taxonomy
+precomputed overrides. Resource preparation and retained replay remain separate
+from canonical ingestion, mapping approval and release qualification.
+The owning parser activates the byte-identical official resource package until
+validation and model teardown finish. Success, failure, cancellation and worker
+termination release its temporary resources. Package activation, source-constant
+evaluation and completed EFM/DQC evidence are required together.
+
 ### 25.5 Target-compatible service contract chain
 
 The isolated service must create the contracts that the enterprise stage will consume from its first release. It must not expose a temporary payload and plan to replace it later.
