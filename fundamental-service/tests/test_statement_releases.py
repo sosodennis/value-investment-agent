@@ -137,6 +137,38 @@ def test_statement_release_reports_original_unclassified_monetary_observations(
     )
 
 
+def test_statement_membership_recomputes_cash_basis_from_original(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.statement_releases import (
+        verify_statement_release_membership,
+    )
+
+    value, request, statement, options = release_case(tmp_path, monkeypatch)
+    selected = statement.projection.facts[0]
+    changed = selected.model_copy(update={"cash_basis": "cash_and_equivalents"})
+    envelope = statement.model_copy(
+        update={
+            "projection": statement.projection.model_copy(
+                update={"facts": (changed, *statement.projection.facts[1:])}
+            )
+        }
+    )
+    with pytest.raises(DataReleaseError) as error:
+        verify_statement_release_membership(
+            request.manifest,
+            envelope,
+            originals=value.service,
+            content=value.acquisition.content_store,
+            snapshots=options["snapshots"],
+            facts=options["facts"],
+            mappings=options["mappings"],
+            artifacts=value.artifacts,
+            source_revision=options["source_revision"],
+        )
+    assert error.value.code == "STATEMENT_RELEASE_FACT_MISMATCH"
+
+
 @pytest.mark.parametrize("submissions_delay", (0, 600))
 def test_partial_statement_release_signs_existing_gates_and_replays_without_market_or_valuation(
     tmp_path, monkeypatch, submissions_delay

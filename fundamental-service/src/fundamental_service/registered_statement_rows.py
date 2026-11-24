@@ -86,6 +86,13 @@ def statement_cash_basis(
     )
     if scope is None:
         return None
+    if row_id == "effect_of_exchange_rates_on_cash":
+        if concept != scope.cash_effect_concept or not any(
+            locator.row_id == row_id and locator.context_ids
+            for locator in scope.locators
+        ):
+            return None
+        concept = scope.cash_balance_concept
     if row_id in activities:
         concept = scope.cash_balance_concept
     if concept in {

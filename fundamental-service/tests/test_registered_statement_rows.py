@@ -225,6 +225,14 @@ def test_registered_primary_scope_hash_is_the_retained_original(retained_root, f
             assert set(locator.context_ids) == {
                 node.get("contextref") for node in facts
             }
+            if row["row_id"] == "effect_of_exchange_rates_on_cash" and filing[
+                "accession_number"
+            ] in {"0001564590-20-034944", "0001564590-21-039151"}:
+                assert scope.cash_balance_concept == CASH
+                assert scope.cash_change_concept == CHANGE
+                assert {node.get("name") for node in facts} == {
+                    "us-gaap:EffectOfExchangeRateOnCashAndCashEquivalents"
+                }
             if row["row_id"] == "revenue":
                 periods = set()
                 for fact in facts:

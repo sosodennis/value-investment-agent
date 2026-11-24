@@ -50,6 +50,8 @@ PYTHONPATH=finance-agent-core uv run --frozen --extra dev --project fundamental-
 
 Apple 的 cash-flow balance 包含 restricted cash。FY2023 balance-sheet cash 為 29,965 百萬美元，cash-flow closing cash 為 30,737 百萬美元，不能混用。Apple 主表沒有獨立 FX 行，因此該 cell 保留 `missing` 與具體理由。三項活動小計等於 reported cash change，以及 beginning cash 加 reported change 等於 ending cash，是分開的核對。它們不能證明未知 FX 為零；完整含 FX 的活動勾稽保留 `unresolved`。Microsoft 主表明列 FX，核對使用原文 FX 值。
 
+Microsoft FY2020、FY2021 的 primary cash-flow table 已用含 restricted cash 的 cash balance 與 net-change 概念，但 FX 行仍用 `us-gaap:EffectOfExchangeRateOnCashAndCashEquivalents`。兩份原件的 FX locator 分別為 table 155／row 53 與 table 141／row 51；其 SHA-256 分別為 `99d1dfdd564d8e7cc42fa9c6c3b44c0bc131fece7e6638f28e24ec7cb49faa7a` 和 `0168b995b37d463102f295f989710294eb61b98db1636a9384ea1ccc276dddcb`。同表的期初、期末及變動 locator、contexts 與原值皆保留於 golden。FY2022 的 table 152／row 51 改用含 restricted cash 的 FX 概念，仍呈現相同 FY2020 的 -201 百萬美元與 FY2021 的 -29 百萬美元。這些已核准的 primary FX 行沿用其 cash-rollforward balance 的 basis，原始 FX tag 不改寫。這項來源歸屬不代表 restricted cash 或其 FX 為零，也不授權其他 context 或未審閱來源。新政策須經新的 mapping approval 與 release，不能重用舊簽核。
+
 `issue494-boundary-cases.json` 固定真實來源限制及合成邊界變異。合成案例明標 `synthetic`，不能被解讀為 issuer 披露。#493 Tesla 原件的 276 facts、修訂件的 0 facts、unknown amendment scope 和 `SEC_VALIDATION_REQUIRED` 不變。該資料只約束原 parse-only 輸入，不授予新三表資格。
 
 每份正向 original 的 `validation_state_at_freeze` 均為 `not_run`。來源可得及原文 golden 不代表完整 strict validation、mapping、release、估值資格或財報附註完整。後續實作需以同一批 immutable inputs 逐案完成正式流程，驗證結果另存，不回填或改寫此處的預期以配合輸出。五年度只是覆蓋目標，`supported_history_threshold` 保持 null。

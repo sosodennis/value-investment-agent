@@ -170,10 +170,22 @@ def evidence(filing: dict) -> tuple[StatementFactEvidenceV1, ...]:
                 )
                 cash_basis = None
                 if statement["statement"] == "cash_flow":
+                    basis_concept = observation["concept_qname"]
+                    if row["row_id"] in {
+                        "operating_cash_flow",
+                        "investing_cash_flow",
+                        "financing_cash_flow",
+                        "effect_of_exchange_rates_on_cash",
+                    }:
+                        basis_concept = next(
+                            item
+                            for item in statement["rows"]
+                            if item["row_id"] == "cash_flow_ending_balance"
+                        )["values"][0]["concept_qname"]
                     cash_basis = (
                         "cash_and_equivalents"
-                        if observation["concept_qname"]
-                        == "us-gaap:EffectOfExchangeRateOnCashAndCashEquivalents"
+                        if basis_concept
+                        == "us-gaap:CashAndCashEquivalentsAtCarryingValue"
                         else "cash_equivalents_and_restricted_cash"
                     )
                 facts.append(
@@ -260,6 +272,56 @@ def project(request):
     return project_annual_statements(
         request, executable_digest=statement_executable_digest()
     )
+
+
+def test_microsoft_historical_primary_fx_and_cash_rollforward_keep_reported_values():
+    case = next(
+        item for item in COHORT["cases"] if item["case_id"] == "msft-historical"
+    )
+    result = project(request_for(tuple(case["original_accessions"])))
+    assert (
+        sum(
+            cell.status == "reported"
+            for table in result.tables
+            for row in table.rows
+            for cell in row.cells
+        )
+        == 125
+    )
+    assert len(result.reconciliations) == 20
+    assert all(check.status == "passed" for check in result.reconciliations)
+    for year, amount in ((2020, "-201000000"), (2021, "-29000000")):
+        fx = cell(result, "effect_of_exchange_rates_on_cash", f"{year}-06-30")
+        assert fx.status == "reported" and fx.fact.value == Decimal(amount)
+        filing = next(
+            item
+            for item in GOLDEN["filings"]
+            if item["accession_number"] == fx.fact.accession_number
+        )
+        expected = next(
+            row
+            for table in filing["statements"]
+            for row in table["rows"]
+            if row["row_id"] == "effect_of_exchange_rates_on_cash"
+        )["values"][0]
+        assert fx.fact.concept == expected["concept_qname"]
+        assert fx.cash_basis == "cash_equivalents_and_restricted_cash"
+
+
+@pytest.mark.parametrize(
+    "accession,amount",
+    (("0001564590-20-034944", "-201000000"), ("0001564590-21-039151", "-29000000")),
+)
+def test_microsoft_legacy_primary_fx_retains_its_concept_and_reported_cash_basis(
+    accession, amount
+):
+    result = project(request_for((accession,)))
+    fx = cell(result, "effect_of_exchange_rates_on_cash")
+    assert fx.status == "reported" and fx.fact.value == Decimal(amount)
+    assert fx.fact.accession_number == accession
+    assert fx.fact.concept == "us-gaap:EffectOfExchangeRateOnCashAndCashEquivalents"
+    assert fx.cash_basis == "cash_equivalents_and_restricted_cash"
+    assert all(check.status == "passed" for check in result.reconciliations)
 
 
 def cell(result, row_id, period_end=None):
@@ -667,7 +729,17 @@ def test_same_retained_input_is_order_independent_and_decimal_context_isolated()
 
 @pytest.mark.parametrize("accession", ("0001564590-20-034944", "0001564590-21-039151"))
 def test_microsoft_legacy_fx_basis_is_not_promoted_by_a_balanced_sum(accession):
-    result = project(request_for((accession,)))
+    request = request_for((accession,))
+    request = replace_facts(
+        request,
+        tuple(
+            item.model_copy(update={"cash_basis": "cash_and_equivalents"})
+            if item.fact.normalized_field == "effect_of_exchange_rates_on_cash"
+            else item
+            for item in request.facts
+        ),
+    )
+    result = project(request)
     checks = {check.check_id: check for check in result.reconciliations}
     assert isinstance(
         cell(result, "effect_of_exchange_rates_on_cash"), ReportedStatementCellV1
