@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal, Protocol
 
@@ -151,6 +152,12 @@ AutomaticSourceRequestV1 = (
 )
 
 
+def original_selection_at(request: AutomaticSourceRequestV1) -> datetime:
+    """Select the original at the requested cutoff before public capture freezes it."""
+    cutoff = request.public_source_cutoff
+    return cutoff.requested_at if cutoff is not None else request.valuation_timestamp
+
+
 class MappingPublisherPort(Protocol):
     def publish_mapping(self, mapping: CanonicalMappingV1) -> None: ...
 
@@ -275,7 +282,7 @@ class _AutomaticSourceMappingResolver:
             validated.identity != request.identity
             or original.source.cik != request.cik
             or original.source.accession_number != request.filing.accession_number
-            or original.decision_at != request.valuation_timestamp
+            or original.decision_at != original_selection_at(request)
             or original.report.taxonomy_cache_hash != authority.taxonomy_cache_sha256
         ):
             raise DataReleaseError(

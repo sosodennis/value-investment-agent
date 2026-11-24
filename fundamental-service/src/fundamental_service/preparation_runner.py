@@ -30,7 +30,10 @@ from .automatic_mapping_batch import (
     AutomaticMappingBatchDecisionV1,
     AutomaticMappingBatchRequestV1,
 )
-from .automatic_source_mapping import AutomaticSourceMappingAuthority
+from .automatic_source_mapping import (
+    AutomaticSourceMappingAuthority,
+    original_selection_at,
+)
 from .automatic_data_release import (
     AutomaticDataReleasePolicyV1,
     AutomaticDataReleaseService,
@@ -452,7 +455,7 @@ class SourcePreparationRunner:
                 batch_input.original.source.cik != request.cik
                 or batch_input.original.source.accession_number
                 != request.filing.accession_number
-                or batch_input.original.decision_at != request.valuation_timestamp
+                or batch_input.original.decision_at != original_selection_at(request)
                 or batch_input.security_identity != request.identity
                 or batch_input.evaluator_id != request.evaluator_id
                 or batch_input.mapping_version != request.mapping_version
