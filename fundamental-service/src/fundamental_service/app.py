@@ -256,12 +256,7 @@ def create_app(
         config=runtime_config,
         metrics=metrics,
         metadata_store=metadata_store,
-        statement_originals=statement_originals
-        or (
-            sec_acquisition.original_preparation()
-            if sec_acquisition is not None and sec_acquisition.capture_store is not None
-            else None
-        ),
+        statement_originals=statement_originals,
         require_metadata=require_metadata,
         policy_registry=policy_registry,
         model_inventory=model_inventory,
@@ -1402,6 +1397,9 @@ def create_runtime_app() -> FastAPI:
             repository=MetadataPolicyRepository(metadata_store),
         ),
         sec_acquisition=sec_acquisition,
+        statement_originals=sec_acquisition.original_preparation()
+        if sec_acquisition is not None
+        else None,
         identity_resolution=identity_resolution,
         source_use_policy=source_use_policy,
     )
