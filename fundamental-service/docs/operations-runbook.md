@@ -219,6 +219,14 @@ User-Agent are absent. The runtime recomputes every directory/file hash and
 rejects a request whose taxonomy or validation pins do not match. Do not mount
 the test taxonomy or validation fixtures as production evidence.
 
+For mixed annual histories, mount both reviewed catalogs and all their ruleset
+files read-only at the paths declared inside each catalog. Set
+`FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH` for V31 and
+`FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH` for the official-source V18 build.
+The SEC ingestion overlay passes both settings to the service; an additional
+deployment overlay must provide the catalog and ruleset mounts. Each original
+retains its own validation profile and exact DTS namespace binding.
+
 The provider returns only a typed snapshot reference, manifest digest,
 canonical fact IDs, source hashes, filing metadata, quality, missing evidence,
 and version pins. Filing bytes stay in the Fundamental content-addressed

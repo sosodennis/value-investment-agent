@@ -55,7 +55,7 @@ export function AnnualStatementsTable({ report, onSelectEvidence }: {
         </section>)}
         <section aria-label="Period comparability" className="space-y-2">
             <h3 className="text-sm font-semibold">Period comparability</h3>
-            {report.comparability.length === 0 ? <p className="text-sm text-muted-foreground">No period comparison was supplied.</p> : <ul className="space-y-2 text-xs [overflow-wrap:anywhere]">{report.comparability.map((item) => <li key={`${item.earlier_period_id}:${item.later_period_id}`}>
+            {report.comparability.length === 0 ? <p className="text-sm text-muted-foreground">No period comparison was supplied.</p> : <ul className="space-y-2 text-xs [overflow-wrap:anywhere]">{report.comparability.map((item) => <li key={`${item.earlier_period_id}:${item.later_period_id}:${item.affected_row_ids.join(',')}`}>
                 {item.earlier} to {item.later} · {item.status.replaceAll('_', ' ')} · {item.issue_codes.join(', ') || 'No issue codes'}
                 {item.affected_row_ids.length > 0 && <span className="block">Affected rows · {item.affected_row_ids.join(', ')}</span>}
             </li>)}</ul>}
