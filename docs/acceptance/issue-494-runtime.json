@@ -1,7 +1,7 @@
 {
   "issue": 494,
   "branch": "codex/issue-494-annual-statements",
-  "commit": "d0c7f4e537558073e15d974cb21db5be36c5fdf0",
+  "commit": "1af75185124d4e8c4a75195be011466d2a0e2a45",
   "status": "WIP",
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-494-annual-statements/value-investment-agent",
@@ -92,7 +92,7 @@
     "fundamental-postgres",
     "fundamental-service"
   ],
-  "preflight": "passed exact d0c7f4e537558073e15d974cb21db5be36c5fdf0, SEC identity required; see preflight-d0c7f4e5.log",
+  "preflight": "passed exact 1af75185124d4e8c4a75195be011466d2a0e2a45, SEC identity required; see preflight-1af75185.log",
   "schema_version": 1,
   "checks": [
     {
@@ -100,24 +100,69 @@
       "status": "pass",
       "command": "python3 /tmp/issue494-source-review/run-preflight.py",
       "exit_code": 0,
-      "tested_commit": "d0c7f4e537558073e15d974cb21db5be36c5fdf0"
+      "tested_commit": "1af75185124d4e8c4a75195be011466d2a0e2a45"
     },
     {
       "name": "formal-annual-statement-flow",
-      "status": "not_run",
-      "command": "fundamental-prepare-statements; authenticated read; workspace inspection",
-      "exit_code": null
+      "status": "fail",
+      "command": "python3 /tmp/issue494-source-review/run-formal-operators.py",
+      "exit_code": 0,
+      "tested_commit": "1af75185124d4e8c4a75195be011466d2a0e2a45",
+      "result": "All four operators completed and activated, but every annual statement cell is unavailable. Independent accounting check rejected aapl-historical at 0/120 reported cells. Operator exit 0 does not prove positive statement acceptance."
+    },
+    {
+      "name": "acquisition-boundary-focused-postgres",
+      "status": "pass",
+      "command": "pytest test_preparation_fact_scope.py test_postgres_metadata.py with isolated FUNDAMENTAL_TEST_DATABASE_URL",
+      "exit_code": 0,
+      "tested_commit": "fe7e71c8",
+      "result": "88 passed, 0 skipped; independently reran the prior six failures, 6 passed"
+    },
+    {
+      "name": "statement-scope-and-release-focused",
+      "status": "pass",
+      "command": "pytest test_mapping_security_scope.py test_statement_releases.py test_automatic_mapping.py test_automatic_mapping_security.py test_sec_rebuild.py test_statement_preparation.py -ra",
+      "exit_code": 0,
+      "tested_commit": "568d3c79",
+      "result": "129 passed, 1 PostgreSQL skip; skipped restart test separately rerun against isolated PostgreSQL: 1 passed"
+    },
+    {
+      "name": "backend-annual-reader",
+      "status": "pass",
+      "command": "uv run --frozen --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental/test_annual_statement_reader.py -q",
+      "exit_code": 0,
+      "tested_commit": "568d3c79",
+      "result": "19 passed"
+    },
+    {
+      "name": "frontend-checks",
+      "status": "pass",
+      "command": "npm run lint && npm run typecheck && npm run test -- --run",
+      "exit_code": 0,
+      "tested_commit": "568d3c79",
+      "result": "64 test files, 546 passed; lint and typecheck passed"
+    },
+    {
+      "name": "sec-integrity-independent-review",
+      "status": "fail",
+      "command": "independent source review plus production content-context counterexamples",
+      "exit_code": 1,
+      "tested_commit": "275e1b71",
+      "result": "#516 passed; #518 requires content-context restrictions before runtime acceptance"
     }
   ],
   "blockers": [
-    "#509 formal Linux SEC coverage",
+    "#509 full Linux coverage",
     "#511 standalone thread ownership formal workflow",
-    "#512 failed original exact semantics",
+    "#512 failed-original semantics",
     "#513 source organization authorization",
     "#514 original header dates",
-    "#515 prepared original identity and source metadata formal workflow"
+    "#515 prepared original identity and source metadata formal workflow",
+    "#516 historical DEI security selection",
+    "#517 approved canonical statement issuer scope",
+    "#518 Microsoft HTML representation integrity; independent content-context finding requires a follow-up"
   ],
-  "next_step": "Four formal frozen cases and exact full suite running; independent metadata probe now passes, remaining review and real page checks pending.",
+  "next_step": "Finish #518 content-context restriction and independent review, then rebuild at a new exact commit and repeat formal four-case, full service suite, authenticated API, workspace and accounting acceptance.",
   "runtime_resource_limits": {
     "parser_virtual_memory_bytes": 3221225472,
     "container_memory": "4GiB",
