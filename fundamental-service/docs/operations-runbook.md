@@ -576,9 +576,12 @@ fundamental-persistence export \
 
 The receipt identifies `/backups/fundamental/<manifest_digest>/manifest.json`.
 Copy the complete directory to retained storage outside the disposable service
-volume. The canonical manifest pins the implementation revision, migration and
-schema digests, PostgreSQL major version, every table's columns/row count/file
-digest, and every source/content file's digest and length. Source bytes from
+volume. The `fundamental-persistence-backup-v2` canonical manifest pins the implementation
+revision, migration and schema digests, PostgreSQL major version, every table's
+columns, row count and file digest, and every content file's digest and length.
+It also pins the source history origin, trusted heads and database-clock frontier F.
+Export takes all metadata SHARE locks in READ COMMITTED before reading any rows.
+Every exported history writer must have a sealed commit receipt with U < F. Source bytes from
 failed ingestion are included even if registration was interrupted. Missing or
 corrupt snapshot/fact/artifact source bytes refuse publication. Table values are
 exported as sorted canonical JSON lines containing PostgreSQL text values;
@@ -586,8 +589,9 @@ timestamps retain their original UTC values. Operational audit rows remain part
 of the backup, separate from valuation identity.
 
 The complete backup is staged, verified and atomically renamed to its digest.
-Re-exporting identical state and revision returns `wrote=false` without touching
-the existing directory. An existing corrupt backup is rejected, never replaced.
+A later export records a new frontier and therefore has a new manifest identity,
+even when financial data is unchanged. Existing bundles are never rewritten.
+An existing corrupt bundle is rejected.
 Record the receipt and exact command in acceptance evidence. Export is not an
 independent mapping review or a release signature.
 
@@ -597,23 +601,92 @@ the recorded digest, obtained independently of the backup's current contents:
 ```sh
 fundamental-persistence restore \
   --bundle /backups/fundamental/<manifest_digest> \
-  --manifest-digest <manifest_digest>
+  --manifest-digest <manifest_digest> \
+  --authorization /run/fundamental-maintenance/recovery-authorization.json
 ```
+
+Provision the authorization separately from the bundle. Serialize a validated
+`RecoveryAuthorizationV1` with `canonical_bytes`; keep its file private to the
+offline maintenance process UID, with no symlink and at most 16 KiB. The pin binds
+the manifest digest, source origin, exact target PostgreSQL system identifier,
+timeline and database OID, runtime database role, and a retained source-fence
+reference. Its canonical digest is the recovery operation ID. Do not let the
+bundle supply this trust root. A missing or mismatched pin refuses import.
+
+Use the actual metadata owner connection for offline recovery. The pin's runtime
+role must exist, be independent of that owner, and lack privileged attributes,
+owner membership, protected relation ownership, schema CREATE, recovery staging
+access and installer EXECUTE. Record evidence that this exact role is the role
+used by the deployed runtime DSN. The ACL check validates the named role; it
+cannot detect a decoy role or prove deployment configuration. Record the runtime
+and maintenance OS UIDs and filesystem permissions too. A private file owned by
+the maintenance process proves neither OS UID separation nor that the runtime
+cannot replace its parent directory. Do not report recovery readiness until those
+deployment boundaries are verified. Never run the runtime with the maintenance
+DSN or a writable authorization directory.
+
+Fence the source and retain that operational evidence before allowing target
+writes. The command validates the bound reference, not the external fence itself.
+If the source cannot be fenced, retain the bundle for historical audit and keep
+the target offline. The pin does not prove that no revocation occurred after F.
 
 Restore checks the entire inventory, referenced bytes, schema and runtime
 compatibility before importing rows. It initializes the owned schema only when
 absent. An existing target must be empty apart from schema bootstrap records, or
-already contain exactly the backed-up metadata; unrelated data is refused. The
+contain the same completed recovery operation and its intact imported prefix;
+unrelated data or a different operation is refused. The
 content root may contain only a matching subset of the backup's objects. Bytes
 are published atomically before a single metadata transaction imports all rows
-in foreign-key order. Failure rolls back the metadata transaction; already
+in foreign-key order. The owner-only staging ticket binds the current backend,
+full transaction ID, target origin, manifest and exact normalized staged rows.
+Ordinary history guards accept only matching staged INSERTs; restore never
+disables triggers or truncates history. Failure rolls back the metadata transaction; already
 restored matching bytes are retained for retry. Temporary copy bytes stay in
 `.restore-pending`, which is outside the published
 content inventory; a killed copy cannot publish a partial object or block retry.
 Uncommitted staging bytes are retained locally and excluded from export.
-The acquisition-audit sequence continues beyond restored IDs. The transaction verifies the restored table
-digests before commit. Repeating a complete restore returns `wrote=false` and
-does not modify existing content files.
+The acquisition-audit sequence continues beyond restored IDs. The transaction
+verifies the imported logical projection before commit. A separate transaction
+seals the original import full XID with its genuine local commit time C and fresh
+visibility upper bound U, requiring F < C <= U. A fresh read observes the receipt
+before the command reports success. An interruption after import leaves a pending
+activation. Repeat the same command and pin to seal that original XID. Missing
+commit proof keeps activation refused; a retry never replaces C with the current
+time. Repeating a completed restore returns `wrote=false`, preserves legitimate
+later local appends, and verifies both the original prefix and current metadata,
+content and lineage.
+
+Retry compares mutable metadata by its owner contract. The SEC request slot
+keeps the `sec-edgar` key and cannot move backwards. Release pointers may advance
+through the complete, contiguous activation audit, including an explicit rollback
+to a previously active release. Every candidate keeps its manifest and
+verification identities, and the current pointer must equal the final audit
+result. A rebuilt parser cache may select another retained result for the same
+action key only when its immutable result body and report still validate that
+key. Existing source, artifact, release and audit rows retain their exact imported
+identities and bytes. These checks do not reapprove a release or replace its
+deployment trust-root and current-authority checks.
+
+The target keeps its new local origin. Imported event bytes, digests, full XIDs
+and sealed C/U remain unchanged. Reads preserve each ancestor recovery interval:
+F < T < C is `recovery_gap`, and C <= T <= U is ambiguous. Later local epochs need
+local state evidence; an imported active state is not carried through a gap.
+Re-export and another restore retain all ancestor intervals.
+
+Imported grants, reviews and decisions are historical audit evidence. They do
+not authorize current actions. Current consumers must call
+`FiscalHistoryReadV1.require_current_epoch` with the actual authority and decision
+entries required for their operation, then validate fresh external dependencies
+in the owning service. A new metadata checkpoint alone does not revalidate a
+previous grant. Re-establish exact roles through the independent deployment
+administrator and perform new local reviews and decisions after activation.
+
+Both entrypoints accept one absolute deadline; the CLI uses `--deadline-seconds`
+with a default of 300 seconds and a maximum of 3600. Installed limits are 8 GiB
+of bundle data, 256 MiB of metadata, one million rows, 100,000 objects and 8 MiB
+per row. Lock waits, hash, copy, staging and readback share the same budget.
+The v2 wire does not accept old v1 bundles. Retain their pinned original image
+for reading them; do not rewrite old signed artifacts or retained backups.
 
 Deployment secrets, trust roots, parser/taxonomy assets and service configuration
 are not data backup contents. Restore their separately pinned deployment inputs

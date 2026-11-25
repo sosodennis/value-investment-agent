@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from .contracts import StrictModel
 from .data_releases import ArtifactRefV1
 from .metadata import PostgresMetadataStore, metadata_operation_budget
+from .history_recovery_contracts import FiscalHistoryCutoverV1, FiscalHistoryEpochV1
 from .replay import ArtifactRecordV1
 from .serialization import canonical_bytes
 from .snapshots import SnapshotError
@@ -168,6 +169,27 @@ class FiscalHistoryReadV1(StrictModel):
     heads: tuple[FiscalHistoryHeadV1, ...]
     entries: tuple[FiscalHistoryEntryV1, ...]
     observed_through: AwareDatetime
+    epoch: FiscalHistoryEpochV1
+
+    def require_current_epoch(self, entries: tuple[FiscalHistoryEntryV1, ...]) -> None:
+        if not entries:
+            raise _unavailable("current authority requires explicit control evidence")
+        local_entries = {entry.event_digest: entry for entry in self.entries}
+        activation = self.epoch.cutovers[-1].activation if self.epoch.cutovers else None
+        if self.epoch.cutovers and activation is None:
+            raise _unavailable("history recovery activation is pending")
+        for entry in entries:
+            bound = entry.commit_bound
+            if (
+                local_entries.get(entry.event_digest) != entry
+                or entry.event.origin_id != self.epoch.local_origin_id
+                or not isinstance(bound, FiscalCommitReceiptV1)
+                or activation is not None
+                and bound.committed_at <= activation.visible_by
+            ):
+                raise _unavailable(
+                    "recovered authority requires fresh local control evidence"
+                )
 
     def prefix_as_of(
         self, stream_id: str, *, at: datetime
@@ -178,6 +200,16 @@ class FiscalHistoryReadV1(StrictModel):
         selected = tuple(e for e in self.entries if e.event.stream_id == stream_id)
         if not selected:
             raise _unavailable("history does not cover the requested stream")
+        required_origin = None
+        for cutover in self.epoch.cutovers:
+            if at > cutover.source_frontier_at:
+                if cutover.activation is None:
+                    raise _unavailable("history recovery activation is pending")
+                if at < cutover.activation.committed_at:
+                    raise _unavailable("recovery_gap: source activity was not observed")
+                if at <= cutover.activation.visible_by:
+                    raise _unavailable("activation_visibility_ambiguous")
+                required_origin = cutover.target_origin_id
         prefix = []
         excluded = False
         for entry in selected:
@@ -201,6 +233,14 @@ class FiscalHistoryReadV1(StrictModel):
             raise _unavailable("visibility_ambiguous: commit visibility is not proven")
         if not prefix:
             raise _unavailable("history does not cover the requested time")
+        if required_origin is not None:
+            origins = [self.epoch.cutovers[0].source_origin_id] + [
+                link.target_origin_id for link in self.epoch.cutovers
+            ]
+            if origins.index(prefix[-1].event.origin_id) < origins.index(
+                required_origin
+            ):
+                raise _unavailable("recovery_gap: no local state has been observed")
         return tuple(prefix)
 
     def evidence_as_of(
@@ -531,7 +571,11 @@ class PostgresFiscalAdmissionHistory:
         origin = await connection.scalar(
             text("SELECT fundamental.fiscal_history_origin_id()")
         )
-        bounds: dict[int, CommitBound] = {}
+        epoch = await self._epoch(connection, str(origin))
+        origins = {epoch.local_origin_id} | {
+            link.source_origin_id for link in epoch.cutovers
+        }
+        bounds: dict[tuple[str, int], CommitBound] = {}
         for stream in sorted(stream_ids):
             head = await self._head(connection, stream)
             if head is None:
@@ -567,16 +611,15 @@ class PostgresFiscalAdmissionHistory:
                 entry = self._entry(raw, str(row[1]))
                 event = entry.event
                 if (
-                    event.origin_id != str(origin)
+                    event.origin_id not in origins
                     or event.origin_id != str(row[3])
                     or event.writer_xid8 != int(row[4])
                 ):
                     raise _unavailable("history writer identity or origin differs")
-                if event.writer_xid8 not in bounds:
-                    bounds[event.writer_xid8] = await self._commit_bound(
-                        connection, event
-                    )
-                bound = bounds[event.writer_xid8]
+                writer = (event.origin_id, event.writer_xid8)
+                if writer not in bounds:
+                    bounds[writer] = await self._commit_bound(connection, event)
+                bound = bounds[writer]
                 lower = (
                     bound.committed_at
                     if isinstance(bound, FiscalCommitReceiptV1)
@@ -682,8 +725,63 @@ class PostgresFiscalAdmissionHistory:
             if latest_at > now:
                 raise _unavailable("history commit observation clock reversed")
         return FiscalHistoryReadV1(
-            heads=tuple(heads), entries=tuple(entries), observed_through=observed
+            heads=tuple(heads),
+            entries=tuple(entries),
+            observed_through=observed,
+            epoch=epoch,
         )
+
+    @staticmethod
+    async def _epoch(connection: AsyncConnection, local: str) -> FiscalHistoryEpochV1:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT l.operation_id,l.source_manifest_digest,l.source_origin_id::text,"
+                        "l.target_origin_id::text,l.source_frontier_at,l.source_heads_digest,"
+                        "l.import_writer_xid8::text,a.committed_at,a.visible_by "
+                        "FROM fundamental.fiscal_history_restore_links l LEFT JOIN "
+                        "fundamental.fiscal_history_activation_receipts a USING(target_origin_id)"
+                    )
+                )
+            )
+            .mappings()
+            .all()
+        )
+        if len(rows) > 32:
+            raise _unavailable("history recovery lineage exceeds its bound")
+        by_target = {row["target_origin_id"]: row for row in rows}
+        links = []
+        cursor = local
+        while cursor in by_target:
+            row = by_target.pop(cursor)
+            activation = (
+                {"committed_at": row["committed_at"], "visible_by": row["visible_by"]}
+                if row["committed_at"]
+                else None
+            )
+            links.append(
+                FiscalHistoryCutoverV1.model_validate(
+                    {
+                        key: value
+                        for key, value in {
+                            **dict(row),
+                            "activation": activation,
+                        }.items()
+                        if key not in {"committed_at", "visible_by"}
+                    },
+                    strict=False,
+                )
+            )
+            cursor = row["source_origin_id"]
+        if by_target:
+            raise _unavailable("history recovery lineage contains a fork or orphan")
+        try:
+            return FiscalHistoryEpochV1(
+                local_origin_id=local, cutovers=tuple(reversed(links))
+            )
+        except ValueError as error:
+            raise _unavailable("history recovery lineage is invalid") from error
 
     @staticmethod
     async def _commit_bound(

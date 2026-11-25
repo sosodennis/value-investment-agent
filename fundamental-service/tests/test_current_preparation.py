@@ -553,7 +553,8 @@ def test_postgres_selection_reopens_and_restores_into_empty_store(
         PostgresContentStore,
         PostgresMetadataStore,
     )
-    from fundamental_service.persistence_recovery import export_backup, restore_backup
+    from fundamental_service.persistence_recovery import export_backup
+    from recovery_test_support import restore_backup
     from fundamental_service.public_acquisition import (
         PostgresPublicCaptureLock,
         PublicSourceAcquisition,

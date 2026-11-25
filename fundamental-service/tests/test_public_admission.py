@@ -414,7 +414,8 @@ def test_admission_persistence_survives_postgres_restart_and_empty_store_restore
     recovery_databases,
 ):
     import asyncio
-    from fundamental_service.persistence_recovery import export_backup, restore_backup
+    from fundamental_service.persistence_recovery import export_backup
+    from recovery_test_support import restore_backup
     from fundamental_service.metadata import (
         PostgresArtifactStore,
         PostgresContentStore,

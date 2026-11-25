@@ -1265,8 +1265,8 @@ def test_accounting_sources_survive_persistent_restart_and_backup_restore(
     from fundamental_service.persistence_recovery import (
         RecoveryError,
         export_backup,
-        restore_backup,
     )
+    from recovery_test_support import restore_backup, assert_same_data_plane_projection
 
     source_database, target_database = recovery_databases
     raw = b"synthetic SEC accounting source for persistent boundary acceptance"
@@ -1327,9 +1327,7 @@ def test_accounting_sources_survive_persistent_restart_and_backup_restore(
     repeated = asyncio.run(
         export_backup(source_database, content_root, backups, source_revision="1" * 40)
     )
-    assert (
-        repeated.manifest_digest == backup.manifest_digest and repeated.wrote is False
-    )
+    assert_same_data_plane_projection(backup, repeated, backups)
     bundle = backups / backup.manifest_digest
     target_root = tmp_path / "target-content"
     restored = asyncio.run(
