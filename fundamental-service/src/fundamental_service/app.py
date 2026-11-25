@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from contextlib import ExitStack, asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -316,11 +316,23 @@ def create_app(
             if metadata_store is not None:
                 metadata_store.close()
 
+    @asynccontextmanager
+    async def read_only_operator_lifespan(app: FastAPI) -> AsyncIterator[None]:
+        try:
+            if metadata_store is not None:
+                metadata_store.start_read_only()
+            yield
+        finally:
+            diagnostic_sink.close()
+            if metadata_store is not None:
+                metadata_store.close()
+
     app = FastAPI(
         title="Fundamental service",
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.state.read_only_operator_lifespan = read_only_operator_lifespan
     app.state.operations_config = runtime_config
     app.state.metrics = metrics
     app.state.application = application

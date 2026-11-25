@@ -5,7 +5,7 @@ import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from functools import partial
-from typing import Annotated, Literal, Protocol, TypeVar
+from typing import Annotated, Literal, Protocol, TypeVar, runtime_checkable
 
 from pydantic import AwareDatetime, ConfigDict, Field, model_validator
 from sqlalchemy import text
@@ -35,6 +35,7 @@ class FiscalControlBindingV1(StrictModel):
         "authority_granted",
         "authority_revoked",
         "classification_recorded",
+        "candidate_prepared",
         "release_approved",
         "decision_revoked",
         "decision_superseded",
@@ -317,9 +318,29 @@ class FiscalHistoryAppendV1(StrictModel):
     wrote: bool
 
 
-class FiscalAdmissionHistoryPort(Protocol):
+class FiscalAdmissionHistoryReaderPort(Protocol):
     def read_epoch(self, *, deadline_at: datetime) -> FiscalHistoryEpochV1: ...
 
+    def read(
+        self, stream_ids: tuple[str, ...], *, deadline_at: datetime
+    ) -> FiscalHistoryReadV1: ...
+
+    def require_heads(
+        self, heads: tuple[FiscalHistoryHeadV1, ...], *, deadline_at: datetime
+    ) -> None: ...
+
+    def finish_observation(
+        self,
+        records: tuple[ArtifactRecordV1, ...],
+        heads: tuple[FiscalHistoryHeadV1, ...],
+        epoch: FiscalHistoryEpochV1,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalHistoryReadV1: ...
+
+
+@runtime_checkable
+class FiscalAdmissionHistoryPort(FiscalAdmissionHistoryReaderPort, Protocol):
     def seal_pending(
         self, stream_ids: tuple[str, ...], *, deadline_at: datetime
     ) -> FiscalHistoryReadV1: ...
@@ -337,13 +358,35 @@ class FiscalAdmissionHistoryPort(Protocol):
         self, records: tuple[ArtifactRecordV1, ...], *, deadline_at: datetime
     ) -> FiscalHistoryReadV1: ...
 
+
+class ReadOnlyFiscalAdmissionHistory:
+    def __init__(self, history: FiscalAdmissionHistoryReaderPort) -> None:
+        self.__history = history
+
+    def read_epoch(self, *, deadline_at: datetime) -> FiscalHistoryEpochV1:
+        return self.__history.read_epoch(deadline_at=deadline_at)
+
     def read(
         self, stream_ids: tuple[str, ...], *, deadline_at: datetime
-    ) -> FiscalHistoryReadV1: ...
+    ) -> FiscalHistoryReadV1:
+        return self.__history.read(stream_ids, deadline_at=deadline_at)
 
     def require_heads(
         self, heads: tuple[FiscalHistoryHeadV1, ...], *, deadline_at: datetime
-    ) -> None: ...
+    ) -> None:
+        self.__history.require_heads(heads, deadline_at=deadline_at)
+
+    def finish_observation(
+        self,
+        records: tuple[ArtifactRecordV1, ...],
+        heads: tuple[FiscalHistoryHeadV1, ...],
+        epoch: FiscalHistoryEpochV1,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalHistoryReadV1:
+        return self.__history.finish_observation(
+            records, heads, epoch, deadline_at=deadline_at
+        )
 
 
 def _unavailable(message: str) -> SnapshotError:
@@ -929,6 +972,86 @@ class PostgresFiscalAdmissionHistory:
             )
         except ValueError as error:
             raise _unavailable("history commit proof is invalid") from error
+
+    def finish_observation(
+        self,
+        records: tuple[ArtifactRecordV1, ...],
+        heads: tuple[FiscalHistoryHeadV1, ...],
+        epoch: FiscalHistoryEpochV1,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalHistoryReadV1:
+        if (
+            not records
+            or len(records) > self._max_entries
+            or len({record.artifact_id for record in records}) != len(records)
+            or len({head.stream_id for head in heads}) != len(heads)
+            or len(canonical_bytes((records, heads))) > self._max_bytes
+        ):
+            raise _unavailable(
+                "whole observation exceeds its bounds or repeats an identity"
+            )
+        streams = tuple(
+            sorted(
+                {"evidence:" + record.artifact_id for record in records}
+                | {head.stream_id for head in heads}
+            )
+        )
+        if len(streams) > self._max_entries or any(
+            len(stream) > 1024 for stream in streams
+        ):
+            raise _unavailable("whole observation stream selection exceeds its bounds")
+        return self._run(
+            partial(self._finish_observation, records, heads, epoch, streams),
+            deadline_at,
+        )
+
+    async def _finish_observation(
+        self,
+        records: tuple[ArtifactRecordV1, ...],
+        heads: tuple[FiscalHistoryHeadV1, ...],
+        epoch: FiscalHistoryEpochV1,
+        streams: tuple[str, ...],
+        connection: AsyncConnection,
+    ) -> FiscalHistoryReadV1:
+        await connection.execute(
+            text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        )
+        observed_at = await connection.scalar(text("SELECT transaction_timestamp()"))
+        if not isinstance(observed_at, datetime):
+            raise _unavailable("whole observation clock is unavailable")
+        observed = await self._read(streams, connection, observed_through=observed_at)
+        if observed.epoch != epoch:
+            raise _unavailable("whole observation recovery epoch changed")
+        by_stream = {head.stream_id: head for head in observed.heads}
+        if any(by_stream.get(head.stream_id) != head for head in heads):
+            raise _unavailable("whole observation history head changed")
+        latest = {entry.event.stream_id: entry for entry in observed.entries}
+        selected = []
+        for record in records:
+            entry = latest["evidence:" + record.artifact_id]
+            if getattr(entry.event.body, "record", None) != record:
+                raise _unavailable("whole observation metadata changed")
+            storage = await connection.scalar(
+                text(
+                    "SELECT byte_length FROM fundamental.content_objects "
+                    "WHERE content_hash=:digest AND media_type=:media"
+                ),
+                {"digest": record.content_hash, "media": record.media_type},
+            )
+            if not isinstance(storage, int) or storage < 0:
+                raise _unavailable("whole observation content storage is unavailable")
+            selected.append(entry)
+        selected.extend(
+            latest[head.stream_id] for head in heads if head.stream_kind == "control"
+        )
+        observed.require_current_epoch(tuple(selected))
+        if any(
+            not isinstance(entry.commit_bound, FiscalCommitReceiptV1)
+            for entry in observed.entries
+        ):
+            raise _unavailable("whole observation contains unsealed history")
+        return observed
 
     def require_heads(
         self, heads: tuple[FiscalHistoryHeadV1, ...], *, deadline_at: datetime

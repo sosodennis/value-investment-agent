@@ -15,6 +15,7 @@ from .command_artifacts import EvidenceArtifactStore
 from .data_releases import ArtifactRefV1
 from .fiscal_admission_history import (
     FiscalAdmissionHistoryPort,
+    FiscalAdmissionHistoryReaderPort,
     FiscalCommitReceiptV1,
     FiscalControlBindingV1,
     FiscalHistoryEntryV1,
@@ -176,7 +177,7 @@ class FiscalAuthorityOwner:
         self,
         *,
         artifacts: EvidenceArtifactStore,
-        history: FiscalAdmissionHistoryPort | None,
+        history: FiscalAdmissionHistoryReaderPort | None,
         deployment: Callable[[], FiscalAuthorityDeploymentV1],
         signer: FiscalRegistrySignerPort | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -215,7 +216,7 @@ class FiscalAuthorityOwner:
         except ValueError as error:
             raise _invalid("authority deployment configuration is invalid") from error
 
-    def _history_owner(self) -> FiscalAdmissionHistoryPort:
+    def _history_owner(self) -> FiscalAdmissionHistoryReaderPort:
         if self._history is None:
             raise SnapshotError(
                 "FISCAL_AUTHORITY_HISTORY_UNCONFIGURED",
@@ -742,6 +743,8 @@ class FiscalAuthorityOwner:
         deadline_at: datetime,
     ) -> tuple[FiscalHistoryHeadV1, ...]:
         history = self._history_owner()
+        if not isinstance(history, FiscalAdmissionHistoryPort):
+            raise _invalid("authority history write capability is not configured")
         self._require_current_issuance(
             signed, history.read_epoch(deadline_at=deadline_at), reader
         )

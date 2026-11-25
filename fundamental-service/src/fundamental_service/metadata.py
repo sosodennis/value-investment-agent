@@ -63,7 +63,7 @@ from .replay import (
     check_publication_budget,
 )
 from .serialization import canonical_bytes, sha256_digest
-from .snapshots import SnapshotError, SnapshotRepository
+from .snapshots import FilesystemContentStore, SnapshotError, SnapshotRepository
 
 SCHEMA = "fundamental"
 SCHEMA_VERSION = "fundamental-metadata-v2"
@@ -309,8 +309,14 @@ class PostgresMetadataStore:
         return self._data_release_trust_roots is not None
 
     def start(self) -> None:
+        self._start(self._startup)
+
+    def start_read_only(self) -> None:
+        self._start(self._inspect_schema)
+
+    def _start(self, operation: Callable[[], Coroutine[object, object, None]]) -> None:
         try:
-            self._runner.run(self._startup())
+            self._runner.run(operation())
         except Exception as exc:  # pragma: no cover - exercised by container startup
             self._ready = False
             self._health = MetadataHealth(False, None)
@@ -323,6 +329,9 @@ class PostgresMetadataStore:
     async def _startup(self) -> None:
         if self.auto_migrate:
             await self._apply_migration()
+        await self._inspect_schema()
+
+    async def _inspect_schema(self) -> None:
         version = await self._schema_version()
         if version != SCHEMA_VERSION:
             raise RuntimeError("Fundamental metadata schema version is incompatible")
@@ -1561,6 +1570,29 @@ class PostgresMetadataStore:
             )
         return None if row is None else dict(row["payload"])
 
+    def content_byte_length(self, content_hash: str, *, media_type: str) -> int:
+        self._require_ready()
+        value = self._runner.run(self._content_byte_length(content_hash, media_type))
+        if value is None:
+            raise SnapshotError(
+                "CONTENT_REGISTRATION_UNAVAILABLE",
+                "retained content registration is missing",
+            )
+        return value
+
+    async def _content_byte_length(
+        self, content_hash: str, media_type: str
+    ) -> int | None:
+        async with self._runner._engine.connect() as connection:
+            value = await connection.scalar(
+                text(
+                    "SELECT byte_length FROM fundamental.content_objects "
+                    "WHERE content_hash=:digest AND media_type=:media"
+                ),
+                {"digest": content_hash, "media": media_type},
+            )
+            return int(value) if value is not None else None
+
     def register_content(
         self, content_hash: str, *, media_type: str, byte_length: int
     ) -> None:
@@ -2004,16 +2036,49 @@ class PostgresMetadataStore:
                 await connection.close()
 
 
+class _ReadOnlyFilesystemContentStore(FilesystemContentStore):
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def put(self, content: bytes, *, media_type: str) -> str:
+        raise SnapshotError(
+            "READ_ONLY_STORAGE", "filesystem publication capability is unavailable"
+        )
+
+
 class PostgresContentStore:
     """Filesystem bytes with PostgreSQL content-object metadata."""
 
-    def __init__(self, root: Path, metadata: PostgresMetadataStore) -> None:
-        from .snapshots import FilesystemContentStore
-
-        self._filesystem = FilesystemContentStore(root)
+    def __init__(
+        self, root: Path, metadata: PostgresMetadataStore, *, read_only: bool = False
+    ) -> None:
+        if read_only and not root.is_dir():
+            raise SnapshotError(
+                "SOURCE_BYTES_UNAVAILABLE", "read-only content root is missing"
+            )
+        self._root = root
+        self._filesystem_view: FilesystemContentStore | None = None
         self._metadata = metadata
+        self._read_only = read_only
+
+    @property
+    def _filesystem(self) -> FilesystemContentStore:
+        if self._filesystem_view is None:
+            self._filesystem_view = (
+                _ReadOnlyFilesystemContentStore(self._root)
+                if self._read_only
+                else FilesystemContentStore(self._root)
+            )
+        return self._filesystem_view
+
+    def as_read_only(self) -> PostgresContentStore:
+        return PostgresContentStore(self._root, self._metadata, read_only=True)
 
     def put(self, content: bytes, *, media_type: str) -> str:
+        if self._read_only:
+            raise SnapshotError(
+                "READ_ONLY_STORAGE", "content publication capability is unavailable"
+            )
         _check_metadata_budget()
         content_hash = self._filesystem.put(content, media_type=media_type)
         self._metadata.register_content(
@@ -2024,9 +2089,19 @@ class PostgresContentStore:
     def get(self, content_hash: str, *, media_type: str) -> bytes:
         _check_metadata_budget()
         content = self._filesystem.get(content_hash, media_type=media_type)
-        self._metadata.register_content(
-            content_hash, media_type=media_type, byte_length=len(content)
-        )
+        if self._read_only:
+            if self._metadata.content_byte_length(
+                content_hash, media_type=media_type
+            ) != len(content):
+                raise SnapshotError(
+                    "CONTENT_METADATA_MISMATCH",
+                    "retained content registration differs from its bytes",
+                )
+        else:
+            self._metadata.register_content(
+                content_hash, media_type=media_type, byte_length=len(content)
+            )
+        _check_metadata_budget()
         return content
 
 
@@ -2089,10 +2164,18 @@ class PostgresArtifactStore:
     """Artifact metadata in PostgreSQL and immutable bytes in the content volume."""
 
     def __init__(
-        self, metadata: PostgresMetadataStore, content: PostgresContentStore
+        self,
+        metadata: PostgresMetadataStore,
+        content: PostgresContentStore,
+        *,
+        read_only: bool = False,
     ) -> None:
         self._metadata = metadata
-        self._content = content
+        self._content = content.as_read_only() if read_only else content
+        self._read_only = read_only
+
+    def as_read_only(self) -> PostgresArtifactStore:
+        return PostgresArtifactStore(self._metadata, self._content, read_only=True)
 
     def put(
         self,
@@ -2140,6 +2223,10 @@ class PostgresArtifactStore:
         retention: Literal["evidence", "operational_cache"] = "evidence",
         publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
+        if self._read_only:
+            raise SnapshotError(
+                "READ_ONLY_STORAGE", "artifact publication capability is unavailable"
+            )
         content_hash = hashlib.sha256(payload).hexdigest()
         record = ArtifactRecordV1(
             artifact_id=artifact_id,
@@ -2369,6 +2456,11 @@ class _RetainedPostgresArtifactReads:
             record.content_hash, media_type=record.media_type
         )
         if entry.byte_length is None:
+            if self._artifacts._read_only:
+                raise SnapshotError(
+                    "CONTENT_REGISTRATION_UNAVAILABLE",
+                    "read-only artifact verification cannot repair missing registration",
+                )
             self._artifacts._metadata.register_content(
                 record.content_hash, media_type=record.media_type, byte_length=len(raw)
             )

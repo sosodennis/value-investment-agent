@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from functools import partial
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
+from dataclasses import dataclass
 
 from pydantic import AwareDatetime, ConfigDict, Field
 
@@ -17,7 +18,11 @@ from .fiscal_candidate_contracts import (
     FiscalCandidateClassificationBindingV1,
     FiscalCandidateSourceUseV1,
     FiscalSourceUseScopeV1,
-    FiscalStatementCandidateV1,
+    FiscalCandidateContentV1,
+    FiscalPrepareCandidateCommandV1,
+    VerifiedClassifiedCandidateSource,
+    VerifiedRawCandidateSource,
+    VerifiedFiscalCandidateSource,
     VerifiedRawSourceForCandidateV1,
 )
 from .fiscal_discovery import FiscalDiscovery
@@ -37,6 +42,7 @@ from .fiscal_statement_contracts import (
 )
 from .fiscal_statement_mapping import (
     FiscalMappingApprovalOwner,
+    FiscalMappingVerifier,
     FiscalStatementMappingBatchV1,
     fiscal_display_profile_digest,
     fiscal_mapping_policy_digest,
@@ -63,10 +69,15 @@ from .fiscal_validation_contracts import (
     FiscalValidationPinV1,
     ResolvedFiscalValidationRequestV1,
 )
-from .metadata import metadata_operation_budget
-from .replay import ArtifactPublicationV1, ArtifactRecordV1
+from .replay import ArtifactRecordV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
+
+if TYPE_CHECKING:
+    from .fiscal_candidate_preparation import (
+        FiscalCandidatePreparation,
+        CurrentFiscalCandidate,
+    )
 from .statement_contracts import StatementScopeV1
 
 
@@ -77,7 +88,7 @@ class FiscalCandidateClassificationPort(Protocol):
         classification_refs: tuple[ArtifactRefV1, ...],
         *,
         deadline_at: datetime,
-    ) -> ClassifiedSourceForCandidateV1: ...
+    ) -> VerifiedClassifiedCandidateSource: ...
 
 
 class FiscalCoverageBasisEvidenceV1(StrictModel):
@@ -95,13 +106,12 @@ class FiscalCoverageBasisEvidenceV1(StrictModel):
     mapping_refs: tuple[ArtifactRefV1, ...]
 
 
-class FiscalProjectionCandidatePublicationV1(StrictModel):
-    model_config = ConfigDict(frozen=True)
-
-    candidate: FiscalStatementCandidateV1
+@dataclass(frozen=True)
+class FiscalCandidateMaterialization:
+    content: FiscalCandidateContentV1
     projection: FiscalProjectionResultV1
-    candidate_publication: ArtifactPublicationV1
     consumed_metadata: tuple[ArtifactRecordV1, ...]
+    source_evidence: tuple[VerifiedFiscalCandidateSource, ...]
 
 
 def _invalid(message: str) -> SnapshotError:
@@ -117,8 +127,8 @@ class FiscalProjectionBuilder:
         artifacts: EvidenceArtifactStore,
         content: ContentAddressedStore,
         pin: FiscalValidationPinV1,
-        mapping_approvals: FiscalMappingApprovalOwner | None,
-        preparer_execution_ref: ArtifactRefV1,
+        mapping_approvals: FiscalMappingVerifier | None,
+        preparation: FiscalCandidatePreparation | None = None,
         classifications: FiscalCandidateClassificationPort | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
@@ -129,8 +139,8 @@ class FiscalProjectionBuilder:
             content,
         )
         self.pin, self.mapping_approvals = pin, mapping_approvals
-        self.preparer_execution_ref, self.classifications, self.clock = (
-            preparer_execution_ref,
+        self.preparation, self.classifications, self.clock = (
+            preparation,
             classifications,
             clock,
         )
@@ -331,24 +341,26 @@ class FiscalProjectionBuilder:
 
     def prepare(
         self,
-        discovery_ref: ArtifactRefV1,
+        command: FiscalPrepareCandidateCommandV1,
         *,
-        security_id: str | None,
-        classification_bindings: tuple[
-            FiscalCandidateClassificationBindingV1, ...
-        ] = (),
         deadline_at: datetime,
-    ) -> FiscalProjectionCandidatePublicationV1:
-        with metadata_operation_budget(
-            partial(self._budget, deadline_at), self._expired
-        ):
-            return self._build(
-                discovery_ref,
-                security_id=security_id,
-                classification_bindings=classification_bindings,
-                deadline_at=deadline_at,
-                publish=True,
+    ) -> CurrentFiscalCandidate:
+        if self.preparation is None:
+            raise SnapshotError(
+                "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
+                "candidate preparation requires its deployment capability",
             )
+        return self.preparation.prepare(command, deadline_at=deadline_at)
+
+    def verify_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> CurrentFiscalCandidate:
+        if self.preparation is None:
+            raise SnapshotError(
+                "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
+                "candidate verification requires its read-only deployment composition",
+            )
+        return self.preparation.verify_candidate(reference, deadline_at=deadline_at)
 
     def _build(
         self,
@@ -359,8 +371,7 @@ class FiscalProjectionBuilder:
         deadline_at: datetime,
         publish: bool,
         retained_mapping_refs: tuple[ArtifactRefV1, ...] = (),
-        preparer_execution_ref: ArtifactRefV1 | None = None,
-    ) -> FiscalProjectionCandidatePublicationV1:
+    ) -> FiscalCandidateMaterialization:
         budget = partial(self._budget, deadline_at)
         budget()
         if self.mapping_approvals is None:
@@ -381,8 +392,6 @@ class FiscalProjectionBuilder:
                 "projection discovery differs from the configured source revision"
             )
         coverage = selected_fiscal_coverage(discovery)
-        preparer = preparer_execution_ref or self.preparer_execution_ref
-        read_retained_artifact(reader, preparer)
         scopes = {
             item.accession_number: item
             for item in fiscal_primary_scopes(fiscal_statement_registry())
@@ -405,6 +414,7 @@ class FiscalProjectionBuilder:
                 )
             classifications[source_id] = binding
         source_uses: list[FiscalCandidateSourceUseV1] = []
+        source_evidence: list[VerifiedFiscalCandidateSource] = []
         mapping_refs: list[ArtifactRefV1] = []
         filings: dict[str, FiscalBasisFilingV1] = {}
         for accession in coverage.source_accessions:
@@ -538,13 +548,28 @@ class FiscalProjectionBuilder:
                     classification.classification_refs,
                     deadline_at=deadline_at,
                 )
-                if admitted.scope != use_scope:
+                if admitted.source_use.scope != use_scope:
                     raise _invalid(
                         "classification does not authorize the exact requested source use"
                     )
-                source_uses.append(admitted)
+                source_uses.append(admitted.source_use)
+                source_evidence.append(admitted)
+                for record in admitted.consumed_metadata:
+                    reader.expect(record.artifact_id, record)
             else:
-                source_uses.append(VerifiedRawSourceForCandidateV1(scope=use_scope))
+                raw_use = VerifiedRawSourceForCandidateV1(scope=use_scope)
+                source_uses.append(raw_use)
+                source_evidence.append(
+                    VerifiedRawCandidateSource(
+                        raw_use,
+                        evidence.outcome.action_refs,
+                        tuple(
+                            record
+                            for _, record in source_read.records
+                            if record is not None
+                        ),
+                    )
+                )
             batch_ref = self._retain(
                 batch,
                 "fiscal-statement-mapping-v1",
@@ -554,6 +579,11 @@ class FiscalProjectionBuilder:
                 deadline_at=deadline_at,
             )
             if publish:
+                if not isinstance(self.mapping_approvals, FiscalMappingApprovalOwner):
+                    raise SnapshotError(
+                        "FISCAL_MAPPING_AUTHORITY_UNCONFIGURED",
+                        "mapping write capability is not configured",
+                    )
                 approval_ref = self.mapping_approvals.approve(
                     batch, batch_ref, deadline_at=deadline_at
                 )
@@ -747,7 +777,15 @@ class FiscalProjectionBuilder:
             publish=publish,
             deadline_at=deadline_at,
         )
-        candidate = FiscalStatementCandidateV1(
+        if set(classifications) != {
+            source.scope.source_validation_ref.artifact_id
+            for source in source_uses
+            if isinstance(source, ClassifiedSourceForCandidateV1)
+        }:
+            raise _invalid("candidate classification bindings include unused sources")
+        candidate = FiscalCandidateContentV1(
+            discovery_ref=discovery_ref,
+            materialization=self.pin,
             scope=scope,
             cutoff_at=discovery.request.valuation_timestamp,
             source_uses=tuple(source_uses),
@@ -763,35 +801,7 @@ class FiscalProjectionBuilder:
             source_set_digest=source_set_digest,
             projection_policy_digest=fiscal_statement_policy().digest,
             executable_digest=fiscal_projection_executable_digest(),
-            preparer_execution_ref=preparer,
         )
-        candidate_dependencies = tuple(
-            sorted(
-                {projection_ref.content_hash, source_set_digest, preparer.content_hash}
-            )
-        )
-        if publish:
-            candidate_publication = self.artifacts.put_with_receipt(
-                candidate.artifact_id,
-                candidate,
-                candidate_dependencies,
-                publication_budget=budget,
-            )
-            reader.expect(candidate.artifact_id, candidate_publication.artifact)
-        else:
-            self._retain(
-                candidate,
-                "fiscal-statement-candidate-v1",
-                candidate_dependencies,
-                reader,
-                publish=False,
-                deadline_at=deadline_at,
-            )
-            candidate_publication = ArtifactPublicationV1(
-                artifact=reader.get(candidate.artifact_id), wrote=False
-            )
-        if reader.read(candidate.artifact_id) != canonical_bytes(candidate):
-            raise _invalid("retained candidate differs from reconstructed inputs")
         for source in source_uses:
             if isinstance(source, ClassifiedSourceForCandidateV1):
                 if (
@@ -800,7 +810,7 @@ class FiscalProjectionBuilder:
                         source.scope,
                         source.classification_refs,
                         deadline_at=deadline_at,
-                    )
+                    ).source_use
                     != source
                 ):
                     raise _invalid("candidate classification changed before completion")
@@ -808,63 +818,11 @@ class FiscalProjectionBuilder:
             self.mapping_approvals.verify(batch, approval, deadline_at=deadline_at)
         reader.check_current()
         budget()
-        return FiscalProjectionCandidatePublicationV1(
-            candidate=candidate,
+        return FiscalCandidateMaterialization(
+            content=candidate,
             projection=projection,
-            candidate_publication=candidate_publication,
+            source_evidence=tuple(source_evidence),
             consumed_metadata=tuple(
                 record for _, record in reader.records if record is not None
             ),
         )
-
-    def verify_candidate(
-        self,
-        reference: ArtifactRefV1,
-        *,
-        deadline_at: datetime,
-    ) -> FiscalProjectionCandidatePublicationV1:
-        with metadata_operation_budget(
-            partial(self._budget, deadline_at), self._expired
-        ):
-            budget = partial(self._budget, deadline_at)
-            reader = FiscalArtifactRead(self.artifacts, budget)
-            candidate = FiscalStatementCandidateV1.model_validate_json(
-                read_retained_artifact(reader, reference)
-            )
-            if (
-                reference.role != "fiscal-statement-candidate-v1"
-                or reference.artifact_id != candidate.artifact_id
-            ):
-                raise _invalid("candidate reference has the wrong identity")
-            first = self.sources.read_with_metadata(
-                candidate.source_uses[0].scope.source_validation_ref.artifact_id,
-                deadline_at=deadline_at,
-            )
-            for identity, record in first.records:
-                reader.expect(identity, record)
-            bindings = tuple(
-                FiscalCandidateClassificationBindingV1(
-                    source_validation_ref=item.scope.source_validation_ref,
-                    witness_ref=item.scope.witness_ref,
-                    classification_refs=item.classification_refs,
-                )
-                for item in candidate.source_uses
-                if isinstance(item, ClassifiedSourceForCandidateV1)
-                and item.scope.witness_ref is not None
-            )
-            result = self._build(
-                first.evidence.request.selection.discovery_ref,
-                security_id=candidate.scope.security_id,
-                classification_bindings=bindings,
-                deadline_at=deadline_at,
-                publish=False,
-                retained_mapping_refs=candidate.mapping_refs,
-                preparer_execution_ref=candidate.preparer_execution_ref,
-            )
-            if result.candidate != candidate:
-                raise _invalid(
-                    "candidate does not reproduce from current source closure"
-                )
-            reader.check_current()
-            budget()
-            return result

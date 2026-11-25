@@ -666,10 +666,13 @@ def test_signed_classification_candidate_and_same_command_retry(environment):
     admitted = env.owner.require_candidate_source(
         env.source.scope, (ref,), deadline_at=deadline()
     )
-    assert admitted.kind == "classified_provisional"
-    assert admitted.scope.permitted_inputs[0].value == Decimal("-1000000")
-    assert admitted.scope.validation_kind == "complete_refused"
-    assert admitted.scope.permitted_inputs[0].quality is QualityStatus.PROVISIONAL
+    assert admitted.source_use.kind == "classified_provisional"
+    assert admitted.source_use.scope.permitted_inputs[0].value == Decimal("-1000000")
+    assert admitted.source_use.scope.validation_kind == "complete_refused"
+    assert (
+        admitted.source_use.scope.permitted_inputs[0].quality
+        is QualityStatus.PROVISIONAL
+    )
     repeated = env.owner.record_classification(
         env.command, expected_head=None, deadline_at=deadline()
     )

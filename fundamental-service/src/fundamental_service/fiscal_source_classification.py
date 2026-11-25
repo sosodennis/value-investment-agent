@@ -15,6 +15,7 @@ from .data_releases import ArtifactRefV1, DataReleaseError
 from .fiscal_admission_authority import FiscalAuthorityOwner
 from .fiscal_admission_history import (
     FiscalAdmissionHistoryPort,
+    FiscalAdmissionHistoryReaderPort,
     FiscalCommitReceiptV1,
     FiscalControlBindingV1,
     FiscalHistoryHeadV1,
@@ -24,6 +25,8 @@ from .fiscal_authority_contracts import CurrentFiscalAuthorityV1
 from .history_recovery_contracts import FiscalHistoryEpochV1, FiscalIssuanceContextV1
 from .fiscal_candidate_contracts import (
     ClassifiedSourceForCandidateV1,
+    VerifiedClassifiedCandidateSource,
+    VerifiedFiscalActivity,
     FiscalSourceUseScopeV1,
 )
 from .fiscal_classification_contracts import (
@@ -101,6 +104,7 @@ class _ClassificationRead:
         self.visible_after: datetime | None = None
         self.authorities: dict[str, CurrentFiscalAuthorityV1] = {}
         self.epoch: FiscalHistoryEpochV1 | None = None
+        self.activities: tuple[VerifiedFiscalActivity, ...] = ()
 
     def observe(self, history: FiscalHistoryReadV1) -> None:
         if self.epoch is not None and self.epoch != history.epoch:
@@ -125,7 +129,7 @@ class FiscalSourceClassificationOwner:
         self,
         *,
         artifacts: EvidenceArtifactStore,
-        history: FiscalAdmissionHistoryPort | None,
+        history: FiscalAdmissionHistoryReaderPort | None,
         authorities: FiscalAuthorityOwner,
         sources: FiscalClassificationSourcePort | None,
         signer: FiscalClassifierSignerPort | None = None,
@@ -158,7 +162,7 @@ class FiscalSourceClassificationOwner:
             raise self._expired()
         return (deadline_at - now).total_seconds()
 
-    def _history(self) -> FiscalAdmissionHistoryPort:
+    def _history(self) -> FiscalAdmissionHistoryReaderPort:
         if self.history is None:
             raise SnapshotError(
                 "FISCAL_CLASSIFICATION_HISTORY_UNCONFIGURED",
@@ -354,6 +358,38 @@ class FiscalSourceClassificationOwner:
             raise _invalid(
                 "source preparation, focus validation and classification are not independent"
             )
+        state.activities = (
+            VerifiedFiscalActivity(
+                "source_preparation",
+                preparation.authority_id,
+                preparation.principal_id,
+                preparation.principal_kind,
+                preparation.key_id,
+                preparer.grant_ref,
+                (preparation.execution_id,),
+                (command.preparer_execution_ref,),
+            ),
+            VerifiedFiscalActivity(
+                "focus_validation",
+                witness.authority_id,
+                witness.principal_id,
+                None,
+                witness.key_id,
+                None,
+                tuple(sorted(focus_executions)),
+                (command.witness_ref,),
+            ),
+            VerifiedFiscalActivity(
+                "source_classification",
+                actor.authority_id,
+                actor.principal_id,
+                actor.principal_kind,
+                actor.key_id,
+                authority.grant_ref,
+                (execution.execution_id,),
+                (actor.execution_ref,),
+            ),
+        )
         if state.epoch is None:
             raise _invalid("classification recovery epoch is unavailable")
         try:
@@ -662,6 +698,10 @@ class FiscalSourceClassificationOwner:
                     publication = ArtifactPublicationV1(artifact=existing, wrote=False)
                 state.reader.get(command.artifact_id)
                 history = self._history()
+                if not isinstance(history, FiscalAdmissionHistoryPort):
+                    raise _invalid(
+                        "classification history write capability is not configured"
+                    )
                 self._require_current_epoch(signed, state, deadline_at)
                 history.checkpoint(
                     tuple(
@@ -705,7 +745,7 @@ class FiscalSourceClassificationOwner:
         classification_refs: tuple[ArtifactRefV1, ...],
         *,
         deadline_at: datetime,
-    ) -> ClassifiedSourceForCandidateV1:
+    ) -> VerifiedClassifiedCandidateSource:
         with metadata_operation_budget(
             partial(self._budget, deadline_at), self._expired
         ):
@@ -728,8 +768,33 @@ class FiscalSourceClassificationOwner:
                     )
                 self._history_state(signed, ref, state, deadline_at)
                 self._finish(signed, state, deadline_at)
-                return ClassifiedSourceForCandidateV1(
-                    scope=scope, classification_refs=classification_refs
+                for authority in state.authorities.values():
+                    for head in authority.history_heads:
+                        if head.stream_kind == "evidence":
+                            state.reader.get(head.subject_id)
+                source = self._source(signed.command, state, deadline_at)
+                self._finish(signed, state, deadline_at)
+                return VerifiedClassifiedCandidateSource(
+                    source_use=ClassifiedSourceForCandidateV1(
+                        scope=scope, classification_refs=classification_refs
+                    ),
+                    activities=state.activities,
+                    consumed_metadata=tuple(
+                        record
+                        for _, record in state.reader.records
+                        if record is not None
+                    ),
+                    history_heads=tuple(state.heads.values())
+                    + tuple(
+                        head
+                        for authority in state.authorities.values()
+                        for head in authority.history_heads
+                    ),
+                    expires_at=(signed.command.expires_at, source.witness.expires_at)
+                    + tuple(
+                        authority.grant.valid_until
+                        for authority in state.authorities.values()
+                    ),
                 )
             except (ValueError, DataReleaseError) as error:
                 raise _invalid(

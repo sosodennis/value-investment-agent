@@ -1016,3 +1016,42 @@ python -m fundamental_service.fiscal_source_runner \
 讀取重驗來源、完整 dependencies、資源、build、簽章、目前 authority 與期限，並在回傳前再次檢查。它不重新取得原件或執行 validator。Authority 可透過部署配置撤銷。Witness 最長有效 30 日，且不得超過 authority 期限。已過期或撤銷的 witness 不能以原簽章繼續 current read；新 build、來源或 key 需要新證據身分。
 
 所有命令在同一 absolute deadline 內處理 metadata、lock、worker、publication 與 stdout pipe 寫入。消費端停止讀取時，命令到期即停止等待，以 stderr 的具名 JSON 和 exit 2 結束。失敗可能已送出部分 stdout bytes，僅 exit 0 的完整 JSON 可作成功輸出。這份 witness 只證明來源診斷。原 raw active finding 與 blocking 保留，季度或 TTM 展示仍需獨立分類與分權 release decision，年度及估值資格沿原政策。
+
+## 固定季度與 TTM candidate 給獨立審閱
+
+`prepare-candidate` 執行既有 fiscal mapper 與 projector，簽署整個 candidate 的實際 preparation 結果。它不授予 display release、年度資料或估值資格。Raw-refused source 仍需要 source owner 的正式 preparation、focus witness 與獨立 accounting classification。這些 producer 的部署與實質審閱必須另外完成，candidate 簽章不能替代。
+
+先保留前節的 fiscal acquisition、PostgreSQL history 與完整 resource pins。部署配置下列檔案。命令不接受 key、principal、role、job 或 epoch overrides。
+
+- `FUNDAMENTAL_FISCAL_AUTHORITY_DEPLOYMENT_FILE` 指向 `FiscalAuthorityDeploymentV1` JSON。Root、provisioning refs 與 active grants 必須已由 authority owner 正式建立。
+- `FUNDAMENTAL_FISCAL_CANDIDATE_AUTHORITY_ID` 選定 roster 中的 `machine` principal 與 `source_preparer` grant。
+- `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE` 保留 fiscal mapping evaluator 的當前公鑰與 `fiscal_mapping_policy_digest()`。
+- 寫入 process 另掛載 `FUNDAMENTAL_FISCAL_CANDIDATE_PRIVATE_KEY_FILE` 與 `FUNDAMENTAL_FISCAL_MAPPING_PRIVATE_KEY_FILE`。使用各自對應的 Ed25519 PKCS8 PEM。私鑰檔須由該 process 的 OS user 擁有，權限為 `600` 或更窄。部署檔須是非 symlink 的一般檔案，大小不超過 1 MiB。
+
+`command.json` 必須符合 `FiscalPrepareCandidateCommandV1`。必要欄位為 `command_id`、完整 `discovery_ref` 與含時區的絕對 `expires_at`。`security_id` 是可選 selector。`classification_bindings` 按 `source_validation_ref.artifact_id` 排序，每個 raw-refused source 提供一組 exact source、witness 與 classification refs。不得提供財務 rows、公式、期間 labels 或簽署者身分。
+
+```sh
+python -m fundamental_service.fiscal_source_runner \
+  --source-revision "$RETAINED_SOURCE_REVISION" --timeout-seconds 60 \
+  prepare-candidate --command-file command.json
+```
+
+輸出 `evidence` 為 `FiscalStatementCandidateV2`。其 signed body 包含唯一 `FiscalCandidateContentV1`、原 discovery 與 validation pin、全部 source uses、mapping approvals、projection、period 與 row lineage、實際 machine execution 及 issuance context。Preparation executable digest 與原 source revision 分開保留。Job ID 由部署能力產生，真正的信任根是 deployment grant、key custody 與固定 builder 程式。
+
+從 `publication.artifact` 保留完整 ref，指定 role `fiscal-statement-candidate-v2`，寫入 `candidate-ref.json`。Ref 同時包含 stable artifact ID、content hash 與 media type。
+
+```sh
+python -m fundamental_service.fiscal_source_runner \
+  --source-revision "$RETAINED_SOURCE_REVISION" --timeout-seconds 60 \
+  read-candidate --candidate-ref-file candidate-ref.json
+```
+
+讀取 process 使用專用的 `read_only_operator_lifespan` 與 `PostgresMetadataStore.start_read_only()`，只檢查現有 schema 和 capabilities。它不執行 migrations 或發布 model、policy catalog，即使一般服務配置允許 auto-migrate。缺少 prerequisite 時具名拒絕並關閉資源。部署 reader 使用只有 SELECT 的資料庫角色與唯讀 content volume。
+
+Content 和 artifact reader 只驗現有 registration 與 byte length。缺 registration 或長度不符即拒絕，不自動 INSERT、repair 或更新 retained journal。一般服務和寫入 operator 保留原 publication 與 recovery 行為。
+
+讀取 process 只需要 public deployment、mapping trust 與適用的 focus authority。它不載入 candidate、mapping 或 focus 私鑰，且沒有 history append、checkpoint 或 seal 能力。它從原 discovery 重建完整內容，再於一個有界 PostgreSQL snapshot 核對全部 metadata、storage、heads、sealed entries 與 current epoch。Source、classification、witness、grant、build、policy、expiry 或任何 binding 改變均拒絕。Raw parser action refs 保留原 owner 驗證的 evidence，不會創造未參與的 preparer、focus validator 或 classifier。
+
+相同 command 重試保留首次 signed bytes、execution、expiry 與 source identity。變更 command scope、pins 或 expiry 必須使用新 command ID。若 `FISCAL_CANDIDATE_SIGNING_OUTCOME_UNAVAILABLE` 表示 signing intent 已留存而沒有可證明的 durable signature，該 command 不再重簽。用新 command ID 執行真實新工作。已留存 signed bytes 的同代重試可續做缺少的 publication history；純讀不補寫。Restore 後舊 candidate 或 signed orphan 保留原 issuance，不能靠新 append 取得 current。新的本代 command 需要真正本代 invocation 與有效 grants。
+
+這個入口只回 current preparation 結果。Historical source、witness 與 classification replay 尚無完整 owning port，因此沒有 candidate as-of approval 入口。正式 display decision、outer release、authenticated API 與 workspace 驗收仍是後續 gate。

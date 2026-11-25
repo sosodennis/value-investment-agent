@@ -20,6 +20,7 @@ from fundamental_service.data_releases import (
 from fundamental_service.fiscal_candidate_contracts import (
     ClassifiedSourceForCandidateV1,
     FiscalCandidateClassificationBindingV1,
+    VerifiedClassifiedCandidateSource,
 )
 from fundamental_service.fiscal_discovery import FiscalDiscoveryEvidenceV1
 from fundamental_service.fiscal_projection_builder import FiscalProjectionBuilder
@@ -88,8 +89,14 @@ class SyntheticClassificationPort:
             raise SnapshotError(
                 "SYNTHETIC_CLASSIFICATION_REFUSED", "test classification refused"
             )
-        return ClassifiedSourceForCandidateV1(
-            scope=scope, classification_refs=classification_refs
+        return VerifiedClassifiedCandidateSource(
+            ClassifiedSourceForCandidateV1(
+                scope=scope, classification_refs=classification_refs
+            ),
+            (),
+            (),
+            (),
+            (),
         )
 
 
@@ -112,9 +119,17 @@ def _retained_root():
     return Path(configured)
 
 
-def _case(tmp_path, case_id, *, classifications=True, artifact_type=ArtifactStore):
+def _case(
+    tmp_path,
+    case_id,
+    *,
+    classifications=True,
+    artifact_type=ArtifactStore,
+    retained_revision=RETAINED_REVISION,
+    retained_content_root=None,
+):
     root = _retained_root()
-    formal = root / "formal-fiscal-sources" / RETAINED_REVISION / case_id
+    formal = root / "formal-fiscal-sources" / retained_revision / case_id
     discovery_payload = json.loads(
         next(formal.glob("discover-*.stdout.json")).read_bytes()
     )
@@ -194,13 +209,6 @@ def _case(tmp_path, case_id, *, classifications=True, artifact_type=ArtifactStor
     approval_owner = FiscalMappingApprovalOwner(
         artifacts=artifacts, trust_roots=lambda: roots, private_key=lambda: key
     )
-    preparer = _ref(
-        artifacts.put_with_receipt(
-            "synthetic-fixture-preparer:" + case_id,
-            {"protocol": "synthetic-fixture-preparer", "case": case_id},
-        ),
-        "synthetic-fixture-preparer",
-    )
     source_port = SyntheticRetainedSourcePort(sources, artifacts)
     classifier = (
         SyntheticClassificationPort(tuple(bindings)) if classifications else None
@@ -209,10 +217,11 @@ def _case(tmp_path, case_id, *, classifications=True, artifact_type=ArtifactStor
         discovery=SyntheticDiscoveryPort(discovery),
         sources=source_port,
         artifacts=artifacts,
-        content=FilesystemContentStore(root / "sources-worker/content"),
+        content=FilesystemContentStore(
+            retained_content_root or root / "sources-worker/content"
+        ),
         pin=next(iter(sources.values())).request.pin,
         mapping_approvals=approval_owner,
-        preparer_execution_ref=preparer,
         classifications=classifier,
     )
     return builder, discovery_ref, tuple(bindings), artifacts, sources
@@ -229,12 +238,36 @@ def test_retained_primary_sources_produce_all_frozen_quarter_and_ttm_values(
     tmp_path, case_id
 ):
     builder, discovery_ref, bindings, _, _ = _case(tmp_path, case_id)
-    actual = builder.prepare(
+    actual = builder._build(
         discovery_ref,
         security_id="AAPL" if case_id.startswith("aapl") else "MSFT",
         classification_bindings=bindings,
         deadline_at=_deadline(),
+        publish=True,
     )
+    assert_frozen_candidate_projection(actual, case_id)
+    projection = actual.projection
+    again = builder._build(
+        discovery_ref,
+        security_id=actual.content.scope.security_id,
+        classification_bindings=bindings,
+        deadline_at=_deadline(),
+        publish=True,
+    )
+    assert canonical_bytes(again.content) == canonical_bytes(actual.content)
+    assert canonical_bytes(again.projection) == canonical_bytes(projection)
+    retained = builder._build(
+        discovery_ref,
+        security_id=actual.content.scope.security_id,
+        classification_bindings=bindings,
+        retained_mapping_refs=actual.content.mapping_refs,
+        deadline_at=_deadline(),
+        publish=False,
+    )
+    assert retained.content == actual.content
+
+
+def assert_frozen_candidate_projection(actual, case_id):
     projection = actual.projection
     by_frequency = {
         "quarter": {
@@ -272,13 +305,12 @@ def test_retained_primary_sources_produce_all_frozen_quarter_and_ttm_values(
                 assert node.availability == availability
                 if node.value is not None:
                     assert node.revision_basis_proof is not None
-                    assert node.available_at <= actual.candidate.cutoff_at
+                    assert node.available_at <= actual.content.cutoff_at
                 checked += 1
     assert checked == 325
-    assert actual.candidate_publication.wrote
     assert all(
         not ref.artifact_id.startswith("synthetic-fixture:")
-        for ref in actual.candidate.mapping_refs
+        for ref in actual.content.mapping_refs
     )
     assert projection.supported_history_threshold is None
     assert projection.valuation_eligibility == "not_evaluated"
@@ -286,23 +318,8 @@ def test_retained_primary_sources_produce_all_frozen_quarter_and_ttm_values(
     if case_id.startswith("msft"):
         assert any(
             isinstance(item, ClassifiedSourceForCandidateV1)
-            for item in actual.candidate.source_uses
+            for item in actual.content.source_uses
         )
-    again = builder.prepare(
-        discovery_ref,
-        security_id=actual.candidate.scope.security_id,
-        classification_bindings=bindings,
-        deadline_at=_deadline(),
-    )
-    assert not again.candidate_publication.wrote
-    assert canonical_bytes(again.candidate) == canonical_bytes(actual.candidate)
-    assert canonical_bytes(again.projection) == canonical_bytes(projection)
-    retained = builder.verify_candidate(
-        _ref(actual.candidate_publication, "fiscal-statement-candidate-v1"),
-        deadline_at=_deadline(),
-    )
-    assert not retained.candidate_publication.wrote
-    assert retained.candidate == actual.candidate
 
 
 def test_raw_refused_source_cannot_form_candidate_without_classification_owner(
@@ -312,7 +329,13 @@ def test_raw_refused_source_cannot_form_candidate_without_classification_owner(
         tmp_path, "msft-historical", classifications=False
     )
     with pytest.raises(SnapshotError) as caught:
-        builder.prepare(reference, security_id="MSFT", deadline_at=_deadline())
+        builder._build(
+            reference,
+            security_id="MSFT",
+            deadline_at=_deadline(),
+            publish=True,
+            classification_bindings=(),
+        )
     assert caught.value.code == "FISCAL_CLASSIFICATION_UNCONFIGURED"
 
 
@@ -432,14 +455,26 @@ def test_preparation_refuses_unconfigured_mapping_authority_before_source_work(
     builder, reference, _, _, _ = _case(tmp_path, "aapl-historical")
     builder.mapping_approvals = None
     with pytest.raises(SnapshotError) as caught:
-        builder.prepare(reference, security_id="AAPL", deadline_at=_deadline())
+        builder._build(
+            reference,
+            security_id="AAPL",
+            deadline_at=_deadline(),
+            publish=True,
+            classification_bindings=(),
+        )
     assert caught.value.code == "FISCAL_MAPPING_AUTHORITY_UNCONFIGURED"
 
 
 def test_security_from_another_issuer_cannot_name_a_candidate(tmp_path):
     builder, reference, _, _, _ = _case(tmp_path, "aapl-historical")
     with pytest.raises(SnapshotError) as caught:
-        builder.prepare(reference, security_id="MSFT", deadline_at=_deadline())
+        builder._build(
+            reference,
+            security_id="MSFT",
+            deadline_at=_deadline(),
+            publish=True,
+            classification_bindings=(),
+        )
     assert caught.value.code == "FISCAL_PROJECTION_SOURCE_INVALID"
 
 
@@ -452,7 +487,7 @@ def test_source_revoked_during_candidate_publication_refuses_and_retry_stays_ref
         def put_with_receipt(self, artifact_id, *args, **kwargs):
             result = super().put_with_receipt(artifact_id, *args, **kwargs)
             if (
-                artifact_id.startswith("fiscal-statement-candidate-v1:")
+                artifact_id.startswith("fiscal-statement-projection-v1:")
                 and self.source_identity is not None
             ):
                 self.invalidate(self.source_identity)
@@ -463,28 +498,31 @@ def test_source_revoked_during_candidate_publication_refuses_and_retry_stays_ref
     )
     artifacts.source_identity = next(iter(sources))
     with pytest.raises(SnapshotError):
-        builder.prepare(
+        builder._build(
             reference,
             security_id="AAPL",
             classification_bindings=bindings,
             deadline_at=_deadline(),
+            publish=True,
         )
     with pytest.raises(SnapshotError):
-        builder.prepare(
+        builder._build(
             reference,
             security_id="AAPL",
             classification_bindings=bindings,
             deadline_at=_deadline(),
+            publish=True,
         )
 
 
 def test_candidate_verification_never_publishes_or_signs(tmp_path):
     builder, reference, bindings, artifacts, _ = _case(tmp_path, "aapl-historical")
-    result = builder.prepare(
+    result = builder._build(
         reference,
         security_id="AAPL",
         classification_bindings=bindings,
         deadline_at=_deadline(),
+        publish=True,
     )
 
     def forbidden(*args, **kwargs):
@@ -492,11 +530,15 @@ def test_candidate_verification_never_publishes_or_signs(tmp_path):
 
     artifacts.put_with_receipt = forbidden
     builder.mapping_approvals.private_key = forbidden
-    retained = builder.verify_candidate(
-        _ref(result.candidate_publication, "fiscal-statement-candidate-v1"),
+    retained = builder._build(
+        reference,
+        security_id="AAPL",
+        classification_bindings=bindings,
+        retained_mapping_refs=result.content.mapping_refs,
         deadline_at=_deadline(),
+        publish=False,
     )
-    assert retained.candidate == result.candidate
+    assert retained.content == result.content
 
 
 def test_wrong_fiscal_year_start_has_no_primary_ytd_proof(tmp_path, monkeypatch):
@@ -527,9 +569,10 @@ def test_wrong_fiscal_year_start_has_no_primary_ytd_proof(tmp_path, monkeypatch)
 
     monkeypatch.setattr(implementation, "fiscal_reviewed_coverage", changed)
     with pytest.raises(SnapshotError):
-        builder.prepare(
+        builder._build(
             reference,
             security_id="MSFT",
             classification_bindings=bindings,
             deadline_at=_deadline(),
+            publish=True,
         )

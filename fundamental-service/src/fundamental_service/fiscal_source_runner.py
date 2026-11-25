@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import stat
 import asyncio
 import re
 import sys
@@ -16,6 +18,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from .arelle_parser import ArelleParserError
 from .contracts import StrictModel
 from .data_releases import ArtifactRefV1
+from .fiscal_candidate_contracts import (
+    FiscalPrepareCandidateCommandV1,
+    FiscalStatementCandidateV2,
+)
+from .fiscal_preparation_runtime import configured_fiscal_candidate_runtime
 from .fiscal_discovery import FiscalDiscoveryEvidenceV1, FiscalDiscoveryRequestV1
 from .fiscal_focus_witness import SignedFiscalDiagnosticFocusWitnessV1
 from .fiscal_source_validation import fiscal_validation_budget
@@ -37,10 +44,34 @@ class _FiscalCommandOutput(StrictModel):
         FiscalDiscoveryEvidenceV1
         | FiscalOriginalValidationEvidenceV1
         | SignedFiscalDiagnosticFocusWitnessV1
+        | FiscalStatementCandidateV2
     ) = Field(discriminator="protocol")
     publication: ArtifactPublicationV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+
+
+def _command_bytes(path: Path, deadline_at: datetime) -> bytes:
+    fiscal_validation_budget(deadline_at)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
+            raise SnapshotError(
+                "FISCAL_CANDIDATE_INPUT_INVALID",
+                "candidate input must be a bounded regular file",
+            )
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            raw = source.read(1024 * 1024 + 1)
+        fiscal_validation_budget(deadline_at)
+        if len(raw) > 1024 * 1024:
+            raise SnapshotError(
+                "FISCAL_CANDIDATE_INPUT_INVALID",
+                "candidate input exceeds its byte limit",
+            )
+        return raw
+    finally:
+        os.close(descriptor)
 
 
 async def _run(
@@ -54,7 +85,12 @@ async def _run(
             sys.path.insert(0, str(root))
     from .app import app
 
-    async with app.router.lifespan_context(app):
+    lifecycle = (
+        app.state.read_only_operator_lifespan
+        if args.command == "read-candidate"
+        else app.router.lifespan_context
+    )
+    async with lifecycle(app):
         acquisition = app.state.fiscal_sec_acquisition
         if acquisition is None or not app.state.application.ready:
             raise SnapshotError(
@@ -64,6 +100,36 @@ async def _run(
         with metadata_operation_budget(
             partial(fiscal_validation_budget, deadline_at), sec_deadline_exceeded
         ):
+            if args.command in {"prepare-candidate", "read-candidate"}:
+                metadata = app.state.metadata_store
+                if metadata is None:
+                    raise SnapshotError(
+                        "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
+                        "candidate requires PostgreSQL history",
+                    )
+                builder = configured_fiscal_candidate_runtime(
+                    acquisition,
+                    metadata,
+                    declared_source_revision=args.source_revision,
+                    write=args.command == "prepare-candidate",
+                )
+                if args.command == "prepare-candidate":
+                    result = builder.prepare(
+                        FiscalPrepareCandidateCommandV1.model_validate_json(
+                            _command_bytes(args.command_file, deadline_at)
+                        ),
+                        deadline_at=deadline_at,
+                    )
+                else:
+                    result = builder.verify_candidate(
+                        ArtifactRefV1.model_validate_json(
+                            _command_bytes(args.candidate_ref_file, deadline_at)
+                        ),
+                        deadline_at=deadline_at,
+                    )
+                return _FiscalCommandOutput(
+                    evidence=result.candidate, publication=result.candidate_publication
+                )
             if args.command in {"focus-witness", "read-focus-witness"}:
                 owner = acquisition.fiscal_focus_witness(
                     declared_source_revision=args.source_revision
@@ -148,6 +214,10 @@ def main(argv: list[str] | None = None) -> int:
     witness.add_argument("--source-artifact-id", required=True)
     witness_read = commands.add_parser("read-focus-witness")
     witness_read.add_argument("--artifact-id", required=True)
+    candidate = commands.add_parser("prepare-candidate")
+    candidate.add_argument("--command-file", type=Path, required=True)
+    candidate_read = commands.add_parser("read-candidate")
+    candidate_read.add_argument("--candidate-ref-file", type=Path, required=True)
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[0-9a-f]{40}", args.source_revision):
         parser.error("--source-revision requires a lowercase Git revision")
@@ -160,7 +230,12 @@ def main(argv: list[str] | None = None) -> int:
         ):
             result = asyncio.run(_run(args, deadline_at=deadline_at))
             write_stdout(
-                canonical_bytes(result.model_dump(mode="json")) + b"\n",
+                (
+                    canonical_bytes(result)
+                    if isinstance(result.evidence, FiscalStatementCandidateV2)
+                    else canonical_bytes(result.model_dump(mode="json"))
+                )
+                + b"\n",
                 remaining_budget=partial(fiscal_validation_budget, deadline_at),
             )
     except (SnapshotError, SecSourceError, ServiceError) as error:

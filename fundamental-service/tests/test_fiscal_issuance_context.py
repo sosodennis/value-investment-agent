@@ -264,7 +264,7 @@ def test_classification_signing_crash_retries_a_real_execution_without_relabelli
     assert (
         env.owner.require_candidate_source(
             env.source.scope, (ref,), deadline_at=deadline()
-        ).scope
+        ).source_use.scope
         == env.source.scope
     )
     assert env.signer.sign_calls == 2

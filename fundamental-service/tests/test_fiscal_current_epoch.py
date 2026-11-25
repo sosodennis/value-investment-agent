@@ -395,7 +395,7 @@ def test_recovered_classification_requires_fresh_grants_executions_and_command(
             assert (
                 fresh.owner.require_candidate_source(
                     fresh.source.scope, (fresh_ref,), deadline_at=deadline()
-                ).scope
+                ).source_use.scope
                 == fresh.source.scope
             )
         assert target.store.read(ref.artifact_id) == original
@@ -531,7 +531,7 @@ def test_three_origins_preserve_classification_bytes_and_require_local_review(
             assert (
                 fresh.owner.require_candidate_source(
                     env.source.scope, (third_ref,), deadline_at=deadline()
-                ).scope
+                ).source_use.scope
                 == env.source.scope
             )
             assert len(target.history.read_epoch(deadline_at=deadline()).cutovers) == 2

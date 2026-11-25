@@ -931,7 +931,7 @@ class SecAcquisitionUseCase:
         )
 
     def fiscal_focus_witness(
-        self, *, declared_source_revision: str
+        self, *, declared_source_revision: str, read_only: bool = False
     ) -> FiscalDiagnosticFocusWitnessOwner:
         store = self.capture_store
         if store is None:
@@ -944,7 +944,7 @@ class SecAcquisitionUseCase:
             content=self.content_store,
             taxonomy_cache_dir=self.settings.taxonomy_cache_dir,
             authority=configured_focus_authority,
-            private_key=configured_focus_private_key,
+            private_key=None if read_only else configured_focus_private_key,
             worker=run_fiscal_diagnostic_focus,
             profile_resolver=partial(resolve_fiscal_validation_profile, self),
             resource_policy=ParserResourcePolicy.from_env().validate(),

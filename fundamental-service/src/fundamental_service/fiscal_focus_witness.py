@@ -280,7 +280,7 @@ class FiscalDiagnosticFocusWitnessOwner:
         content: ContentAddressedStore,
         taxonomy_cache_dir: Path,
         authority: Callable[[], FiscalFocusValidatorAuthorityV1],
-        private_key: Callable[[], Ed25519PrivateKey],
+        private_key: Callable[[], Ed25519PrivateKey] | None,
         current_time: Callable[[], datetime] = lambda: datetime.now(UTC),
         worker: FiscalDiagnosticFocusWorkerPort = run_fiscal_diagnostic_focus,
         profile_resolver: Callable[[str], ArelleValidationProfileV1] | None = None,
@@ -827,6 +827,11 @@ class FiscalDiagnosticFocusWitnessOwner:
         authority: FiscalFocusValidatorAuthorityV1,
     ) -> SignedFiscalDiagnosticFocusWitnessV1:
         now = self._now()
+        if self._private_key is None:
+            raise SnapshotError(
+                "FISCAL_FOCUS_AUTHORITY_UNCONFIGURED",
+                "focus signing capability is not configured",
+            )
         key = self._private_key()
         if (
             key.public_key().public_bytes_raw()

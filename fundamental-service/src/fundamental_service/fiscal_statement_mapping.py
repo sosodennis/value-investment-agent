@@ -486,21 +486,16 @@ def map_fiscal_primary_source(
     )
 
 
-class FiscalMappingApprovalOwner:
+class FiscalMappingVerifier:
     def __init__(
         self,
         *,
         artifacts: EvidenceArtifactStore,
         trust_roots: Callable[[], DataReleaseTrustRootsV1],
-        private_key: Callable[[], Ed25519PrivateKey],
         evaluator_id: str = FISCAL_MAPPING_EVALUATOR_ID,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        self.artifacts, self.trust_roots, self.private_key = (
-            artifacts,
-            trust_roots,
-            private_key,
-        )
+        self.artifacts, self.trust_roots = artifacts, trust_roots
         self.evaluator_id, self.clock = evaluator_id, clock
 
     @staticmethod
@@ -534,74 +529,6 @@ class FiscalMappingApprovalOwner:
                 "fiscal mapping evaluator or installed policy is not trusted",
             )
         return roots
-
-    def approve(
-        self,
-        batch: FiscalStatementMappingBatchV1,
-        reference: ArtifactRefV1,
-        *,
-        deadline_at: datetime,
-    ) -> ArtifactRefV1:
-        with metadata_operation_budget(
-            partial(self._budget, deadline_at), self._expired
-        ):
-            budget = partial(self._budget, deadline_at)
-            budget()
-            roots = self._authority(batch.policy_digest)
-            reader = FiscalArtifactRead(self.artifacts, budget)
-            if read_retained_artifact(reader, reference) != canonical_bytes(batch):
-                raise _invalid("retained fiscal mapping differs")
-            key = self.private_key()
-            if key.public_key().public_bytes_raw() != b64decode(
-                roots.automatic_mapping_evaluators[
-                    self.evaluator_id
-                ].public_key_ed25519_base64,
-                validate=True,
-            ):
-                raise _invalid(
-                    "fiscal mapping signer differs from deployment authority"
-                )
-            approval = sign_automatic_mapping_approval(
-                {
-                    "mapping_id": batch.artifact_id,
-                    "mapping_digest": batch.digest,
-                    "evaluator_id": self.evaluator_id,
-                    "policy_digest": batch.policy_digest,
-                    "source_revision": batch.source_revision,
-                    "input_digest": sha256_digest(
-                        {
-                            "source": batch.source_validation_ref,
-                            "scope": batch.primary_scope_digest,
-                            "policy": batch.policy_digest,
-                        }
-                    ),
-                    "output_digest": batch.digest,
-                    "evidence_refs": (reference, batch.source_validation_ref),
-                },
-                key,
-            )
-            verify_mapping_review_evidence(
-                approval, self._authority(batch.policy_digest)
-            )
-            publication = self.artifacts.put_with_receipt(
-                "fiscal-mapping-approval-v1:" + sha256_digest(approval),
-                approval,
-                (batch.digest, batch.source_validation_ref.content_hash),
-                publication_budget=budget,
-            )
-            reader.expect(publication.artifact.artifact_id, publication.artifact)
-            reader.get(publication.artifact.artifact_id)
-            reader.check_current()
-            verify_mapping_review_evidence(
-                approval, self._authority(batch.policy_digest)
-            )
-            budget()
-            return ArtifactRefV1(
-                role="fiscal-mapping-approval",
-                artifact_id=publication.artifact.artifact_id,
-                content_hash=publication.artifact.content_hash,
-                media_type="application/json",
-            )
 
     def verify(
         self,
@@ -666,3 +593,95 @@ class FiscalMappingApprovalOwner:
             )
             budget()
             return approval
+
+
+class FiscalMappingApprovalOwner(FiscalMappingVerifier):
+    def __init__(
+        self,
+        *,
+        artifacts: EvidenceArtifactStore,
+        trust_roots: Callable[[], DataReleaseTrustRootsV1],
+        private_key: Callable[[], Ed25519PrivateKey],
+        evaluator_id: str = FISCAL_MAPPING_EVALUATOR_ID,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
+        super().__init__(
+            artifacts=artifacts,
+            trust_roots=trust_roots,
+            evaluator_id=evaluator_id,
+            clock=clock,
+        )
+        self.private_key = private_key
+
+    def approve(
+        self,
+        batch: FiscalStatementMappingBatchV1,
+        reference: ArtifactRefV1,
+        *,
+        deadline_at: datetime,
+    ) -> ArtifactRefV1:
+        with metadata_operation_budget(
+            partial(self._budget, deadline_at), self._expired
+        ):
+            budget = partial(self._budget, deadline_at)
+            budget()
+            roots = self._authority(batch.policy_digest)
+            reader = FiscalArtifactRead(self.artifacts, budget)
+            if read_retained_artifact(reader, reference) != canonical_bytes(batch):
+                raise _invalid("retained fiscal mapping differs")
+            if self.private_key is None:
+                raise SnapshotError(
+                    "FISCAL_MAPPING_AUTHORITY_UNCONFIGURED",
+                    "fiscal mapping publication requires a signing capability",
+                )
+            key = self.private_key()
+            if key.public_key().public_bytes_raw() != b64decode(
+                roots.automatic_mapping_evaluators[
+                    self.evaluator_id
+                ].public_key_ed25519_base64,
+                validate=True,
+            ):
+                raise _invalid(
+                    "fiscal mapping signer differs from deployment authority"
+                )
+            approval = sign_automatic_mapping_approval(
+                {
+                    "mapping_id": batch.artifact_id,
+                    "mapping_digest": batch.digest,
+                    "evaluator_id": self.evaluator_id,
+                    "policy_digest": batch.policy_digest,
+                    "source_revision": batch.source_revision,
+                    "input_digest": sha256_digest(
+                        {
+                            "source": batch.source_validation_ref,
+                            "scope": batch.primary_scope_digest,
+                            "policy": batch.policy_digest,
+                        }
+                    ),
+                    "output_digest": batch.digest,
+                    "evidence_refs": (reference, batch.source_validation_ref),
+                },
+                key,
+            )
+            verify_mapping_review_evidence(
+                approval, self._authority(batch.policy_digest)
+            )
+            publication = self.artifacts.put_with_receipt(
+                "fiscal-mapping-approval-v1:" + sha256_digest(approval),
+                approval,
+                (batch.digest, batch.source_validation_ref.content_hash),
+                publication_budget=budget,
+            )
+            reader.expect(publication.artifact.artifact_id, publication.artifact)
+            reader.get(publication.artifact.artifact_id)
+            reader.check_current()
+            verify_mapping_review_evidence(
+                approval, self._authority(batch.policy_digest)
+            )
+            budget()
+            return ArtifactRefV1(
+                role="fiscal-mapping-approval",
+                artifact_id=publication.artifact.artifact_id,
+                content_hash=publication.artifact.content_hash,
+                media_type="application/json",
+            )
