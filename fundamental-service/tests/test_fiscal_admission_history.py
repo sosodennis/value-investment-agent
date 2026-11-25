@@ -34,6 +34,7 @@ from fundamental_service.snapshots import SnapshotError
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 
 DATABASE_URL = os.getenv("FUNDAMENTAL_TEST_DATABASE_URL")
+TRACKING_OFF_DATABASE_URL = os.getenv("FUNDAMENTAL_TEST_TRACKING_OFF_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
     not DATABASE_URL, reason="requires PostgreSQL history storage"
 )
@@ -988,14 +989,13 @@ def test_real_full_xid_guards_reject_future_epoch_and_reserved_xid(metadata):
     )
 
 
+@pytest.mark.skipif(
+    not TRACKING_OFF_DATABASE_URL,
+    reason="requires a PostgreSQL instance with commit tracking disabled",
+)
 def test_history_write_requires_commit_tracking_on(artifacts):
-    assert DATABASE_URL is not None
-    off_url = (
-        make_url(DATABASE_URL)
-        .set(port=23292, database="fundamental")
-        .render_as_string(hide_password=False)
-    )
-    with _temporary_database(off_url) as url:
+    assert TRACKING_OFF_DATABASE_URL is not None
+    with _temporary_database(TRACKING_OFF_DATABASE_URL) as url:
         store = PostgresMetadataStore(url, auto_migrate=True)
         try:
             store.start()
