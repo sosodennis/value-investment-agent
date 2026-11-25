@@ -18,10 +18,24 @@ jobs:
           POSTGRES_USER: fundamental
           POSTGRES_PASSWORD: fundamental
           POSTGRES_DB: fundamental_test
+          POSTGRES_INITDB_ARGS: --set=track_commit_timestamp=on
         ports:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U fundamental -d fundamental_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      fundamental-postgres-without-tracking:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fundamental
+          POSTGRES_PASSWORD: fundamental
+          POSTGRES_DB: fundamental_tracking_off_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U fundamental -d fundamental_tracking_off_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -45,6 +59,7 @@ jobs:
       - name: Run Fundamental Service contracts and PostgreSQL tests
         env:
           FUNDAMENTAL_TEST_DATABASE_URL: postgresql+asyncpg://fundamental:fundamental@127.0.0.1:5432/fundamental_test
+          FUNDAMENTAL_TEST_TRACKING_OFF_DATABASE_URL: postgresql+asyncpg://fundamental:fundamental@127.0.0.1:5433/fundamental_tracking_off_test
           PYTHONHASHSEED: "0"
         run: uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -ra
 
