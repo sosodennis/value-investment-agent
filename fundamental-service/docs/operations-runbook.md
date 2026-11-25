@@ -616,9 +616,20 @@ bundle supply this trust root. A missing or mismatched pin refuses import.
 Use the actual metadata owner connection for offline recovery. The pin's runtime
 role must exist, be independent of that owner, and lack privileged attributes,
 owner membership, protected relation ownership, schema CREATE, recovery staging
-access and installer EXECUTE. Record evidence that this exact role is the role
-used by the deployed runtime DSN. The ACL check validates the named role; it
-cannot detect a decoy role or prove deployment configuration. Record the runtime
+access and installer EXECUTE. These checks include every role PostgreSQL permits
+the runtime to assume with SET ROLE. The runtime must not hold an effective ADMIN
+OPTION, including through an assumed role or inherited membership, because it
+could grant itself SET or INHERIT. Membership with SET FALSE, INHERIT FALSE and
+ADMIN FALSE does not by itself grant those capabilities. The runtime and its
+SET actors must also lack effective `pg_read_server_files`,
+`pg_write_server_files` and `pg_execute_server_program` membership. They must
+not have EXECUTE on any `pg_catalog` overload of `pg_read_file`,
+`pg_read_binary_file`, `lo_import` or `lo_export`, including privileges inherited
+from other roles or PUBLIC. The check reads PostgreSQL privileges without
+executing file or program operations. Record evidence that this exact role is
+the role used by the deployed runtime DSN. The ACL check
+validates the named role; it cannot detect a decoy role or prove deployment
+configuration. Record the runtime
 and maintenance OS UIDs and filesystem permissions too. A private file owned by
 the maintenance process proves neither OS UID separation nor that the runtime
 cannot replace its parent directory. Do not report recovery readiness until those
@@ -649,7 +660,9 @@ The acquisition-audit sequence continues beyond restored IDs. The transaction
 verifies the imported logical projection before commit. A separate transaction
 seals the original import full XID with its genuine local commit time C and fresh
 visibility upper bound U, requiring F < C <= U. A fresh read observes the receipt
-before the command reports success. An interruption after import leaves a pending
+and a later PostgreSQL clock value before the command reports success. The
+recovery host clock does not establish visibility of a database commit. An
+interruption after import leaves a pending
 activation. Repeat the same command and pin to seal that original XID. Missing
 commit proof keeps activation refused; a retry never replaces C with the current
 time. Repeating a completed restore returns `wrote=false`, preserves legitimate

@@ -402,6 +402,404 @@ def test_low_privilege_runtime_cannot_enter_recovery_or_forge_foreign_history(
         asyncio.run(check())
 
 
+@pytest.mark.parametrize(
+    ("privilege", "membership", "permitted"),
+    [
+        ("schema_create", "direct", False),
+        ("schema_create", "indirect", False),
+        ("recovery_usage", "direct", False),
+        ("recovery_create", "direct", False),
+        ("freeze_execute", "direct", False),
+        ("activate_execute", "direct", False),
+        ("createrole", "direct", False),
+        ("bypassrls", "direct", False),
+        ("none", "admin_direct", False),
+        ("none", "admin_set_middle", False),
+        ("none", "admin_inherit_middle", False),
+        ("none", "indirect", True),
+        ("schema_create", "blocked", True),
+    ],
+)
+def test_official_restore_checks_runtime_assumable_roles(
+    databases, tmp_path, privilege, membership, permitted
+):
+    from sqlalchemy.engine import make_url
+
+    source, target, _ = databases
+    source_store, _ = store(source, tmp_path / "source")
+    source_store.close()
+    target_store, _ = store(target, tmp_path / "target")
+    target_store.close()
+    receipt = asyncio.run(
+        export_backup(
+            source, tmp_path / "source", tmp_path / "backups", source_revision="f" * 40
+        )
+    )
+    bundle = tmp_path / "backups" / receipt.manifest_digest
+    manifest = _verify_bundle(bundle, receipt.manifest_digest)
+    with target_pin(target, manifest, tmp_path / "pin.json") as pin:
+        authorization = RecoveryAuthorizationV1.model_validate_json(pin.read_bytes())
+        runtime = authorization.runtime_role
+        middle = "issue532_middle_" + uuid4().hex
+        privileged = "issue532_privileged_" + uuid4().hex
+        password = uuid4().hex
+
+        async def configure_and_prove():
+            owner = await _connect(target)
+            try:
+                for role in (middle, privileged):
+                    await owner.execute(f'CREATE ROLE "{role}" NOLOGIN NOINHERIT')
+                await owner.execute(
+                    f"ALTER ROLE \"{runtime}\" LOGIN NOINHERIT PASSWORD '{password}'"
+                )
+                grants = {
+                    "schema_create": f'GRANT CREATE ON SCHEMA fundamental TO "{privileged}"',
+                    "recovery_usage": f'GRANT USAGE ON SCHEMA fundamental_recovery TO "{privileged}"',
+                    "recovery_create": f'GRANT CREATE ON SCHEMA fundamental_recovery TO "{privileged}"',
+                    "freeze_execute": f'GRANT EXECUTE ON FUNCTION fundamental.fiscal_recovery_freeze_stage() TO "{privileged}"',
+                    "activate_execute": f'GRANT EXECUTE ON FUNCTION fundamental.fiscal_history_activate(uuid) TO "{privileged}"',
+                    "createrole": f'ALTER ROLE "{privileged}" CREATEROLE',
+                    "bypassrls": f'ALTER ROLE "{privileged}" BYPASSRLS',
+                }
+                if privilege != "none":
+                    await owner.execute(grants[privilege])
+                indirect = membership in {
+                    "indirect",
+                    "admin_set_middle",
+                    "admin_inherit_middle",
+                }
+                if indirect:
+                    inherited = membership == "admin_inherit_middle"
+                    await owner.execute(
+                        f'GRANT "{middle}" TO "{runtime}" WITH ADMIN FALSE, '
+                        f"INHERIT {str(inherited).upper()}, SET {str(not inherited).upper()}"
+                    )
+                member = middle if indirect else runtime
+                admin = membership.startswith("admin_")
+                can_set = not admin and membership != "blocked"
+                await owner.execute(
+                    f'GRANT "{privileged}" TO "{member}" WITH ADMIN {str(admin).upper()}, '
+                    f"INHERIT FALSE, SET {str(can_set).upper()}"
+                )
+                runtime_url = (
+                    make_url(target)
+                    .set(drivername="postgresql", username=runtime, password=password)
+                    .render_as_string(hide_password=False)
+                )
+                normal = await asyncpg.connect(runtime_url)
+                try:
+                    assert await normal.fetchval("SELECT current_user") == runtime
+                    if can_set:
+                        await normal.execute(f'SET ROLE "{privileged}"')
+                        assert (
+                            await normal.fetchval("SELECT current_user") == privileged
+                        )
+                    else:
+                        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                            await normal.execute(f'SET ROLE "{privileged}"')
+                    if admin:
+                        transaction = normal.transaction()
+                        await transaction.start()
+                        try:
+                            if membership == "admin_set_middle":
+                                await normal.execute(f'SET ROLE "{middle}"')
+                            await normal.execute(
+                                f'GRANT "{privileged}" TO "{runtime}" WITH SET TRUE'
+                            )
+                            assert await normal.fetchval(
+                                "SELECT pg_has_role(session_user,$1::name,'SET')",
+                                privileged,
+                            )
+                        finally:
+                            await transaction.rollback()
+                        assert not await normal.fetchval(
+                            "SELECT pg_has_role(session_user,$1::name,'SET')",
+                            privileged,
+                        )
+                finally:
+                    await normal.close()
+            finally:
+                await owner.close()
+
+        async def clean():
+            owner = await _connect(target)
+            try:
+                for role in (middle, privileged):
+                    await owner.execute(f'DROP OWNED BY "{role}" CASCADE')
+                    await owner.execute(f'DROP ROLE "{role}"')
+            finally:
+                await owner.close()
+
+        try:
+            asyncio.run(configure_and_prove())
+            operation = restore_backup(
+                target,
+                tmp_path / "target",
+                bundle,
+                manifest_digest=manifest.digest,
+                authorization_path=pin,
+            )
+            if permitted:
+                assert asyncio.run(operation).wrote
+            else:
+                with pytest.raises(RecoveryError, match="runtime role"):
+                    asyncio.run(operation)
+        finally:
+            asyncio.run(clean())
+
+
+@pytest.mark.parametrize(
+    ("capability", "membership"),
+    [
+        (role, membership)
+        for role in (
+            "pg_read_server_files",
+            "pg_write_server_files",
+            "pg_execute_server_program",
+        )
+        for membership in ("direct", "set", "inherit", "blocked")
+    ]
+    + [
+        (signature, "direct")
+        for signature in (
+            "pg_read_file(text)",
+            "pg_read_file(text,boolean)",
+            "pg_read_file(text,bigint,bigint)",
+            "pg_read_file(text,bigint,bigint,boolean)",
+            "pg_read_binary_file(text)",
+            "pg_read_binary_file(text,boolean)",
+            "pg_read_binary_file(text,bigint,bigint)",
+            "pg_read_binary_file(text,bigint,bigint,boolean)",
+            "lo_import(text)",
+            "lo_import(text,oid)",
+            "lo_export(oid,text)",
+        )
+    ]
+    + [
+        (signature, membership)
+        for signature in (
+            "pg_read_file(text,boolean)",
+            "pg_read_binary_file(text,boolean)",
+            "lo_import(text)",
+            "lo_export(oid,text)",
+        )
+        for membership in ("set", "inherit", "blocked")
+    ]
+    + [
+        ("pg_read_file(text,boolean)", "public"),
+        ("pg_stat_file(text,boolean)", "direct"),
+    ],
+)
+def test_restore_checks_server_io_capabilities_without_executing_them(
+    databases, tmp_path, capability, membership
+):
+    from sqlalchemy.engine import make_url
+
+    source, target, _ = databases
+    source_store, _ = store(source, tmp_path / "source")
+    source_store.close()
+    target_store, _ = store(target, tmp_path / "target")
+    target_store.close()
+    receipt = asyncio.run(
+        export_backup(
+            source, tmp_path / "source", tmp_path / "backups", source_revision="f" * 40
+        )
+    )
+    bundle = tmp_path / "backups" / receipt.manifest_digest
+    manifest = _verify_bundle(bundle, receipt.manifest_digest)
+    with target_pin(target, manifest, tmp_path / "pin.json") as pin:
+        authorization = RecoveryAuthorizationV1.model_validate_json(pin.read_bytes())
+        runtime = authorization.runtime_role
+        holder = "issue532_io_" + uuid4().hex
+        password = uuid4().hex
+        is_function = "(" in capability
+        query = (
+            "SELECT has_function_privilege(current_user,$1::regprocedure,'EXECUTE')"
+            if is_function
+            else "SELECT pg_has_role(current_user,$1::name,'USAGE')"
+        )
+
+        async def configure_and_prove():
+            owner = await _connect(target)
+            try:
+                await owner.execute(f'CREATE ROLE "{holder}" NOLOGIN NOINHERIT')
+                await owner.execute(
+                    f"ALTER ROLE \"{runtime}\" LOGIN NOINHERIT PASSWORD '{password}'"
+                )
+                recipient = runtime if membership == "direct" else holder
+                if is_function:
+                    recipient = "PUBLIC" if membership == "public" else f'"{recipient}"'
+                    await owner.execute(
+                        f"GRANT EXECUTE ON FUNCTION pg_catalog.{capability} TO {recipient}"
+                    )
+                else:
+                    await owner.execute(
+                        f'GRANT "{capability}" TO "{recipient}" '
+                        "WITH ADMIN FALSE, INHERIT TRUE, SET FALSE"
+                    )
+                if membership not in {"direct", "public"}:
+                    await owner.execute(
+                        f'GRANT "{holder}" TO "{runtime}" WITH ADMIN FALSE, '
+                        f"INHERIT {str(membership == 'inherit').upper()}, "
+                        f"SET {str(membership == 'set').upper()}"
+                    )
+                runtime_url = (
+                    make_url(target)
+                    .set(drivername="postgresql", username=runtime, password=password)
+                    .render_as_string(hide_password=False)
+                )
+                normal = await asyncpg.connect(runtime_url)
+                try:
+                    assert await normal.fetchval("SELECT current_user") == runtime
+                    if membership == "set":
+                        assert not await normal.fetchval(query, capability)
+                        await normal.execute(f'SET ROLE "{holder}"')
+                        assert await normal.fetchval("SELECT current_user") == holder
+                    assert await normal.fetchval(query, capability) is (
+                        membership != "blocked"
+                    )
+                finally:
+                    await normal.close()
+            finally:
+                await owner.close()
+
+        async def clean():
+            owner = await _connect(target)
+            try:
+                if is_function and membership in {"direct", "public"}:
+                    recipient = "PUBLIC" if membership == "public" else f'"{runtime}"'
+                    await owner.execute(
+                        f"REVOKE EXECUTE ON FUNCTION pg_catalog.{capability} FROM {recipient}"
+                    )
+                await owner.execute(f'DROP OWNED BY "{holder}" CASCADE')
+                await owner.execute(f'DROP ROLE "{holder}"')
+            finally:
+                await owner.close()
+
+        try:
+            asyncio.run(configure_and_prove())
+            operation = restore_backup(
+                target,
+                tmp_path / "target",
+                bundle,
+                manifest_digest=manifest.digest,
+                authorization_path=pin,
+            )
+            if membership == "blocked" or capability == "pg_stat_file(text,boolean)":
+                assert asyncio.run(operation).wrote
+            else:
+                with pytest.raises(RecoveryError, match="runtime role"):
+                    asyncio.run(operation)
+        finally:
+            asyncio.run(clean())
+
+
+@pytest.mark.parametrize("offset_seconds", [-4, 4])
+def test_restore_observes_activation_with_database_clock(
+    databases, tmp_path, monkeypatch, offset_seconds
+):
+    from fundamental_service import persistence_recovery as recovery
+
+    class HostClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) + timedelta(seconds=offset_seconds)
+
+    source, target, _ = databases
+    metadata, _ = store(source, tmp_path / "source")
+    metadata.close()
+    receipt = asyncio.run(
+        export_backup(
+            source, tmp_path / "source", tmp_path / "backups", source_revision="f" * 40
+        )
+    )
+    bundle = tmp_path / "backups" / receipt.manifest_digest
+    manifest = _verify_bundle(bundle, receipt.manifest_digest)
+    with target_pin(target, manifest, tmp_path / "pin.json") as pin:
+        monkeypatch.setattr(recovery, "datetime", HostClock)
+        restored = asyncio.run(
+            restore_backup(
+                target,
+                tmp_path / "target",
+                bundle,
+                manifest_digest=manifest.digest,
+                authorization_path=pin,
+                deadline_at=deadline(),
+            )
+        )
+        assert restored.wrote
+        assert (
+            restored.history_frontier.covered_through
+            < restored.activation.committed_at
+            <= restored.activation.visible_by
+        )
+
+
+def test_restore_refuses_unproven_database_clock_and_retries_same_activation(
+    databases, tmp_path, monkeypatch
+):
+    from fundamental_service import persistence_recovery as recovery
+
+    source, target, _ = databases
+    metadata, _ = store(source, tmp_path / "source")
+    metadata.close()
+    receipt = asyncio.run(
+        export_backup(
+            source, tmp_path / "source", tmp_path / "backups", source_revision="f" * 40
+        )
+    )
+    bundle = tmp_path / "backups" / receipt.manifest_digest
+    manifest = _verify_bundle(bundle, receipt.manifest_digest)
+    connect = recovery._connect
+    observed = []
+
+    class ReversedClockConnection:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+        async def fetchrow(self, query, *args):
+            row = await self.connection.fetchrow(query, *args)
+            if query.startswith("SELECT committed_at,visible_by FROM") and row:
+                observed.append(row["visible_by"])
+            return row
+
+        async def fetchval(self, query, *args):
+            if query == "SELECT clock_timestamp()" and observed:
+                return observed[-1]
+            return await self.connection.fetchval(query, *args)
+
+    async def reversed_clock_connection(url):
+        return ReversedClockConnection(await connect(url))
+
+    with target_pin(target, manifest, tmp_path / "pin.json") as pin:
+        with monkeypatch.context() as patch:
+            patch.setattr(recovery, "_connect", reversed_clock_connection)
+            with pytest.raises(RecoveryError, match="activation clock"):
+                asyncio.run(
+                    restore_backup(
+                        target,
+                        tmp_path / "target",
+                        bundle,
+                        manifest_digest=manifest.digest,
+                        authorization_path=pin,
+                    )
+                )
+        retried = asyncio.run(
+            restore_backup(
+                target,
+                tmp_path / "target",
+                bundle,
+                manifest_digest=manifest.digest,
+                authorization_path=pin,
+            )
+        )
+        assert not retried.wrote
+        assert observed == [retried.activation.visible_by]
+
+
 def test_export_locks_before_snapshot_and_seals_a_writer_that_commits_during_lock_wait(
     databases, tmp_path
 ):
@@ -825,6 +1223,7 @@ def test_pending_activation_refuses_lost_commit_proof_without_replacing_xid(
         "source",
         "digest",
         "runtime_owner",
+        "runtime_missing",
     ],
 )
 def test_authorization_refusals_precede_metadata_import(
@@ -874,6 +1273,8 @@ def test_authorization_refusals_precede_metadata_import(
                         await connection.close()
 
                 updates["runtime_role"] = asyncio.run(owner_name())
+            elif damage == "runtime_missing":
+                updates["runtime_role"] = "issue532_absent_" + uuid4().hex
             pin.write_bytes(canonical_bytes(auth.model_copy(update=updates)))
         with pytest.raises((RecoveryError, OSError)):
             asyncio.run(

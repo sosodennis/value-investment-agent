@@ -972,7 +972,8 @@ async def _restore_backup(
         if activation_row is None:
             raise RecoveryError("recovery activation is pending")
         activation = FiscalRecoveryActivationV1.model_validate(dict(activation_row))
-        if datetime.now(UTC) <= activation.visible_by:
+        observed_at = await connection.fetchval("SELECT clock_timestamp()")
+        if observed_at <= activation.visible_by:
             raise RecoveryError("recovery activation clock is not yet proven")
         return _receipt(manifest, wrote=wrote).model_copy(
             update={
@@ -1110,43 +1111,83 @@ async def _require_recovery_access(
     user = await connection.fetchval("SELECT session_user")
     if user != owner:
         raise RecoveryError("offline recovery requires the metadata owner")
-    runtime = await connection.fetchrow(
-        "SELECT rolsuper,rolcreaterole,rolcreatedb,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=$1",
+    roles = await connection.fetch(
+        "SELECT candidate.rolname,candidate.rolsuper,candidate.rolcreaterole,candidate.rolcreatedb,candidate.rolreplication,candidate.rolbypassrls FROM pg_roles runtime JOIN pg_roles candidate ON pg_has_role(runtime.oid,candidate.oid,'SET') WHERE runtime.rolname=$1",
         runtime_role,
     )
-    if runtime is None or any(runtime.values()) or runtime_role == owner:
+    if not roles:
         raise RecoveryError(
             "recovery requires an independent least-privilege runtime role"
         )
-    if await connection.fetchval(
-        "SELECT pg_has_role($1,$2,'MEMBER')", runtime_role, owner
-    ):
-        raise RecoveryError("runtime role can assume the metadata owner")
-    if await connection.fetchval(
-        "SELECT has_schema_privilege($1,'fundamental','CREATE')", runtime_role
-    ):
-        raise RecoveryError("runtime role can change the metadata schema")
-    for privilege in ("USAGE", "CREATE"):
-        if await connection.fetchval(
-            "SELECT has_schema_privilege($1,'fundamental_recovery',$2)",
-            runtime_role,
-            privilege,
+    for role in roles:
+        name = role["rolname"]
+        if name == owner or any(
+            role[attribute]
+            for attribute in (
+                "rolsuper",
+                "rolcreaterole",
+                "rolcreatedb",
+                "rolreplication",
+                "rolbypassrls",
+            )
         ):
-            raise RecoveryError("runtime role can access recovery staging")
-    for signature in (
-        "fundamental.fiscal_recovery_freeze_stage()",
-        "fundamental.fiscal_history_activate(uuid)",
-    ):
+            raise RecoveryError(
+                "recovery requires an independent least-privilege runtime role"
+            )
         if await connection.fetchval(
-            "SELECT has_function_privilege($1,$2,'EXECUTE')", runtime_role, signature
+            "SELECT EXISTS(SELECT 1 FROM pg_auth_members membership WHERE membership.admin_option AND pg_has_role($1::name,membership.member,'USAGE'))",
+            name,
         ):
-            raise RecoveryError("runtime role can execute offline recovery")
-    owned = await connection.fetchval(
-        "SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('fundamental','fundamental_recovery') AND pg_has_role($1,c.relowner,'MEMBER'))",
-        runtime_role,
-    )
-    if owned:
-        raise RecoveryError("runtime role owns protected metadata relations")
+            raise RecoveryError("runtime role can administer database roles")
+        if await connection.fetchval("SELECT pg_has_role($1,$2,'MEMBER')", name, owner):
+            raise RecoveryError("runtime role can assume the metadata owner")
+        if await connection.fetchval(
+            "SELECT has_schema_privilege($1,'fundamental','CREATE')", name
+        ):
+            raise RecoveryError("runtime role can change the metadata schema")
+        for privilege in ("USAGE", "CREATE"):
+            if await connection.fetchval(
+                "SELECT has_schema_privilege($1,'fundamental_recovery',$2)",
+                name,
+                privilege,
+            ):
+                raise RecoveryError("runtime role can access recovery staging")
+        if await connection.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_roles capability "
+            "WHERE capability.rolname=ANY($2::text[]) "
+            "AND pg_has_role($1::name,capability.oid,'USAGE'))",
+            name,
+            (
+                "pg_read_server_files",
+                "pg_write_server_files",
+                "pg_execute_server_program",
+            ),
+        ):
+            raise RecoveryError("runtime role can access server files or programs")
+        if await connection.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_proc procedure "
+            "JOIN pg_namespace namespace ON namespace.oid=procedure.pronamespace "
+            "WHERE namespace.nspname='pg_catalog' "
+            "AND procedure.proname=ANY($2::text[]) "
+            "AND has_function_privilege($1::name,procedure.oid,'EXECUTE'))",
+            name,
+            ("pg_read_file", "pg_read_binary_file", "lo_import", "lo_export"),
+        ):
+            raise RecoveryError("runtime role can execute server file operations")
+        for signature in (
+            "fundamental.fiscal_recovery_freeze_stage()",
+            "fundamental.fiscal_history_activate(uuid)",
+        ):
+            if await connection.fetchval(
+                "SELECT has_function_privilege($1,$2,'EXECUTE')", name, signature
+            ):
+                raise RecoveryError("runtime role can execute offline recovery")
+        owned = await connection.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('fundamental','fundamental_recovery') AND pg_has_role($1,c.relowner,'MEMBER'))",
+            name,
+        )
+        if owned:
+            raise RecoveryError("runtime role owns protected metadata relations")
 
 
 async def _require_bootstrap(
