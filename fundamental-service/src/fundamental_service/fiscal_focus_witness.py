@@ -4,6 +4,7 @@ import base64
 import binascii
 import hashlib
 import os
+import stat
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-from pydantic import AwareDatetime, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, ConfigDict, Field, ValidationError, field_validator
 
 from .arelle_parser import (
     ArelleFindingV1,
@@ -979,14 +980,60 @@ class FiscalDiagnosticFocusWitnessOwner:
         return (deadline_at - now).total_seconds()
 
 
+def _read_focus_configuration(path: Path, *, private_key: bool) -> bytes:
+    maximum_bytes = 16_384
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        with os.fdopen(descriptor, "rb") as source:
+            metadata = os.fstat(source.fileno())
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_size > maximum_bytes
+                or (private_key and metadata.st_mode & 0o077)
+            ):
+                raise SnapshotError(
+                    "FISCAL_FOCUS_AUTHORITY_INVALID",
+                    "focus configuration requires bounded regular files and a private signing key",
+                )
+            content = source.read(maximum_bytes + 1)
+            if len(content) > maximum_bytes:
+                raise SnapshotError(
+                    "FISCAL_FOCUS_AUTHORITY_INVALID",
+                    "focus configuration exceeds its byte limit",
+                )
+            return content
+    except OSError as error:
+        raise SnapshotError(
+            "FISCAL_FOCUS_AUTHORITY_INVALID",
+            "focus configuration could not be read as a regular file",
+        ) from error
+
+
 def load_validator_authority(path: Path) -> FiscalFocusValidatorAuthorityV1:
-    return FiscalFocusValidatorAuthorityV1.model_validate_json(path.read_bytes())
+    try:
+        return FiscalFocusValidatorAuthorityV1.model_validate_json(
+            _read_focus_configuration(path, private_key=False)
+        )
+    except ValidationError as error:
+        raise SnapshotError(
+            "FISCAL_FOCUS_AUTHORITY_INVALID", "focus validator authority is invalid"
+        ) from error
 
 
 def load_validator_private_key(path: Path) -> Ed25519PrivateKey:
-    key = serialization.load_pem_private_key(path.read_bytes(), password=None)
+    try:
+        key = serialization.load_pem_private_key(
+            _read_focus_configuration(path, private_key=True), password=None
+        )
+    except (ValueError, TypeError) as error:
+        raise SnapshotError(
+            "FISCAL_FOCUS_AUTHORITY_INVALID", "focus validator signing key is invalid"
+        ) from error
     if not isinstance(key, Ed25519PrivateKey):
-        raise ValueError("fiscal focus validator requires an Ed25519 private key")
+        raise SnapshotError(
+            "FISCAL_FOCUS_AUTHORITY_INVALID",
+            "focus validator requires an Ed25519 private key",
+        )
     return key
 
 
@@ -1007,10 +1054,4 @@ def configured_focus_private_key() -> Ed25519PrivateKey:
             "FISCAL_FOCUS_AUTHORITY_UNCONFIGURED",
             "fiscal focus validator signing key is not configured",
         )
-    key_path = Path(path)
-    if key_path.is_symlink() or key_path.stat().st_mode & 0o077:
-        raise SnapshotError(
-            "FISCAL_FOCUS_AUTHORITY_INVALID",
-            "validator signing key must be a private regular file",
-        )
-    return load_validator_private_key(key_path)
+    return load_validator_private_key(Path(path))

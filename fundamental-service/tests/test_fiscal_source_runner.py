@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from sqlalchemy.engine import make_url
 
 import fundamental_service.app as app_module
+from fundamental_service.arelle_parser import ArelleParserError
 from fundamental_service.fiscal_source_runner import main
 from fundamental_service.fiscal_validation_contracts import (
     FiscalOriginalValidationEvidenceV1,
@@ -37,14 +38,173 @@ postgres_metadata = test_postgres_metadata.metadata
 DATABASE_URL = test_postgres_metadata.DATABASE_URL
 
 
-def _install_acquisition(monkeypatch: pytest.MonkeyPatch, acquisition: object) -> None:
+def _install_acquisition(
+    monkeypatch: pytest.MonkeyPatch,
+    acquisition: object,
+    *,
+    annual: object | None = None,
+) -> None:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        app.state.sec_acquisition = acquisition
+        app.state.sec_acquisition = annual
+        app.state.fiscal_sec_acquisition = acquisition
         app.state.application = SimpleNamespace(ready=True)
         yield
 
     monkeypatch.setattr(app_module, "app", FastAPI(lifespan=lifespan))
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        [
+            "discover",
+            "--cik",
+            "320193",
+            "--valuation-timestamp",
+            "2025-01-01T00:00:00Z",
+        ],
+        [
+            "validate",
+            "--discovery-artifact-id",
+            "synthetic",
+            "--accession",
+            "0000320193-25-000057",
+        ],
+        ["read", "--artifact-id", "synthetic"],
+        ["focus-witness", "--source-artifact-id", "synthetic"],
+        ["read-focus-witness", "--artifact-id", "synthetic"],
+    ],
+)
+def test_cli_selects_fiscal_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: list[str],
+) -> None:
+    def refuse(owner: str) -> None:
+        from fundamental_service.snapshots import SnapshotError
+
+        raise SnapshotError(f"SYNTHETIC_{owner}_OWNER", "synthetic owner selected")
+
+    _install_acquisition(
+        monkeypatch,
+        SimpleNamespace(
+            fiscal_source_closure=lambda **_kwargs: refuse("FISCAL"),
+            fiscal_focus_witness=lambda **_kwargs: refuse("FISCAL"),
+        ),
+        annual=SimpleNamespace(
+            fiscal_source_closure=lambda **_kwargs: refuse("ANNUAL"),
+            fiscal_focus_witness=lambda **_kwargs: refuse("ANNUAL"),
+        ),
+    )
+    assert main(["--source-revision", "a" * 40, *command]) == 2
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert json.loads(captured.err)["error_code"] == "SYNTHETIC_FISCAL_OWNER"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        [
+            "discover",
+            "--cik",
+            "320193",
+            "--valuation-timestamp",
+            "2025-01-01T00:00:00Z",
+        ],
+        [
+            "validate",
+            "--discovery-artifact-id",
+            "synthetic",
+            "--accession",
+            "0000320193-25-000057",
+        ],
+        ["read", "--artifact-id", "synthetic"],
+        ["focus-witness", "--source-artifact-id", "synthetic"],
+        ["read-focus-witness", "--artifact-id", "synthetic"],
+    ],
+)
+def test_cli_refuses_missing_fiscal_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: list[str],
+) -> None:
+    annual = Mock()
+    _install_acquisition(monkeypatch, None, annual=annual)
+    assert main(["--source-revision", "a" * 40, *command]) == 2
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert json.loads(captured.err)["error_code"] == "FISCAL_VALIDATION_UNCONFIGURED"
+    assert not annual.mock_calls
+
+
+@pytest.mark.parametrize(
+    ("error_code", "retryable"),
+    [("PARSER_RESOURCE_POLICY_INVALID", False), ("REQUEST_DEADLINE_EXCEEDED", True)],
+)
+def test_cli_reports_parser_failures_as_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    error_code: str,
+    retryable: bool,
+) -> None:
+    def invalid_resource_policy(**_kwargs):
+        raise ArelleParserError(error_code, "synthetic failure")
+
+    _install_acquisition(
+        monkeypatch, SimpleNamespace(fiscal_focus_witness=invalid_resource_policy)
+    )
+    assert (
+        main(
+            [
+                "--source-revision",
+                "a" * 40,
+                "read-focus-witness",
+                "--artifact-id",
+                "synthetic",
+            ]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert json.loads(captured.err) == {
+        "error_code": error_code,
+        "retryable": retryable,
+    }
+
+
+def test_cli_applies_deadline_to_runtime_startup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        time.sleep(1.05)
+        _check_metadata_budget()
+        yield
+
+    monkeypatch.setattr(app_module, "app", FastAPI(lifespan=lifespan))
+    assert (
+        main(
+            [
+                "--source-revision",
+                "a" * 40,
+                "--timeout-seconds",
+                "1",
+                "read",
+                "--artifact-id",
+                "synthetic",
+            ]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert json.loads(captured.err) == {
+        "error_code": "REQUEST_DEADLINE_EXCEEDED",
+        "retryable": True,
+    }
 
 
 def test_cli_outputs_retained_fiscal_evidence_as_json(

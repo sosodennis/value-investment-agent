@@ -13,9 +13,11 @@ from pathlib import Path
 from pydantic import Field
 from sqlalchemy.exc import SQLAlchemyError
 
+from .arelle_parser import ArelleParserError
 from .contracts import StrictModel
 from .data_releases import ArtifactRefV1
 from .fiscal_discovery import FiscalDiscoveryEvidenceV1, FiscalDiscoveryRequestV1
+from .fiscal_focus_witness import SignedFiscalDiagnosticFocusWitnessV1
 from .fiscal_source_validation import fiscal_validation_budget
 from .fiscal_validation_contracts import (
     FiscalOriginalValidationEvidenceV1,
@@ -31,9 +33,11 @@ from .snapshots import SnapshotError
 
 
 class _FiscalCommandOutput(StrictModel):
-    evidence: FiscalDiscoveryEvidenceV1 | FiscalOriginalValidationEvidenceV1 = Field(
-        discriminator="protocol"
-    )
+    evidence: (
+        FiscalDiscoveryEvidenceV1
+        | FiscalOriginalValidationEvidenceV1
+        | SignedFiscalDiagnosticFocusWitnessV1
+    ) = Field(discriminator="protocol")
     publication: ArtifactPublicationV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -51,7 +55,7 @@ async def _run(
     from .app import app
 
     async with app.router.lifespan_context(app):
-        acquisition = app.state.sec_acquisition
+        acquisition = app.state.fiscal_sec_acquisition
         if acquisition is None or not app.state.application.ready:
             raise SnapshotError(
                 "FISCAL_VALIDATION_UNCONFIGURED",
@@ -60,6 +64,32 @@ async def _run(
         with metadata_operation_budget(
             partial(fiscal_validation_budget, deadline_at), sec_deadline_exceeded
         ):
+            if args.command in {"focus-witness", "read-focus-witness"}:
+                owner = acquisition.fiscal_focus_witness(
+                    declared_source_revision=args.source_revision
+                )
+                if args.command == "read-focus-witness":
+                    return _FiscalCommandOutput(
+                        evidence=owner.read(args.artifact_id, deadline_at=deadline_at)
+                    )
+                store = acquisition.capture_store
+                if store is None:
+                    raise SnapshotError(
+                        "SEC_CAPTURE_STORE_UNAVAILABLE", "evidence unavailable"
+                    )
+                record = store.get(args.source_artifact_id)
+                result = owner.execute(
+                    ArtifactRefV1(
+                        role="fiscal-original-validation",
+                        artifact_id=record.artifact_id,
+                        media_type=record.media_type,
+                        content_hash=record.content_hash,
+                    ),
+                    deadline_at=deadline_at,
+                )
+                return _FiscalCommandOutput(
+                    evidence=result.witness, publication=result.publication
+                )
             closure = acquisition.fiscal_source_closure(
                 declared_source_revision=args.source_revision
             )
@@ -114,6 +144,10 @@ def main(argv: list[str] | None = None) -> int:
     validate.add_argument("--accession", required=True)
     read = commands.add_parser("read")
     read.add_argument("--artifact-id", required=True)
+    witness = commands.add_parser("focus-witness")
+    witness.add_argument("--source-artifact-id", required=True)
+    witness_read = commands.add_parser("read-focus-witness")
+    witness_read.add_argument("--artifact-id", required=True)
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[0-9a-f]{40}", args.source_revision):
         parser.error("--source-revision requires a lowercase Git revision")
@@ -121,12 +155,34 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--timeout-seconds must be between 1 and 900")
     deadline_at = datetime.now(UTC) + timedelta(seconds=args.timeout_seconds)
     try:
-        result = asyncio.run(_run(args, deadline_at=deadline_at))
-        write_stdout(canonical_bytes(result.model_dump(mode="json")) + b"\n")
+        with metadata_operation_budget(
+            partial(fiscal_validation_budget, deadline_at), sec_deadline_exceeded
+        ):
+            result = asyncio.run(_run(args, deadline_at=deadline_at))
+            write_stdout(
+                canonical_bytes(result.model_dump(mode="json")) + b"\n",
+                remaining_budget=partial(fiscal_validation_budget, deadline_at),
+            )
     except (SnapshotError, SecSourceError, ServiceError) as error:
         print(
             canonical_bytes(
                 {"error_code": error.code, "retryable": error.retryable}
+            ).decode(),
+            file=sys.stderr,
+        )
+        return 2
+    except ArelleParserError as error:
+        print(
+            canonical_bytes(
+                {
+                    "error_code": error.code,
+                    "retryable": error.code
+                    in {
+                        "REQUEST_DEADLINE_EXCEEDED",
+                        "PARSER_CONCURRENCY_EXHAUSTED",
+                        "PARSER_RESOURCE_EXHAUSTED",
+                    },
+                }
             ).decode(),
             file=sys.stderr,
         )

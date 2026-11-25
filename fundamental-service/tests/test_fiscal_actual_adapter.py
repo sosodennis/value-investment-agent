@@ -2,9 +2,10 @@ from datetime import UTC, date, datetime, timedelta
 import base64
 import json
 from asyncio import CancelledError
+from contextlib import redirect_stderr, redirect_stdout
 from functools import partial
 from hashlib import sha256
-from io import BytesIO
+from io import BytesIO, StringIO, TextIOWrapper
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -36,6 +37,7 @@ from fundamental_service.fiscal_focus_witness import (
 from fundamental_service.fiscal_source_validation import (
     resolve_fiscal_validation_profile,
 )
+from fundamental_service.fiscal_source_runner import main as fiscal_command
 from fundamental_service.fiscal_validation_contracts import FISCAL_TAXONOMY_CACHE_SHA256
 from fundamental_service.ingestion import SecIngestionService
 from fundamental_service.metadata import _check_metadata_budget
@@ -77,6 +79,7 @@ def test_fiscal_parser_evidence_requires_a_complete_action_set(tmp_path: Path) -
         (True, case)
         for case in (
             "valid",
+            "configured-cli",
             "action-revoked",
             "source-revoked",
             "discovery-revoked",
@@ -441,6 +444,151 @@ def test_configured_fiscal_validation_and_retained_replay(
                     sorted(report.findings, key=sha256_digest)
                 ),
             )
+
+        if witness_case == "configured-cli":
+            from test_fiscal_source_runner import _install_acquisition
+
+            authority_path = tmp_path / "focus-authority.json"
+            authority_path.write_bytes(canonical_bytes(authority))
+            key_path = tmp_path / "focus-key.pem"
+            key_path.write_bytes(
+                signing_key.private_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PrivateFormat.PKCS8,
+                    serialization.NoEncryption(),
+                )
+            )
+            key_path.chmod(0o600)
+            monkeypatch.setenv(
+                "FUNDAMENTAL_FISCAL_FOCUS_AUTHORITY_FILE", str(authority_path)
+            )
+            monkeypatch.setenv(
+                "FUNDAMENTAL_FISCAL_FOCUS_PRIVATE_KEY_FILE", str(key_path)
+            )
+            monkeypatch.setattr(
+                acquisition_module,
+                "run_fiscal_diagnostic_focus",
+                synthetic_focus_worker,
+            )
+            _install_acquisition(monkeypatch, acquisition)
+
+            def command(*args, revision=harness.request.declared_source_revision):
+                output = TextIOWrapper(BytesIO(), encoding="utf-8")
+                error = StringIO()
+                with redirect_stdout(output), redirect_stderr(error):
+                    code = fiscal_command(["--source-revision", revision, *args])
+                raw = output.buffer.getvalue()
+                return code, raw, error.getvalue()
+
+            wrong_key = Ed25519PrivateKey.generate()
+            key_path.write_bytes(
+                wrong_key.private_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PrivateFormat.PKCS8,
+                    serialization.NoEncryption(),
+                )
+            )
+            before_wrong_key = harness.inventory()
+            code, raw, error = command(
+                "focus-witness", "--source-artifact-id", evidence.artifact_id
+            )
+            assert code == 2 and not raw
+            assert (
+                json.loads(error)["error_code"] == "FISCAL_FOCUS_AUTHORITY_KEY_MISMATCH"
+            )
+            assert harness.inventory() == before_wrong_key
+            worker_reports = iter(
+                action.report
+                for action in (retained_actions.normalized, retained_actions.archive)
+                if action is not None
+            )
+            worker_calls.clear()
+            key_path.write_bytes(
+                signing_key.private_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PrivateFormat.PKCS8,
+                    serialization.NoEncryption(),
+                )
+            )
+            code, raw, error = command(
+                "focus-witness", "--source-artifact-id", evidence.artifact_id
+            )
+            assert (code, error) == (0, "")
+            wire = json.loads(raw)
+            assert raw == canonical_bytes(wire) + b"\n"
+            assert (
+                wire["evidence"]["protocol"]
+                == "fundamental.signed-fiscal-diagnostic-focus-witness.v1"
+            )
+            assert wire["evidence"]["principal_id"] == "synthetic-service-principal"
+            assert wire["publication"]["wrote"]
+            witness_id = wire["publication"]["artifact"]["artifact_id"]
+            assert (
+                wire["evidence"]["witness"]["raw_finding"]["code"] == "DQC.US.0015.5970"
+            )
+            assert (
+                wire["evidence"]["witness"]["integrity"]["quality_decision"] == "block"
+            )
+            assert len(worker_calls) == 2
+            before_read = harness.inventory()
+            source_fetches = list(fetches)
+            code, repeated_raw, error = command(
+                "focus-witness", "--source-artifact-id", evidence.artifact_id
+            )
+            assert (code, error) == (0, "")
+            repeated_wire = json.loads(repeated_raw)
+            assert repeated_wire["evidence"] == wire["evidence"]
+            assert not repeated_wire["publication"]["wrote"]
+            code, read_raw, error = command(
+                "read-focus-witness", "--artifact-id", witness_id
+            )
+            assert (code, error) == (0, "")
+            assert json.loads(read_raw) == {"evidence": wire["evidence"]}
+            assert harness.inventory() == before_read
+            assert fetches == source_fetches
+            assert len(worker_calls) == 2
+            for args in (
+                ("focus-witness", "--source-artifact-id", discovery.artifact_id),
+                ("read-focus-witness", "--artifact-id", witness_id),
+            ):
+                code, raw, error = command(*args, revision="b" * 40)
+                assert code == 2 and not raw
+                assert json.loads(error)["error_code"] in {
+                    "FISCAL_VALIDATION_INVALID",
+                    "FISCAL_VALIDATION_INPUT_INVALID",
+                }
+            for changed in (
+                authority.model_copy(update={"status": "revoked"}),
+                authority.model_copy(
+                    update={"valid_until": harness.now - timedelta(seconds=1)}
+                ),
+                authority.model_copy(
+                    update={
+                        "public_key_ed25519_base64": base64.b64encode(
+                            wrong_key.public_key().public_bytes_raw()
+                        ).decode()
+                    }
+                ),
+            ):
+                authority_path.write_bytes(canonical_bytes(changed))
+                code, raw, error = command(
+                    "read-focus-witness", "--artifact-id", witness_id
+                )
+                assert code == 2 and not raw
+                assert (
+                    json.loads(error)["error_code"] == "FISCAL_FOCUS_AUTHORITY_INVALID"
+                )
+            authority_path.write_bytes(canonical_bytes(authority))
+            monkeypatch.delenv("FUNDAMENTAL_FISCAL_FOCUS_AUTHORITY_FILE")
+            code, raw, error = command(
+                "read-focus-witness", "--artifact-id", witness_id
+            )
+            assert code == 2 and not raw
+            assert (
+                json.loads(error)["error_code"] == "FISCAL_FOCUS_AUTHORITY_UNCONFIGURED"
+            )
+            assert not tuple(scratch_root.iterdir())
+            return
 
         owner = FiscalDiagnosticFocusWitnessOwner(
             closure=closure,

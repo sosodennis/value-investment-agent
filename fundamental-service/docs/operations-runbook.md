@@ -879,3 +879,34 @@ python -m fundamental_service.statement_preparation_runner \
 Microsoft FY2020 的 HTML block LF 表示差異只由 `sec_html_representation_registry.py` 中的單一來源登錄批准。登錄綁定原件 hashes、精確 offsets、schema/context proof、V18 profile 與 taxonomy cache。未知表示差異回報 `SOURCE_HTML_REPRESENTATION_UNREGISTERED`；profile/cache 不符回報 `SOURCE_HTML_REPRESENTATION_RESOURCE_SCOPE_MISMATCH`。不得藉由補登 hash 或忽略拒絕來取得資料資格。新登錄需先核對原文、submission、ZIP、schema 和內容語義，提交獨立審閱證據，然後更新 policy pins 並重新驗收。機器 proof 位於 `tests/fixtures/sec-integrity/msft-2020-html-block-representation-proof.json`，來源 bytes 仍依既有 capture 流程保留與重取。
 
 重跑相同 retained inputs 與版本會重用 publication；新原文 hash、parser input、profile、mapping 或 executable pin 需形成新輸入。Registry 外原件、金融 SIC、錯 namespace、缺 validation、cutoff 不符及資料毀損均具名拒絕。五年度為 coverage 目標，`supported_history_threshold` 維持 null。正式成功仍須核對服務數字、每格來源、partial 結果與 workspace 行為。
+
+## 建立季度來源的 diagnostic focus witness
+
+先配置獨立 fiscal acquisition owner。完整設定 `FUNDAMENTAL_FISCAL_SEC_TAXONOMY_CACHE_DIR`、`FUNDAMENTAL_FISCAL_SEC_TAXONOMY_MANIFEST_ID`、`FUNDAMENTAL_FISCAL_SEC_TAXONOMY_VERSION`、`FUNDAMENTAL_FISCAL_SEC_TAXONOMY_CACHE_SHA256`、`FUNDAMENTAL_FISCAL_SEC_SUPPORTED_FILING_YEARS` 與 `FUNDAMENTAL_FISCAL_SEC_SUPPORTED_FILING_FORMS`。沿用部署的共享 SEC contact、EDGAR、XULE 與完整 DQC catalog pins。年度 owner 保留自己的 cache 與 forms。Fiscal CLI 缺少 fiscal owner 時回報 `FISCAL_VALIDATION_UNCONFIGURED`。
+
+由部署 operator 提供兩個檔案，並以唯讀掛載交給服務。
+
+- `FUNDAMENTAL_FISCAL_FOCUS_AUTHORITY_FILE` 指向 `FiscalFocusValidatorAuthorityV1` JSON。它包含實際機器 `authority_id`、`principal_id`、role `fiscal-diagnostic-focus-validator-v1`、raw Ed25519 公鑰的 base64、`status` 與含時區的 `valid_until`。部署設定是 trust root，CLI 不接受 caller 傳入角色或公鑰。
+- `FUNDAMENTAL_FISCAL_FOCUS_PRIVATE_KEY_FILE` 指向對應的 Ed25519 PKCS8 PEM。限制檔案權限為 `600` 或更窄。兩個配置檔皆須是非 symlink 的一般檔案，且各不超過 16 KiB。缺檔、錯格式、非一般檔案或不符角色均具名拒絕。
+
+以相同固定 source revision 取得 retained discovery 與原件 validation。`discover` 使用 `--cik`、`--valuation-timestamp`，`validate` 使用 `--discovery-artifact-id`、`--accession`，`read` 使用 `--artifact-id`。這些命令由 `python -m fundamental_service.fiscal_source_runner` 執行，共用必要的 `--source-revision` 與 1 至 900 秒的 `--timeout-seconds`。
+
+原件必須已完成完整 EFM/DQC、metadata matched，且 raw refusal 只有唯一 active `DQC.US.0015.5970`，才能建立 witness。
+
+```sh
+python -m fundamental_service.fiscal_source_runner \
+  --source-revision "$IMPLEMENTATION_COMMIT" --timeout-seconds 900 \
+  focus-witness --source-artifact-id "$FISCAL_ORIGINAL_ARTIFACT_ID"
+```
+
+輸出 `evidence` 是 signed witness，`publication` 保存 immutable artifact 身分與 `wrote`。服務重建完整 parser inputs，對必要的雙表示執行受限官方 validator，再比對全量 facts、findings 與唯一 actual focus。重試相同 retained inputs、build 與 key 會重用相同 signed bytes。
+
+```sh
+python -m fundamental_service.fiscal_source_runner \
+  --source-revision "$IMPLEMENTATION_COMMIT" --timeout-seconds 900 \
+  read-focus-witness --artifact-id "$FOCUS_WITNESS_ARTIFACT_ID"
+```
+
+讀取重驗來源、完整 dependencies、資源、build、簽章、目前 authority 與期限，並在回傳前再次檢查。它不重新取得原件或執行 validator。Authority 可透過部署配置撤銷。Witness 最長有效 30 日，且不得超過 authority 期限。已過期或撤銷的 witness 不能以原簽章繼續 current read；新 build、來源或 key 需要新證據身分。
+
+所有命令在同一 absolute deadline 內處理 metadata、lock、worker、publication 與 stdout pipe 寫入。消費端停止讀取時，命令到期即停止等待，以 stderr 的具名 JSON 和 exit 2 結束。失敗可能已送出部分 stdout bytes，僅 exit 0 的完整 JSON 可作成功輸出。這份 witness 只證明來源診斷。原 raw active finding 與 blocking 保留，季度或 TTM 展示仍需獨立分類與分權 release decision，年度及估值資格沿原政策。

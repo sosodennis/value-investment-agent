@@ -18,7 +18,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
+from .arelle_parser import (
+    ArelleParserError,
+    ArelleValidationProfileV1,
+    ParserResourcePolicy,
+    _directory_hash,
+)
 from .annual_discovery_service import AnnualDiscovery, AnnualDiscoveryArtifacts
 from .dqc_rulesets import DQC_V18_PROFILE_ID, DqcRulesetCatalogV1
 from .dqc_applicability import dqc_applicability_policy_digest
@@ -52,11 +57,18 @@ from .contracts import (
 from .data_releases import ArtifactRefV1, DataReleaseError
 from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .fiscal_discovery import FiscalDiscovery
+from .fiscal_diagnostic_focus import run_fiscal_diagnostic_focus
+from .fiscal_focus_witness import (
+    FiscalDiagnosticFocusWitnessOwner,
+    configured_focus_authority,
+    configured_focus_private_key,
+)
 from .fiscal_source_closure import FiscalSourceClosure
 from .fiscal_source_contracts import FiscalFilingV1
 from .fiscal_source_validation import (
     SecFiscalSourceValidation,
     fiscal_validation_budget,
+    resolve_fiscal_validation_profile,
 )
 from .fiscal_validation_contracts import (
     FISCAL_TAXONOMY_CACHE_SHA256,
@@ -916,6 +928,29 @@ class SecAcquisitionUseCase:
                 sha256_digest(("fiscal-validation", key))
             ),
             operation=self._fiscal_metadata_operation,
+        )
+
+    def fiscal_focus_witness(
+        self, *, declared_source_revision: str
+    ) -> FiscalDiagnosticFocusWitnessOwner:
+        store = self.capture_store
+        if store is None:
+            raise SnapshotError("SEC_CAPTURE_STORE_UNAVAILABLE", "evidence unavailable")
+        return FiscalDiagnosticFocusWitnessOwner(
+            closure=self.fiscal_source_closure(
+                declared_source_revision=declared_source_revision
+            ),
+            artifacts=store,
+            content=self.content_store,
+            taxonomy_cache_dir=self.settings.taxonomy_cache_dir,
+            authority=configured_focus_authority,
+            private_key=configured_focus_private_key,
+            worker=run_fiscal_diagnostic_focus,
+            profile_resolver=partial(resolve_fiscal_validation_profile, self),
+            resource_policy=ParserResourcePolicy.from_env().validate(),
+            capture_lock=lambda key, _: self._capture_lock(
+                sha256_digest(("fiscal-focus-witness", key))
+            ),
         )
 
     @staticmethod
