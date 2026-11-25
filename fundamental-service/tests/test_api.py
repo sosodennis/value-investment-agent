@@ -1690,7 +1690,8 @@ def test_runtime_injects_deployment_data_release_trust_roots(
     monkeypatch.setattr(
         fundamental_app,
         "PostgresMetadataStore",
-        lambda *_, **kwargs: captured.update(kwargs) or object(),
+        lambda *_, **kwargs: captured.update(kwargs)
+        or SimpleNamespace(close=lambda: None),
     )
     monkeypatch.setattr(
         fundamental_app.ModelInventory,

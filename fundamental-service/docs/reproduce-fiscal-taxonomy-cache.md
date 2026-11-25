@@ -32,3 +32,27 @@ uv run --frozen --project fundamental-service python fundamental-service/scripts
 `af63b0b36d5cad6f2788e90fc323b56955ce581fd84e41330bac4ba765f3a6f0`
 是另一個 resource identity，供 fiscal runtime 明確選用。年度 retained validation
 與 read 繼續使用原 pin。
+
+## 同一服務的 fiscal runtime 設定
+
+年度驗證與既有 HTTP 操作使用 `app.state.sec_acquisition`。年度工作繼續讀取
+`FUNDAMENTAL_SEC_TAXONOMY_*` 及 `FUNDAMENTAL_SEC_SUPPORTED_FILING_*`。
+保留 #494 部署的年度目錄、manifest、版本、cache hash、年份及表單範圍。
+
+要配置 `app.state.fiscal_sec_acquisition`，在服務環境中設定以下六個變數。
+
+| 變數 | 值 |
+| --- | --- |
+| `FUNDAMENTAL_FISCAL_SEC_TAXONOMY_CACHE_DIR` | 服務內的新 cache 目錄 |
+| `FUNDAMENTAL_FISCAL_SEC_TAXONOMY_MANIFEST_ID` | 新 cache 的 manifest ID |
+| `FUNDAMENTAL_FISCAL_SEC_TAXONOMY_VERSION` | 新 cache 的版本 |
+| `FUNDAMENTAL_FISCAL_SEC_TAXONOMY_CACHE_SHA256` | 上述 `af63b0…f3a6f0` 完整 SHA-256 |
+| `FUNDAMENTAL_FISCAL_SEC_SUPPORTED_FILING_YEARS` | 部署支援的申報年，以逗號分隔 |
+| `FUNDAMENTAL_FISCAL_SEC_SUPPORTED_FILING_FORMS` | 部署支援的申報表單，以逗號分隔，例如 `10-K,10-Q` |
+
+六個變數均未設定時，fiscal owner 為 `None`。設定任一變數後，缺少或留空的欄位會使
+啟動失敗，錯誤會列出欄位名稱。兩個 owner 共用 PostgreSQL、原件儲存、SEC 限速、
+`FUNDAMENTAL_SEC_USER_AGENT` 與現有 EDGAR、XULE、DQC 資源設定。
+
+後續整合須將 fiscal CLI 與 witness 明確接到 `app.state.fiscal_sec_acquisition`，
+並以 Q14 核對年度 retained read、季度和 TTM 的正式路徑。
