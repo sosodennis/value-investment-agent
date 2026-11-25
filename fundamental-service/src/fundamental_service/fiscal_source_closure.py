@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from typing import Protocol
@@ -58,7 +59,7 @@ def _invalid(message: str) -> SnapshotError:
     return SnapshotError("FISCAL_VALIDATION_INVALID", message)
 
 
-class _FiscalArtifactRead:
+class FiscalArtifactRead:
     def __init__(
         self, artifacts: EvidenceArtifactStore, check_deadline: Callable[[], float]
     ) -> None:
@@ -110,9 +111,19 @@ class _FiscalArtifactRead:
                 raise _invalid("fiscal validation artifact metadata changed")
         self._check_deadline()
 
+    @property
+    def records(self) -> tuple[tuple[str, ArtifactRecordV1 | None], ...]:
+        return tuple(self._records.items())
+
+
+@dataclass(frozen=True)
+class FiscalSourceMetadataRead:
+    evidence: FiscalOriginalValidationEvidenceV1
+    records: tuple[tuple[str, ArtifactRecordV1 | None], ...]
+
 
 def _read_json(
-    reader: _FiscalArtifactRead,
+    reader: FiscalArtifactRead,
     identity: str,
     value: object,
     dependencies: tuple[str, ...],
@@ -173,7 +184,7 @@ class FiscalSourceClosure:
     def _resolve(
         self,
         request: FiscalOriginalValidationRequestV1,
-        reader: _FiscalArtifactRead,
+        reader: FiscalArtifactRead,
         deadline_at: datetime,
     ) -> ResolvedFiscalValidationRequestV1:
         ref = request.discovery_ref
@@ -199,7 +210,7 @@ class FiscalSourceClosure:
     def _verify(
         self,
         evidence: FiscalOriginalValidationEvidenceV1,
-        reader: _FiscalArtifactRead,
+        reader: FiscalArtifactRead,
         deadline_at: datetime,
     ) -> None:
         request, outcome = evidence.request, evidence.outcome
@@ -230,7 +241,7 @@ class FiscalSourceClosure:
     def _read(
         self,
         artifact_id: str,
-        reader: _FiscalArtifactRead,
+        reader: FiscalArtifactRead,
         deadline_at: datetime,
         *,
         expected_request: ResolvedFiscalValidationRequestV1 | None = None,
@@ -261,13 +272,19 @@ class FiscalSourceClosure:
     def read(
         self, artifact_id: str, *, deadline_at: datetime
     ) -> FiscalOriginalValidationEvidenceV1:
+        return self.read_with_metadata(artifact_id, deadline_at=deadline_at).evidence
+
+    def read_with_metadata(
+        self, artifact_id: str, *, deadline_at: datetime
+    ) -> FiscalSourceMetadataRead:
         with self._operation(deadline_at):
-            reader = _FiscalArtifactRead(
+            reader = FiscalArtifactRead(
                 self._artifacts, partial(self._before_deadline, deadline_at)
             )
             self._before_deadline(deadline_at)
             self._configured_source()
-            return self._read(artifact_id, reader, deadline_at)
+            evidence = self._read(artifact_id, reader, deadline_at)
+            return FiscalSourceMetadataRead(evidence, reader.records)
 
     def read_matched(
         self, ref: ArtifactRefV1, *, deadline_at: datetime
@@ -278,7 +295,7 @@ class FiscalSourceClosure:
     def _read_matched(
         self, ref: ArtifactRefV1, deadline_at: datetime
     ) -> ValidatedFiscalOriginalV1:
-        reader = _FiscalArtifactRead(
+        reader = FiscalArtifactRead(
             self._artifacts, partial(self._before_deadline, deadline_at)
         )
         if ref.role != "fiscal-original-validation":
@@ -307,7 +324,7 @@ class FiscalSourceClosure:
         check_deadline = partial(self._before_deadline, deadline_at)
         check_deadline()
         source = self._configured_source()
-        reader = _FiscalArtifactRead(self._artifacts, check_deadline)
+        reader = FiscalArtifactRead(self._artifacts, check_deadline)
         try:
             request = FiscalOriginalValidationRequestV1.model_validate_json(
                 canonical_bytes(request)

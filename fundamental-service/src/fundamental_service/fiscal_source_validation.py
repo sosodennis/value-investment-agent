@@ -55,6 +55,34 @@ if TYPE_CHECKING:
     from .source_acquisition import SecAcquisitionUseCase, _OriginalPackage
 
 
+def resolve_fiscal_validation_profile(
+    acquisition: SecAcquisitionUseCase, namespace: str
+) -> ArelleValidationProfileV1:
+    """Resolve the configured physical profile and full ruleset for a GAAP namespace."""
+    profile = acquisition._profile_for_id(
+        DQC_V18_PROFILE_ID
+        if namespace in DQC_V18_RULESETS
+        else "sec-efm-us-dqc-v31.0.3"
+    )
+    catalog = profile.dqc_ruleset_catalog
+    if catalog is None:
+        raise SnapshotError(
+            "VALIDATION_RESOURCES_UNAVAILABLE",
+            "fiscal validation requires a full taxonomy ruleset catalog",
+            retryable=True,
+        )
+    try:
+        binding = catalog.select((namespace,))
+    except ValueError as error:
+        raise SnapshotError("DQC_TAXONOMY_RULESET_UNAVAILABLE", str(error)) from error
+    return profile.model_copy(
+        update={
+            "dqc_ruleset_path": binding.path,
+            "dqc_ruleset_sha256": binding.sha256,
+        }
+    )
+
+
 def fiscal_validation_budget(deadline_at: datetime) -> float:
     if deadline_at.utcoffset() is None:
         remaining = 0.0
@@ -175,30 +203,7 @@ class SecFiscalSourceValidation:
                 "fiscal package has no unique US GAAP namespace",
             )
         namespace = next(iter(namespaces))
-        profile = self.acquisition._profile_for_id(
-            DQC_V18_PROFILE_ID
-            if namespace in DQC_V18_RULESETS
-            else "sec-efm-us-dqc-v31.0.3"
-        )
-        catalog = profile.dqc_ruleset_catalog
-        if catalog is None:
-            raise SnapshotError(
-                "VALIDATION_RESOURCES_UNAVAILABLE",
-                "fiscal validation requires a full taxonomy ruleset catalog",
-                retryable=True,
-            )
-        try:
-            binding = catalog.select((namespace,))
-        except ValueError as error:
-            raise SnapshotError(
-                "DQC_TAXONOMY_RULESET_UNAVAILABLE", str(error)
-            ) from error
-        return namespace, profile.model_copy(
-            update={
-                "dqc_ruleset_path": binding.path,
-                "dqc_ruleset_sha256": binding.sha256,
-            }
-        )
+        return namespace, resolve_fiscal_validation_profile(self.acquisition, namespace)
 
     @staticmethod
     def _rejected_report(

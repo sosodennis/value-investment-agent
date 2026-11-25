@@ -1,24 +1,50 @@
 from datetime import UTC, date, datetime, timedelta
+import base64
+import json
+from asyncio import CancelledError
+from functools import partial
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 import fundamental_service.parser_action_identity as action_identity
 import fundamental_service.parser_actions as parser_module
 import fundamental_service.source_acquisition as acquisition_module
-from fundamental_service.arelle_parser import ArelleFindingV1, _directory_hash
+import fundamental_service.fiscal_focus_witness as witness_module
+from fundamental_service.arelle_parser import (
+    ArelleFindingV1,
+    _directory_hash,
+    fact_semantic_digest,
+)
+from fundamental_service.data_releases import ArtifactRefV1
 from fundamental_service.dqc_rulesets import DqcRulesetBindingV1, DqcRulesetCatalogV1
 from fundamental_service.fiscal_parser_evidence import read_fiscal_parser_actions
+from fundamental_service.fiscal_diagnostic_focus import (
+    ArelleActualFocusEventV1,
+    ArelleActualFocusFactV1,
+    FiscalDiagnosticFocusExecutionV1,
+)
+from fundamental_service.fiscal_focus_witness import (
+    FiscalDiagnosticFocusWitnessOwner,
+    FiscalFocusValidatorAuthorityV1,
+)
+from fundamental_service.fiscal_source_validation import (
+    resolve_fiscal_validation_profile,
+)
 from fundamental_service.fiscal_validation_contracts import FISCAL_TAXONOMY_CACHE_SHA256
 from fundamental_service.ingestion import SecIngestionService
+from fundamental_service.metadata import _check_metadata_budget
 from fundamental_service.parser_action_contracts import ParserBuildIdentityV1
+from fundamental_service.parser_action_identity import ParserBuildChecks
 from fundamental_service.parser_actions import ParserActions
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import _SecResponse
-from fundamental_service.serialization import canonical_bytes
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import FilesystemSnapshotRepository, SnapshotError
 from fundamental_service.source_acquisition import (
     SecAcquisitionSettings,
@@ -44,9 +70,48 @@ def test_fiscal_parser_evidence_requires_a_complete_action_set(tmp_path: Path) -
         )
 
 
-@pytest.mark.parametrize("blocked", [False, True])
+@pytest.mark.parametrize(
+    ("blocked", "witness_case"),
+    [(False, "valid")]
+    + [
+        (True, case)
+        for case in (
+            "valid",
+            "action-revoked",
+            "source-revoked",
+            "discovery-revoked",
+            "worker-incomplete",
+            "worker-multiple-focus",
+            "worker-other-finding",
+            "worker-error",
+            "worker-cancelled",
+            "worker-expired",
+            "worker-build-drift",
+            "first-staging-error",
+            "second-staging-error",
+            "authority-revoked",
+            "authority-expired",
+            "authority-key-mismatch",
+            "authority-revoked-in-worker",
+            "authority-expired-in-worker",
+            "execute-metadata-expired",
+            "read-metadata-expired",
+            "publication-source-revoked",
+            "publication-authority-revoked",
+            "read-source-revoked",
+            "read-envelope-revoked",
+            "read-authority-revoked",
+            "read-authority-expired",
+            "read-authority-wrong-key",
+            "read-authority-revoked-during-read",
+            "read-envelope-expired-during-read",
+            "execute-existing-envelope-expired",
+            "publication-envelope-expired-before-return",
+        )
+    ],
+)
 def test_configured_fiscal_validation_and_retained_replay(
-    tmp_path, monkeypatch, blocked
+    tmp_path, monkeypatch, blocked, witness_case
 ):
     harness = DiscoveryHarness(tmp_path)
     discovery, published = harness.publish()
@@ -198,12 +263,15 @@ def test_configured_fiscal_validation_and_retained_replay(
                 "findings": (
                     ArelleFindingV1(
                         code="DQC.US.0015.5970",
-                        severity="error",
+                        severity="warning",
+                        rule_severity="error",
+                        rule_effective_date=date(2017, 3, 28),
                         message="Synthetic raw block",
                     ),
                 )
                 if blocked
                 else (),
+                "finding_codes": ("DQC.US.0015.5970",) if blocked else (),
                 "facts": tuple(
                     fact.model_copy(
                         update={
@@ -263,6 +331,422 @@ def test_configured_fiscal_validation_and_retained_replay(
     if blocked:
         assert evidence.outcome.rejection_ref is not None
         assert evidence.outcome.rejection_ref.content_hash in evidence.dependencies
+        signing_key = Ed25519PrivateKey.generate()
+        authority = FiscalFocusValidatorAuthorityV1(
+            authority_id="synthetic-focus-validator",
+            principal_id="synthetic-service-principal",
+            public_key_ed25519_base64=base64.b64encode(
+                signing_key.public_key().public_bytes(
+                    serialization.Encoding.Raw,
+                    serialization.PublicFormat.Raw,
+                )
+            ).decode("ascii"),
+            valid_until=harness.now + timedelta(days=1),
+        )
+        retained_actions = read_fiscal_parser_actions(
+            evidence.outcome.integrity.validation_evidence,
+            relation=evidence.outcome.integrity.integrity_relation,
+            artifacts=harness.artifacts,
+            build_checks=ParserBuildChecks(),
+            delivery_revision=evidence.outcome.runtime.delivery_revision,
+        )
+        worker_reports = iter(
+            action.report
+            for action in (retained_actions.normalized, retained_actions.archive)
+            if action is not None
+        )
+        worker_calls = []
+        scratch_root = tmp_path / "focus-scratch"
+        scratch_root.mkdir()
+        created_directories = []
+        temporary_directory = witness_module.TemporaryDirectory
+
+        def retain_directory(**kwargs):
+            temporary = temporary_directory(dir=scratch_root, **kwargs)
+            created_directories.append(temporary)
+            return temporary
+
+        monkeypatch.setattr(witness_module, "TemporaryDirectory", retain_directory)
+
+        def synthetic_focus_worker(path, **_kwargs):
+            nonlocal authority, build
+            worker_calls.append(path)
+            revoke_ids = {
+                "action-revoked": retained_actions.normalized.refs[0].artifact_id,
+                "source-revoked": evidence.artifact_id,
+                "discovery-revoked": discovery.artifact_id,
+            }
+            if witness_case in revoke_ids:
+                harness.artifacts.invalidate(revoke_ids[witness_case])
+            if witness_case == "worker-error":
+                raise RuntimeError("synthetic official worker failure")
+            if witness_case == "worker-cancelled":
+                raise CancelledError
+            if witness_case == "worker-expired":
+                harness.now = harness.deadline + timedelta(microseconds=1)
+            if witness_case == "worker-build-drift":
+                build = build.model_copy(update={"runtime_digest": "4" * 64})
+            if witness_case == "authority-revoked-in-worker":
+                authority = authority.model_copy(update={"status": "revoked"})
+            if witness_case == "authority-expired-in-worker":
+                authority = authority.model_copy(update={"valid_until": harness.now})
+            source_report = next(worker_reports)
+            report = source_report.model_copy(
+                update={
+                    "validation_evidence": tuple(
+                        marker
+                        for marker in source_report.validation_evidence
+                        if not marker.startswith("sec-parser-action-")
+                    )
+                }
+            )
+            if witness_case == "worker-incomplete":
+                report = report.model_copy(
+                    update={"validation_evidence": ("strict-sec-efm-profile-selected",)}
+                )
+            if witness_case == "worker-other-finding":
+                report = report.model_copy(
+                    update={
+                        "findings": (
+                            *report.findings,
+                            ArelleFindingV1(
+                                code="EFM.extra",
+                                severity="error",
+                                message="Synthetic extra error",
+                            ),
+                        ),
+                        "finding_codes": (*report.finding_codes, "EFM.extra"),
+                    }
+                )
+            fact = next(item for item in report.facts if item.is_numeric)
+            focus = ArelleActualFocusFactV1(
+                fact_id="synthetic-official-focus",
+                fact=fact,
+                numeric_value=fact.value,
+            )
+            return FiscalDiagnosticFocusExecutionV1(
+                report=report.model_copy(
+                    update={"filing_path": str(path), "parsed_at": datetime.now(UTC)}
+                ),
+                events=(
+                    ArelleActualFocusEventV1(
+                        level="ERROR",
+                        facts=(focus, focus)
+                        if witness_case == "worker-multiple-focus"
+                        else (focus,),
+                    ),
+                ),
+                complete_fact_digest=fact_semantic_digest(report),
+                complete_findings_digest=sha256_digest(
+                    sorted(report.findings, key=sha256_digest)
+                ),
+            )
+
+        owner = FiscalDiagnosticFocusWitnessOwner(
+            closure=closure,
+            artifacts=harness.artifacts,
+            content=harness.content,
+            taxonomy_cache_dir=taxonomy,
+            authority=lambda: authority,
+            private_key=lambda: (
+                Ed25519PrivateKey.generate()
+                if witness_case == "authority-key-mismatch"
+                else signing_key
+            ),
+            current_time=lambda: harness.now,
+            worker=synthetic_focus_worker,
+            profile_resolver=partial(resolve_fiscal_validation_profile, acquisition),
+        )
+        source_record = harness.artifacts.get(evidence.artifact_id)
+        source_ref = ArtifactRefV1(
+            role="fiscal-original-validation",
+            artifact_id=source_record.artifact_id,
+            content_hash=source_record.content_hash,
+            media_type=source_record.media_type,
+        )
+        envelope_expiry_cases = {
+            "read-envelope-expired-during-read",
+            "execute-existing-envelope-expired",
+            "publication-envelope-expired-before-return",
+        }
+        if witness_case in envelope_expiry_cases:
+            original_sign = owner._sign
+
+            def sign_short_lived_witness(*args):
+                signed = original_sign(*args)
+                unsigned = signed.model_copy(
+                    update={"expires_at": signed.signed_at + timedelta(seconds=1)}
+                )
+                return unsigned.model_copy(
+                    update={
+                        "signature": signing_key.sign(unsigned.signing_bytes()).hex()
+                    }
+                )
+
+            monkeypatch.setattr(owner, "_sign", sign_short_lived_witness)
+
+        def witness_records():
+            return [
+                json.loads(line)
+                for line in (harness.artifacts.root / ".artifact-records.jsonl")
+                .read_text()
+                .splitlines()
+                if json.loads(line)["artifact_id"].startswith(
+                    "fiscal-diagnostic-focus-witness-v1:"
+                )
+            ]
+
+        def assert_scratch_clean():
+            assert not tuple(scratch_root.iterdir())
+            assert all(not Path(item.name).exists() for item in created_directories)
+
+        def expire_metadata_lookup():
+            original_get = harness.artifacts.get
+
+            def get(artifact_id):
+                harness.now = harness.deadline + timedelta(microseconds=1)
+                _check_metadata_budget()
+                return original_get(artifact_id)
+
+            monkeypatch.setattr(harness.artifacts, "get", get)
+
+        if witness_case == "execute-metadata-expired":
+            expire_metadata_lookup()
+            with pytest.raises(SnapshotError) as failure:
+                owner.execute(source_ref, deadline_at=harness.deadline)
+            assert failure.value.code == "REQUEST_DEADLINE_EXCEEDED"
+            _check_metadata_budget()
+            assert not worker_calls
+            assert not witness_records()
+            assert_scratch_clean()
+            return
+        if witness_case in {"first-staging-error", "second-staging-error"}:
+            original_input = witness_module.parser_action_input
+            staged_calls = 0
+
+            def fail_staged_input(*args, **kwargs):
+                nonlocal staged_calls
+                staged_calls += 1
+                expected_calls = 1 if witness_case == "first-staging-error" else 2
+                if staged_calls == expected_calls:
+                    raise OSError("synthetic staged input failure")
+                return original_input(*args, **kwargs)
+
+            monkeypatch.setattr(
+                witness_module, "parser_action_input", fail_staged_input
+            )
+            with pytest.raises(OSError, match="staged input failure"):
+                owner.execute(source_ref, deadline_at=harness.deadline)
+            assert len(created_directories) == staged_calls
+            assert not worker_calls
+            assert not witness_records()
+            assert_scratch_clean()
+            return
+        if witness_case == "authority-revoked":
+            authority = authority.model_copy(update={"status": "revoked"})
+        if witness_case == "authority-expired":
+            authority = authority.model_copy(update={"valid_until": harness.now})
+        expected_errors = {
+            "action-revoked": "FISCAL_VALIDATION_INVALID",
+            "source-revoked": "FISCAL_VALIDATION_INVALID",
+            "discovery-revoked": "FISCAL_VALIDATION_INVALID",
+            "worker-incomplete": "VALIDATION_EVIDENCE_MISSING",
+            "worker-multiple-focus": "FISCAL_FOCUS_OBJECT_AMBIGUOUS",
+            "worker-other-finding": "FISCAL_FOCUS_REPORT_MISMATCH",
+            "worker-expired": "REQUEST_DEADLINE_EXCEEDED",
+            "worker-build-drift": "FISCAL_FOCUS_RUNTIME_CHANGED",
+            "authority-revoked": "FISCAL_FOCUS_AUTHORITY_INVALID",
+            "authority-expired": "FISCAL_FOCUS_AUTHORITY_INVALID",
+            "authority-key-mismatch": "FISCAL_FOCUS_AUTHORITY_KEY_MISMATCH",
+            "authority-revoked-in-worker": "FISCAL_FOCUS_AUTHORITY_INVALID",
+            "authority-expired-in-worker": "FISCAL_FOCUS_AUTHORITY_INVALID",
+        }
+        if witness_case in expected_errors:
+            with pytest.raises(SnapshotError) as failure:
+                owner.execute(source_ref, deadline_at=harness.deadline)
+            assert failure.value.code == expected_errors[witness_case]
+            assert not witness_records()
+            assert_scratch_clean()
+            return
+        if witness_case in {"worker-error", "worker-cancelled"}:
+            error = RuntimeError if witness_case == "worker-error" else CancelledError
+            with pytest.raises(error):
+                owner.execute(source_ref, deadline_at=harness.deadline)
+            assert not witness_records()
+            assert_scratch_clean()
+            return
+        if witness_case in {
+            "publication-source-revoked",
+            "publication-authority-revoked",
+        }:
+            original_put = harness.artifacts.put_with_receipt
+
+            def revoke_at_publication(*args, **kwargs):
+                nonlocal authority
+                if witness_case == "publication-authority-revoked":
+                    authority = authority.model_copy(update={"status": "revoked"})
+                publication = original_put(*args, **kwargs)
+                harness.artifacts.invalidate(evidence.artifact_id)
+                return publication
+
+            monkeypatch.setattr(
+                harness.artifacts, "put_with_receipt", revoke_at_publication
+            )
+            with pytest.raises(SnapshotError) as failure:
+                owner.execute(source_ref, deadline_at=harness.deadline)
+            if witness_case == "publication-source-revoked":
+                assert failure.value.code == "FISCAL_VALIDATION_INVALID"
+                (retained_witness,) = witness_records()
+                with pytest.raises(SnapshotError):
+                    owner.read(
+                        retained_witness["artifact_id"], deadline_at=harness.deadline
+                    )
+            else:
+                assert failure.value.code == "FISCAL_FOCUS_AUTHORITY_INVALID"
+                assert not witness_records()
+            assert_scratch_clean()
+            return
+        if witness_case == "publication-envelope-expired-before-return":
+            original_check_current = owner._check_current
+
+            def expire_before_return(*args):
+                original_check_current(*args)
+                if witness_records():
+                    harness.now += timedelta(seconds=2)
+
+            monkeypatch.setattr(owner, "_check_current", expire_before_return)
+            with pytest.raises(SnapshotError) as failure:
+                owner.execute(source_ref, deadline_at=harness.deadline)
+            assert failure.value.code == "FISCAL_FOCUS_AUTHORITY_INVALID"
+            assert harness.now < authority.valid_until
+            assert harness.now < harness.deadline
+            (retained_witness,) = witness_records()
+            with pytest.raises(SnapshotError, match="expired"):
+                owner.read(
+                    retained_witness["artifact_id"], deadline_at=harness.deadline
+                )
+            assert_scratch_clean()
+            return
+        published_witness = owner.execute(source_ref, deadline_at=harness.deadline)
+        assert published_witness.publication.wrote
+        assert published_witness.witness.witness.actual_focus.fact == next(
+            item for item in evidence.outcome.claim.report.facts if item.is_numeric
+        )
+        assert published_witness.witness.witness.raw_finding.severity == "warning"
+        if witness_case in {
+            "read-envelope-expired-during-read",
+            "execute-existing-envelope-expired",
+        }:
+            original_stage_inputs = owner._stage_inputs
+
+            def expire_during_staging(*args):
+                staged = original_stage_inputs(*args)
+                harness.now += timedelta(seconds=2)
+                return staged
+
+            monkeypatch.setattr(owner, "_stage_inputs", expire_during_staging)
+            before_expired_operation = harness.inventory()
+            with pytest.raises(SnapshotError) as failure:
+                if witness_case == "read-envelope-expired-during-read":
+                    owner.read(
+                        published_witness.witness.artifact_id,
+                        deadline_at=harness.deadline,
+                    )
+                else:
+                    owner.execute(source_ref, deadline_at=harness.deadline)
+            assert failure.value.code == "FISCAL_FOCUS_AUTHORITY_INVALID"
+            assert published_witness.witness.expires_at <= harness.now
+            assert harness.now < authority.valid_until
+            assert harness.now < harness.deadline
+            assert harness.inventory() == before_expired_operation
+            assert len(worker_calls) == 2
+            assert_scratch_clean()
+            return
+        if witness_case == "read-metadata-expired":
+            expire_metadata_lookup()
+            expected_read_error = "REQUEST_DEADLINE_EXCEEDED"
+        elif witness_case == "read-source-revoked":
+            harness.artifacts.invalidate(evidence.artifact_id)
+            expected_read_error = "FISCAL_VALIDATION_INVALID"
+        elif witness_case == "read-envelope-revoked":
+            original_read = harness.artifacts.read
+
+            def revoke_envelope(artifact_id):
+                raw = original_read(artifact_id)
+                if artifact_id == published_witness.witness.artifact_id:
+                    harness.artifacts.invalidate(artifact_id)
+                return raw
+
+            monkeypatch.setattr(harness.artifacts, "read", revoke_envelope)
+            expected_read_error = "FISCAL_VALIDATION_INVALID"
+        elif witness_case == "read-authority-revoked-during-read":
+            original_read = harness.artifacts.read
+
+            def revoke_authority(artifact_id):
+                nonlocal authority
+                raw = original_read(artifact_id)
+                if artifact_id == evidence.artifact_id:
+                    authority = authority.model_copy(update={"status": "revoked"})
+                return raw
+
+            monkeypatch.setattr(harness.artifacts, "read", revoke_authority)
+            expected_read_error = "FISCAL_FOCUS_AUTHORITY_INVALID"
+        elif witness_case in {
+            "read-authority-revoked",
+            "read-authority-expired",
+            "read-authority-wrong-key",
+        }:
+            if witness_case == "read-authority-revoked":
+                authority = authority.model_copy(update={"status": "revoked"})
+            elif witness_case == "read-authority-expired":
+                authority = authority.model_copy(update={"valid_until": harness.now})
+            else:
+                wrong_key = Ed25519PrivateKey.generate()
+                authority = authority.model_copy(
+                    update={
+                        "public_key_ed25519_base64": base64.b64encode(
+                            wrong_key.public_key().public_bytes_raw()
+                        ).decode("ascii")
+                    }
+                )
+            expected_read_error = "FISCAL_FOCUS_AUTHORITY_INVALID"
+        else:
+            expected_read_error = None
+        if expected_read_error is not None:
+            with pytest.raises(SnapshotError) as failure:
+                owner.read(
+                    published_witness.witness.artifact_id, deadline_at=harness.deadline
+                )
+            assert failure.value.code == expected_read_error
+            _check_metadata_budget()
+            assert len(worker_calls) == 2
+            assert_scratch_clean()
+            return
+        before_replay = harness.inventory()
+        assert (
+            owner.read(
+                published_witness.witness.artifact_id, deadline_at=harness.deadline
+            )
+            == published_witness.witness
+        )
+        repeated = owner.execute(source_ref, deadline_at=harness.deadline)
+        assert not repeated.publication.wrote
+        assert repeated.witness == published_witness.witness
+        assert harness.inventory() == before_replay
+        assert len(worker_calls) == 2
+        assert_scratch_clean()
+        harness.replace_value(
+            published_witness.witness.artifact_id,
+            published_witness.witness.model_copy(
+                update={"signature": "0" * 128}
+            ).model_dump(mode="json"),
+        )
+        with pytest.raises(SnapshotError) as invalid_signature:
+            owner.read(
+                published_witness.witness.artifact_id,
+                deadline_at=harness.deadline,
+            )
+        assert invalid_signature.value.code == "FISCAL_FOCUS_SIGNATURE_INVALID"
     assert evidence.outcome.integrity.integrity_relation == (
         "normalized" if blocked else "exact"
     )
