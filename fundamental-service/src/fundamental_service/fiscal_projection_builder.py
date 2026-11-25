@@ -20,7 +20,7 @@ from .fiscal_candidate_contracts import (
     FiscalStatementCandidateV1,
     VerifiedRawSourceForCandidateV1,
 )
-from .fiscal_discovery import FiscalDiscovery, FiscalDiscoveryEvidenceV1
+from .fiscal_discovery import FiscalDiscovery
 from .fiscal_source_closure import FiscalArtifactRead, FiscalSourceClosure
 from .fiscal_statement_contracts import (
     FiscalBasisFilingV1,
@@ -52,8 +52,8 @@ from .fiscal_statement_registry import (
     FiscalReviewedCoverageV1,
     FiscalRowBasisPlanV1,
     fiscal_primary_scopes,
-    fiscal_reviewed_coverage,
     fiscal_statement_registry,
+    selected_fiscal_coverage,
 )
 from .fiscal_validation_contracts import (
     FiscalOriginalValidationEvidenceV1,
@@ -152,28 +152,6 @@ class FiscalProjectionBuilder:
         ):
             raise self._expired()
         return (deadline_at - now).total_seconds()
-
-    @staticmethod
-    def _coverage(discovery: FiscalDiscoveryEvidenceV1) -> FiscalReviewedCoverageV1:
-        if discovery.selection.issue_codes or discovery.is_retry_attempt:
-            raise _invalid(
-                "fiscal discovery does not have a complete eligible period set"
-            )
-        ends = tuple(
-            sorted(filing.report_period_end for filing in discovery.selection.selected)
-        )
-        matches = [
-            item
-            for item in fiscal_reviewed_coverage(fiscal_statement_registry())
-            if item.issuer_id == discovery.request.cik
-            and tuple(quarter.period.end for quarter in item.quarters) == ends
-        ]
-        if len(matches) != 1:
-            raise SnapshotError(
-                "FISCAL_PRIMARY_SCOPE_UNREVIEWED",
-                "the selected fiscal period set has no reviewed source scope",
-            )
-        return matches[0]
 
     def _retain(
         self,
@@ -402,7 +380,7 @@ class FiscalProjectionBuilder:
             raise _invalid(
                 "projection discovery differs from the configured source revision"
             )
-        coverage = self._coverage(discovery)
+        coverage = selected_fiscal_coverage(discovery)
         preparer = preparer_execution_ref or self.preparer_execution_ref
         read_retained_artifact(reader, preparer)
         scopes = {

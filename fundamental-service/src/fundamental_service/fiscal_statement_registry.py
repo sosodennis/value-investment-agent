@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 from pydantic import AwareDatetime, ConfigDict, Field, model_validator
 
 from .contracts import StrictModel
+from .fiscal_discovery import FiscalDiscoveryEvidenceV1
 from .fiscal_statement_contracts import FiscalDurationPeriodV1, FiscalStatement
 from .serialization import sha256_digest
 from .snapshots import SnapshotError
@@ -204,3 +205,28 @@ def fiscal_reviewed_coverage(
         FiscalReviewedCoverageV1.model_validate_json(_resource(item))
         for item in registry.coverage
     )
+
+
+def selected_fiscal_coverage(
+    discovery: FiscalDiscoveryEvidenceV1,
+) -> FiscalReviewedCoverageV1:
+    if discovery.selection.issue_codes or discovery.is_retry_attempt:
+        raise SnapshotError(
+            "FISCAL_PROJECTION_INVALID",
+            "fiscal discovery does not have a complete eligible period set",
+        )
+    ends = tuple(
+        sorted(filing.report_period_end for filing in discovery.selection.selected)
+    )
+    matches = [
+        item
+        for item in fiscal_reviewed_coverage(fiscal_statement_registry())
+        if item.issuer_id == discovery.request.cik
+        and tuple(quarter.period.end for quarter in item.quarters) == ends
+    ]
+    if len(matches) != 1:
+        raise SnapshotError(
+            "FISCAL_PRIMARY_SCOPE_UNREVIEWED",
+            "the selected fiscal period set has no reviewed source scope",
+        )
+    return matches[0]

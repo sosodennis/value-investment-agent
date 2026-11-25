@@ -25,7 +25,8 @@ from fundamental_service.metadata import (
     PostgresContentStore,
     PostgresMetadataStore,
 )
-from fundamental_service.persistence_recovery import export_backup, restore_backup
+from fundamental_service.persistence_recovery import export_backup
+from recovery_test_support import restore_backup, assert_same_data_plane_projection
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from test_mapping_review_signer import (
@@ -99,9 +100,10 @@ def test_service_signing_survives_restart_and_backup_restore(
         assert not repeated.stderr
         assert json.loads(repeated.stdout) == expected
         assert _file_inventory(data_root) == before
-    assert asyncio.run(
+    repeated_backup = asyncio.run(
         export_backup(source_db, content_root, backups, source_revision=REVISION)
-    ) == backup.model_copy(update={"wrote": False})
+    )
+    assert_same_data_plane_projection(backup, repeated_backup, backups)
     restored_root = tmp_path / "restored-service"
     restored_content = restored_root / "content"
     assert (
@@ -112,8 +114,8 @@ def test_service_signing_survives_restart_and_backup_restore(
                 backups / backup.manifest_digest,
                 manifest_digest=backup.manifest_digest,
             )
-        )
-        == backup
+        ).manifest_digest
+        == backup.manifest_digest
     )
     restored_before = _file_inventory(restored_root)
     restored = subprocess.run(
@@ -143,14 +145,10 @@ def test_service_signing_survives_restart_and_backup_restore(
         )
     finally:
         reopened.close()
-    assert (
-        asyncio.run(
-            export_backup(
-                target_db, restored_content, backups, source_revision=REVISION
-            )
-        ).wrote
-        is False
+    reexported = asyncio.run(
+        export_backup(target_db, restored_content, backups, source_revision=REVISION)
     )
+    assert_same_data_plane_projection(backup, reexported, backups)
 
 
 def test_service_signer_requires_configured_storage(

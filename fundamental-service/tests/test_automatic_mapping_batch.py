@@ -32,7 +32,8 @@ from fundamental_service.metadata import (
     PostgresContentStore,
     PostgresMetadataStore,
 )
-from fundamental_service.persistence_recovery import export_backup, restore_backup
+from fundamental_service.persistence_recovery import export_backup
+from recovery_test_support import restore_backup
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.serialization import canonical_bytes
 from fundamental_service.statement_profiles import (

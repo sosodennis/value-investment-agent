@@ -500,7 +500,7 @@ def test_candidate_verification_never_publishes_or_signs(tmp_path):
 
 
 def test_wrong_fiscal_year_start_has_no_primary_ytd_proof(tmp_path, monkeypatch):
-    import fundamental_service.fiscal_projection_builder as implementation
+    import fundamental_service.fiscal_statement_registry as implementation
 
     builder, reference, bindings, _, _ = _case(tmp_path, "msft-historical")
     original = implementation.fiscal_reviewed_coverage

@@ -1,0 +1,737 @@
+from __future__ import annotations
+
+import base64
+from collections.abc import Callable
+from datetime import UTC, datetime
+from functools import partial
+from typing import Literal, Protocol
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+from .artifact_evidence import read_retained_artifact
+from .command_artifacts import EvidenceArtifactStore
+from .data_releases import ArtifactRefV1, DataReleaseError
+from .fiscal_admission_authority import FiscalAuthorityOwner
+from .fiscal_admission_history import (
+    FiscalAdmissionHistoryPort,
+    FiscalCommitReceiptV1,
+    FiscalControlBindingV1,
+    FiscalHistoryHeadV1,
+    FiscalHistoryReadV1,
+)
+from .fiscal_authority_contracts import CurrentFiscalAuthorityV1
+from .history_recovery_contracts import FiscalHistoryEpochV1, FiscalIssuanceContextV1
+from .fiscal_candidate_contracts import (
+    ClassifiedSourceForCandidateV1,
+    FiscalSourceUseScopeV1,
+)
+from .fiscal_classification_contracts import (
+    FiscalClassificationPublicationV1,
+    FiscalClassifierActorV1,
+    FiscalClassifierReviewExecutionV1,
+    FiscalRecordClassificationCommandV1,
+    FiscalSourceAccountingReviewV1,
+    SignedFiscalSourceClassificationV1,
+    SignedFiscalSourcePreparationExecutionV1,
+)
+from .fiscal_classification_review import verify_fiscal_source_review
+from .fiscal_classification_source import (
+    FiscalClassificationSource,
+    FiscalClassificationSourcePort,
+)
+from .fiscal_source_closure import FiscalArtifactRead
+from .metadata import metadata_operation_budget
+from .replay import (
+    ArtifactPublicationDeadlineExceeded,
+    ArtifactPublicationV1,
+    ArtifactRecordV1,
+)
+from .serialization import canonical_bytes
+from .snapshots import SnapshotError
+
+_ROLE = "fiscal-source-classification-v1"
+
+
+class FiscalClassifierSignerPort(Protocol):
+    def authenticate(
+        self,
+        command: FiscalRecordClassificationCommandV1,
+        review: FiscalSourceAccountingReviewV1,
+        *,
+        issuance: FiscalIssuanceContextV1,
+        deadline_at: datetime,
+    ) -> FiscalClassifierActorV1: ...
+
+    def sign(
+        self, message: bytes, *, actor: FiscalClassifierActorV1, deadline_at: datetime
+    ) -> str: ...
+
+
+def _invalid(message: str) -> SnapshotError:
+    return SnapshotError("FISCAL_CLASSIFICATION_INVALID", message)
+
+
+def _ref(record: ArtifactRecordV1) -> ArtifactRefV1:
+    return ArtifactRefV1(
+        role=_ROLE,
+        artifact_id=record.artifact_id,
+        content_hash=record.content_hash,
+        media_type=record.media_type,
+    )
+
+
+def _signature(
+    message: bytes, signature: str, authority: CurrentFiscalAuthorityV1
+) -> None:
+    try:
+        Ed25519PublicKey.from_public_bytes(
+            base64.b64decode(
+                authority.grant.identity.public_key_ed25519_base64, validate=True
+            )
+        ).verify(bytes.fromhex(signature), message)
+    except (ValueError, InvalidSignature) as error:
+        raise _invalid("classification or preparation signature is invalid") from error
+
+
+class _ClassificationRead:
+    def __init__(self, reader: FiscalArtifactRead) -> None:
+        self.reader = reader
+        self.heads: dict[str, FiscalHistoryHeadV1] = {}
+        self.visible_after: datetime | None = None
+        self.authorities: dict[str, CurrentFiscalAuthorityV1] = {}
+        self.epoch: FiscalHistoryEpochV1 | None = None
+
+    def observe(self, history: FiscalHistoryReadV1) -> None:
+        if self.epoch is not None and self.epoch != history.epoch:
+            raise _invalid("classification recovery epoch changed during verification")
+        self.epoch = history.epoch
+        for entry in history.entries:
+            if not isinstance(entry.commit_bound, FiscalCommitReceiptV1):
+                raise _invalid(
+                    "classification requires sealed evidence and control history"
+                )
+            upper = entry.commit_bound.visible_by
+            self.visible_after = (
+                max(upper, self.visible_after) if self.visible_after else upper
+            )
+        for head in history.heads:
+            if self.heads.setdefault(head.stream_id, head) != head:
+                raise _invalid("classification history changed during verification")
+
+
+class FiscalSourceClassificationOwner:
+    def __init__(
+        self,
+        *,
+        artifacts: EvidenceArtifactStore,
+        history: FiscalAdmissionHistoryPort | None,
+        authorities: FiscalAuthorityOwner,
+        sources: FiscalClassificationSourcePort | None,
+        signer: FiscalClassifierSignerPort | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
+        self.artifacts = artifacts
+        self.history = history
+        self.authorities = authorities
+        self.sources = sources
+        self.signer = signer
+        self.clock = clock
+
+    @staticmethod
+    def _expired() -> SnapshotError:
+        return SnapshotError(
+            "REQUEST_DEADLINE_EXCEEDED",
+            "fiscal classification deadline expired",
+            retryable=True,
+        )
+
+    def _now(self) -> datetime:
+        now = self.clock()
+        if now.utcoffset() is None:
+            raise _invalid("classification clock must be timezone aware")
+        return now
+
+    def _budget(self, deadline_at: datetime) -> float:
+        now = self._now()
+        if deadline_at.utcoffset() is None or now >= deadline_at:
+            raise self._expired()
+        return (deadline_at - now).total_seconds()
+
+    def _history(self) -> FiscalAdmissionHistoryPort:
+        if self.history is None:
+            raise SnapshotError(
+                "FISCAL_CLASSIFICATION_HISTORY_UNCONFIGURED",
+                "classification requires a trusted history owner",
+            )
+        return self.history
+
+    @staticmethod
+    def _subject(command: FiscalRecordClassificationCommandV1) -> str:
+        return "fiscal-classification:" + command.artifact_id
+
+    def _authority(
+        self,
+        identity: str,
+        role: Literal["classifier", "source_preparer"],
+        state: _ClassificationRead,
+        deadline_at: datetime,
+    ) -> CurrentFiscalAuthorityV1:
+        if role == "classifier":
+            current = self.authorities.read_current(
+                identity, expected_role="classifier", deadline_at=deadline_at
+            )
+        else:
+            current = self.authorities.read_current(
+                identity, expected_role="source_preparer", deadline_at=deadline_at
+            )
+        previous = state.authorities.setdefault(identity, current)
+        if (
+            previous.grant_ref != current.grant_ref
+            or previous.grant != current.grant
+            or previous.history_heads != current.history_heads
+        ):
+            raise _invalid("classification authority changed during verification")
+        if state.epoch is None:
+            state.observe(
+                self._history().read(
+                    tuple(
+                        head.stream_id
+                        for head in current.history_heads
+                        if head.stream_kind == "control"
+                    ),
+                    deadline_at=deadline_at,
+                )
+            )
+        return current
+
+    def _source(
+        self,
+        command: FiscalRecordClassificationCommandV1,
+        state: _ClassificationRead,
+        deadline_at: datetime,
+    ) -> FiscalClassificationSource:
+        if self.sources is None:
+            raise SnapshotError(
+                "FISCAL_CLASSIFICATION_SOURCE_UNCONFIGURED",
+                "classification requires a trusted source scope resolver",
+            )
+        source = self.sources.resolve(
+            command.source_validation_ref,
+            command.witness_ref,
+            command.security_id,
+            reader=state.reader,
+            check_deadline=partial(self._budget, deadline_at),
+            deadline_at=deadline_at,
+        )
+        self._budget(deadline_at)
+        if (
+            source.scope.source_validation_ref != command.source_validation_ref
+            or source.scope.witness_ref != command.witness_ref
+        ):
+            raise _invalid("source resolver returned a different source or witness")
+        return source
+
+    @staticmethod
+    def _json(ref: ArtifactRefV1, role: str, state: _ClassificationRead) -> bytes:
+        if ref.role != role or ref.media_type != "application/json":
+            raise _invalid("classification evidence reference has a different role")
+        return read_retained_artifact(state.reader, ref)
+
+    def _review(
+        self,
+        command: FiscalRecordClassificationCommandV1,
+        source: FiscalClassificationSource,
+        state: _ClassificationRead,
+        deadline_at: datetime,
+    ) -> FiscalSourceAccountingReviewV1:
+        raw = self._json(
+            command.review_ref, "fiscal-source-accounting-review-v1", state
+        )
+        review = FiscalSourceAccountingReviewV1.model_validate_json(raw)
+        if canonical_bytes(review) != raw:
+            raise _invalid("review bytes are not canonical")
+        verify_fiscal_source_review(
+            source, review, check_deadline=partial(self._budget, deadline_at)
+        )
+        return review
+
+    def _execution(
+        self,
+        command: FiscalRecordClassificationCommandV1,
+        review: FiscalSourceAccountingReviewV1,
+        actor: FiscalClassifierActorV1,
+        signed_at: datetime,
+        issuance: FiscalIssuanceContextV1,
+        authority: CurrentFiscalAuthorityV1,
+        source: FiscalClassificationSource,
+        state: _ClassificationRead,
+        deadline_at: datetime,
+    ) -> None:
+        identity = authority.grant.identity
+        raw = self._json(
+            actor.execution_ref, "fiscal-classifier-review-execution-v1", state
+        )
+        execution = FiscalClassifierReviewExecutionV1.model_validate_json(raw)
+        if (
+            canonical_bytes(execution) != raw
+            or actor.authority_id != identity.authority_id
+            or actor.principal_id != identity.principal_id
+            or actor.principal_kind != identity.principal_kind
+            or actor.key_id != identity.key_id
+            or execution.authority_id != actor.authority_id
+            or execution.principal_id != actor.principal_id
+            or execution.principal_kind != actor.principal_kind
+            or execution.key_id != actor.key_id
+            or execution.command_digest != command.command_digest
+            or execution.scope_digest != review.scope.scope_digest
+            or execution.review_ref != command.review_ref
+            or execution.issuance != issuance
+            or execution.completed_at > signed_at
+            or execution.started_at < authority.grant.valid_from
+        ):
+            raise _invalid(
+                "review execution does not authenticate the exact command and reviewer"
+            )
+        raw_preparation = self._json(
+            command.preparer_execution_ref,
+            "fiscal-source-preparation-execution-v1",
+            state,
+        )
+        signed_preparation = (
+            SignedFiscalSourcePreparationExecutionV1.model_validate_json(
+                raw_preparation
+            )
+        )
+        preparation = signed_preparation.execution
+        preparer = self._authority(
+            preparation.authority_id, "source_preparer", state, deadline_at
+        )
+        preparer_identity = preparer.grant.identity
+        if (
+            canonical_bytes(signed_preparation) != raw_preparation
+            or preparation.source_validation_ref != review.scope.source_validation_ref
+            or preparation.source_binding_digest != review.scope.source_binding_digest
+            or preparation.runtime != review.scope.runtime
+            or preparation.authority_grant_ref != preparer.grant_ref
+            or preparation.issuance != issuance
+            or preparation.principal_id != preparer_identity.principal_id
+            or preparation.principal_kind != preparer_identity.principal_kind
+            or preparation.key_id != preparer_identity.key_id
+            or not preparer.grant.valid_from
+            <= preparation.started_at
+            <= preparation.completed_at
+            < preparer.grant.valid_until
+            or preparation.completed_at > execution.started_at
+        ):
+            raise _invalid(
+                "source preparation does not bind an authenticated source execution"
+            )
+        _signature(
+            signed_preparation.signing_bytes(), signed_preparation.signature, preparer
+        )
+        witness = source.witness
+        principals = (
+            preparation.principal_id,
+            witness.principal_id,
+            actor.principal_id,
+        )
+        keys = (preparation.key_id, witness.key_id, actor.key_id)
+        focus_executions = {
+            ref.artifact_id
+            for action in witness.witness.actions
+            for ref in (action.result_ref, action.delivery_ref)
+        }
+        if (
+            len(set(principals)) != 3
+            or len(set(keys)) != 3
+            or preparation.execution_id == execution.execution_id
+            or preparation.execution_id in focus_executions
+            or execution.execution_id in focus_executions
+            or command.preparer_execution_ref.artifact_id
+            == actor.execution_ref.artifact_id
+        ):
+            raise _invalid(
+                "source preparation, focus validation and classification are not independent"
+            )
+        if state.epoch is None:
+            raise _invalid("classification recovery epoch is unavailable")
+        try:
+            state.epoch.require_current_issuance(issuance)
+            state.epoch.require_current_activity(
+                signed_at,
+                execution.started_at,
+                execution.completed_at,
+                preparation.started_at,
+                preparation.completed_at,
+            )
+        except ValueError as error:
+            raise _invalid(
+                "recovered classification requires fresh issuance and executions"
+            ) from error
+
+    @staticmethod
+    def _dependencies(signed: SignedFiscalSourceClassificationV1) -> tuple[str, ...]:
+        command = signed.command
+        return tuple(
+            sorted(
+                {
+                    command.source_validation_ref.content_hash,
+                    command.witness_ref.content_hash,
+                    command.review_ref.content_hash,
+                    command.preparer_execution_ref.content_hash,
+                    signed.reviewer.execution_ref.content_hash,
+                    signed.authority_grant_ref.content_hash,
+                    signed.reviewer.key_id,
+                    signed.review.scope.scope_digest,
+                }
+            )
+        )
+
+    def _verify(
+        self,
+        signed: SignedFiscalSourceClassificationV1,
+        state: _ClassificationRead,
+        deadline_at: datetime,
+    ) -> None:
+        command = signed.command
+        source = self._source(command, state, deadline_at)
+        review = self._review(command, source, state, deadline_at)
+        authority = self._authority(
+            command.authority_id, "classifier", state, deadline_at
+        )
+        if (
+            signed.review != review
+            or signed.authority_grant_ref != authority.grant_ref
+            or not authority.grant.valid_from
+            <= signed.signed_at
+            < command.expires_at
+            <= authority.grant.valid_until
+        ):
+            raise _invalid(
+                "classification differs from review, source, authority or expiry"
+            )
+        self._execution(
+            command,
+            review,
+            signed.reviewer,
+            signed.signed_at,
+            signed.issuance,
+            authority,
+            source,
+            state,
+            deadline_at,
+        )
+        _signature(signed.signing_bytes(), signed.signature, authority)
+        self._budget(deadline_at)
+
+    def _load(
+        self, ref: ArtifactRefV1, state: _ClassificationRead, deadline_at: datetime
+    ) -> SignedFiscalSourceClassificationV1:
+        raw = self._json(ref, _ROLE, state)
+        signed = SignedFiscalSourceClassificationV1.model_validate_json(raw)
+        if (
+            canonical_bytes(signed) != raw
+            or signed.artifact_id != ref.artifact_id
+            or state.reader.get(ref.artifact_id).dependency_hashes
+            != self._dependencies(signed)
+        ):
+            raise _invalid(
+                "classification artifact identity or dependency metadata differs"
+            )
+        self._verify(signed, state, deadline_at)
+        return signed
+
+    def _history_state(
+        self,
+        signed: SignedFiscalSourceClassificationV1,
+        ref: ArtifactRefV1,
+        state: _ClassificationRead,
+        deadline_at: datetime,
+    ) -> None:
+        history = self._history()
+        control = history.read(
+            ("control:" + self._subject(signed.command),), deadline_at=deadline_at
+        )
+        if len(control.entries) != 1:
+            raise _invalid("classification has no unique committed control record")
+        entry = control.entries[0]
+        if (
+            entry.event.body
+            != FiscalControlBindingV1(
+                action="classification_recorded",
+                payload_ref=ref,
+                command_digest=signed.command.command_digest,
+            )
+            or entry.event.recorded_at < signed.signed_at
+            or entry.event.origin_id != signed.issuance.origin_id
+        ):
+            raise _invalid("classification control event differs from signed evidence")
+        try:
+            control.require_current_epoch((entry,))
+        except SnapshotError as error:
+            raise _invalid(
+                "recovered classification requires fresh local control evidence"
+            ) from error
+        state.observe(control)
+        records = tuple(
+            record for _, record in state.reader.records if record is not None
+        )
+        evidence = history.read(
+            tuple("evidence:" + record.artifact_id for record in records),
+            deadline_at=deadline_at,
+        )
+        selected_entries = []
+        for record in records:
+            entries = [
+                entry
+                for entry in evidence.entries
+                if entry.event.subject_id == record.artifact_id
+            ]
+            if not entries or getattr(entries[-1].event.body, "record", None) != record:
+                raise _invalid(
+                    "consumed classification evidence lacks its current checkpoint"
+                )
+            selected_entries.append(entries[-1])
+        try:
+            evidence.require_current_epoch(tuple(selected_entries))
+        except SnapshotError as error:
+            raise _invalid(
+                "classification requires fresh local evidence observations"
+            ) from error
+        state.observe(evidence)
+
+    def _require_current_epoch(
+        self,
+        signed: SignedFiscalSourceClassificationV1,
+        state: _ClassificationRead,
+        deadline_at: datetime,
+    ) -> None:
+        epoch = self._history().read_epoch(deadline_at=deadline_at)
+        if state.epoch is not None and epoch != state.epoch:
+            raise _invalid("classification recovery epoch changed during verification")
+        try:
+            epoch.require_current_issuance(signed.issuance)
+        except ValueError as error:
+            raise _invalid(
+                "recovered classification requires fresh local issuance"
+            ) from error
+
+    def _finish(
+        self,
+        signed: SignedFiscalSourceClassificationV1,
+        state: _ClassificationRead,
+        deadline_at: datetime,
+    ) -> None:
+        records_before = state.reader.records
+        source = self._source(signed.command, state, deadline_at)
+        if source.scope != signed.review.scope:
+            raise _invalid("classification source changed during verification")
+        if state.reader.records != records_before:
+            raise _invalid("classification consumed evidence changed before return")
+        observed: list[datetime] = []
+        for identity, previous in state.authorities.items():
+            current = self.authorities.read_current(
+                identity,
+                expected_role=previous.grant.identity.role,
+                deadline_at=deadline_at,
+            )
+            if (
+                current.grant_ref != previous.grant_ref
+                or current.grant != previous.grant
+                or current.history_heads != previous.history_heads
+            ):
+                raise _invalid("classification authority changed before return")
+            observed.append(current.observed_at)
+        state.reader.check_current()
+        heads = dict(state.heads)
+        for authority in state.authorities.values():
+            for head in authority.history_heads:
+                if heads.setdefault(head.stream_id, head) != head:
+                    raise _invalid("classification and authority history heads differ")
+        self._history().require_heads(tuple(heads.values()), deadline_at=deadline_at)
+        self._require_current_epoch(signed, state, deadline_at)
+        state.reader.check_current()
+        now = self._now()
+        if now >= deadline_at:
+            raise self._expired()
+        if now >= signed.command.expires_at or now >= source.witness.expires_at:
+            raise _invalid("classification or witness expired before return")
+        if any(
+            not authority.grant.valid_from <= now < authority.grant.valid_until
+            for authority in state.authorities.values()
+        ):
+            raise _invalid("classification authority expired before return")
+        if (state.visible_after is not None and now <= state.visible_after) or any(
+            now < at for at in observed
+        ):
+            raise _invalid("classification clock does not follow sealed visibility")
+
+    def record_classification(
+        self,
+        command: FiscalRecordClassificationCommandV1,
+        *,
+        expected_head: FiscalHistoryHeadV1 | None,
+        deadline_at: datetime,
+    ) -> FiscalClassificationPublicationV1:
+        with metadata_operation_budget(
+            partial(self._budget, deadline_at), self._expired
+        ):
+            try:
+                self._budget(deadline_at)
+                self._history()
+                command = FiscalRecordClassificationCommandV1.model_validate_json(
+                    canonical_bytes(command)
+                )
+                state = _ClassificationRead(
+                    FiscalArtifactRead(
+                        self.artifacts, partial(self._budget, deadline_at)
+                    )
+                )
+                existing = state.reader.current(command.artifact_id)
+                if existing is None:
+                    if self.signer is None:
+                        raise SnapshotError(
+                            "FISCAL_CLASSIFIER_UNCONFIGURED",
+                            "classification signing capability is not configured",
+                        )
+                    source = self._source(command, state, deadline_at)
+                    review = self._review(command, source, state, deadline_at)
+                    issuance = (
+                        self._history()
+                        .read_epoch(deadline_at=deadline_at)
+                        .issuance_context
+                    )
+                    actor = self.signer.authenticate(
+                        command, review, issuance=issuance, deadline_at=deadline_at
+                    )
+                    self._budget(deadline_at)
+                    authority = self._authority(
+                        command.authority_id, "classifier", state, deadline_at
+                    )
+                    unsigned = SignedFiscalSourceClassificationV1(
+                        command=command,
+                        review=review,
+                        reviewer=actor,
+                        authority_grant_ref=authority.grant_ref,
+                        issuance=issuance,
+                        signed_at=self._now(),
+                        signature="0" * 128,
+                    )
+                    self._execution(
+                        command,
+                        review,
+                        actor,
+                        unsigned.signed_at,
+                        issuance,
+                        authority,
+                        source,
+                        state,
+                        deadline_at,
+                    )
+                    if command.expires_at > authority.grant.valid_until:
+                        raise _invalid(
+                            "classification expiry exceeds its authority grant"
+                        )
+                    signature = self.signer.sign(
+                        unsigned.signing_bytes(), actor=actor, deadline_at=deadline_at
+                    )
+                    self._budget(deadline_at)
+                    signed = SignedFiscalSourceClassificationV1.model_validate_json(
+                        canonical_bytes(
+                            unsigned.model_copy(update={"signature": signature})
+                        )
+                    )
+                    self._verify(signed, state, deadline_at)
+                    state.reader.check_current()
+                    publication = self.artifacts.put_bytes_with_receipt(
+                        signed.artifact_id,
+                        canonical_bytes(signed),
+                        self._dependencies(signed),
+                        media_type="application/json",
+                        publication_budget=partial(self._budget, deadline_at),
+                    )
+                else:
+                    ref = _ref(existing)
+                    signed = self._load(ref, state, deadline_at)
+                    if signed.command != command:
+                        raise SnapshotError(
+                            "FISCAL_CLASSIFICATION_COMMAND_REUSED",
+                            "classification command identity is immutable",
+                        )
+                    publication = ArtifactPublicationV1(artifact=existing, wrote=False)
+                state.reader.get(command.artifact_id)
+                history = self._history()
+                self._require_current_epoch(signed, state, deadline_at)
+                history.checkpoint(
+                    tuple(
+                        record
+                        for _, record in state.reader.records
+                        if record is not None
+                    ),
+                    deadline_at=deadline_at,
+                )
+                self._require_current_epoch(signed, state, deadline_at)
+                history.append_once(
+                    self._subject(command),
+                    FiscalControlBindingV1(
+                        action="classification_recorded",
+                        payload_ref=_ref(publication.artifact),
+                        command_digest=command.command_digest,
+                    ),
+                    expected_head=expected_head,
+                    deadline_at=deadline_at,
+                )
+                signed = self._load(_ref(publication.artifact), state, deadline_at)
+                self._history_state(
+                    signed, _ref(publication.artifact), state, deadline_at
+                )
+                self._finish(signed, state, deadline_at)
+                return FiscalClassificationPublicationV1(
+                    signed_classification=signed,
+                    publication=publication,
+                    history_heads=tuple(state.heads.values()),
+                )
+            except ArtifactPublicationDeadlineExceeded as error:
+                raise self._expired() from error
+            except (ValueError, DataReleaseError) as error:
+                raise _invalid(
+                    "classification failed typed evidence verification"
+                ) from error
+
+    def require_candidate_source(
+        self,
+        scope: FiscalSourceUseScopeV1,
+        classification_refs: tuple[ArtifactRefV1, ...],
+        *,
+        deadline_at: datetime,
+    ) -> ClassifiedSourceForCandidateV1:
+        with metadata_operation_budget(
+            partial(self._budget, deadline_at), self._expired
+        ):
+            try:
+                self._budget(deadline_at)
+                if len(classification_refs) != 1:
+                    raise _invalid(
+                        "this profile requires one exact source classification"
+                    )
+                state = _ClassificationRead(
+                    FiscalArtifactRead(
+                        self.artifacts, partial(self._budget, deadline_at)
+                    )
+                )
+                ref = classification_refs[0]
+                signed = self._load(ref, state, deadline_at)
+                if signed.review.scope != scope:
+                    raise _invalid(
+                        "classification does not authorize the exact candidate source scope"
+                    )
+                self._history_state(signed, ref, state, deadline_at)
+                self._finish(signed, state, deadline_at)
+                return ClassifiedSourceForCandidateV1(
+                    scope=scope, classification_refs=classification_refs
+                )
+            except (ValueError, DataReleaseError) as error:
+                raise _invalid(
+                    "classification failed typed evidence verification"
+                ) from error

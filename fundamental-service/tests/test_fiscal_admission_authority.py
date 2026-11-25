@@ -104,7 +104,7 @@ class SyntheticRegistrySigner:
             [FiscalRegistryOperatorV1], FiscalRegistryOperatorV1
         ] = lambda value: value
 
-    def authenticate(self, command, *, deadline_at):
+    def authenticate(self, command, *, issuance, deadline_at):
         execution = FiscalRegistryExecutionV1(
             root_id=self.root.root_id,
             principal_id=self.root.principal_id,
@@ -113,6 +113,7 @@ class SyntheticRegistrySigner:
             execution_id="synthetic-execution:" + uuid4().hex,
             operation=command.kind,
             command_digest=fiscal_authority_command_digest(command),
+            issuance=issuance,
             started_at=datetime.now(UTC),
         )
         publication = self.store.put_with_receipt(execution.execution_id, execution)
@@ -211,6 +212,12 @@ def control_head(publication):
     )
 
 
+def observed_authority_time(environment: Environment) -> datetime:
+    return environment.history.read(
+        ("control:fiscal-authority:synthetic-classifier",), deadline_at=deadline()
+    ).observed_through
+
+
 def revoke_command(publication, *, command_id="synthetic-revoke"):
     return FiscalRevokeAuthorityCommandV1(
         command_id=command_id,
@@ -244,7 +251,7 @@ def test_real_signed_grant_revoke_and_historical_explanation(environment):
     assert isinstance(current, CurrentFiscalAuthorityV1)
     assert current.grant.identity.principal_kind == "machine"
     assert granted.publication.wrote
-    at = datetime.now(UTC)
+    at = observed_authority_time(environment)
     revoked = environment.owner.revoke(
         revoke_command(granted),
         expected_head=control_head(granted),
@@ -265,7 +272,9 @@ def test_real_signed_grant_revoke_and_historical_explanation(environment):
     with pytest.raises(ValidationError):
         CurrentFiscalAuthorityV1.model_validate(historical.model_dump())
     after = environment.owner.replay_authority(
-        "synthetic-classifier", at=datetime.now(UTC), deadline_at=deadline()
+        "synthetic-classifier",
+        at=observed_authority_time(environment),
+        deadline_at=deadline(),
     )
     assert after.state == "revoked" and after.revocation_ref is not None
 
@@ -423,7 +432,7 @@ def test_replay_preserves_old_role_after_deployment_roster_changes(environment):
     publication = environment.owner.grant(
         grant_command(), expected_head=None, deadline_at=deadline()
     )
-    at = datetime.now(UTC)
+    at = observed_authority_time(environment)
     environment.configuration[0] = environment.configuration[0].model_copy(
         update={"authorities": ()}
     )
@@ -443,7 +452,7 @@ def test_historical_evidence_uses_its_checkpoint_instead_of_current_status(envir
     publication = environment.owner.grant(
         grant_command(), expected_head=None, deadline_at=deadline()
     )
-    at = datetime.now(UTC)
+    at = observed_authority_time(environment)
     change_status(
         environment, publication.publication.artifact.artifact_id, "invalidated"
     )
@@ -461,7 +470,9 @@ def test_historical_evidence_uses_its_checkpoint_instead_of_current_status(envir
     assert old.state == "active"
     with pytest.raises(SnapshotError):
         environment.owner.replay_authority(
-            "synthetic-classifier", at=datetime.now(UTC), deadline_at=deadline()
+            "synthetic-classifier",
+            at=observed_authority_time(environment),
+            deadline_at=deadline(),
         )
 
 
@@ -481,7 +492,9 @@ def test_missing_historical_root_evidence_refuses_replay(environment):
     )
     with pytest.raises(SnapshotError):
         environment.owner.replay_authority(
-            "synthetic-classifier", at=datetime.now(UTC), deadline_at=deadline()
+            "synthetic-classifier",
+            at=observed_authority_time(environment),
+            deadline_at=deadline(),
         )
 
 
@@ -709,7 +722,9 @@ def test_current_and_audit_reads_do_not_write_history(environment):
         "synthetic-classifier", expected_role="classifier", deadline_at=deadline()
     )
     environment.owner.replay_authority(
-        "synthetic-classifier", at=datetime.now(UTC), deadline_at=deadline()
+        "synthetic-classifier",
+        at=observed_authority_time(environment),
+        deadline_at=deadline(),
     )
     assert environment.metadata.run_fiscal_admission_history(counts) == before
 
@@ -1070,3 +1085,101 @@ def test_revoke_success_refuses_clock_reversal_at_final_head_check(
             "synthetic-classifier", expected_role="classifier", deadline_at=deadline()
         )
     assert refused.value.code == "FISCAL_AUTHORITY_REFUSED"
+
+
+def test_restored_authority_is_audit_only_until_fresh_local_revoke_and_grant(
+    environment, database_url, tmp_path
+):
+    from fundamental_service.persistence_recovery import (
+        export_backup,
+        restore_backup,
+        _verify_bundle,
+    )
+    from test_fiscal_history_recovery import target_pin
+
+    env = environment
+    original = env.owner.grant(
+        grant_command(), expected_head=None, deadline_at=deadline()
+    )
+    source_read = env.history.read(
+        ("control:fiscal-authority:synthetic-classifier",), deadline_at=deadline()
+    )
+    at = source_read.observed_through
+    backups = tmp_path.parent / ("epoch-backups-" + uuid4().hex)
+    exported = asyncio.run(
+        export_backup(database_url, tmp_path, backups, source_revision="f" * 40)
+    )
+    bundle = backups / exported.manifest_digest
+    manifest = _verify_bundle(bundle, exported.manifest_digest)
+    with _temporary_database(os.environ["FUNDAMENTAL_TEST_DATABASE_URL"]) as target:
+        target_root = tmp_path.parent / ("epoch-content-" + uuid4().hex)
+        with target_pin(
+            target, manifest, tmp_path.parent / ("epoch-pin-" + uuid4().hex)
+        ) as pin:
+            asyncio.run(
+                restore_backup(
+                    target,
+                    target_root,
+                    bundle,
+                    manifest_digest=manifest.digest,
+                    authorization_path=pin,
+                )
+            )
+        current_metadata = PostgresMetadataStore(target)
+        current_metadata.start()
+        try:
+            current_store = PostgresArtifactStore(
+                current_metadata, PostgresContentStore(target_root, current_metadata)
+            )
+            current_history = PostgresFiscalAdmissionHistory(current_metadata)
+            current_signer = SyntheticRegistrySigner(
+                current_store, env.signer.root, env.signer.private_key
+            )
+            owner = FiscalAuthorityOwner(
+                artifacts=current_store,
+                history=current_history,
+                deployment=lambda: env.configuration[0],
+                signer=current_signer,
+            )
+            recovered = current_history.read(
+                ("control:fiscal-authority:synthetic-classifier",),
+                deadline_at=deadline(),
+            )
+            assert (
+                recovered.entries[0].payload_bytes
+                == source_read.entries[0].payload_bytes
+            )
+            assert (
+                recovered.entries[0].commit_bound == source_read.entries[0].commit_bound
+            )
+            assert (
+                owner.replay_authority(
+                    "synthetic-classifier", at=at, deadline_at=deadline()
+                ).state
+                == "active"
+            )
+            with pytest.raises(SnapshotError, match="fresh|epoch|recovered"):
+                owner.read_current(
+                    "synthetic-classifier",
+                    expected_role="classifier",
+                    deadline_at=deadline(),
+                )
+            revoked = owner.revoke(
+                revoke_command(original, command_id="local-revoke"),
+                expected_head=recovered.heads[0],
+                deadline_at=deadline(),
+            )
+            fresh = owner.grant(
+                grant_command(command_id="local-grant"),
+                expected_head=control_head(revoked),
+                deadline_at=deadline(),
+            )
+            assert owner.read_current(
+                "synthetic-classifier",
+                expected_role="classifier",
+                deadline_at=deadline(),
+            ).grant_ref == reference(
+                fresh.publication.artifact, "fiscal-authority-record-v1"
+            )
+        finally:
+            current_metadata.close()

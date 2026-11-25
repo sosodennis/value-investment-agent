@@ -179,7 +179,7 @@ def _text(node: etree._Element) -> str:
     return " ".join(" ".join(node.itertext()).split())
 
 
-def _amount(node: etree._Element) -> Decimal:
+def transcribe_fiscal_amount(node: etree._Element) -> Decimal:
     transform = node.get("format", "").split(":")[-1]
     if transform not in {"", "num-dot-decimal", "numdotdecimal"}:
         raise _invalid("primary amount uses an unreviewed numeric transform")
@@ -350,7 +350,7 @@ def map_fiscal_primary_source(
                 }
             ):
                 raise _invalid("primary fact row, context or concept differs")
-            value = _amount(node)
+            value = transcribe_fiscal_amount(node)
             matches = [
                 fact
                 for fact in parsed.get((fact_scope.concept, fact_scope.context_id), ())

@@ -22,7 +22,8 @@ from fundamental_service.metadata import (
     PostgresMetadataStore,
     PostgresSnapshotRepository,
 )
-from fundamental_service.persistence_recovery import export_backup, restore_backup
+from fundamental_service.persistence_recovery import export_backup
+from recovery_test_support import restore_backup
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import (
     SecEdgarSourceAdapter,

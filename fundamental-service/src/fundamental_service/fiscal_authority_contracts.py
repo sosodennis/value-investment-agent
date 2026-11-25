@@ -11,6 +11,7 @@ from pydantic import AwareDatetime, ConfigDict, Field, model_validator
 from .contracts import StrictModel
 from .data_releases import ArtifactRefV1
 from .fiscal_admission_history import FiscalHistoryHeadV1
+from .history_recovery_contracts import FiscalIssuanceContextV1
 from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 
@@ -179,6 +180,7 @@ class FiscalRegistryExecutionV1(_AuthorityModel):
     execution_id: Identity
     operation: Literal["grant", "revoke"]
     command_digest: Digest
+    issuance: FiscalIssuanceContextV1
     started_at: AwareDatetime
 
 
@@ -228,6 +230,7 @@ class SignedFiscalAuthorityRecordV1(_AuthorityModel):
     record: FiscalAuthorityRecordV1
     issuer: FiscalRegistryOperatorV1
     root_evidence_ref: ArtifactRefV1
+    issuance: FiscalIssuanceContextV1
     signed_at: AwareDatetime
     signature: str = Field(pattern=r"^[0-9a-f]{128}$")
 

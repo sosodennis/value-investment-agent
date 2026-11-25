@@ -19,7 +19,9 @@ from .fiscal_admission_history import (
     FiscalControlBindingV1,
     FiscalHistoryEntryV1,
     FiscalHistoryHeadV1,
+    FiscalHistoryReadV1,
 )
+from .history_recovery_contracts import FiscalHistoryEpochV1, FiscalIssuanceContextV1
 from .fiscal_authority_contracts import (
     CurrentFiscalAuthorityV1,
     FiscalAuthorityCommandV1,
@@ -50,7 +52,11 @@ _MAX_GRANT_AGE = timedelta(days=30)
 
 class FiscalRegistrySignerPort(Protocol):
     def authenticate(
-        self, command: FiscalAuthorityCommandV1, *, deadline_at: datetime
+        self,
+        command: FiscalAuthorityCommandV1,
+        *,
+        issuance: FiscalIssuanceContextV1,
+        deadline_at: datetime,
     ) -> FiscalRegistryOperatorV1: ...
 
     def sign(
@@ -159,6 +165,10 @@ class _AuthorityState:
     grant: FiscalAuthorityGrantV1
     revocation_ref: ArtifactRefV1 | None
     heads: tuple[FiscalHistoryHeadV1, ...]
+    grant_entry: FiscalHistoryEntryV1
+    evidence_entries: tuple[FiscalHistoryEntryV1, ...]
+    control: FiscalHistoryReadV1
+    evidence: FiscalHistoryReadV1
 
 
 class FiscalAuthorityOwner:
@@ -263,16 +273,19 @@ class FiscalAuthorityOwner:
         command: FiscalAuthorityCommandV1,
         configuration: FiscalAuthorityDeploymentV1,
         reader: _AuthorityRead,
+        issuance: FiscalIssuanceContextV1,
         deadline_at: datetime,
     ) -> tuple[FiscalRegistryOperatorV1, FiscalConfiguredRegistryRootV1]:
         if self._signer is None:
             raise _refused("registry signing capability is not configured")
-        issuer = self._signer.authenticate(command, deadline_at=deadline_at)
+        issuer = self._signer.authenticate(
+            command, issuance=issuance, deadline_at=deadline_at
+        )
         self._budget(deadline_at)
         root = self._root(configuration, issuer)
         self._require_root_time(root, self._now())
         reader.expect(root.evidence_ref, root.identity)
-        self._execution(issuer, command, reader, self._now())
+        self._execution(issuer, command, reader, self._now(), issuance)
         return issuer, root
 
     @staticmethod
@@ -281,7 +294,8 @@ class FiscalAuthorityOwner:
         command: FiscalAuthorityCommandV1,
         reader: _AuthorityRead,
         signed_at: datetime,
-    ) -> None:
+        issuance: FiscalIssuanceContextV1,
+    ) -> FiscalRegistryExecutionV1:
         if issuer.execution_ref.role != "fiscal-registry-execution-v1":
             raise _invalid("registry execution evidence has a different role")
         try:
@@ -298,9 +312,30 @@ class FiscalAuthorityOwner:
             or execution.key_id != issuer.key_id
             or execution.operation != command.kind
             or execution.command_digest != fiscal_authority_command_digest(command)
+            or execution.issuance != issuance
             or execution.started_at > signed_at
         ):
             raise _invalid("registry execution does not authenticate this command")
+        return execution
+
+    def _require_current_issuance(
+        self,
+        signed: SignedFiscalAuthorityRecordV1,
+        epoch: FiscalHistoryEpochV1,
+        reader: _AuthorityRead,
+    ) -> None:
+        execution = self._execution(
+            signed.issuer,
+            signed.record.command,
+            reader,
+            signed.signed_at,
+            signed.issuance,
+        )
+        try:
+            epoch.require_current_issuance(signed.issuance)
+            epoch.require_current_activity(signed.signed_at, execution.started_at)
+        except ValueError as error:
+            raise _refused(str(error)) from error
 
     @staticmethod
     def _dependencies(signed: SignedFiscalAuthorityRecordV1) -> tuple[str, ...]:
@@ -332,7 +367,13 @@ class FiscalAuthorityOwner:
         ):
             raise _invalid("authority signing root or command identity differs")
         reader.expect(root.evidence_ref, root.identity)
-        self._execution(signed.issuer, signed.record.command, reader, signed.signed_at)
+        self._execution(
+            signed.issuer,
+            signed.record.command,
+            reader,
+            signed.signed_at,
+            signed.issuance,
+        )
         self._verify_signature(signed, root)
         if isinstance(signed.record, FiscalAuthorityGrantV1):
             if (
@@ -405,6 +446,7 @@ class FiscalAuthorityOwner:
         grant: FiscalAuthorityGrantV1 | None = None
         signed_grant: SignedFiscalAuthorityRecordV1 | None = None
         grant_ref: ArtifactRefV1 | None = None
+        grant_entry: FiscalHistoryEntryV1 | None = None
         revoked: ArtifactRefV1 | None = None
         for entry in entries:
             body = entry.event.body
@@ -416,6 +458,7 @@ class FiscalAuthorityOwner:
                 record.command.authority_id != authority_id
                 or body.command_digest != signed.command_digest
                 or entry.event.recorded_at < signed.signed_at
+                or signed.issuance.origin_id != entry.event.origin_id
                 or body.action
                 != (
                     "authority_granted"
@@ -439,6 +482,7 @@ class FiscalAuthorityOwner:
                     body.payload_ref,
                     None,
                 )
+                grant_entry = entry
             else:
                 if (
                     grant_ref is None
@@ -449,7 +493,12 @@ class FiscalAuthorityOwner:
                         "authority revocation does not name the active grant"
                     )
                 revoked = body.payload_ref
-        if grant is None or grant_ref is None or signed_grant is None:
+        if (
+            grant is None
+            or grant_ref is None
+            or signed_grant is None
+            or grant_entry is None
+        ):
             raise _refused("authority history contains no grant")
         evidence = history.read(
             tuple("evidence:" + identity for identity in state_reader.records),
@@ -473,8 +522,23 @@ class FiscalAuthorityOwner:
         for identity, artifact_record in state_reader.records.items():
             if reader.records.setdefault(identity, artifact_record) != artifact_record:
                 raise _invalid("authority evidence metadata changed")
+        current_ids = {
+            grant_ref.artifact_id,
+            signed_grant.root_evidence_ref.artifact_id,
+            signed_grant.issuer.execution_ref.artifact_id,
+            grant.provisioning_ref.artifact_id,
+        }
+        latest_evidence = {entry.event.subject_id: entry for entry in evidence.entries}
         return _AuthorityState(
-            grant_ref, signed_grant, grant, revoked, control.heads + evidence.heads
+            grant_ref,
+            signed_grant,
+            grant,
+            revoked,
+            control.heads + evidence.heads,
+            grant_entry,
+            tuple(latest_evidence[identity] for identity in sorted(current_ids)),
+            control,
+            evidence,
         )
 
     def _finish(
@@ -533,7 +597,22 @@ class FiscalAuthorityOwner:
                 or state.revocation_ref is not None
             ):
                 raise _refused("authority role is different or its grant was revoked")
+            try:
+                state.control.require_current_epoch((state.grant_entry,))
+                state.evidence.require_current_epoch(state.evidence_entries)
+            except SnapshotError as error:
+                raise _refused(
+                    "recovered authority requires fresh local authorizing evidence"
+                ) from error
+            self._require_current_issuance(
+                state.signed_grant, state.control.epoch, reader
+            )
             self._finish(configuration, reader, state.heads, deadline_at)
+            self._require_current_issuance(
+                state.signed_grant,
+                self._history_owner().read_epoch(deadline_at=deadline_at),
+                reader,
+            )
             now = self._live_time(
                 self._root(configuration, state.signed_grant.issuer),
                 deadline_at,
@@ -613,6 +692,7 @@ class FiscalAuthorityOwner:
         issuer: FiscalRegistryOperatorV1,
         root: FiscalConfiguredRegistryRootV1,
         reader: _AuthorityRead,
+        issuance: FiscalIssuanceContextV1,
         deadline_at: datetime,
     ) -> tuple[SignedFiscalAuthorityRecordV1, ArtifactPublicationV1]:
         signed_at = (
@@ -624,6 +704,7 @@ class FiscalAuthorityOwner:
             record=record,
             issuer=issuer,
             root_evidence_ref=root.evidence_ref,
+            issuance=issuance,
             signed_at=signed_at,
             signature="0" * 128,
         )
@@ -661,10 +742,14 @@ class FiscalAuthorityOwner:
         deadline_at: datetime,
     ) -> tuple[FiscalHistoryHeadV1, ...]:
         history = self._history_owner()
+        self._require_current_issuance(
+            signed, history.read_epoch(deadline_at=deadline_at), reader
+        )
         reader.get(signed.artifact_id)
         checkpoint = history.checkpoint(
             tuple(reader.records.values()), deadline_at=deadline_at
         )
+        self._require_current_issuance(signed, checkpoint.epoch, reader)
         reader.observe_commits(checkpoint.entries)
         appended = history.append_once(
             "fiscal-authority:" + signed.record.command.authority_id,
@@ -707,8 +792,13 @@ class FiscalAuthorityOwner:
             configuration = self._configured()
             reader = _AuthorityRead(self._artifacts, partial(self._budget, deadline_at))
             target = self._target(configuration, command.authority_id)
+            issuance = (
+                self._history_owner()
+                .read_epoch(deadline_at=deadline_at)
+                .issuance_context
+            )
             issuer, root = self._authenticate(
-                command, configuration, reader, deadline_at
+                command, configuration, reader, issuance, deadline_at
             )
             existing = self._existing(command, issuer, configuration, reader)
             if existing is None:
@@ -742,6 +832,7 @@ class FiscalAuthorityOwner:
                     issuer,
                     root,
                     reader,
+                    issuance,
                     deadline_at,
                 )
             else:
@@ -758,6 +849,11 @@ class FiscalAuthorityOwner:
                 raise _refused("authority command is no longer the current grant")
             heads = self._merge_heads(evidence_heads, current.history_heads)
             self._finish(configuration, reader, heads, deadline_at)
+            self._require_current_issuance(
+                signed,
+                self._history_owner().read_epoch(deadline_at=deadline_at),
+                reader,
+            )
             self._live_time(root, deadline_at, reader, current.grant)
             return FiscalAuthorityPublicationV1(
                 signed_record=signed,
@@ -779,8 +875,13 @@ class FiscalAuthorityOwner:
             self._history_owner()
             configuration = self._configured()
             reader = _AuthorityRead(self._artifacts, partial(self._budget, deadline_at))
+            issuance = (
+                self._history_owner()
+                .read_epoch(deadline_at=deadline_at)
+                .issuance_context
+            )
             issuer, root = self._authenticate(
-                command, configuration, reader, deadline_at
+                command, configuration, reader, issuance, deadline_at
             )
             existing = self._existing(command, issuer, configuration, reader)
             if existing is None:
@@ -801,6 +902,7 @@ class FiscalAuthorityOwner:
                     issuer,
                     root,
                     reader,
+                    issuance,
                     deadline_at,
                 )
             else:
@@ -815,6 +917,11 @@ class FiscalAuthorityOwner:
                 raise _refused("authority command is no longer its current revocation")
             heads = self._merge_heads(evidence_heads, state.heads)
             self._finish(configuration, reader, heads, deadline_at)
+            self._require_current_issuance(
+                signed,
+                self._history_owner().read_epoch(deadline_at=deadline_at),
+                reader,
+            )
             self._live_time(root, deadline_at, reader)
             return FiscalAuthorityPublicationV1(
                 signed_record=signed, publication=publication, history_heads=heads

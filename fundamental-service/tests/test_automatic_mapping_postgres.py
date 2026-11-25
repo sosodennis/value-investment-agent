@@ -17,7 +17,8 @@ from fundamental_service.metadata import (
     PostgresContentStore,
     PostgresMetadataStore,
 )
-from fundamental_service.persistence_recovery import export_backup, restore_backup
+from fundamental_service.persistence_recovery import export_backup
+from recovery_test_support import restore_backup, assert_same_data_plane_projection
 from fundamental_service.serialization import canonical_bytes
 from test_automatic_mapping import case, MACHINE_KEY, REVISION
 from test_automatic_mapping_disclosures import expense_case
@@ -140,6 +141,7 @@ def test_machine_approval_cli_restart_and_empty_store_restore(
             assert artifacts.read(ref.artifact_id) == offline.read(ref.artifact_id)
     finally:
         target.close()
-    assert not asyncio.run(
+    reexported = asyncio.run(
         export_backup(target_db, restored, backup_root, source_revision=REVISION)
-    ).wrote
+    )
+    assert_same_data_plane_projection(backup, reexported, backup_root)
