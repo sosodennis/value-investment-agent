@@ -10,21 +10,38 @@ from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
 
+from pydantic import Field
 from sqlalchemy.exc import SQLAlchemyError
 
+from .contracts import StrictModel
 from .data_releases import ArtifactRefV1
-from .fiscal_discovery import FiscalDiscoveryRequestV1
+from .fiscal_discovery import FiscalDiscoveryEvidenceV1, FiscalDiscoveryRequestV1
 from .fiscal_source_validation import fiscal_validation_budget
-from .fiscal_validation_contracts import FiscalOriginalValidationRequestV1
+from .fiscal_validation_contracts import (
+    FiscalOriginalValidationEvidenceV1,
+    FiscalOriginalValidationRequestV1,
+)
 from .metadata import metadata_operation_budget
 from .operations import ServiceError
 from .process_output import write_stdout
+from .replay import ArtifactPublicationV1
 from .sec_source import SecSourceError, sec_deadline_exceeded
 from .serialization import canonical_bytes
 from .snapshots import SnapshotError
 
 
-async def _run(args: argparse.Namespace, *, deadline_at: datetime) -> object:
+class _FiscalCommandOutput(StrictModel):
+    evidence: FiscalDiscoveryEvidenceV1 | FiscalOriginalValidationEvidenceV1 = Field(
+        discriminator="protocol"
+    )
+    publication: ArtifactPublicationV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+
+async def _run(
+    args: argparse.Namespace, *, deadline_at: datetime
+) -> _FiscalCommandOutput:
     package_root = Path(__file__).resolve().parents[2]
     for root in (package_root, package_root.parent / "finance-agent-core"):
         if (root / "src/shared/internal_services").is_dir() and str(
@@ -60,11 +77,11 @@ async def _run(args: argparse.Namespace, *, deadline_at: datetime) -> object:
                 evidence, publication = discovery.execute(
                     request, deadline_at=deadline_at
                 )
-                return {"publication": publication, "evidence": evidence}
+                return _FiscalCommandOutput(evidence=evidence, publication=publication)
             if args.command == "read":
-                return {
-                    "evidence": closure.read(args.artifact_id, deadline_at=deadline_at)
-                }
+                return _FiscalCommandOutput(
+                    evidence=closure.read(args.artifact_id, deadline_at=deadline_at)
+                )
             store = acquisition.capture_store
             assert store is not None
             record = store.get(args.discovery_artifact_id)
@@ -80,7 +97,7 @@ async def _run(args: argparse.Namespace, *, deadline_at: datetime) -> object:
                 ),
                 deadline_at=deadline_at,
             )
-            return {"publication": publication, "evidence": evidence}
+            return _FiscalCommandOutput(evidence=evidence, publication=publication)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -105,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     deadline_at = datetime.now(UTC) + timedelta(seconds=args.timeout_seconds)
     try:
         result = asyncio.run(_run(args, deadline_at=deadline_at))
-        write_stdout(canonical_bytes(result) + b"\n")
+        write_stdout(canonical_bytes(result.model_dump(mode="json")) + b"\n")
     except (SnapshotError, SecSourceError, ServiceError) as error:
         print(
             canonical_bytes(

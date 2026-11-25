@@ -3,6 +3,7 @@ import json
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -15,17 +16,132 @@ from sqlalchemy.engine import make_url
 
 import fundamental_service.app as app_module
 from fundamental_service.fiscal_source_runner import main
+from fundamental_service.fiscal_validation_contracts import (
+    FiscalOriginalValidationEvidenceV1,
+    FiscalOriginalValidationRequestV1,
+    FiscalValidationMatchedV1,
+)
 from fundamental_service.metadata import (
     PostgresArtifactStore,
     PostgresContentStore,
     PostgresMetadataStore,
     _check_metadata_budget,
 )
+from fundamental_service.replay import ArtifactPublicationV1
 
 import test_postgres_metadata
+from test_fiscal_discovery import DiscoveryHarness
+from test_fiscal_source_closure import SyntheticCompleteSource, _closure
 
 postgres_metadata = test_postgres_metadata.metadata
 DATABASE_URL = test_postgres_metadata.DATABASE_URL
+
+
+def _install_acquisition(monkeypatch: pytest.MonkeyPatch, acquisition: object) -> None:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        app.state.sec_acquisition = acquisition
+        app.state.application = SimpleNamespace(ready=True)
+        yield
+
+    monkeypatch.setattr(app_module, "app", FastAPI(lifespan=lifespan))
+
+
+def test_cli_outputs_retained_fiscal_evidence_as_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    harness = DiscoveryHarness(tmp_path)
+    closure = _closure(harness, SyntheticCompleteSource(harness, blocked=False))
+    request = harness.request
+
+    def execute(
+        selection: FiscalOriginalValidationRequestV1, *, deadline_at: datetime
+    ) -> tuple[FiscalOriginalValidationEvidenceV1, ArtifactPublicationV1]:
+        harness.deadline = deadline_at
+        return closure.execute(selection, deadline_at=deadline_at)
+
+    def read(
+        artifact_id: str, *, deadline_at: datetime
+    ) -> FiscalOriginalValidationEvidenceV1:
+        harness.deadline = deadline_at
+        return closure.read(artifact_id, deadline_at=deadline_at)
+
+    _install_acquisition(
+        monkeypatch,
+        SimpleNamespace(
+            capture_store=harness.artifacts,
+            settings=SimpleNamespace(
+                supported_filing_years=request.supported_filing_years
+            ),
+            fiscal_discovery=harness.discovery,
+            fiscal_source_closure=lambda **_kwargs: SimpleNamespace(
+                execute=execute, read=read
+            ),
+        ),
+    )
+
+    def run(*args: str) -> str:
+        exit_code = main(["--source-revision", request.declared_source_revision, *args])
+        captured = capsys.readouterr()
+        assert (exit_code, captured.err) == (0, "")
+        return captured.out
+
+    discovered = json.loads(
+        run(
+            "discover",
+            "--cik",
+            request.cik,
+            "--valuation-timestamp",
+            request.valuation_timestamp.isoformat(),
+        )
+    )
+    discovery_id = f"fiscal-discovery:{request.digest}"
+    discovery_record = harness.artifacts.get(discovery_id)
+    assert discovered == {
+        "evidence": json.loads(harness.artifacts.read(discovery_id)),
+        "publication": {
+            "artifact": discovery_record.model_dump(mode="json"),
+            "wrote": True,
+        },
+    }
+    accession = discovered["evidence"]["selection"]["selected"][0]["accession_number"]
+    validated = json.loads(
+        run(
+            "validate",
+            "--discovery-artifact-id",
+            discovery_id,
+            "--accession",
+            accession,
+        )
+    )
+    validation_id = validated["publication"]["artifact"]["artifact_id"]
+    report_evidence = closure.read(validation_id, deadline_at=harness.deadline)
+    assert isinstance(report_evidence.outcome, FiscalValidationMatchedV1)
+    report = report_evidence.outcome.claim.report
+    raw_source = report_evidence.outcome.claim.source
+    assert harness.content.get(raw_source.content_hash, media_type="text/html") == (
+        b"synthetic primary"
+    )
+    retained = json.loads(harness.artifacts.read(report_evidence.artifact_id))
+    assert validated == {
+        "evidence": retained,
+        "publication": {
+            "artifact": harness.artifacts.get(report_evidence.artifact_id).model_dump(
+                mode="json"
+            ),
+            "wrote": True,
+        },
+    }
+    json_report = validated["evidence"]["outcome"]["claim"]["report"]
+    ruleset = report.validation_profile.dqc_ruleset_path
+    assert isinstance(ruleset, Path)
+    assert json_report["validation_profile"]["dqc_ruleset_path"] == str(ruleset)
+    assert datetime.fromisoformat(json_report["parsed_at"]) == report.parsed_at
+    assert json.loads(run("read", "--artifact-id", validation_id)) == {
+        "evidence": retained
+    }
 
 
 @pytest.fixture
@@ -44,13 +160,7 @@ def run_validation(
             fiscal_source_closure=lambda **_kwargs: closure,
         )
 
-        @asynccontextmanager
-        async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-            app.state.sec_acquisition = acquisition
-            app.state.application = SimpleNamespace(ready=True)
-            yield
-
-        monkeypatch.setattr(app_module, "app", FastAPI(lifespan=lifespan))
+        _install_acquisition(monkeypatch, acquisition)
         return main(
             [
                 "--source-revision",
