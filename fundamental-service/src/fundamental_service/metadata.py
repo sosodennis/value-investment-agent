@@ -13,7 +13,7 @@ import hashlib
 import json
 import sys
 import tempfile
-from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterator
 from concurrent.futures import Future, wait
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import Context, ContextVar
@@ -25,6 +25,7 @@ from threading import Event, Lock, Thread
 from typing import Any, BinaryIO, Literal, TypeVar
 from uuid import uuid4
 
+import asyncpg
 from sqlalchemy import bindparam, event, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
@@ -352,10 +353,29 @@ class PostgresMetadataStore:
         for migration in migrations:
             sql = migration.read_text(encoding="utf-8")
             async with self._runner._engine.begin() as connection:
-                for statement in sql.split(";"):
-                    statement = statement.strip()
-                    if statement:
-                        await connection.execute(text(statement))
+                await connection.execute(text("SELECT 1"))
+                raw = await connection.get_raw_connection()
+                driver = raw.driver_connection
+                if not isinstance(driver, asyncpg.Connection):
+                    raise RuntimeError("metadata migrations require PostgreSQL")
+                await driver.execute(sql)
+
+    def run_fiscal_admission_history(
+        self, operation: Callable[[AsyncConnection], Awaitable[_T]]
+    ) -> _T:
+        self._require_ready()
+        if "fiscal-admission-history-v1" not in self._schema_capabilities:
+            raise SnapshotError(
+                "FISCAL_ADMISSION_HISTORY_UNAVAILABLE",
+                "fiscal admission history capability is unavailable",
+            )
+        return self._runner.run(self._fiscal_history_transaction(operation))
+
+    async def _fiscal_history_transaction(
+        self, operation: Callable[[AsyncConnection], Awaitable[_T]]
+    ) -> _T:
+        async with self._runner.transaction() as connection:
+            return await operation(connection)
 
     async def _schema_version(self) -> str | None:
         async with self._runner._engine.connect() as connection:
