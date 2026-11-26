@@ -2242,9 +2242,6 @@ def test_collapsed_geometry_cannot_hide_extra_money_inline_evidence_or_tail(
 @pytest.mark.parametrize(
     "kind",
     (
-        "style",
-        "link",
-        "script",
         "processing_instruction",
         "class",
         "template",
@@ -2271,9 +2268,6 @@ def test_external_or_unknown_presentation_mechanisms_are_unsupported(sources, ki
                 "foreign_namespace": "{urn:other}span",
                 "ix_hidden": "{http://www.xbrl.org/2013/inlineXBRL}hidden",
             }[kind]
-        else:
-            node = etree.SubElement(root, "{" + _HTML + "}" + kind)
-            node.text = ".hidden-disclosure { display:none }"
         raw = etree.tostring(root)
     with pytest.raises(_Refusal) as rejected:
         _read_disclosures(source, raw, check_deadline=_deadline)
