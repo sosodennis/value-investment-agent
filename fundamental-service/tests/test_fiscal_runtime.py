@@ -1,3 +1,4 @@
+import errno
 import os
 from asyncio import CancelledError
 from collections.abc import Iterator
@@ -126,6 +127,112 @@ def test_runtime_releases_metadata_when_content_root_is_file(
     assert failure.value.filename == str(data_root / "content")
     [store] = runtime_metadata
     assert not store._runner._thread.is_alive()
+
+
+def test_runtime_releases_metadata_when_content_leaf_is_file(
+    sec_resources: tuple[str, str],
+    runtime_metadata: list[PostgresMetadataStore],
+    tmp_path: Path,
+) -> None:
+    content_root = tmp_path / "data" / "content"
+    content_root.parent.mkdir()
+    content_root.write_bytes(b"retained file")
+
+    with pytest.raises(NotADirectoryError) as failure:
+        create_runtime_app()
+
+    assert failure.value.filename == str(content_root)
+    assert content_root.read_bytes() == b"retained file"
+    [store] = runtime_metadata
+    assert not store._runner._thread.is_alive()
+
+
+def test_runtime_releases_metadata_when_content_ancestor_is_file(
+    sec_resources: tuple[str, str],
+    runtime_metadata: list[PostgresMetadataStore],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ancestor = tmp_path / "data"
+    ancestor.write_bytes(b"retained file")
+    data_root = ancestor / "missing" / "nested"
+    monkeypatch.setenv("FUNDAMENTAL_SERVICE_DATA_ROOT", str(data_root))
+
+    with pytest.raises(NotADirectoryError) as failure:
+        create_runtime_app()
+
+    assert failure.value.filename == str(data_root / "content")
+    assert ancestor.read_bytes() == b"retained file"
+    [store] = runtime_metadata
+    assert not store._runner._thread.is_alive()
+
+
+@pytest.mark.parametrize("error_number", [errno.EACCES, errno.EIO])
+def test_runtime_preserves_content_root_stat_errors_and_releases_metadata(
+    sec_resources: tuple[str, str],
+    runtime_metadata: list[PostgresMetadataStore],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    error_number: int,
+) -> None:
+    content_root = tmp_path / "data" / "content"
+    failure = OSError(error_number, os.strerror(error_number), str(content_root))
+    original_stat = Path.stat
+
+    def stat(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+        if path == content_root:
+            raise failure
+        return original_stat(path, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(Path, "stat", stat)
+
+    with pytest.raises(OSError) as raised:
+        create_runtime_app()
+
+    assert raised.value is failure
+    [store] = runtime_metadata
+    assert not store._runner._thread.is_alive()
+
+
+@pytest.mark.parametrize("existing_directory", [False, True])
+def test_runtime_content_root_stays_lazy_until_first_put(
+    sec_resources: tuple[str, str],
+    runtime_metadata: list[PostgresMetadataStore],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    existing_directory: bool,
+) -> None:
+    content_root = tmp_path / "data" / "content"
+    if existing_directory:
+        content_root.mkdir(parents=True)
+    app = create_runtime_app()
+    try:
+        [metadata] = runtime_metadata
+        assert content_root.is_dir() is existing_directory
+        if existing_directory:
+            assert tuple(content_root.iterdir()) == ()
+        else:
+            assert not content_root.parent.exists()
+        registrations: list[tuple[str, str, int]] = []
+
+        def register_content(
+            content_hash: str, *, media_type: str, byte_length: int
+        ) -> None:
+            registrations.append((content_hash, media_type, byte_length))
+
+        monkeypatch.setattr(metadata, "register_content", register_content)
+        content = app.state.application.content_store
+        digest = content.put(b"retained bytes", media_type="application/octet-stream")
+
+        assert content_root.is_dir()
+        assert registrations == [(digest, "application/octet-stream", 14)]
+        assert content.get(digest, media_type="application/octet-stream") == (
+            b"retained bytes"
+        )
+    finally:
+        app.state.valuation_diagnostic_sink.close()
+        app.state.metadata_store.close()
+    assert not metadata._runner._thread.is_alive()
 
 
 def test_runtime_releases_metadata_when_app_construction_is_cancelled(
