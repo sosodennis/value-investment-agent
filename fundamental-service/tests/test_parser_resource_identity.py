@@ -316,6 +316,52 @@ def test_explicit_current_and_v1_remain_fresh_inside_candidate_operation(
             c.request(build_checks=None)
 
 
+def test_retained_parser_current_reads_fresh_bytes_inside_candidate_operation(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.fiscal_parser_evidence import (
+        ParserActionRuntimeObservation,
+    )
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+    from fundamental_service.serialization import canonical_bytes
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        if args and args[0] == "rb":
+            opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", observed)
+    with pytest.raises(IncompleteParserClosure, match="bytes changed"):
+        with _ParserResourceOperation(lambda: 60.0) as owner:
+            request = c.request()
+            observation = ParserActionRuntimeObservation(
+                request,
+                canonical_bytes(c.profile.model_dump(mode="json")),
+                c.arguments["taxonomy_cache_dir"],
+                c.arguments["delivery_revision"],
+            )
+            current = partial(
+                observation.check_current,
+                c.profile,
+                c.arguments["taxonomy_cache_dir"],
+                c.arguments["delivery_revision"],
+            )
+            current()
+            assert opened[c.rules] == 2
+            assert owner._state.high_water_keys == 1
+            c.rules.write_bytes(b"other rules")
+            assert c.request() == request
+            assert opened[c.rules] == 2
+            current()
+    assert opened[c.rules] == 3
+    assert owner._state.status == "aborted"
+    assert not owner._state.observations
+
+
 def test_resource_operations_are_fresh_nested_isolated_and_cleanup_on_error(
     tmp_path, monkeypatch
 ):

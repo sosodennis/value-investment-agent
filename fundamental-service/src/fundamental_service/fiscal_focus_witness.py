@@ -39,11 +39,17 @@ from .fiscal_diagnostic_focus import (
     run_fiscal_diagnostic_focus,
 )
 from .fiscal_parser_evidence import (
+    FiscalParserRuntimeRead,
     RetainedFiscalAction,
     RetainedFiscalActions,
     read_fiscal_parser_actions,
 )
-from .fiscal_source_closure import FiscalArtifactRead, FiscalSourceClosure
+from .fiscal_source_closure import (
+    FiscalArtifactRead,
+    FiscalSourceClosure,
+    FiscalSourceContentRead,
+    FiscalSourceRead,
+)
 from .fiscal_source_contracts import FiscalFilingV1
 from .fiscal_validation_contracts import (
     FiscalOriginalValidationEvidenceV1,
@@ -59,7 +65,7 @@ from .parser_action_contracts import (
 )
 from .parser_action_identity import ParserBuildChecks, parser_action_input
 from .parser_computation import logical_profile
-from .replay import ArtifactPublicationV1
+from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .sec_capture import SecResponseReceiptV1
 from .sec_integrity import extract_referenced_graphics
 from .sec_source import SecSourceError
@@ -416,6 +422,66 @@ class FiscalDiagnosticFocusWitnessOwner:
             self._check_envelope_current(witness, authority)
             return witness
 
+    def observe(
+        self, artifact_id: str, *, deadline_at: datetime
+    ) -> FiscalFocusWitnessRead:
+        with metadata_operation_budget(
+            partial(self._check_deadline, deadline_at), self._deadline_error
+        ):
+            artifacts, closure, content_store = (
+                self._artifacts,
+                self._closure,
+                self._content,
+            )
+            reader = FiscalArtifactRead(
+                artifacts, partial(self._check_deadline, deadline_at)
+            )
+            authority = self._current_authority()
+            witness = self._read_envelope(artifact_id, authority, reader)
+            source_ref = witness.witness.source_validation_ref
+            self._source_ref(source_ref, reader)
+            source = closure.observe(source_ref.artifact_id, deadline_at=deadline_at)
+            for identity, record in source.records:
+                reader.expect(identity, record)
+            evidence = source.evidence
+            outcome = self._require_refused_focus_source(evidence, source_ref)
+            actions = read_fiscal_parser_actions(
+                outcome.integrity.validation_evidence,
+                relation=outcome.integrity.integrity_relation,
+                artifacts=reader,
+                build_checks=ParserBuildChecks(),
+                delivery_revision=outcome.runtime.delivery_revision,
+            )
+            content = FiscalSourceContentRead(
+                content_store, partial(self._check_deadline, deadline_at)
+            )
+            runtime = FiscalParserRuntimeRead()
+            profile = self._runtime_profile(outcome)
+            with self._stage_actions(
+                outcome, actions, profile, deadline_at, content=content, runtime=runtime
+            ):
+                self._verify_current_binding(
+                    witness,
+                    evidence,
+                    source_ref,
+                    self._source_binding(evidence, source_ref, outcome, actions),
+                )
+            self._check_current(reader, authority, outcome.runtime, deadline_at)
+            self._check_envelope_current(witness, authority)
+            return FiscalFocusWitnessRead(
+                self,
+                reader,
+                source,
+                content,
+                runtime,
+                witness,
+                authority.model_copy(deep=True),
+                deadline_at,
+                artifacts,
+                closure,
+                content_store,
+            )
+
     def _read_source(
         self,
         source_ref: ArtifactRefV1,
@@ -647,9 +713,14 @@ class FiscalDiagnosticFocusWitnessOwner:
         actions: RetainedFiscalActions,
         profile: ArelleValidationProfileV1,
         deadline_at: datetime,
+        *,
+        content: FiscalSourceContentRead | None = None,
+        runtime: FiscalParserRuntimeRead | None = None,
     ) -> Iterator[tuple[_StagedFiscalAction, ...]]:
         with ExitStack() as scratch:
-            yield self._stage_inputs(outcome, actions, profile, deadline_at, scratch)
+            yield self._stage_inputs(
+                outcome, actions, profile, deadline_at, scratch, content, runtime
+            )
 
     def _stage_inputs(
         self,
@@ -658,6 +729,8 @@ class FiscalDiagnosticFocusWitnessOwner:
         profile: ArelleValidationProfileV1,
         deadline_at: datetime,
         scratch: ExitStack,
+        content_read: FiscalSourceContentRead | None = None,
+        runtime_read: FiscalParserRuntimeRead | None = None,
     ) -> tuple[_StagedFiscalAction, ...]:
         integrity = outcome.integrity
         responses = {item.uri: item for item in outcome.responses}
@@ -668,8 +741,9 @@ class FiscalDiagnosticFocusWitnessOwner:
                 "FISCAL_FOCUS_SOURCE_RESPONSE_MISSING",
                 "primary or archive receipt is missing",
             )
-        archive = self._read_content(
-            archive_receipt.content_hash, archive_receipt.media_type
+        read_content = self._read_content if content_read is None else content_read.get
+        archive = read_content(
+            archive_receipt.content_hash, media_type=archive_receipt.media_type
         )
         document_media = {
             item.uri.rsplit("/", 1)[-1]: item.media_type for item in outcome.responses
@@ -717,15 +791,17 @@ class FiscalDiagnosticFocusWitnessOwner:
                         "FISCAL_FOCUS_STAGING_INVALID",
                         "inline source media type is missing",
                     )
-                files[inline.document.filename] = self._read_content(digest, media_type)
+                files[inline.document.filename] = read_content(
+                    digest, media_type=media_type
+                )
             if not integrity.inline_documents:
                 primary_digest = (
                     integrity.normalized_content_hash
                     if request.representation == "normalized"
                     else integrity.archive_member_hash
                 )
-                files[integrity.archive_member_name] = self._read_content(
-                    primary_digest, primary.media_type
+                files[integrity.archive_member_name] = read_content(
+                    primary_digest, media_type=primary.media_type
                 )
             if integrity.inline_documents:
                 manifest = InlineDocumentSetInputV1(
@@ -787,6 +863,18 @@ class FiscalDiagnosticFocusWitnessOwner:
                 raise SnapshotError(
                     "FISCAL_FOCUS_STAGING_INVALID",
                     "reconstructed parser request differs from retained action",
+                )
+            if runtime_read is not None:
+                if not isinstance(expected_request, ParserActionInputV3):
+                    raise SnapshotError(
+                        "FISCAL_FOCUS_STAGING_INVALID",
+                        "focus parser runtime is incomplete",
+                    )
+                runtime_read.observe(
+                    expected_request,
+                    profile,
+                    self._taxonomy_cache_dir,
+                    outcome.runtime.delivery_revision,
                 )
             self._check_deadline(deadline_at)
             staged.append(_StagedFiscalAction(action, filing_path))
@@ -983,6 +1071,69 @@ class FiscalDiagnosticFocusWitnessOwner:
         if deadline_at.utcoffset() is None or deadline_at <= now:
             raise self._deadline_error()
         return (deadline_at - now).total_seconds()
+
+
+@dataclass(frozen=True)
+class FiscalFocusWitnessRead:
+    owner: FiscalDiagnosticFocusWitnessOwner
+    reader: FiscalArtifactRead
+    source: FiscalSourceRead
+    content: FiscalSourceContentRead
+    runtime: FiscalParserRuntimeRead
+    _witness: SignedFiscalDiagnosticFocusWitnessV1
+    authority: FiscalFocusValidatorAuthorityV1
+    deadline_at: datetime
+    artifacts: EvidenceArtifactStore
+    closure: FiscalSourceClosure
+    content_store: ContentAddressedStore
+
+    @property
+    def witness(self) -> SignedFiscalDiagnosticFocusWitnessV1:
+        return self._witness.model_copy(deep=True)
+
+    @property
+    def records(self) -> tuple[tuple[str, ArtifactRecordV1 | None], ...]:
+        return self.reader.records
+
+    def check_current(self) -> None:
+        with metadata_operation_budget(
+            partial(self.owner._check_deadline, self.deadline_at),
+            self.owner._deadline_error,
+        ):
+            self._check_current()
+
+    def _check_current(self) -> None:
+        if (
+            self.owner._artifacts is not self.artifacts
+            or self.owner._closure is not self.closure
+            or self.owner._content is not self.content_store
+        ):
+            raise SnapshotError(
+                "FISCAL_FOCUS_RUNTIME_CHANGED", "focus source owner changed"
+            )
+        self.source.check_current()
+        outcome = self.source.evidence.outcome
+        if not isinstance(outcome, FiscalValidationCompleteRefusedV1):
+            raise SnapshotError(
+                "FISCAL_FOCUS_SOURCE_NOT_REFUSED", "source is not complete"
+            )
+        profile = self.owner._runtime_profile(outcome)
+        self.runtime.check_current(
+            profile, self.owner._taxonomy_cache_dir, outcome.runtime.delivery_revision
+        )
+        self.content.check_current()
+        self.reader.check_bodies()
+        witness = self._witness.witness
+        if (
+            self.owner._worker_digest() != witness.worker_module_sha256
+            or dqc_applicability_policy_digest(witness.filing_context.dqc_version)
+            != witness.applicability_policy_digest
+        ):
+            raise SnapshotError("FISCAL_FOCUS_RUNTIME_CHANGED", "focus policy changed")
+        self.owner._check_current(
+            self.reader, self.authority, outcome.runtime, self.deadline_at
+        )
+        self.owner._check_envelope_current(self._witness, self.authority)
 
 
 def _read_focus_configuration(path: Path, *, private_key: bool) -> bytes:

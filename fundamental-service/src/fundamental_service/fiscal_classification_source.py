@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
+from copy import deepcopy
 
 from .artifact_evidence import read_retained_artifact
 from .data_releases import ArtifactRefV1
@@ -11,9 +12,15 @@ from .fiscal_candidate_contracts import FiscalSourceUseScopeV1
 from .fiscal_discovery import FiscalDiscovery
 from .fiscal_focus_witness import (
     FiscalDiagnosticFocusWitnessOwner,
+    FiscalFocusWitnessRead,
     SignedFiscalDiagnosticFocusWitnessV1,
 )
-from .fiscal_source_closure import FiscalArtifactRead, FiscalSourceClosure
+from .fiscal_source_closure import (
+    FiscalArtifactRead,
+    FiscalSourceClosure,
+    FiscalSourceContentRead,
+    FiscalSourceRead,
+)
 from .fiscal_statement_mapping import (
     fiscal_display_profile_digest,
     fiscal_mapping_policy_digest,
@@ -41,6 +48,17 @@ class FiscalClassificationSource:
 
 
 class FiscalClassificationSourcePort(Protocol):
+    def observe(
+        self,
+        source_ref: ArtifactRefV1,
+        witness_ref: ArtifactRefV1,
+        security_id: str | None,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        deadline_at: datetime,
+    ) -> FiscalClassificationSourceReadPort: ...
+
     def resolve(
         self,
         source_ref: ArtifactRefV1,
@@ -51,6 +69,55 @@ class FiscalClassificationSourcePort(Protocol):
         check_deadline: Callable[[], float],
         deadline_at: datetime,
     ) -> FiscalClassificationSource: ...
+
+
+class FiscalClassificationSourceReadPort(Protocol):
+    @property
+    def source(self) -> FiscalClassificationSource: ...
+
+    def check_current(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class _ClassificationSourceRead:
+    owner: FiscalClassificationSourceResolver
+    sources: FiscalSourceClosure
+    discovery: FiscalDiscovery
+    witnesses: FiscalDiagnosticFocusWitnessOwner
+    content_store: ContentAddressedStore
+    source_read: FiscalSourceRead
+    witness_read: FiscalFocusWitnessRead
+    content: FiscalSourceContentRead
+    reader: FiscalArtifactRead
+    _source: FiscalClassificationSource
+    registry_digest: str
+    check_deadline: Callable[[], float]
+
+    @property
+    def source(self) -> FiscalClassificationSource:
+        return deepcopy(self._source)
+
+    def check_current(self) -> None:
+        self.check_deadline()
+        if (
+            self.owner.sources is not self.sources
+            or self.owner.discovery is not self.discovery
+            or self.owner.witnesses is not self.witnesses
+            or self.owner.content is not self.content_store
+            or fiscal_mapping_policy_digest()
+            != self._source.scope.mapping_policy_digest
+            or fiscal_display_profile_digest()
+            != self._source.scope.display_profile_digest
+            or sha256_digest(fiscal_statement_registry()) != self.registry_digest
+        ):
+            raise SnapshotError(
+                "FISCAL_CLASSIFICATION_INVALID", "source resolver configuration changed"
+            )
+        self.source_read.check_current()
+        self.witness_read.check_current()
+        self.content.check_current()
+        self.reader.check_bodies()
+        self.check_deadline()
 
 
 class FiscalClassificationSourceResolver:
@@ -77,14 +144,37 @@ class FiscalClassificationSourceResolver:
         check_deadline: Callable[[], float],
         deadline_at: datetime,
     ) -> FiscalClassificationSource:
+        return self.observe(
+            source_ref,
+            witness_ref,
+            security_id,
+            reader=reader,
+            check_deadline=check_deadline,
+            deadline_at=deadline_at,
+        ).source
+
+    def observe(
+        self,
+        source_ref: ArtifactRefV1,
+        witness_ref: ArtifactRefV1,
+        security_id: str | None,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        deadline_at: datetime,
+    ) -> FiscalClassificationSourceReadPort:
         def invalid(message: str) -> SnapshotError:
             return SnapshotError("FISCAL_CLASSIFICATION_INVALID", message)
 
         check_deadline()
         raw = read_retained_artifact(reader, source_ref)
-        source = self.sources.read_with_metadata(
-            source_ref.artifact_id, deadline_at=deadline_at
+        sources, discovery_owner, witnesses, content_store = (
+            self.sources,
+            self.discovery,
+            self.witnesses,
+            self.content,
         )
+        source = sources.observe(source_ref.artifact_id, deadline_at=deadline_at)
         for identity, record in source.records:
             reader.expect(identity, record)
         evidence = source.evidence
@@ -99,7 +189,7 @@ class FiscalClassificationSourceResolver:
             raise invalid("classification requires exact complete raw-refused source")
         discovery_ref = evidence.request.selection.discovery_ref
         read_retained_artifact(reader, discovery_ref)
-        discovery = self.discovery.read(
+        discovery = discovery_owner.read(
             discovery_ref.artifact_id, deadline_at=deadline_at
         )
         coverage = selected_fiscal_coverage(discovery)
@@ -124,7 +214,12 @@ class FiscalClassificationSourceResolver:
         }:
             raise invalid("security identifier is not disclosed for the source issuer")
         witness_raw = read_retained_artifact(reader, witness_ref)
-        witness = self.witnesses.read(witness_ref.artifact_id, deadline_at=deadline_at)
+        witness_read = witnesses.observe(
+            witness_ref.artifact_id, deadline_at=deadline_at
+        )
+        for identity, record in witness_read.records:
+            reader.expect(identity, record)
+        witness = witness_read.witness
         body = witness.witness
         if (
             witness_ref.role != "fiscal-diagnostic-focus-witness-v1"
@@ -167,7 +262,8 @@ class FiscalClassificationSourceResolver:
         )
         if receipt is None:
             raise invalid("source archive receipt is missing")
-        archive = self.content.get(receipt.content_hash, media_type=receipt.media_type)
+        content = FiscalSourceContentRead(content_store, check_deadline)
+        archive = content.get(receipt.content_hash, media_type=receipt.media_type)
         check_deadline()
         reviewed = next(
             (
@@ -208,4 +304,17 @@ class FiscalClassificationSourceResolver:
             permitted_inputs=batch.observations,
         )
         check_deadline()
-        return FiscalClassificationSource(scope, evidence, witness, archive)
+        return _ClassificationSourceRead(
+            self,
+            sources,
+            discovery_owner,
+            witnesses,
+            content_store,
+            source,
+            witness_read,
+            content,
+            reader,
+            FiscalClassificationSource(scope, evidence, witness, archive),
+            sha256_digest(fiscal_statement_registry()),
+            check_deadline,
+        )
