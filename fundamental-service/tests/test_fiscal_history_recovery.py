@@ -1554,6 +1554,8 @@ def _advance_release(target, tmp_path, first, initial_pointer, *, rollback=False
 def test_completed_retry_preserves_formal_release_activation_and_rollback(
     databases, tmp_path, rollback
 ):
+    from test_postgres_metadata import _release_test_trust_roots
+
     source, target, _ = databases
     bundle, manifest, first, original_pointer = _release_backup(source, tmp_path)
     with target_pin(target, manifest, tmp_path / "pin.json") as pin:
@@ -1579,7 +1581,9 @@ def test_completed_retry_preserves_formal_release_activation_and_rollback(
             )
         )
         assert not retried.wrote and retried.operation_id == initial.operation_id
-        reopened = PostgresMetadataStore(target)
+        reopened = PostgresMetadataStore(
+            target, data_release_trust_roots=_release_test_trust_roots()
+        )
         reopened.start()
         try:
             assert reopened.get_active_data_release(first.profile_id) == latest_pointer
