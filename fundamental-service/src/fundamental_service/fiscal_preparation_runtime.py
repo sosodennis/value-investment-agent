@@ -38,6 +38,11 @@ from .metadata import PostgresMetadataStore, PostgresArtifactStore, PostgresCont
 from .source_acquisition import SecAcquisitionUseCase
 from .serialization import sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
+from .fiscal_source_preparation import (
+    FiscalSourceProducerEvidenceVerifier,
+    AccountingAccreditationProvider,
+)
+from .fiscal_source_producer_runtime import public_accounting_accreditation_provider
 
 
 class FiscalPreparationDeploymentV1(StrictModel):
@@ -84,6 +89,7 @@ class FiscalPreparationInputs:
     pin: FiscalValidationPinV1
     classification_sources: FiscalClassificationSourcePort | None
     source_configuration_digest: Callable[[], str] = lambda: "no-source-configuration"
+    accounting_accreditation: AccountingAccreditationProvider | None = None
 
 
 def _configuration(path: Path, *, private: bool = False) -> bytes:
@@ -151,12 +157,25 @@ def build_fiscal_candidate_runtime(
             _configuration(deployment.authority_deployment_file)
         ),
     )
+    accounting_accreditation = (
+        inputs.accounting_accreditation or public_accounting_accreditation_provider()
+    )
     classifier = FiscalSourceClassificationOwner(
         artifacts=inputs.artifacts,
         history=history,
         authorities=authorities,
         sources=inputs.classification_sources,
+        producer_evidence=FiscalSourceProducerEvidenceVerifier(
+            accounting_accreditation
+        ),
+        require_production_evidence=True,
     )
+
+    def accounting_generation() -> str:
+        try:
+            return sha256_digest(accounting_accreditation())
+        except (SnapshotError, ValueError):
+            return "accounting-release-unavailable"
 
     def roots() -> DataReleaseTrustRootsV1:
         return DataReleaseTrustRootsV1.model_validate_json(
@@ -220,6 +239,7 @@ def build_fiscal_candidate_runtime(
                     _configuration(deployment.mapping_trust_roots_file)
                 ).hexdigest(),
                 inputs.source_configuration_digest(),
+                accounting_generation(),
             )
         ),
         capture_lock=capture_lock if write else None,

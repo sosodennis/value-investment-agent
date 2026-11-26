@@ -80,7 +80,13 @@ def prepared_runtime(environment, tmp_path):
         security_id="AAPL",
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
     )
-    return env, inputs, config, builder, command, sources
+    try:
+        yield env, inputs, config, builder, command, sources
+    finally:
+        import shutil
+
+        for protected in getattr(env, "producer_protected_directories", ()):
+            shutil.rmtree(protected)
 
 
 def test_real_factory_prepares_reads_retries_and_refuses_nonfirst_source(
@@ -225,122 +231,187 @@ def synthetic_retained_classifications(
     env, source_builder, discovery_ref, bindings, sources
 ):
     import hashlib
-    import json
-    from decimal import Decimal
-    from lxml import etree
-    from fundamental_service.arelle_parser import fact_semantic_digest
+    import tempfile
+    from contextlib import nullcontext
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from fundamental_service.artifact_evidence import read_retained_artifact
     from fundamental_service.fiscal_candidate_contracts import (
         FiscalCandidateClassificationBindingV1,
-        FiscalSourceUseScopeV1,
     )
-    from fundamental_service.fiscal_classification_contracts import (
-        FiscalRecordClassificationCommandV1,
-        FiscalReviewFactV1,
-        FiscalSourceAccountingReviewV1,
-        FiscalSourcePreparationExecutionV1,
-        SignedFiscalSourcePreparationExecutionV1,
-        FiscalSourceReconciliationV1,
-        FiscalReconciliationTermV1,
+    from fundamental_service.fiscal_classification_source import (
+        FiscalClassificationSourceResolver,
     )
-    from fundamental_service.fiscal_diagnostic_focus import ArelleActualFocusFactV1
     from fundamental_service.fiscal_focus_witness import (
         FiscalDiagnosticFocusWitnessV1,
         SignedFiscalDiagnosticFocusWitnessV1,
+        FiscalFocusActionBindingV1,
     )
-    from fundamental_service.fiscal_source_classification import (
-        FiscalSourceClassificationOwner,
+    from fundamental_service.fiscal_diagnostic_focus import ArelleActualFocusFactV1
+    from fundamental_service.fiscal_source_accounting_policy import (
+        source_accounting_policy_identity,
     )
-    from fundamental_service.fiscal_statement_mapping import (
-        map_fiscal_primary_source,
-        fiscal_mapping_policy_digest,
-        fiscal_display_profile_digest,
+    from fundamental_service.fiscal_source_closure import FiscalSourceClosure
+    from fundamental_service.fiscal_source_preparation import (
+        fiscal_source_producer_executable_digest,
     )
-    from fundamental_service.fiscal_statement_registry import (
-        fiscal_statement_registry,
-        fiscal_primary_scopes,
-        selected_fiscal_coverage,
+    from fundamental_service.fiscal_source_producer_contracts import (
+        FiscalAccountingAccreditationV1,
+        FiscalProducerOrderV1,
     )
-    from fundamental_service.ingestion import read_sec_xbrl_archive
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-    from test_fiscal_admission_authority import reference
-    from test_fiscal_source_classification import retained
+    from fundamental_service.fiscal_source_producer_runtime import (
+        FiscalSourceProducerInstallationV1,
+        FiscalSourceProducerRuntime,
+        producer_reference,
+        public_accounting_accreditation_provider,
+    )
+    from fundamental_service.parser_action_contracts import (
+        ParserActionResultV2,
+        ParserActionDeliveryV2,
+    )
+    from fundamental_service.sec_capture import sec_response_artifact_id
     from fundamental_service.serialization import sha256_digest
-
-    evidence_root = Path(os.environ["ISSUE495_RETAINED_EVIDENCE_ROOT"])
-    opinion = json.loads(
-        (
-            evidence_root / "actual-witness-accounting-classification-review.json"
-        ).read_bytes()
+    from fundamental_service.arelle_parser import fact_semantic_digest
+    from test_fiscal_source_producer_runtime import (
+        RetainedDiscoveryAdapter,
+        RetainedSECAdapter,
     )
+    from types import SimpleNamespace
+
+    root = Path(os.environ["ISSUE495_RETAINED_EVIDENCE_ROOT"])
+    parent = Path(os.environ.get("ISSUE495_PRODUCER_PROTECTED_TEMP", str(Path.home())))
+    protected = Path(tempfile.mkdtemp(prefix="issue495-mixed-v2-", dir=parent))
+    env.producer_protected_directories = [
+        *getattr(env, "producer_protected_directories", ()),
+        protected,
+    ]
+    orders = protected / "orders"
+    orders.mkdir(mode=0o700)
+    roster = protected / "deployment.json"
+    roster.write_bytes(canonical_bytes(env.authorities._configured()))
+    preparer_key = key_file(protected / "preparer.pem", env.preparer_key)
+    classifier_key = key_file(protected / "classifier.pem", env.signer.key)
+    independent = (
+        root / "source-policy-token-amended-review/independent-61/remaining-review.md"
+    ).read_bytes()
+    independent_ref = producer_reference(
+        env.store.put_bytes_with_receipt(
+            "retained-policy-independent-review",
+            independent,
+            (),
+            media_type="text/markdown",
+        ).artifact,
+        "independent-accounting-policy-review",
+    )
+    now = datetime.now(UTC)
+    accreditation = FiscalAccountingAccreditationV1(
+        policy=source_accounting_policy_identity(),
+        independent_review_ref=independent_ref,
+        classifier_executable_digest=fiscal_source_producer_executable_digest(),
+        valid_from=now - timedelta(minutes=1),
+        valid_until=now + timedelta(hours=1),
+    )
+    accreditation_ref = producer_reference(
+        env.store.put_with_receipt(
+            "mixed-ephemeral-policy-accreditation", accreditation
+        ).artifact,
+        "fiscal-accounting-accreditation-v1",
+    )
+    release = protected / "accounting-release.json"
+    release.write_bytes(canonical_bytes(accreditation_ref))
+    provider = public_accounting_accreditation_provider(release, owner=os.getuid())
     discovery = source_builder.discovery.read(
         discovery_ref.artifact_id, deadline_at=deadline()
     )
-    coverage = selected_fiscal_coverage(discovery)
-    reviewed = {
-        scope.accession_number: scope
-        for scope in fiscal_primary_scopes(fiscal_statement_registry())
-    }
     focus_key = Ed25519PrivateKey.generate()
     witnesses = {}
 
-    class SyntheticRetainedWitnesses:
+    class RetainedSyntheticWitnesses:
         def read(self, identity, *, deadline_at):
             value = witnesses[identity]
+            assert read_retained_artifact(
+                env.store,
+                producer_reference(
+                    env.store.get(identity), "fiscal-diagnostic-focus-witness-v1"
+                ),
+            ) == canonical_bytes(value)
             focus_key.public_key().verify(
                 bytes.fromhex(value.signature), value.signing_bytes()
             )
             assert datetime.now(UTC) < value.expires_at
             return value
 
-    from fundamental_service.fiscal_classification_source import (
-        FiscalClassificationSource,
-    )
-    from fundamental_service.artifact_evidence import read_retained_artifact
-
-    test_sources = {}
-
-    class SyntheticRetainedClassificationSources:
-        def resolve(
-            self,
-            source_ref,
-            witness_ref,
-            security_id,
-            *,
-            reader,
-            check_deadline,
-            deadline_at,
-        ):
-            check_deadline()
-            assert security_id == "MSFT"
-            source = test_sources[source_ref.artifact_id]
-            assert source.scope.witness_ref == witness_ref
-            assert read_retained_artifact(reader, source_ref) == canonical_bytes(
-                source.evidence.model_dump(mode="json")
-            )
-            assert read_retained_artifact(reader, witness_ref) == canonical_bytes(
-                source.witness
-            )
-            focus_key.public_key().verify(
-                bytes.fromhex(source.witness.signature), source.witness.signing_bytes()
-            )
-            assert datetime.now(UTC) < source.witness.expires_at
-            return source
-
-    resolver = SyntheticRetainedClassificationSources()
-    classifier = FiscalSourceClassificationOwner(
-        artifacts=env.store,
-        history=env.history,
-        authorities=env.authorities,
-        sources=resolver,
-        signer=env.signer,
-    )
     new_bindings = []
+    resolver = None
     for binding in bindings:
-        source_ref = binding.source_validation_ref
-        evidence = sources[source_ref.artifact_id]
+        evidence = sources[binding.source_validation_ref.artifact_id]
         outcome = evidence.outcome
+        assert (
+            evidence.request.pin.declared_source_revision
+            == "293c068cc8cca6a4329b13a21f88ce93c1b47326"
+        )
+        recovered = root / "retained-293-content-recovery/content"
+        for ref in outcome.action_refs:
+            raw = (
+                recovered / ref.content_hash[:2] / (ref.content_hash + ".json")
+            ).read_bytes()
+            assert hashlib.sha256(raw).hexdigest() == ref.content_hash
+            env.store.put_bytes_with_receipt(
+                ref.artifact_id, raw, (), media_type=ref.media_type
+            )
+        results = [
+            ParserActionResultV2.model_validate_json(env.store.read(ref.artifact_id))
+            for ref in outcome.action_refs
+            if ref.role == "sec-parser-action-result-v2"
+        ]
+        deliveries = {
+            value.action_key: value
+            for ref in outcome.action_refs
+            if ref.role == "sec-parser-action-delivery-v2"
+            for value in [
+                ParserActionDeliveryV2.model_validate_json(
+                    env.store.read(ref.artifact_id)
+                )
+            ]
+        }
+        refs = {ref.artifact_id: ref for ref in outcome.action_refs}
+        actions = tuple(
+            FiscalFocusActionBindingV1(
+                representation=result.request.representation,
+                request=result.request,
+                result_ref=refs[result.artifact_id],
+                report_ref=next(
+                    ref
+                    for ref in outcome.action_refs
+                    if ref.role == "sec-parser-action-report-v1"
+                    and ref.content_hash == result.report_content_hash
+                ),
+                delivery_ref=next(
+                    ref
+                    for ref in outcome.action_refs
+                    if ref.role == "sec-parser-action-delivery-v2"
+                    and ref.content_hash
+                    == sha256_digest(deliveries[result.request.digest])
+                ),
+                delivery=deliveries[result.request.digest],
+                report_digest=result.report_content_hash,
+            )
+            for result in results
+        )
         report = outcome.claim.report
-        filing = evidence.request.filing
+        from lxml import etree
+        from fundamental_service.ingestion import read_sec_xbrl_archive
+
+        candidates = [
+            fact
+            for fact in report.facts
+            if fact.concept == "us-gaap:ShortTermInvestments"
+            and fact.instant == evidence.request.filing.report_period_end
+            and any(
+                member.endswith(":DerivativeMember") for _, member in fact.dimensions
+            )
+        ]
+        assert len(candidates) == 1
+        fact = candidates[0]
         receipt = next(
             item
             for item in outcome.responses
@@ -349,71 +420,34 @@ def synthetic_retained_classifications(
         archive = source_builder.content.get(
             receipt.content_hash, media_type=receipt.media_type
         )
-        batch = map_fiscal_primary_source(
-            evidence,
-            source_ref,
-            archive=archive,
-            reviewed=reviewed[filing.accession_number],
-            target_periods=tuple(q.period for q in coverage.quarters),
-            security_id="MSFT",
-            policy_digest=fiscal_mapping_policy_digest(),
-            check_deadline=lambda: 60.0,
+        content = env.store._content
+        from test_fiscal_source_producer_runtime import populate_retained_content
+
+        populate_retained_content(
+            SimpleNamespace(evidence=evidence, archive=archive), content, root
         )
-        actions = env.source.witness.witness.actions
-        member = read_sec_xbrl_archive(
-            archive, primary_document=filing.primary_document, dts_filenames=()
-        )[filing.primary_document]
-        root = etree.fromstring(
-            member,
+        primary = read_sec_xbrl_archive(
+            archive,
+            primary_document=evidence.request.filing.primary_document,
+            dts_filenames=(),
+        )[evidence.request.filing.primary_document]
+        document = etree.fromstring(
+            primary,
             etree.XMLParser(resolve_entities=False, no_network=True, recover=False),
         )
-        tables = root.xpath('//*[local-name()="table"]')
-        facts, by_name = [], {}
-        for source_fact in opinion["facts"]:
-            (node,) = root.xpath("//*[@id=$identity]", identity=source_fact["fact_id"])
-            table = next(
-                parent
-                for parent in node.iterancestors()
-                if etree.QName(parent).localname == "table"
-            )
-            row = next(
-                parent
-                for parent in node.iterancestors()
-                if etree.QName(parent).localname == "tr"
-            )
-            fact = next(
-                fact
-                for fact in report.facts
-                if fact.concept == source_fact["qname"]
-                and fact.context_id == source_fact["context_id"]
-                and fact.value == source_fact["value_usd"]
-            )
-            item = FiscalReviewFactV1(
-                fact_id=source_fact["fact_id"],
-                fact=fact,
-                table_index=tables.index(table),
-                row_index=table.xpath('.//*[local-name()="tr"]').index(row),
-                table_sha256=hashlib.sha256(
-                    etree.tostring(table, method="c14n")
-                ).hexdigest(),
-                row_sha256=hashlib.sha256(
-                    etree.tostring(row, method="c14n")
-                ).hexdigest(),
-                raw_lexical=source_fact["lexical_value"],
-                raw_sign=source_fact["sign"] or None,
-                raw_scale=source_fact["scale"],
-                raw_decimals=source_fact["decimals"],
-                value=Decimal(source_fact["value_usd"]),
-            )
-            facts.append(item)
-            by_name[source_fact["name"]] = item.fact_id
-        focus = next(
-            item for item in facts if item.fact_id == by_name["note4_derivatives"]
+        matches = document.xpath(
+            "//*[@name=$concept][@contextRef=$context]",
+            concept=fact.concept,
+            context=fact.context_id,
+        )
+        assert len(matches) == 1
+        actual_focus = ArelleActualFocusFactV1(
+            fact_id=matches[0].get("id"), fact=fact, numeric_value=fact.value
         )
         body = FiscalDiagnosticFocusWitnessV1(
-            source_validation_ref=source_ref,
+            source_validation_ref=binding.source_validation_ref,
             request_digest=evidence.request.digest,
-            filing=filing,
+            filing=evidence.request.filing,
             cutoff=evidence.request.valuation_timestamp,
             source_available_at=outcome.claim.source.available_at,
             integrity=outcome.integrity,
@@ -427,140 +461,147 @@ def synthetic_retained_classifications(
             raw_finding=next(
                 item for item in report.findings if item.code == "DQC.US.0015.5970"
             ),
-            actions=tuple(actions),
+            actions=actions,
             filing_context=report.dqc_filing_context,
-            actual_focus=ArelleActualFocusFactV1(
-                fact_id=focus.fact_id, fact=focus.fact, numeric_value=str(focus.value)
-            ),
+            actual_focus=actual_focus,
             worker_module_sha256="a" * 64,
-            applicability_policy_digest="b" * 64,
+            applicability_policy_digest=report.dqc_filing_context.policy_digest,
         )
         witness = SignedFiscalDiagnosticFocusWitnessV1(
             witness=body,
-            authority_id="synthetic-retained-focus",
-            principal_id="machine:synthetic-retained-focus",
+            authority_id="ephemeral-retained-focus",
+            principal_id="machine:ephemeral-retained-focus",
             key_id=hashlib.sha256(
                 focus_key.public_key().public_bytes_raw()
             ).hexdigest(),
-            signed_at=datetime.now(UTC),
-            expires_at=datetime.now(UTC) + timedelta(hours=1),
+            signed_at=now,
+            expires_at=now + timedelta(hours=1),
             signature="0" * 128,
         )
         witness = witness.model_copy(
             update={"signature": focus_key.sign(witness.signing_bytes()).hex()}
         )
-        witnesses[witness.artifact_id] = witness
-        witness_ref = retained(
-            env.store,
-            witness.artifact_id,
-            witness,
+        witness_ref = producer_reference(
+            env.store.put_with_receipt(witness.artifact_id, witness).artifact,
             "fiscal-diagnostic-focus-witness-v1",
         )
-        scope = FiscalSourceUseScopeV1(
-            source_validation_ref=source_ref,
-            validation_kind="complete_refused",
-            source_binding_digest=batch.source_binding_digest,
-            issuer_id=filing.cik,
-            accession_number=filing.accession_number,
-            cutoff_at=discovery.request.valuation_timestamp,
-            runtime=outcome.runtime,
-            raw_report_digest=sha256_digest(report.model_dump(mode="json")),
-            parser_action_refs=outcome.action_refs,
-            witness_ref=witness_ref,
-            display_profile_digest=fiscal_display_profile_digest(),
-            mapping_policy_digest=fiscal_mapping_policy_digest(),
-            permitted_inputs=batch.observations,
+        witnesses[witness.artifact_id] = witness
+        env.store.put_with_receipt(
+            evidence.request.artifact_id,
+            evidence.request,
+            (discovery_ref.content_hash,),
         )
-        test_sources[source_ref.artifact_id] = FiscalClassificationSource(
-            scope, evidence, witness, archive
+        for receipt in outcome.responses:
+            env.store.put_with_receipt(
+                sec_response_artifact_id(evidence.request.scope, receipt.uri),
+                receipt,
+                (receipt.content_hash,),
+            )
+        discovery_adapter = RetainedDiscoveryAdapter(discovery, evidence, env.store)
+        closure = FiscalSourceClosure(
+            discovery=discovery_adapter,
+            artifacts=env.store,
+            pin=evidence.request.pin,
+            source=RetainedSECAdapter(evidence),
+            capture_lock=lambda key, at: nullcontext(),
         )
-        review = FiscalSourceAccountingReviewV1(
-            scope=scope,
-            facts=tuple(facts),
-            reconciliations=tuple(
-                FiscalSourceReconciliationV1(
-                    description=item["name"],
-                    terms=tuple(
-                        FiscalReconciliationTermV1(
-                            fact_id=by_name[term["fact_name"]],
-                            coefficient=term["coefficient"],
-                        )
-                        for term in item["inputs"]
-                    ),
-                    result_fact_id=by_name[item["output_fact"]],
-                    residual=Decimal(item["difference_usd"]),
-                    precision_allowance=Decimal(
-                        item["combined_rounding_allowance_usd"]
-                    ),
-                )
-                for item in opinion["reconciliations"]
-            ),
-            limitations=(
-                "Synthetic deployment fixture only. Archived facts are test inputs, not a new substantive review or formal source approval.",
-            ),
+        resolver = FiscalClassificationSourceResolver(
+            sources=closure,
+            discovery=source_builder.discovery,
+            witnesses=RetainedSyntheticWitnesses(),
+            content=content.as_read_only(),
         )
-        grant = env.authorities.read_current(
-            "synthetic-source_preparer",
-            expected_role="source_preparer",
-            deadline_at=deadline(),
+        resolver.accounting_accreditation = provider
+        resolver.accounting_release_file = release
+        installed = FiscalSourceProducerInstallationV1(
+            role="source_preparer",
+            audience="ephemeral-mixed-preparer",
+            authority_id="synthetic-source_preparer",
+            workload_uid=os.getuid(),
+            deployment_uid=os.getuid(),
+            database_role="fundamental",
+            deployment_file=roster,
+            orders_directory=orders,
+            private_key_file=preparer_key,
+            source_configuration_files=(),
+            declared_source_revision=evidence.request.pin.declared_source_revision,
+            executable_digest=fiscal_source_producer_executable_digest(),
         )
-        execution = FiscalSourcePreparationExecutionV1(
-            source_validation_ref=source_ref,
-            source_binding_digest=scope.source_binding_digest,
-            runtime=scope.runtime,
-            authority_id=grant.grant.identity.authority_id,
-            authority_grant_ref=grant.grant_ref,
-            principal_id=grant.grant.identity.principal_id,
-            principal_kind="machine",
-            key_id=grant.grant.identity.key_id,
-            execution_id="synthetic-retained-source:" + filing.accession_number,
+        preparation_order = FiscalProducerOrderV1(
+            order_id="mixed-prepare",
+            role="source_preparer",
+            audience=installed.audience,
+            authority_id=installed.authority_id,
+            deployment_digest=sha256_digest(env.authorities._configured()),
+            executable_digest=installed.executable_digest,
             issuance=env.history.read_epoch(deadline_at=deadline()).issuance_context,
-            started_at=datetime.now(UTC),
-            completed_at=datetime.now(UTC),
+            source_request=evidence.request.selection,
+            valid_from=now - timedelta(seconds=1),
+            expires_at=now + timedelta(minutes=30),
         )
-        signed = SignedFiscalSourcePreparationExecutionV1(
-            execution=execution, signature="0" * 128
+        (orders / "mixed-prepare.json").write_bytes(canonical_bytes(preparation_order))
+        runtime = FiscalSourceProducerRuntime(
+            installation=installed,
+            artifacts=env.store,
+            metadata=env.metadata,
+            sources=closure,
+            content=content.as_read_only(),
+            classification_sources=None,
         )
-        signed = signed.model_copy(
-            update={"signature": env.preparer_key.sign(signed.signing_bytes()).hex()}
+        preparation_ref = runtime.run(
+            preparation_order.order_id, deadline_at=deadline()
         )
-        preparation_ref = retained(
-            env.store,
-            execution.execution_id,
-            signed,
-            "fiscal-source-preparation-execution-v1",
+        classifier_installation = installed.model_copy(
+            update={
+                "role": "classifier",
+                "audience": "ephemeral-mixed-classifier",
+                "authority_id": "synthetic-classifier",
+                "private_key_file": classifier_key,
+                "accreditation_file": release,
+            }
         )
-        review_ref = retained(
-            env.store,
-            "synthetic-retained-review:" + filing.accession_number,
-            review,
-            "fiscal-source-accounting-review-v1",
-        )
-        command = FiscalRecordClassificationCommandV1(
-            command_id="synthetic-retained-classify:" + filing.accession_number,
-            authority_id="synthetic-classifier",
-            source_validation_ref=source_ref,
+        classification_order = FiscalProducerOrderV1(
+            order_id="mixed-classify",
+            role="classifier",
+            audience=classifier_installation.audience,
+            authority_id=classifier_installation.authority_id,
+            deployment_digest=preparation_order.deployment_digest,
+            executable_digest=installed.executable_digest,
+            issuance=preparation_order.issuance,
+            preparation_ref=preparation_ref,
             witness_ref=witness_ref,
-            review_ref=review_ref,
-            preparer_execution_ref=preparation_ref,
             security_id="MSFT",
-            expires_at=datetime.now(UTC) + timedelta(minutes=20),
+            valid_from=preparation_order.valid_from,
+            expires_at=preparation_order.expires_at,
         )
-        classified = classifier.record_classification(
-            command, expected_head=None, deadline_at=deadline()
+        (orders / "mixed-classify.json").write_bytes(
+            canonical_bytes(classification_order)
+        )
+        classifier = FiscalSourceProducerRuntime(
+            installation=classifier_installation,
+            artifacts=env.store,
+            metadata=env.metadata,
+            sources=closure,
+            content=content.as_read_only(),
+            classification_sources=resolver,
+        )
+        publication = classifier.run(
+            classification_order.order_id, deadline_at=deadline()
+        )
+        assert hasattr(publication, "signed_classification"), (
+            "real accounting policy must support this retained source"
+        )
+        classified_ref = producer_reference(
+            publication.publication.artifact, "fiscal-source-classification-v2"
         )
         new_bindings.append(
             FiscalCandidateClassificationBindingV1(
-                source_validation_ref=source_ref,
+                source_validation_ref=binding.source_validation_ref,
                 witness_ref=witness_ref,
-                classification_refs=(
-                    reference(
-                        classified.publication.artifact,
-                        "fiscal-source-classification-v1",
-                    ),
-                ),
+                classification_refs=(classified_ref,),
             )
         )
+    assert resolver is not None
     return resolver, tuple(
         sorted(
             new_bindings, key=lambda binding: binding.source_validation_ref.artifact_id
@@ -594,6 +635,7 @@ def test_mixed_source_factory_preserves_verified_classification_activities(
         source_builder.sources,
         source_builder.pin,
         resolver,
+        accounting_accreditation=resolver.accounting_accreditation,
     )
     builder = build_fiscal_candidate_runtime(inputs, env.metadata, config, write=True)
     command = FiscalPrepareCandidateCommandV1(
@@ -1224,6 +1266,7 @@ def test_complete_source_configuration_rotation_before_snapshot_refuses(
         source.pin,
         CurrentSources(),
         generation,
+        accounting_accreditation=resolver.accounting_accreditation,
     )
     builder = build_fiscal_candidate_runtime(inputs, env.metadata, config, write=True)
     command = FiscalPrepareCandidateCommandV1(
@@ -1244,7 +1287,8 @@ def test_complete_source_configuration_rotation_before_snapshot_refuses(
     finish = history.finish_observation
 
     def rotate(*args, **kwargs):
-        state["generation"] = "revoked"
+        if any(record.artifact_id == first.reference.artifact_id for record in args[0]):
+            state["generation"] = "revoked"
         return finish(*args, **kwargs)
 
     monkeypatch.setattr(history, "finish_observation", rotate)
@@ -1254,3 +1298,19 @@ def test_complete_source_configuration_rotation_before_snapshot_refuses(
     assert env.store.read(first.reference.artifact_id) == canonical_bytes(
         first.candidate
     )
+    state["generation"] = "active"
+    release_bytes = resolver.accounting_release_file.read_bytes()
+
+    def rotate_accounting_release(*args, **kwargs):
+        result = finish(*args, **kwargs)
+        if any(record.artifact_id == first.reference.artifact_id for record in args[0]):
+            resolver.accounting_release_file.write_bytes(
+                canonical_bytes(first.reference)
+            )
+        return result
+
+    monkeypatch.setattr(history, "finish_observation", rotate_accounting_release)
+    with pytest.raises(SnapshotError) as policy_rotation:
+        reader.verify_candidate(first.reference, deadline_at=deadline())
+    assert policy_rotation.value.code == "FISCAL_CANDIDATE_INVALID"
+    resolver.accounting_release_file.write_bytes(release_bytes)

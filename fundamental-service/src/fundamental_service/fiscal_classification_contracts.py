@@ -226,3 +226,65 @@ class FiscalClassificationPublicationV1(_ClassificationModel):
     signed_classification: SignedFiscalSourceClassificationV1
     publication: ArtifactPublicationV1
     history_heads: tuple[FiscalHistoryHeadV1, ...]
+
+
+class FiscalRecordClassificationCommandV2(_ClassificationModel):
+    protocol: Literal["fundamental.record-fiscal-classification.v2"] = (
+        "fundamental.record-fiscal-classification.v2"
+    )
+    command_id: Identity
+    authority_id: Identity
+    source_validation_ref: ArtifactRefV1
+    witness_ref: ArtifactRefV1
+    review_ref: ArtifactRefV1
+    preparer_execution_ref: ArtifactRefV1
+    security_id: Identity | None = None
+    expires_at: AwareDatetime
+
+    @property
+    def command_digest(self) -> str:
+        return sha256_digest(self)
+
+    @property
+    def artifact_id(self) -> str:
+        return "fiscal-source-classification-v2:" + sha256_digest(
+            {"authority_id": self.authority_id, "command_id": self.command_id}
+        )
+
+
+class SignedFiscalSourceClassificationV2(_ClassificationModel):
+    protocol: Literal["fundamental.signed-fiscal-source-classification.v2"] = (
+        "fundamental.signed-fiscal-source-classification.v2"
+    )
+    command: FiscalRecordClassificationCommandV2
+    review: FiscalSourceAccountingReviewV1
+    reviewer: FiscalClassifierActorV1
+    authority_grant_ref: ArtifactRefV1
+    issuance: FiscalIssuanceContextV1
+    signed_at: AwareDatetime
+    signature: str = Field(pattern=r"^[0-9a-f]{128}$")
+
+    @model_validator(mode="after")
+    def exact_command(self) -> SignedFiscalSourceClassificationV2:
+        if (
+            self.command.source_validation_ref
+            != self.review.scope.source_validation_ref
+            or self.command.witness_ref != self.review.scope.witness_ref
+            or self.command.authority_id != self.reviewer.authority_id
+            or self.signed_at >= self.command.expires_at
+        ):
+            raise ValueError("classification differs from command or expiry")
+        return self
+
+    def signing_bytes(self) -> bytes:
+        return canonical_bytes(self.model_dump(mode="json", exclude={"signature"}))
+
+    @property
+    def artifact_id(self) -> str:
+        return self.command.artifact_id
+
+
+class FiscalClassificationPublicationV2(_ClassificationModel):
+    signed_classification: SignedFiscalSourceClassificationV2
+    publication: ArtifactPublicationV1
+    history_heads: tuple[FiscalHistoryHeadV1, ...]

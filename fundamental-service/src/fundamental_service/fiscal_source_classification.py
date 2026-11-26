@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import partial
 from typing import Literal, Protocol
+from pydantic import TypeAdapter
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -37,6 +38,9 @@ from .fiscal_classification_contracts import (
     FiscalSourceAccountingReviewV1,
     SignedFiscalSourceClassificationV1,
     SignedFiscalSourcePreparationExecutionV1,
+    FiscalRecordClassificationCommandV2,
+    SignedFiscalSourceClassificationV2,
+    FiscalClassificationPublicationV2,
 )
 from .fiscal_classification_review import verify_fiscal_source_review
 from .fiscal_classification_source import (
@@ -52,14 +56,30 @@ from .replay import (
 )
 from .serialization import canonical_bytes
 from .snapshots import SnapshotError
+from .fiscal_source_preparation import (
+    FiscalSourceProducerEvidenceVerifier,
+    read_source_preparation,
+)
+from .fiscal_source_producer_contracts import (
+    FiscalClassifierReviewExecutionV2,
+    SignedFiscalSourcePreparationExecutionV2,
+)
+
+ClassificationCommand = (
+    FiscalRecordClassificationCommandV1 | FiscalRecordClassificationCommandV2
+)
+SignedClassification = (
+    SignedFiscalSourceClassificationV1 | SignedFiscalSourceClassificationV2
+)
 
 _ROLE = "fiscal-source-classification-v1"
+_V2_ROLE = "fiscal-source-classification-v2"
 
 
 class FiscalClassifierSignerPort(Protocol):
     def authenticate(
         self,
-        command: FiscalRecordClassificationCommandV1,
+        command: ClassificationCommand,
         review: FiscalSourceAccountingReviewV1,
         *,
         issuance: FiscalIssuanceContextV1,
@@ -71,13 +91,24 @@ class FiscalClassifierSignerPort(Protocol):
     ) -> str: ...
 
 
+class FiscalClassifierRecoveryPort(Protocol):
+    def restore(
+        self,
+        command: ClassificationCommand,
+        *,
+        actor: FiscalClassifierActorV1,
+        issuance: FiscalIssuanceContextV1,
+        deadline_at: datetime,
+    ) -> SignedClassification | None: ...
+
+
 def _invalid(message: str) -> SnapshotError:
     return SnapshotError("FISCAL_CLASSIFICATION_INVALID", message)
 
 
 def _ref(record: ArtifactRecordV1) -> ArtifactRefV1:
     return ArtifactRefV1(
-        role=_ROLE,
+        role=_V2_ROLE if record.artifact_id.startswith(_V2_ROLE + ":") else _ROLE,
         artifact_id=record.artifact_id,
         content_hash=record.content_hash,
         media_type=record.media_type,
@@ -105,6 +136,7 @@ class _ClassificationRead:
         self.authorities: dict[str, CurrentFiscalAuthorityV1] = {}
         self.epoch: FiscalHistoryEpochV1 | None = None
         self.activities: tuple[VerifiedFiscalActivity, ...] = ()
+        self.accreditation: ArtifactRefV1 | None = None
 
     def observe(self, history: FiscalHistoryReadV1) -> None:
         if self.epoch is not None and self.epoch != history.epoch:
@@ -133,6 +165,9 @@ class FiscalSourceClassificationOwner:
         authorities: FiscalAuthorityOwner,
         sources: FiscalClassificationSourcePort | None,
         signer: FiscalClassifierSignerPort | None = None,
+        recovery: FiscalClassifierRecoveryPort | None = None,
+        producer_evidence: FiscalSourceProducerEvidenceVerifier | None = None,
+        require_production_evidence: bool = False,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.artifacts = artifacts
@@ -140,6 +175,9 @@ class FiscalSourceClassificationOwner:
         self.authorities = authorities
         self.sources = sources
         self.signer = signer
+        self.recovery = recovery
+        self.producer_evidence = producer_evidence
+        self.require_production_evidence = require_production_evidence
         self.clock = clock
 
     @staticmethod
@@ -171,7 +209,7 @@ class FiscalSourceClassificationOwner:
         return self.history
 
     @staticmethod
-    def _subject(command: FiscalRecordClassificationCommandV1) -> str:
+    def _subject(command: ClassificationCommand) -> str:
         return "fiscal-classification:" + command.artifact_id
 
     def _authority(
@@ -211,7 +249,7 @@ class FiscalSourceClassificationOwner:
 
     def _source(
         self,
-        command: FiscalRecordClassificationCommandV1,
+        command: ClassificationCommand,
         state: _ClassificationRead,
         deadline_at: datetime,
     ) -> FiscalClassificationSource:
@@ -244,7 +282,7 @@ class FiscalSourceClassificationOwner:
 
     def _review(
         self,
-        command: FiscalRecordClassificationCommandV1,
+        command: ClassificationCommand,
         source: FiscalClassificationSource,
         state: _ClassificationRead,
         deadline_at: datetime,
@@ -262,7 +300,7 @@ class FiscalSourceClassificationOwner:
 
     def _execution(
         self,
-        command: FiscalRecordClassificationCommandV1,
+        command: ClassificationCommand,
         review: FiscalSourceAccountingReviewV1,
         actor: FiscalClassifierActorV1,
         signed_at: datetime,
@@ -273,12 +311,24 @@ class FiscalSourceClassificationOwner:
         deadline_at: datetime,
     ) -> None:
         identity = authority.grant.identity
+        v2 = isinstance(command, FiscalRecordClassificationCommandV2)
         raw = self._json(
-            actor.execution_ref, "fiscal-classifier-review-execution-v1", state
+            actor.execution_ref,
+            "fiscal-classifier-review-execution-v2"
+            if v2
+            else "fiscal-classifier-review-execution-v1",
+            state,
         )
-        execution = FiscalClassifierReviewExecutionV1.model_validate_json(raw)
+        proof = (
+            FiscalClassifierReviewExecutionV2.model_validate_json(raw) if v2 else None
+        )
+        execution = (
+            proof.execution
+            if proof
+            else FiscalClassifierReviewExecutionV1.model_validate_json(raw)
+        )
         if (
-            canonical_bytes(execution) != raw
+            canonical_bytes(proof or execution) != raw
             or actor.authority_id != identity.authority_id
             or actor.principal_id != identity.principal_id
             or actor.principal_kind != identity.principal_kind
@@ -297,17 +347,55 @@ class FiscalSourceClassificationOwner:
             raise _invalid(
                 "review execution does not authenticate the exact command and reviewer"
             )
-        raw_preparation = self._json(
-            command.preparer_execution_ref,
-            "fiscal-source-preparation-execution-v1",
-            state,
+        signed_preparation: (
+            SignedFiscalSourcePreparationExecutionV1
+            | SignedFiscalSourcePreparationExecutionV2
         )
-        signed_preparation = (
-            SignedFiscalSourcePreparationExecutionV1.model_validate_json(
-                raw_preparation
+        if isinstance(command, FiscalRecordClassificationCommandV2):
+            if self.producer_evidence is None or proof is None:
+                raise _invalid(
+                    "V2 classification requires trusted producer policy verification"
+                )
+            signed_preparation_v2 = read_source_preparation(
+                state.reader, command.preparer_execution_ref
             )
-        )
-        preparation = signed_preparation.execution
+            execution, preparation = self.producer_evidence.verify(
+                command,
+                source,
+                review,
+                proof,
+                signed_preparation_v2,
+                reader=state.reader,
+                check_deadline=partial(self._budget, deadline_at),
+                now=self._now(),
+            )
+            if (
+                state.accreditation is not None
+                and state.accreditation != proof.accreditation_ref
+            ):
+                raise _invalid("accounting accreditation changed during observation")
+            state.accreditation = proof.accreditation_ref
+            signed_preparation = signed_preparation_v2
+            if proof.classifier_grant_ref != authority.grant_ref:
+                raise _invalid("classifier policy job grant differs")
+            raw_preparation = self._json(
+                command.preparer_execution_ref,
+                "fiscal-source-preparation-execution-v2",
+                state,
+            )
+        else:
+            raw_preparation = self._json(
+                command.preparer_execution_ref,
+                "fiscal-source-preparation-execution-v1",
+                state,
+            )
+            signed_preparation_v1 = (
+                SignedFiscalSourcePreparationExecutionV1.model_validate_json(
+                    raw_preparation
+                )
+            )
+            preparation = signed_preparation_v1.execution
+            signed_preparation = signed_preparation_v1
         preparer = self._authority(
             preparation.authority_id, "source_preparer", state, deadline_at
         )
@@ -407,7 +495,7 @@ class FiscalSourceClassificationOwner:
             ) from error
 
     @staticmethod
-    def _dependencies(signed: SignedFiscalSourceClassificationV1) -> tuple[str, ...]:
+    def _dependencies(signed: SignedClassification) -> tuple[str, ...]:
         command = signed.command
         return tuple(
             sorted(
@@ -426,7 +514,7 @@ class FiscalSourceClassificationOwner:
 
     def _verify(
         self,
-        signed: SignedFiscalSourceClassificationV1,
+        signed: SignedClassification,
         state: _ClassificationRead,
         deadline_at: datetime,
     ) -> None:
@@ -463,9 +551,19 @@ class FiscalSourceClassificationOwner:
 
     def _load(
         self, ref: ArtifactRefV1, state: _ClassificationRead, deadline_at: datetime
-    ) -> SignedFiscalSourceClassificationV1:
-        raw = self._json(ref, _ROLE, state)
-        signed = SignedFiscalSourceClassificationV1.model_validate_json(raw)
+    ) -> SignedClassification:
+        if ref.role not in {_ROLE, _V2_ROLE}:
+            raise _invalid("classification reference version is unsupported")
+        raw = self._json(ref, ref.role, state)
+        signed = TypeAdapter(SignedClassification).validate_json(raw)
+        if (isinstance(signed, SignedFiscalSourceClassificationV2)) != (
+            ref.role == _V2_ROLE
+        ):
+            raise _invalid("classification reference and protocol versions differ")
+        if self.require_production_evidence and not isinstance(
+            signed, SignedFiscalSourceClassificationV2
+        ):
+            raise _invalid("production current admission requires V2 producer evidence")
         if (
             canonical_bytes(signed) != raw
             or signed.artifact_id != ref.artifact_id
@@ -480,7 +578,7 @@ class FiscalSourceClassificationOwner:
 
     def _history_state(
         self,
-        signed: SignedFiscalSourceClassificationV1,
+        signed: SignedClassification,
         ref: ArtifactRefV1,
         state: _ClassificationRead,
         deadline_at: datetime,
@@ -539,7 +637,7 @@ class FiscalSourceClassificationOwner:
 
     def _require_current_epoch(
         self,
-        signed: SignedFiscalSourceClassificationV1,
+        signed: SignedClassification,
         state: _ClassificationRead,
         deadline_at: datetime,
     ) -> None:
@@ -555,7 +653,7 @@ class FiscalSourceClassificationOwner:
 
     def _finish(
         self,
-        signed: SignedFiscalSourceClassificationV1,
+        signed: SignedClassification,
         state: _ClassificationRead,
         deadline_at: datetime,
     ) -> None:
@@ -588,7 +686,30 @@ class FiscalSourceClassificationOwner:
         self._history().require_heads(tuple(heads.values()), deadline_at=deadline_at)
         self._require_current_epoch(signed, state, deadline_at)
         state.reader.check_current()
+        if isinstance(signed, SignedFiscalSourceClassificationV2):
+            if state.epoch is None:
+                raise _invalid("classification observation has no recovery epoch")
+            whole_observation = self._history().finish_observation(
+                tuple(
+                    record for _, record in state.reader.records if record is not None
+                ),
+                tuple(heads.values()),
+                state.epoch,
+                deadline_at=deadline_at,
+            )
+            if any(
+                not isinstance(entry.commit_bound, FiscalCommitReceiptV1)
+                for entry in whole_observation.entries
+            ):
+                raise _invalid("classification observation is not sealed")
+            if self._now() < whole_observation.observed_through:
+                raise _invalid("classification clock precedes whole observation")
         now = self._now()
+        if state.accreditation is not None and (
+            self.producer_evidence is None
+            or self.producer_evidence.accreditation() != state.accreditation
+        ):
+            raise _invalid("accounting accreditation changed before return")
         if now >= deadline_at:
             raise self._expired()
         if now >= signed.command.expires_at or now >= source.witness.expires_at:
@@ -605,20 +726,26 @@ class FiscalSourceClassificationOwner:
 
     def record_classification(
         self,
-        command: FiscalRecordClassificationCommandV1,
+        command: ClassificationCommand,
         *,
         expected_head: FiscalHistoryHeadV1 | None,
         deadline_at: datetime,
-    ) -> FiscalClassificationPublicationV1:
+    ) -> FiscalClassificationPublicationV1 | FiscalClassificationPublicationV2:
         with metadata_operation_budget(
             partial(self._budget, deadline_at), self._expired
         ):
             try:
                 self._budget(deadline_at)
                 self._history()
-                command = FiscalRecordClassificationCommandV1.model_validate_json(
+                command = TypeAdapter(ClassificationCommand).validate_json(
                     canonical_bytes(command)
                 )
+                if self.require_production_evidence and not isinstance(
+                    command, FiscalRecordClassificationCommandV2
+                ):
+                    raise _invalid(
+                        "production classification requires V2 producer evidence"
+                    )
                 state = _ClassificationRead(
                     FiscalArtifactRead(
                         self.artifacts, partial(self._budget, deadline_at)
@@ -645,14 +772,35 @@ class FiscalSourceClassificationOwner:
                     authority = self._authority(
                         command.authority_id, "classifier", state, deadline_at
                     )
-                    unsigned = SignedFiscalSourceClassificationV1(
-                        command=command,
-                        review=review,
-                        reviewer=actor,
-                        authority_grant_ref=authority.grant_ref,
-                        issuance=issuance,
-                        signed_at=self._now(),
-                        signature="0" * 128,
+                    restored = (
+                        self.recovery.restore(
+                            command,
+                            actor=actor,
+                            issuance=issuance,
+                            deadline_at=deadline_at,
+                        )
+                        if self.recovery is not None
+                        else None
+                    )
+                    unsigned = restored or TypeAdapter(
+                        SignedClassification
+                    ).validate_json(
+                        canonical_bytes(
+                            {
+                                "protocol": "fundamental.signed-fiscal-source-classification.v2"
+                                if isinstance(
+                                    command, FiscalRecordClassificationCommandV2
+                                )
+                                else "fundamental.signed-fiscal-source-classification.v1",
+                                "command": command,
+                                "review": review,
+                                "reviewer": actor,
+                                "authority_grant_ref": authority.grant_ref,
+                                "issuance": issuance,
+                                "signed_at": self._now(),
+                                "signature": "0" * 128,
+                            }
+                        )
                     )
                     self._execution(
                         command,
@@ -669,11 +817,26 @@ class FiscalSourceClassificationOwner:
                         raise _invalid(
                             "classification expiry exceeds its authority grant"
                         )
-                    signature = self.signer.sign(
-                        unsigned.signing_bytes(), actor=actor, deadline_at=deadline_at
-                    )
+                    if restored is not None:
+                        if (
+                            restored.command != command
+                            or restored.reviewer != actor
+                            or restored.issuance != issuance
+                            or restored.review != review
+                            or restored.authority_grant_ref != authority.grant_ref
+                        ):
+                            raise _invalid(
+                                "classification recovery differs from exact invocation"
+                            )
+                        signature = restored.signature
+                    else:
+                        signature = self.signer.sign(
+                            unsigned.signing_bytes(),
+                            actor=actor,
+                            deadline_at=deadline_at,
+                        )
                     self._budget(deadline_at)
-                    signed = SignedFiscalSourceClassificationV1.model_validate_json(
+                    signed = TypeAdapter(SignedClassification).validate_json(
                         canonical_bytes(
                             unsigned.model_copy(update={"signature": signature})
                         )
@@ -727,6 +890,12 @@ class FiscalSourceClassificationOwner:
                     signed, _ref(publication.artifact), state, deadline_at
                 )
                 self._finish(signed, state, deadline_at)
+                if isinstance(signed, SignedFiscalSourceClassificationV2):
+                    return FiscalClassificationPublicationV2(
+                        signed_classification=signed,
+                        publication=publication,
+                        history_heads=tuple(state.heads.values()),
+                    )
                 return FiscalClassificationPublicationV1(
                     signed_classification=signed,
                     publication=publication,
