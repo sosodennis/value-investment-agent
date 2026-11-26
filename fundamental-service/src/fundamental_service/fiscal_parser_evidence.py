@@ -85,14 +85,35 @@ class ParserActionRuntimeObservation:
         taxonomy_cache_dir: Path,
         delivery_revision: str,
     ) -> None:
+        _check_parser_runtime_current(
+            (self,), profile, taxonomy_cache_dir, delivery_revision
+        )
+
+
+def _check_parser_runtime_current(
+    observations: tuple[ParserActionRuntimeObservation, ...],
+    profile: ArelleValidationProfileV1,
+    taxonomy_cache_dir: Path,
+    delivery_revision: str,
+) -> None:
+    if not observations:
+        raise _invalid("retained source has no consumed parser runtime")
+    profile_json = canonical_bytes(profile.model_dump(mode="json"))
+    profile_digest = profile.digest()
+    for observation in observations:
         if (
-            canonical_bytes(profile.model_dump(mode="json")) != self.profile_json
-            or taxonomy_cache_dir != self.taxonomy_cache_dir
-            or delivery_revision != self.delivery_revision
-            or profile.digest() != self.request.profile_digest
-            or parser_action_resources(profile, taxonomy_cache_dir).logical
-            != self.request.resources
-            or ParserBuildChecks().current() != self.request.build
+            profile_json != observation.profile_json
+            or taxonomy_cache_dir != observation.taxonomy_cache_dir
+            or delivery_revision != observation.delivery_revision
+            or profile_digest != observation.request.profile_digest
+        ):
+            raise _invalid("retained parser runtime changed during source admission")
+    resources = parser_action_resources(profile, taxonomy_cache_dir)
+    build_checks = ParserBuildChecks()
+    for observation in observations:
+        if (
+            resources.logical != observation.request.resources
+            or build_checks.current() != observation.request.build
         ):
             raise _invalid("retained parser runtime changed during source admission")
 
@@ -123,10 +144,9 @@ class FiscalParserRuntimeRead:
         taxonomy_cache_dir: Path,
         delivery_revision: str,
     ) -> None:
-        if not self.observations:
-            raise _invalid("retained source has no consumed parser runtime")
-        for observation in self.observations:
-            observation.check_current(profile, taxonomy_cache_dir, delivery_revision)
+        _check_parser_runtime_current(
+            tuple(self.observations), profile, taxonomy_cache_dir, delivery_revision
+        )
 
 
 @dataclass(frozen=True)

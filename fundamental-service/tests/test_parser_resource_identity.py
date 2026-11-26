@@ -362,6 +362,153 @@ def test_retained_parser_current_reads_fresh_bytes_inside_candidate_operation(
     assert not owner._state.observations
 
 
+def runtime_action_case(tmp_path, monkeypatch):
+    from fundamental_service.fiscal_parser_evidence import FiscalParserRuntimeRead
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    runtime = FiscalParserRuntimeRead()
+    for representation in ("normalized", "archive"):
+        runtime.observe(
+            c.request(representation=representation),
+            c.profile,
+            c.arguments["taxonomy_cache_dir"],
+            c.arguments["delivery_revision"],
+        )
+    return c, runtime
+
+
+def test_runtime_current_preserves_both_requests_with_one_complete_resource_read(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.serialization import canonical_bytes
+
+    c, runtime = runtime_action_case(tmp_path, monkeypatch)
+    requests = tuple(item.request for item in runtime.observations)
+    expected = tuple(canonical_bytes(request) for request in requests)
+    assert tuple(request.representation for request in requests) == (
+        "normalized",
+        "archive",
+    )
+    monkeypatch.setattr(
+        c.identity, "ResourceHashReader", partial(ResourceHashReader, direct=False)
+    )
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        if args and args[0] == "rb":
+            opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", observed)
+    assert (
+        runtime.check_current(
+            c.profile,
+            c.arguments["taxonomy_cache_dir"],
+            c.arguments["delivery_revision"],
+        )
+        is None
+    )
+    assert tuple(canonical_bytes(item.request) for item in runtime.observations) == (
+        expected
+    )
+    assert opened == Counter(
+        {
+            tmp_path / "taxonomy/content": 1,
+            tmp_path / "edgar/content": 1,
+            tmp_path / "xule/content": 1,
+            c.rules: 1,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "change", ("resources", "build", "profile", "root", "delivery", "profile-digest")
+)
+def test_runtime_current_refuses_a_changed_second_expectation(
+    tmp_path, monkeypatch, change
+):
+    from dataclasses import replace
+    from fundamental_service.arelle_parser import ArelleValidationProfileV1
+    from fundamental_service.parser_action_contracts import ParserActionInputV3
+    from fundamental_service.serialization import canonical_bytes
+
+    c, runtime = runtime_action_case(tmp_path, monkeypatch)
+    first, second = runtime.observations
+    request = second.request.model_dump(mode="python")
+    alternate_profile = ArelleValidationProfileV1.model_validate(
+        {**c.profile.model_dump(mode="python"), "profile_id": "other-profile"}
+    )
+    if change == "resources":
+        name, _ = request["resources"][0]
+        request["resources"] = ((name, "9" * 64), *request["resources"][1:])
+    elif change == "build":
+        request["build"]["runtime_digest"] = "9" * 64
+    elif change == "profile":
+        second = replace(
+            second,
+            profile_json=canonical_bytes(alternate_profile.model_dump(mode="json")),
+        )
+    elif change == "root":
+        alternate_root = tmp_path / "other-taxonomy"
+        alternate_root.mkdir()
+        (alternate_root / "content").write_bytes(b"fixed bytes")
+        second = replace(second, taxonomy_cache_dir=alternate_root)
+    elif change == "delivery":
+        second = replace(second, delivery_revision="e" * 40)
+    else:
+        request["profile_digest"] = alternate_profile.digest()
+    runtime.observations[1] = replace(
+        second, request=ParserActionInputV3.model_validate(request)
+    )
+    assert runtime.observations[0] == first
+    with pytest.raises(SnapshotError) as caught:
+        runtime.check_current(
+            c.profile,
+            c.arguments["taxonomy_cache_dir"],
+            c.arguments["delivery_revision"],
+        )
+    assert caught.value.code == "FISCAL_PARSER_ACTION_INVALID"
+
+
+@pytest.mark.parametrize("change", ("bytes", "membership"))
+def test_runtime_current_rechecks_resources_between_calls_in_one_operation(
+    tmp_path, monkeypatch, change
+):
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+
+    with pytest.raises(IncompleteParserClosure, match="bytes changed"):
+        with _ParserResourceOperation(lambda: 60.0) as owner:
+            c, runtime = runtime_action_case(tmp_path, monkeypatch)
+            current = partial(
+                runtime.check_current,
+                c.profile,
+                c.arguments["taxonomy_cache_dir"],
+                c.arguments["delivery_revision"],
+            )
+            assert current() is None
+            target = (
+                tmp_path / "taxonomy" / ("content" if change == "bytes" else "added")
+            )
+            target.write_bytes(b"other bytes")
+            current()
+    assert owner._state.status == "aborted"
+    assert not owner._state.observations
+
+
+def test_runtime_current_refuses_an_empty_consumption(tmp_path, monkeypatch):
+    from fundamental_service.fiscal_parser_evidence import FiscalParserRuntimeRead
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    with pytest.raises(SnapshotError) as caught:
+        FiscalParserRuntimeRead().check_current(
+            c.profile,
+            c.arguments["taxonomy_cache_dir"],
+            c.arguments["delivery_revision"],
+        )
+    assert caught.value.code == "FISCAL_PARSER_ACTION_INVALID"
+
+
 def test_resource_operations_are_fresh_nested_isolated_and_cleanup_on_error(
     tmp_path, monkeypatch
 ):
