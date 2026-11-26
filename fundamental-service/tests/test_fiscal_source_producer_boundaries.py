@@ -256,8 +256,10 @@ def test_producer_cli_has_only_refs_and_bounded_deadline(monkeypatch):
 
 def test_two_processes_share_one_preparation_intent(preparer, protected_root):
     import json
+    import os
     import subprocess
     import sys
+    from pathlib import Path
 
     runtime, order, env, _ = preparer
     evidence, _ = runtime.sources.execute(order.source_request, deadline_at=deadline())
@@ -320,9 +322,19 @@ finally:
         str(start),
         order.order_id,
     ]
+    child_env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            (str(Path(__file__).resolve().parent), os.environ.get("PYTHONPATH", ""))
+        ),
+    }
     children = [
         subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=child_env,
         )
         for _ in range(2)
     ]
