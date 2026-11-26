@@ -317,6 +317,9 @@ class FiscalDisplayRuntime:
                     )
                 try:
                     self._require(order, lease, deadline_at)
+                    candidate_generation = (
+                        self.candidates.current_configuration_digest()
+                    )
 
                     def authorize(
                         request: FiscalDisplayRequestV1, deadline: datetime
@@ -349,6 +352,7 @@ class FiscalDisplayRuntime:
                         ),
                         configuration_digest=lambda request: sha256_digest(
                             (
+                                self.candidates.current_configuration_digest(),
                                 self.installation.model_dump(mode="json"),
                                 self.configuration(),
                                 self._mapping_configuration(),
@@ -371,6 +375,13 @@ class FiscalDisplayRuntime:
                         deadline_at=deadline_at,
                     )
                     self._require(order, lease, deadline_at)
+                    if (
+                        self.candidates.current_configuration_digest()
+                        != candidate_generation
+                    ):
+                        raise _refused(
+                            "display candidate configuration changed before return"
+                        )
                     return result
                 finally:
                     self.metadata.release_ingestion_lock(lease)
@@ -469,6 +480,7 @@ def build_fiscal_display_reader(
         ),
         configuration_digest=lambda request: sha256_digest(
             (
+                candidates.current_configuration_digest(),
                 deployment(),
                 _candidate_configuration_generation(
                     request,

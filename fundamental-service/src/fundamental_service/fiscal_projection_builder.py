@@ -14,6 +14,7 @@ from .contracts import StrictModel
 from .data_releases import ArtifactRefV1
 from .data_releases import AutomaticMappingApprovalV1
 from .fiscal_candidate_contracts import (
+    FiscalSourceDocumentObservation,
     ClassifiedSourceForCandidateV1,
     FiscalCandidateClassificationBindingV1,
     FiscalCandidateSourceUseV1,
@@ -112,6 +113,7 @@ class FiscalCandidateMaterialization:
     projection: FiscalProjectionResultV1
     consumed_metadata: tuple[ArtifactRecordV1, ...]
     source_evidence: tuple[VerifiedFiscalCandidateSource, ...]
+    source_documents: tuple[FiscalSourceDocumentObservation, ...]
 
 
 def _invalid(message: str) -> SnapshotError:
@@ -352,6 +354,14 @@ class FiscalProjectionBuilder:
             )
         return self.preparation.prepare(command, deadline_at=deadline_at)
 
+    def current_configuration_digest(self) -> str:
+        if self.preparation is None:
+            raise SnapshotError(
+                "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
+                "candidate configuration requires its deployment composition",
+            )
+        return self.preparation.current_configuration_digest()
+
     def verify_candidate(
         self, reference: ArtifactRefV1, *, deadline_at: datetime
     ) -> CurrentFiscalCandidate:
@@ -415,6 +425,7 @@ class FiscalProjectionBuilder:
             classifications[source_id] = binding
         source_uses: list[FiscalCandidateSourceUseV1] = []
         source_evidence: list[VerifiedFiscalCandidateSource] = []
+        source_documents: list[FiscalSourceDocumentObservation] = []
         mapping_refs: list[ArtifactRefV1] = []
         filings: dict[str, FiscalBasisFilingV1] = {}
         for accession in coverage.source_accessions:
@@ -490,6 +501,14 @@ class FiscalProjectionBuilder:
                 security_id=security_id,
                 policy_digest=policy_digest,
                 check_deadline=budget,
+            )
+            source_documents.append(
+                FiscalSourceDocumentObservation(
+                    source_validation_ref=source_ref,
+                    primary_document_url=evidence.outcome.claim.source.uri,
+                    primary_document_sha256=evidence.outcome.integrity.raw_content_hash,
+                    archive_member_sha256=evidence.outcome.integrity.archive_member_hash,
+                )
             )
             if isinstance(evidence.outcome, FiscalValidationCompleteRefusedV1):
                 if self.classifications is None:
@@ -822,6 +841,7 @@ class FiscalProjectionBuilder:
             content=candidate,
             projection=projection,
             source_evidence=tuple(source_evidence),
+            source_documents=tuple(source_documents),
             consumed_metadata=tuple(
                 record for _, record in reader.records if record is not None
             ),

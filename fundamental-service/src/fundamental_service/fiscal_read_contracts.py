@@ -90,8 +90,17 @@ class FiscalDisplayRowV1(ReleaseModel):
     cells: tuple[FiscalCellV1, ...] = Field(min_length=1)
 
 
+class FiscalSourceDocumentV1(ReleaseModel):
+    issuer_id: str = Field(pattern=r"^[0-9]{10}$")
+    accession_number: str = Field(pattern=r"^[0-9]{10}-[0-9]{2}-[0-9]{6}$")
+    primary_document_url: str = Field(min_length=1)
+    primary_document_sha256: Digest
+    archive_member_sha256: Digest
+
+
 class FiscalSourceInspectionV1(ReleaseModel):
     source_validation_ref: ArtifactRefV1
+    source_document: FiscalSourceDocumentV1
     validation_kind: Literal["complete_matched", "complete_refused"]
     source_binding_digest: Digest
     raw_report_digest: Digest
@@ -130,6 +139,27 @@ class FiscalReadResultV1(ReleaseModel):
             self.evidence.observations
         ):
             raise ValueError("fiscal transport repeats a graph identity")
+        sources = {
+            item.source_validation_ref.artifact_id: item
+            for item in self.evidence.source_uses
+        }
+        if len(sources) != len(self.evidence.source_uses) or any(
+            item.source_document.issuer_id != self.binding.scope.issuer_id
+            for item in sources.values()
+        ):
+            raise ValueError("fiscal transport source identity differs")
+        for observation in observations.values():
+            source = sources.get(observation.source_artifact_id)
+            if source is None or (
+                observation.source_binding_digest != source.source_binding_digest
+                or observation.issuer_id != source.source_document.issuer_id
+                or observation.basis.issuer_id != source.source_document.issuer_id
+                or observation.accession_number
+                != source.source_document.accession_number
+                or observation.source_locator.primary_document_sha256
+                != source.source_document.archive_member_sha256
+            ):
+                raise ValueError("fiscal transport observation source differs")
         for node in nodes.values():
             if (
                 any(

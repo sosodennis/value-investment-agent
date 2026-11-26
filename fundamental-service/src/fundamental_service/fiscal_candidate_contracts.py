@@ -23,6 +23,14 @@ from .statement_contracts import StatementScopeV1
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 
 
+@dataclass(frozen=True)
+class FiscalSourceDocumentObservation:
+    source_validation_ref: ArtifactRefV1
+    primary_document_url: str
+    primary_document_sha256: Digest
+    archive_member_sha256: Digest
+
+
 class FiscalSourceUseScopeV1(StrictModel):
     model_config = ConfigDict(frozen=True)
 

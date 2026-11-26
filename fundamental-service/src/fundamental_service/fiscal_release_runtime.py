@@ -190,7 +190,12 @@ def build_fiscal_release_reader(
             configuration_file, owner=0
         ) != canonical_bytes(configuration.model_dump(mode="json")):
             raise ValueError("release reader installation changed")
-        return release_configuration_digest(configuration)
+        return sha256_digest(
+            (
+                release_configuration_digest(configuration),
+                candidates.current_configuration_digest(),
+            )
+        )
 
     return FiscalReleaseReader(
         display=display,
@@ -293,6 +298,7 @@ class FiscalReleaseRuntime:
                 retryable=True,
             )
         try:
+            candidate_generation = self.candidates.current_configuration_digest()
 
             def authorize(
                 approved: FiscalPublishV1, deadline: datetime
@@ -305,7 +311,9 @@ class FiscalReleaseRuntime:
                 ):
                     raise ValueError("fiscal release order or deadline expired")
                 if (
-                    os.getuid() != installation.workload_uid
+                    self.candidates.current_configuration_digest()
+                    != candidate_generation
+                    or os.getuid() != installation.workload_uid
                     or approved != order.approved
                     or order.audience != installation.audience
                     or order.installation_digest

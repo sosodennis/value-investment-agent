@@ -58,6 +58,8 @@ _SIGNING = "fiscal-display-signing-v1"
 
 
 class FiscalCandidateReaderPort(Protocol):
+    def current_configuration_digest(self) -> str: ...
+
     def verify_candidate(
         self, reference: ArtifactRefV1, *, deadline_at: datetime
     ) -> CurrentFiscalCandidate: ...

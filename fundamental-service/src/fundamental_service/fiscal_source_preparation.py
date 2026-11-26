@@ -58,6 +58,8 @@ def fiscal_source_producer_executable_digest() -> str:
                 "fiscal_admission_history.py",
                 "history_recovery_contracts.py",
                 "metadata.py",
+                "snapshots.py",
+                "content_publication.py",
                 "serialization.py",
             )
         )

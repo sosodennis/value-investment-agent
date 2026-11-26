@@ -1063,3 +1063,9 @@ Group publication 的新 content root 與 hash directory 由 publisher 擁有，
 相同 command 重試保留首次 signed bytes、execution、expiry 與 source identity。變更 command scope、pins 或 expiry 必須使用新 command ID。若 `FISCAL_CANDIDATE_SIGNING_OUTCOME_UNAVAILABLE` 表示 signing intent 已留存而沒有可證明的 durable signature，該 command 不再重簽。用新 command ID 執行真實新工作。已留存 signed bytes 的同代重試可續做缺少的 publication history；純讀不補寫。Restore 後舊 candidate 或 signed orphan 保留原 issuance，不能靠新 append 取得 current。新的本代 command 需要真正本代 invocation 與有效 grants。
 
 這個入口只回 current preparation 結果。Historical source、witness 與 classification replay 尚無完整 owning port，因此沒有 candidate as-of approval 入口。正式 display decision、outer release、authenticated API 與 workspace 驗收仍是後續 gate。
+
+Fiscal display 與 release 的 current 起末觀測會沿 candidate reader 的公開 `current_configuration_digest()` 重新讀取當次 configuration，包括實際 accounting accreditation provider。這個 digest 只供當次內部觀測，不是持久 permission token 或快取。Provider 在 display/release 最後回傳前改變即拒絕。Raw-pass source 不依賴 Microsoft accreditation；classified source 仍須完整驗證其 provider、原件、accreditation 與 accounting basis。
+
+Typed fiscal read 的每筆 `evidence.source_uses` 含 `source_document`：`issuer_id`、`accession_number`、`primary_document_url`、`primary_document_sha256` 與 `archive_member_sha256`。HTTP 原件 hash 保留 URL bytes 的身分；archive member hash 保留 mapping locator 的身分，兩者沿原 normalized relation 驗證，不假設相等。Candidate owner 在當次完整 source closure 與 mapping 後產生 immutable document observation，沿原 current finish 傳給 release。Release reader 核對 exact source-validation ref、source binding 與同一最後整體 read set，直接投影已驗證的 SEC 原件 claim；不使用跨請求快取。下游可連結該原件並顯示 locator，不自行推算 URL，也不公開 raw SEC body 或 accounting policy capsule。Observation 的來源 artifact、binding、issuer、accession 與原件 hash 必須符合該 inspection。
+
+更改 producer persistence closure 或 release source 後，重新產生正式 build 身分、accreditation、installed orders 與 release trust bindings。保留舊簽章和舊 source revision；不得用新 digest 重新標記舊證據。本地 retained-adapter / UUID PostgreSQL 測試不替代正式 SEC materialization、installed custody、cohort 或產品驗收。

@@ -73,7 +73,10 @@ class DisplayEnvironment:
 
 @pytest.fixture
 def protected_deployment_root():
-    with TemporaryDirectory(prefix=".issue495-display-", dir=Path.home()) as directory:
+    with TemporaryDirectory(
+        prefix=".issue495-display-",
+        dir=Path(os.environ.get("ISSUE495_PRODUCER_PROTECTED_TEMP", str(Path.home()))),
+    ) as directory:
         root = Path(directory)
         root.chmod(0o700)
         yield root

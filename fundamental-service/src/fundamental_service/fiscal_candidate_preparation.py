@@ -32,6 +32,7 @@ from .fiscal_admission_history import (
 )
 from .fiscal_authority_contracts import CurrentFiscalAuthorityV1
 from .fiscal_candidate_contracts import (
+    FiscalSourceDocumentObservation,
     FiscalCandidateBodyV2,
     FiscalCandidateContentV1,
     FiscalCandidatePreparationExecutionV1,
@@ -122,6 +123,7 @@ class CurrentFiscalCandidate:
     consumed_metadata: tuple[ArtifactRecordV1, ...]
     history_heads: tuple[FiscalHistoryHeadV1, ...]
     observed_at: datetime
+    source_documents: tuple[FiscalSourceDocumentObservation, ...]
 
     @property
     def content(self) -> FiscalCandidateContentV1:
@@ -161,6 +163,9 @@ class FiscalCandidatePreparation:
         self.authority_id, self.clock = authority_id, clock
         self._configuration_digest = configuration_digest
         self._capture_lock, self._private_key = capture_lock, private_key
+
+    def current_configuration_digest(self) -> str:
+        return self._configuration_digest()
 
     @staticmethod
     def _expired() -> SnapshotError:
@@ -443,6 +448,7 @@ class FiscalCandidatePreparation:
             records,
             observed.heads,
             now,
+            materialized.source_documents,
         )
 
     def verify_candidate(

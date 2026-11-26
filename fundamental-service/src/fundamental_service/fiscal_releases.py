@@ -10,7 +10,7 @@ from typing import Protocol, TypeVar
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import BaseModel
 
-from .artifact_evidence import read_retained_artifact
+from .artifact_evidence import read_retained_artifact, require_retained_artifact
 from .command_artifacts import EvidenceArtifactStore
 from .data_releases import (
     ArtifactRefV1,
@@ -30,6 +30,8 @@ from .fiscal_authority_contracts import (
 )
 from .fiscal_candidate_contracts import (
     ClassifiedSourceForCandidateV1,
+    FiscalSourceDocumentObservation,
+    FiscalSourceUseScopeV1,
     VerifiedClassifiedCandidateSource,
 )
 from .fiscal_display_contracts import CurrentFiscalDisplay
@@ -45,6 +47,7 @@ from .fiscal_read_contracts import (
     FiscalReadResultV1,
     FiscalReportedCellV1,
     FiscalSourceInspectionV1,
+    FiscalSourceDocumentV1,
     FiscalTtmColumnsV1,
 )
 from .fiscal_release_contracts import (
@@ -503,6 +506,26 @@ class FiscalReleaseReader:
                 command, fiscal_observation=snapshot
             )
 
+    def _source_document(
+        self,
+        scope: FiscalSourceUseScopeV1,
+        document: FiscalSourceDocumentObservation,
+        reader: FiscalArtifactRead,
+    ) -> FiscalSourceDocumentV1:
+        if (
+            document.source_validation_ref != scope.source_validation_ref
+            or scope.source_binding_digest != scope.source_validation_ref.content_hash
+        ):
+            raise _invalid("fiscal source document differs from current source use")
+        require_retained_artifact(reader, document.source_validation_ref)
+        return FiscalSourceDocumentV1(
+            issuer_id=scope.issuer_id,
+            accession_number=scope.accession_number,
+            primary_document_url=document.primary_document_url,
+            primary_document_sha256=document.primary_document_sha256,
+            archive_member_sha256=document.archive_member_sha256,
+        )
+
     def read(
         self, request: FiscalReadRequestV1, *, deadline_at: datetime
     ) -> FiscalReadResultV1:
@@ -595,9 +618,23 @@ class FiscalReleaseReader:
                         pending.append(identity)
                     elif identity not in node_map:
                         observation_ids.add(identity)
+            documents = {
+                item.source_validation_ref.artifact_id: item
+                for item in observed.display.candidate.source_documents
+            }
+            if len(documents) != len(content.source_uses) or set(documents) != {
+                use.scope.source_validation_ref.artifact_id
+                for use in content.source_uses
+            }:
+                raise _invalid("fiscal current source document set differs")
             source_uses = tuple(
                 FiscalSourceInspectionV1(
                     source_validation_ref=use.scope.source_validation_ref,
+                    source_document=self._source_document(
+                        use.scope,
+                        documents[use.scope.source_validation_ref.artifact_id],
+                        reader,
+                    ),
                     validation_kind=use.scope.validation_kind,
                     source_binding_digest=use.scope.source_binding_digest,
                     raw_report_digest=use.scope.raw_report_digest,
