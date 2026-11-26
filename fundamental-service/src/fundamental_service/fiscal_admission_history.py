@@ -9,7 +9,7 @@ from functools import partial
 from typing import Annotated, Literal, Protocol, TypeVar, runtime_checkable
 
 from pydantic import AwareDatetime, ConfigDict, Field, model_validator
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -26,6 +26,7 @@ Subject = Annotated[str, Field(min_length=1, max_length=1024)]
 OriginId = Annotated[str, Field(pattern=r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$")]
 _T = TypeVar("_T")
 _MAX_STREAMS = 256
+_READ_GROUP_SIZE = 32
 
 
 class FiscalControlBindingV1(StrictModel):
@@ -103,6 +104,22 @@ class FiscalHistoryHeadV1(StrictModel):
     sequence: int = Field(gt=0)
     event_digest: Digest
     recorded_at: AwareDatetime
+
+
+@dataclass(frozen=True)
+class _StoredEvent:
+    payload_bytes: bytes
+    event_digest: str
+    command_digest: str | None
+    origin_id: str
+    writer_xid8: int
+
+
+@dataclass(frozen=True)
+class _StoredStream:
+    head: FiscalHistoryHeadV1
+    stored_bytes: int
+    events: tuple[_StoredEvent, ...]
 
 
 class FiscalHistoryEventV1(StrictModel):
@@ -752,151 +769,130 @@ class PostgresFiscalAdmissionHistory:
             link.source_origin_id for link in epoch.cutovers
         }
         bounds: dict[tuple[str, int], CommitBound] = {}
-        for stream in sorted(stream_ids):
-            head = await self._head(connection, stream)
-            if head is None:
-                raise _unavailable("requested history stream is unavailable")
-            if len(entries) + head.sequence > self._max_entries:
-                raise _unavailable("history entry limit exceeded")
-            stored_size = await connection.scalar(
-                text(
-                    "SELECT COALESCE(SUM(octet_length(payload_bytes)), 0) "
-                    "FROM fundamental.fiscal_history_events WHERE stream_id=:stream"
-                ),
-                {"stream": stream},
+        streams = sorted(stream_ids)
+        for offset in range(0, len(streams), _READ_GROUP_SIZE):
+            group = await self._stream_group(
+                tuple(streams[offset : offset + _READ_GROUP_SIZE]),
+                connection,
+                remaining_entries=self._max_entries - len(entries),
+                remaining_bytes=self._max_bytes - byte_count,
             )
-            if stored_size is None or byte_count + int(stored_size) > self._max_bytes:
-                raise _unavailable("history byte limit exceeded")
-            result = await connection.execute(
-                text(
-                    "SELECT payload_bytes, event_digest, command_digest, origin_id, writer_xid8::text "
-                    "FROM fundamental.fiscal_history_events "
-                    "WHERE stream_id=:stream ORDER BY sequence LIMIT :limit"
-                ),
-                {"stream": stream, "limit": self._max_entries + 1},
-            )
-            prior = None
-            previous_record = None
-            previous_event = None
-            last_at = None
-            stream_entries = []
-            for index, row in enumerate(result, start=1):
-                raw = bytes(row[0])
-                byte_count += len(raw)
-                if byte_count > self._max_bytes:
-                    raise _unavailable("history byte limit exceeded")
-                entry = self._entry(raw, str(row[1]))
-                event = entry.event
-                if (
-                    event.origin_id not in origins
-                    or event.origin_id != str(row[3])
-                    or event.writer_xid8 != int(row[4])
-                ):
-                    raise _unavailable("history writer identity or origin differs")
-                writer = (event.origin_id, event.writer_xid8)
-                if writer not in bounds:
-                    bounds[writer] = await self._commit_bound(connection, event)
-                bound = bounds[writer]
-                lower = (
-                    bound.committed_at
-                    if isinstance(bound, FiscalCommitReceiptV1)
-                    else bound.lower_bound.committed_at
-                    if isinstance(bound.lower_bound, FiscalCommitLowerV1)
-                    else None
-                )
-                if lower is not None and lower < event.recorded_at:
-                    raise _unavailable("history commit clock reversed")
-                entry = entry.model_copy(update={"commit_bound": bound})
-                if (
-                    event.stream_id != stream
-                    or event.subject_id != head.subject_id
-                    or event.stream_kind != head.stream_kind
-                    or event.sequence != index
-                    or event.previous_digest != prior
-                    or (last_at is not None and event.recorded_at < last_at)
-                ):
-                    raise _unavailable("history sequence or scope is invalid")
-                if head.stream_kind == "evidence":
-                    if row[2] is not None:
-                        raise _unavailable("evidence history has a control command")
-                    body = event.body
-                    if index == 1:
-                        if not isinstance(body, FiscalEvidenceCheckpointV1):
-                            raise _unavailable("evidence history has no checkpoint")
-                    elif isinstance(body, FiscalEvidenceReobservationV1):
-                        try:
-                            verify_evidence_reobservation(
-                                event, previous_event, previous_record, epoch, lower
-                            )
-                        except ValueError as error:
-                            raise _unavailable(
-                                "evidence reobservation is invalid"
-                            ) from error
-                    elif (
-                        not isinstance(body, FiscalEvidenceTransitionV1)
-                        or body.previous_record != previous_record
+            group_heads = []
+            group_entries = []
+            expected_current: dict[str, ArtifactRecordV1 | None] = {}
+            for stored in group:
+                head = stored.head
+                stream = head.stream_id
+                prior = None
+                previous_record = None
+                previous_event = None
+                last_at = None
+                stream_entries = []
+                for index, row in enumerate(stored.events, start=1):
+                    raw = row.payload_bytes
+                    byte_count += len(raw)
+                    if byte_count > self._max_bytes:
+                        raise _unavailable("history byte limit exceeded")
+                    entry = self._entry(raw, row.event_digest)
+                    event = entry.event
+                    if (
+                        event.origin_id not in origins
+                        or event.origin_id != row.origin_id
+                        or event.writer_xid8 != row.writer_xid8
                     ):
-                        raise _unavailable(
-                            "evidence history transition is discontinuous"
-                        )
-                    if not isinstance(
-                        body,
-                        (
-                            FiscalEvidenceCheckpointV1,
-                            FiscalEvidenceTransitionV1,
-                            FiscalEvidenceReobservationV1,
-                        ),
-                    ):
-                        raise _unavailable("evidence history has a control event")
-                    previous_record = body.record
-                    for record in (
-                        body.record,
-                        body.previous_record
-                        if isinstance(body, FiscalEvidenceTransitionV1)
-                        else None,
-                    ):
-                        if record is not None and record.artifact_id != head.subject_id:
-                            raise _unavailable(
-                                "evidence history record belongs to another artifact"
-                            )
-                elif (
-                    not isinstance(event.body, FiscalControlBindingV1)
-                    or row[2] != event.body.command_digest
-                ):
-                    raise _unavailable("control history has an evidence event")
-                prior, last_at = entry.event_digest, event.recorded_at
-                previous_event = event
-                stream_entries.append(entry)
-            if (
-                len(stream_entries) != head.sequence
-                or prior != head.event_digest
-                or last_at != head.recorded_at
-            ):
-                raise _unavailable("history prefix does not reach the trusted head")
-            if head.stream_kind == "evidence":
-                value = await connection.scalar(
-                    text(
-                        "SELECT fundamental.fiscal_artifact_record(artifact) "
-                        "FROM fundamental.artifact_references artifact WHERE artifact_id=:identity"
-                    ),
-                    {"identity": head.subject_id},
-                )
-                try:
-                    current = (
-                        ArtifactRecordV1.model_validate(value)
-                        if value is not None
+                        raise _unavailable("history writer identity or origin differs")
+                    writer = (event.origin_id, event.writer_xid8)
+                    if writer not in bounds:
+                        bounds[writer] = await self._commit_bound(connection, event)
+                    bound = bounds[writer]
+                    lower = (
+                        bound.committed_at
+                        if isinstance(bound, FiscalCommitReceiptV1)
+                        else bound.lower_bound.committed_at
+                        if isinstance(bound.lower_bound, FiscalCommitLowerV1)
                         else None
                     )
-                except ValueError as error:
-                    raise _unavailable(
-                        "current evidence metadata is invalid"
-                    ) from error
-                if current != previous_record:
-                    raise _unavailable(
-                        "evidence history does not reach current metadata"
-                    )
-            heads.append(head)
-            entries.extend(stream_entries)
+                    if lower is not None and lower < event.recorded_at:
+                        raise _unavailable("history commit clock reversed")
+                    entry = entry.model_copy(update={"commit_bound": bound})
+                    if (
+                        event.stream_id != stream
+                        or event.subject_id != head.subject_id
+                        or event.stream_kind != head.stream_kind
+                        or event.sequence != index
+                        or event.previous_digest != prior
+                        or (last_at is not None and event.recorded_at < last_at)
+                    ):
+                        raise _unavailable("history sequence or scope is invalid")
+                    if head.stream_kind == "evidence":
+                        if row.command_digest is not None:
+                            raise _unavailable("evidence history has a control command")
+                        body = event.body
+                        if index == 1:
+                            if not isinstance(body, FiscalEvidenceCheckpointV1):
+                                raise _unavailable("evidence history has no checkpoint")
+                        elif isinstance(body, FiscalEvidenceReobservationV1):
+                            try:
+                                verify_evidence_reobservation(
+                                    event, previous_event, previous_record, epoch, lower
+                                )
+                            except ValueError as error:
+                                raise _unavailable(
+                                    "evidence reobservation is invalid"
+                                ) from error
+                        elif (
+                            not isinstance(body, FiscalEvidenceTransitionV1)
+                            or body.previous_record != previous_record
+                        ):
+                            raise _unavailable(
+                                "evidence history transition is discontinuous"
+                            )
+                        if not isinstance(
+                            body,
+                            (
+                                FiscalEvidenceCheckpointV1,
+                                FiscalEvidenceTransitionV1,
+                                FiscalEvidenceReobservationV1,
+                            ),
+                        ):
+                            raise _unavailable("evidence history has a control event")
+                        previous_record = body.record
+                        for record in (
+                            body.record,
+                            body.previous_record
+                            if isinstance(body, FiscalEvidenceTransitionV1)
+                            else None,
+                        ):
+                            if (
+                                record is not None
+                                and record.artifact_id != head.subject_id
+                            ):
+                                raise _unavailable(
+                                    "evidence history record belongs to another artifact"
+                                )
+                    elif (
+                        not isinstance(event.body, FiscalControlBindingV1)
+                        or row.command_digest != event.body.command_digest
+                    ):
+                        raise _unavailable("control history has an evidence event")
+                    prior, last_at = entry.event_digest, event.recorded_at
+                    previous_event = event
+                    stream_entries.append(entry)
+                if (
+                    len(stream_entries) != head.sequence
+                    or prior != head.event_digest
+                    or last_at != head.recorded_at
+                ):
+                    raise _unavailable("history prefix does not reach the trusted head")
+                if head.stream_kind == "evidence":
+                    expected_current[head.subject_id] = previous_record
+                group_heads.append(head)
+                group_entries.extend(stream_entries)
+            current = await self._current_records(tuple(expected_current), connection)
+            if current != expected_current:
+                raise _unavailable("evidence history does not reach current metadata")
+            heads.extend(group_heads)
+            entries.extend(group_entries)
         observed = observed_through or await connection.scalar(
             text("SELECT clock_timestamp()")
         )
@@ -922,6 +918,156 @@ class PostgresFiscalAdmissionHistory:
             observed_through=observed,
             epoch=epoch,
         )
+
+    async def _stream_group(
+        self,
+        streams: tuple[str, ...],
+        connection: AsyncConnection,
+        *,
+        remaining_entries: int,
+        remaining_bytes: int,
+    ) -> tuple[_StoredStream, ...]:
+        head_rows = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT stream_id, stream_kind, subject_id, sequence, event_digest, recorded_at "
+                        "FROM fundamental.fiscal_history_streams WHERE stream_id IN :streams"
+                    ).bindparams(bindparam("streams", expanding=True)),
+                    {"streams": streams},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        try:
+            heads = {
+                str(row["stream_id"]): FiscalHistoryHeadV1.model_validate(dict(row))
+                for row in head_rows
+            }
+        except ValueError as error:
+            raise _unavailable("history stream head is invalid") from error
+        size_rows = await connection.execute(
+            text(
+                "SELECT stream_id, SUM(octet_length(payload_bytes)) "
+                "FROM fundamental.fiscal_history_events WHERE stream_id IN :streams "
+                "GROUP BY stream_id"
+            ).bindparams(bindparam("streams", expanding=True)),
+            {"streams": streams},
+        )
+        sizes = {str(row[0]): int(row[1]) for row in size_rows}
+        entry_count = byte_count = 0
+        for stream in streams:
+            head = heads.get(stream)
+            if head is None:
+                raise _unavailable("requested history stream is unavailable")
+            entry_count += head.sequence
+            if entry_count > remaining_entries:
+                raise _unavailable("history entry limit exceeded")
+            byte_count += sizes.get(stream, 0)
+            if byte_count > remaining_bytes:
+                raise _unavailable("history byte limit exceeded")
+        # RC callers can see new rows after the preflight; guard the payload in
+        # this statement's snapshot before the asyncpg driver buffers any bytes.
+        result = await connection.execute(
+            text(
+                "WITH selected AS MATERIALIZED ("
+                "SELECT stream_id, sequence, payload_bytes, event_digest, command_digest, "
+                "origin_id::text, writer_xid8::text FROM fundamental.fiscal_history_events "
+                "WHERE stream_id IN :streams), totals AS ("
+                "SELECT count(*) AS entries, COALESCE(SUM(octet_length(payload_bytes)), 0) AS bytes "
+                "FROM selected) "
+                "SELECT stream_id, CASE WHEN totals.entries <= :entry_limit "
+                "AND totals.bytes <= :byte_limit THEN payload_bytes END, "
+                "event_digest, command_digest, origin_id, writer_xid8, totals.entries, totals.bytes "
+                "FROM selected CROSS JOIN totals ORDER BY stream_id, sequence LIMIT :limit"
+            ).bindparams(bindparam("streams", expanding=True)),
+            {
+                "streams": streams,
+                "entry_limit": remaining_entries,
+                "byte_limit": remaining_bytes,
+                "limit": remaining_entries + 1,
+            },
+        )
+        events: dict[str, list[_StoredEvent]] = {stream: [] for stream in streams}
+        actual_bytes = 0
+        try:
+            for row in result:
+                if int(row[6]) > remaining_entries:
+                    raise _unavailable("history entry limit exceeded")
+                if int(row[7]) > remaining_bytes:
+                    raise _unavailable("history byte limit exceeded")
+                raw = bytes(row[1])
+                actual_bytes += len(raw)
+                if actual_bytes > remaining_bytes:
+                    raise _unavailable("history byte limit exceeded")
+                events[str(row[0])].append(
+                    _StoredEvent(
+                        payload_bytes=raw,
+                        event_digest=str(row[2]),
+                        command_digest=row[3],
+                        origin_id=str(row[4]),
+                        writer_xid8=int(row[5]),
+                    )
+                )
+        finally:
+            result.close()
+        return tuple(
+            _StoredStream(heads[stream], sizes.get(stream, 0), tuple(events[stream]))
+            for stream in streams
+        )
+
+    @staticmethod
+    async def _current_records(
+        artifact_ids: tuple[str, ...], connection: AsyncConnection
+    ) -> dict[str, ArtifactRecordV1 | None]:
+        if not artifact_ids:
+            return {}
+        rows = await connection.execute(
+            text(
+                "SELECT artifact_id, fundamental.fiscal_artifact_record(artifact) "
+                "FROM fundamental.artifact_references artifact WHERE artifact_id IN :identities"
+            ).bindparams(bindparam("identities", expanding=True)),
+            {"identities": artifact_ids},
+        )
+        current: dict[str, ArtifactRecordV1 | None] = {
+            identity: None for identity in artifact_ids
+        }
+        try:
+            for row in rows:
+                current[str(row[0])] = (
+                    ArtifactRecordV1.model_validate(row[1])
+                    if row[1] is not None
+                    else None
+                )
+        except ValueError as error:
+            raise _unavailable("current evidence metadata is invalid") from error
+        return current
+
+    @staticmethod
+    async def _require_registrations(
+        records: tuple[ArtifactRecordV1, ...], connection: AsyncConnection
+    ) -> None:
+        for offset in range(0, len(records), _READ_GROUP_SIZE):
+            group = records[offset : offset + _READ_GROUP_SIZE]
+            rows = await connection.execute(
+                text(
+                    "SELECT content_hash, media_type, byte_length FROM fundamental.content_objects "
+                    "WHERE (content_hash, media_type) IN :keys"
+                ).bindparams(bindparam("keys", expanding=True)),
+                {
+                    "keys": tuple(
+                        (record.content_hash, record.media_type) for record in group
+                    )
+                },
+            )
+            lengths = {(row[0], row[1]): row[2] for row in rows}
+            for record in group:
+                storage = lengths.get((record.content_hash, record.media_type))
+                if not isinstance(storage, int) or storage < 0:
+                    raise _unavailable(
+                        "whole observation content storage is unavailable"
+                    )
 
     @staticmethod
     async def _epoch(connection: AsyncConnection, local: str) -> FiscalHistoryEpochV1:
@@ -1080,16 +1226,8 @@ class PostgresFiscalAdmissionHistory:
             entry = latest["evidence:" + record.artifact_id]
             if getattr(entry.event.body, "record", None) != record:
                 raise _unavailable("whole observation metadata changed")
-            storage = await connection.scalar(
-                text(
-                    "SELECT byte_length FROM fundamental.content_objects "
-                    "WHERE content_hash=:digest AND media_type=:media"
-                ),
-                {"digest": record.content_hash, "media": record.media_type},
-            )
-            if not isinstance(storage, int) or storage < 0:
-                raise _unavailable("whole observation content storage is unavailable")
             selected.append(entry)
+        await self._require_registrations(records, connection)
         selected.extend(
             latest[head.stream_id] for head in heads if head.stream_kind == "control"
         )

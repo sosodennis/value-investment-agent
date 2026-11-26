@@ -4,7 +4,7 @@ import asyncio
 import os
 from contextlib import contextmanager
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import CancelledError, ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier
@@ -13,7 +13,7 @@ from uuid import uuid4
 import asyncpg
 import pytest
 from sqlalchemy import text
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import CursorResult, make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.sql.elements import TextClause
@@ -1305,3 +1305,309 @@ def test_snapshot_can_include_events_after_its_transaction_timestamp(
     assert entry.commit_bound.visible_by > read.observed_through
     assert entry.event.body.record.status == "invalidated"
     assert read.evidence_as_of(record.artifact_id, at=read.observed_through) == record
+
+
+@pytest.mark.parametrize("limit", [None, "entries", "bytes"])
+def test_grouped_history_keeps_the_complete_union_and_global_limits(
+    metadata, artifacts, monkeypatch, limit
+):
+    monkeypatch.setattr(
+        "fundamental_service.fiscal_admission_history._READ_GROUP_SIZE", 2
+    )
+    history = PostgresFiscalAdmissionHistory(metadata)
+    records = tuple(
+        artifacts.put_with_receipt("grouped-" + name, {"value": name}).artifact
+        for name in ("a", "b", "c")
+    )
+    checkpoint = history.checkpoint(records, deadline_at=_deadline())
+    control = history.append_once(
+        "grouped-control",
+        _command(artifacts),
+        expected_head=None,
+        deadline_at=_deadline(),
+    )
+    control_head = history.read(
+        ("control:grouped-control",), deadline_at=_deadline()
+    ).heads[0]
+    expected = (control.entry, *checkpoint.entries)
+    streams = tuple(entry.event.stream_id for entry in expected)
+    options = (
+        {"max_entries": len(expected) - 1}
+        if limit == "entries"
+        else {"max_bytes": sum(len(entry.payload_bytes) for entry in expected) - 1}
+        if limit == "bytes"
+        else {}
+    )
+    bounded = PostgresFiscalAdmissionHistory(metadata, **options)
+    if limit is not None:
+        with pytest.raises(SnapshotError, match="limit"):
+            bounded.read(streams, deadline_at=_deadline())
+    else:
+        observed = history.finish_observation(
+            records, (control_head,), checkpoint.epoch, deadline_at=_deadline()
+        )
+        assert observed.entries == expected
+        assert tuple(head.stream_id for head in observed.heads) == streams
+        assert observed.epoch == checkpoint.epoch
+        assert len({entry.event.writer_xid8 for entry in checkpoint.entries}) == 1
+    assert history.read(streams, deadline_at=_deadline()).entries == expected
+
+
+@pytest.mark.parametrize("missing", ["head", "events", "current"])
+def test_grouped_history_refuses_missing_data_in_the_last_group(
+    metadata, artifacts, monkeypatch, missing
+):
+    monkeypatch.setattr(
+        "fundamental_service.fiscal_admission_history._READ_GROUP_SIZE", 2
+    )
+    history = PostgresFiscalAdmissionHistory(metadata)
+    records = tuple(
+        artifacts.put_with_receipt("group-missing-" + name, {}).artifact
+        for name in ("a", "b", "c")
+    )
+    checkpoint = history.checkpoint(records, deadline_at=_deadline())
+    streams = tuple(head.stream_id for head in checkpoint.heads)
+    if missing == "head":
+        streams = (*streams[:2], "evidence:group-missing-z-absent")
+    else:
+
+        async def remove(connection):
+            if missing == "events":
+                await connection.execute(
+                    text(
+                        "ALTER TABLE fundamental.fiscal_history_events DISABLE TRIGGER USER"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "DELETE FROM fundamental.fiscal_history_events WHERE stream_id=:stream"
+                    ),
+                    {"stream": streams[-1]},
+                )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE fundamental.fiscal_history_events ENABLE TRIGGER USER"
+                    )
+                )
+            else:
+                await connection.execute(
+                    text(
+                        "ALTER TABLE fundamental.artifact_references DISABLE TRIGGER fiscal_capture_artifact_transition"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "DELETE FROM fundamental.artifact_references WHERE artifact_id=:identity"
+                    ),
+                    {"identity": records[-1].artifact_id},
+                )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE fundamental.artifact_references ENABLE TRIGGER fiscal_capture_artifact_transition"
+                    )
+                )
+
+        metadata.run_fiscal_admission_history(remove)
+    with pytest.raises(SnapshotError) as failure:
+        history.read(streams, deadline_at=_deadline())
+    assert failure.value.code == "FISCAL_ADMISSION_HISTORY_UNAVAILABLE"
+    assert (
+        history.read(streams[:2], deadline_at=_deadline()).entries
+        == checkpoint.entries[:2]
+    )
+
+
+def test_grouped_registration_uses_the_digest_and_media_pair_without_repair(
+    metadata, artifacts, monkeypatch
+):
+    monkeypatch.setattr(
+        "fundamental_service.fiscal_admission_history._READ_GROUP_SIZE", 2
+    )
+    history = PostgresFiscalAdmissionHistory(metadata)
+    records = tuple(
+        artifacts.put_bytes_with_receipt(
+            "group-registration-" + name, b"same bytes", media_type=media
+        ).artifact
+        for name, media in (
+            ("a", "application/json"),
+            ("b", "application/octet-stream"),
+            ("c", "application/json"),
+        )
+    )
+    checkpoint = history.checkpoint(records, deadline_at=_deadline())
+    observed = history.finish_observation(
+        records, (), checkpoint.epoch, deadline_at=_deadline()
+    )
+    assert observed.entries == checkpoint.entries
+    assert len({record.content_hash for record in records}) == 1
+
+    async def remove(connection):
+        await connection.execute(
+            text(
+                "DELETE FROM fundamental.content_objects WHERE content_hash=:digest AND media_type=:media"
+            ),
+            {"digest": records[1].content_hash, "media": records[1].media_type},
+        )
+
+    metadata.run_fiscal_admission_history(remove)
+    with pytest.raises(SnapshotError, match="content storage"):
+        history.finish_observation(
+            records, (), checkpoint.epoch, deadline_at=_deadline()
+        )
+    with pytest.raises(SnapshotError) as missing:
+        metadata.content_byte_length(
+            records[1].content_hash, media_type=records[1].media_type
+        )
+    assert missing.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
+    assert history.finish_observation(
+        (records[0], records[2]), (), checkpoint.epoch, deadline_at=_deadline()
+    ).entries == (checkpoint.entries[0], checkpoint.entries[2])
+
+
+def test_grouped_read_keeps_one_repeatable_read_snapshot(
+    metadata, artifacts, database_url, monkeypatch
+):
+    monkeypatch.setattr(
+        "fundamental_service.fiscal_admission_history._READ_GROUP_SIZE", 2
+    )
+    history = PostgresFiscalAdmissionHistory(metadata)
+    records = tuple(
+        artifacts.put_with_receipt("group-snapshot-" + name, {}).artifact
+        for name in ("a", "b", "c")
+    )
+    checkpoint = history.checkpoint(records, deadline_at=_deadline())
+    streams = tuple(head.stream_id for head in checkpoint.heads)
+    writer = PostgresMetadataStore(database_url, auto_migrate=False)
+    writer.start()
+    original = history._stream_group
+    changed = False
+
+    def invalidate():
+        async def change(connection):
+            await connection.execute(
+                text(
+                    "UPDATE fundamental.artifact_references SET status='invalidated' WHERE artifact_id=:identity"
+                ),
+                {"identity": records[-1].artifact_id},
+            )
+
+        writer.run_fiscal_admission_history(change)
+        PostgresFiscalAdmissionHistory(writer).seal_pending(
+            (streams[-1],), deadline_at=_deadline()
+        )
+
+    async def change_between_groups(*args, **kwargs):
+        nonlocal changed
+        group = await original(*args, **kwargs)
+        if not changed:
+            changed = True
+            await asyncio.to_thread(invalidate)
+        return group
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(history, "_stream_group", change_between_groups)
+            observed = history.finish_observation(
+                records, (), checkpoint.epoch, deadline_at=_deadline()
+            )
+        assert observed.entries == checkpoint.entries
+        with pytest.raises(SnapshotError, match="metadata changed"):
+            history.finish_observation(
+                records, (), checkpoint.epoch, deadline_at=_deadline()
+            )
+        fresh = history.read(streams, deadline_at=_deadline())
+        assert len(fresh.entries) == len(checkpoint.entries) + 1
+        assert fresh.entries[-1].event.body.record.status == "invalidated"
+    finally:
+        writer.close()
+
+
+@pytest.mark.parametrize("limit", ["entries", "bytes"])
+def test_payload_statement_bounds_read_committed_growth_before_buffering(
+    metadata, artifacts, database_url, monkeypatch, limit
+):
+    history = PostgresFiscalAdmissionHistory(metadata)
+    record = artifacts.put_with_receipt("group-rc-growth", {}).artifact
+    checkpoint = history.checkpoint((record,), deadline_at=_deadline())
+    stream = checkpoint.heads[0].stream_id
+    bounded = PostgresFiscalAdmissionHistory(
+        metadata,
+        **(
+            {"max_entries": 1}
+            if limit == "entries"
+            else {"max_bytes": len(checkpoint.entries[0].payload_bytes)}
+        ),
+    )
+    writer = PostgresMetadataStore(database_url, auto_migrate=False)
+    writer.start()
+    original = AsyncConnection.execute
+    payload_rows = []
+
+    def invalidate():
+        async def change(connection):
+            await connection.execute(
+                text(
+                    "UPDATE fundamental.artifact_references SET status='invalidated' WHERE artifact_id=:identity"
+                ),
+                {"identity": record.artifact_id},
+            )
+
+        writer.run_fiscal_admission_history(change)
+
+    async def grow_before_payload(connection, statement, *args, **kwargs):
+        guarded = "WITH selected AS MATERIALIZED" in str(statement)
+        if guarded:
+            await asyncio.to_thread(invalidate)
+        result = await original(connection, statement, *args, **kwargs)
+        if guarded:
+            frozen = result.freeze()
+            payload_rows.extend(frozen.data)
+            return frozen()
+        return result
+
+    async def read_committed(connection):
+        return await bounded._read((stream,), connection)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(AsyncConnection, "execute", grow_before_payload)
+            with pytest.raises(SnapshotError, match="limit"):
+                metadata.run_fiscal_admission_history(read_committed)
+        assert payload_rows and all(row[1] is None for row in payload_rows)
+        fresh = history.seal_pending((stream,), deadline_at=_deadline())
+        assert len(fresh.entries) == 2
+        assert fresh.entries[0] == checkpoint.entries[0]
+        assert fresh.entries[-1].event.body.record.status == "invalidated"
+    finally:
+        writer.close()
+
+
+@pytest.mark.parametrize("interruption", ["error", "cancel"])
+def test_payload_result_closes_on_interruption_and_the_next_read_works(
+    metadata, artifacts, monkeypatch, interruption
+):
+    history = PostgresFiscalAdmissionHistory(metadata)
+    record = artifacts.put_with_receipt("group-result-cleanup", {}).artifact
+    checkpoint = history.checkpoint((record,), deadline_at=_deadline())
+    streams = (checkpoint.heads[0].stream_id,)
+    original = CursorResult.__iter__
+    interrupted = []
+
+    def interrupted_rows(result):
+        rows = original(result)
+        if tuple(result.keys())[-2:] == ("entries", "bytes"):
+            interrupted.append(result)
+            yield next(rows)
+            if interruption == "cancel":
+                raise asyncio.CancelledError()
+            raise RuntimeError("synthetic buffered payload interruption")
+        yield from rows
+
+    with monkeypatch.context() as patch:
+        patch.setattr(CursorResult, "__iter__", interrupted_rows)
+        with pytest.raises(
+            CancelledError if interruption == "cancel" else RuntimeError
+        ):
+            history.read(streams, deadline_at=_deadline())
+    assert interrupted and all(result.closed for result in interrupted)
+    assert history.read(streams, deadline_at=_deadline()).entries == checkpoint.entries
