@@ -81,6 +81,7 @@ from .interface.transport import (
     readiness_response,
     success_response,
 )
+from .content_publication import configured_content_publication_access
 from .metadata import (
     PostgresArtifactStore,
     PostgresCanonicalFactRepository,
@@ -1352,7 +1353,11 @@ def create_runtime_app() -> FastAPI:
             if model_release_path
             else ()
         )
-        content_store = PostgresContentStore(root / "content", metadata_store)
+        content_store = PostgresContentStore(
+            root / "content",
+            metadata_store,
+            publication_access=configured_content_publication_access(),
+        )
         snapshot_repository = PostgresSnapshotRepository(metadata_store)
         fact_repository = PostgresCanonicalFactRepository(metadata_store)
         user_agent = os.getenv("FUNDAMENTAL_SEC_USER_AGENT")

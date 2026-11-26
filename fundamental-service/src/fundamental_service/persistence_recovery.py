@@ -25,6 +25,14 @@ import asyncpg
 from pydantic import AwareDatetime, BaseModel, Field, ValidationError, model_validator
 
 from .contracts import CanonicalFactV1, SourceSnapshotV1, StrictModel
+from .content_publication import (
+    ContentPublicationAccess,
+    PrivateContentPublication,
+    assert_published_access,
+    configured_content_publication_access,
+    ensure_publication_directory,
+    prepare_publication_fd,
+)
 from .data_releases import (
     ActiveDataReleaseV1,
     DataReleaseActivationCommandV1,
@@ -934,6 +942,7 @@ async def _restore_backup(
     *,
     manifest_digest: str,
     authorization_path: Path,
+    publication_access: ContentPublicationAccess,
 ) -> RecoveryReceiptV2:
     manifest = _verify_bundle(bundle, manifest_digest)
     if manifest.migration_digest != sha256_digest(_migrations()):
@@ -990,10 +999,20 @@ async def _restore_backup(
                     connection, bundle, manifest, local, allow_local_changes=True
                 )
                 await _verify_current_state(connection, content_root, manifest)
+                assert_published_access(content_root, publication_access)
+                for item in _content_inventory(content_root):
+                    target = content_root / item.path.removeprefix("content/")
+                    assert_published_access(target.parent, publication_access)
+                    assert_published_access(target, publication_access)
                 wrote = False
             else:
                 await _require_bootstrap(connection, tables, local)
-                await _publish_content(content_root, bundle, manifest)
+                await _publish_content(
+                    content_root,
+                    bundle,
+                    manifest,
+                    publication_access=publication_access,
+                )
                 await _install_bundle(
                     connection, bundle, manifest, authorization, local
                 )
@@ -1263,19 +1282,34 @@ async def _require_bootstrap(
 
 
 async def _publish_content(
-    content_root: Path, bundle: Path, manifest: PersistenceBackupV2
+    content_root: Path,
+    bundle: Path,
+    manifest: PersistenceBackupV2,
+    *,
+    publication_access: ContentPublicationAccess,
 ) -> None:
     expected = {item.path: item for item in manifest.objects}
     for item in _content_inventory(content_root):
         if expected.get(item.path) != item:
             raise RecoveryError("target contains unrelated or conflicting content")
+    ensure_publication_directory(content_root, publication_access)
     for item in manifest.objects:
         target = content_root / item.path.removeprefix("content/")
+        ensure_publication_directory(target.parent, publication_access)
         if target.exists():
+            assert_published_access(target, publication_access)
             continue
-        target.parent.mkdir(parents=True, exist_ok=True)
         pending = content_root / ".restore-pending"
-        pending.mkdir(exist_ok=True)
+        pending.mkdir(mode=0o700, exist_ok=True)
+        pending_stat = pending.stat()
+        if (
+            pending_stat.st_uid != os.geteuid()
+            or stat.S_IMODE(pending_stat.st_mode) & 0o077
+        ):
+            raise SnapshotError(
+                "CONTENT_ACCESS_INSTALL_REQUIRED",
+                "restore staging access requires deployment owner installation",
+            )
         fd, temporary = tempfile.mkstemp(prefix="restore-", dir=pending)
         try:
             with (
@@ -1284,6 +1318,7 @@ async def _publish_content(
             ):
                 _copy_file(source, handle)
                 handle.flush()
+                prepare_publication_fd(handle.fileno(), publication_access)
                 os.fsync(handle.fileno())
             checked = _file_record(Path(temporary), Path(temporary).parent)
             if checked.digest != item.digest or checked.byte_length != item.byte_length:
@@ -1571,6 +1606,7 @@ async def restore_backup(
     manifest_digest: str,
     authorization_path: Path,
     deadline_at: datetime | None = None,
+    publication_access: ContentPublicationAccess = PrivateContentPublication(),
 ) -> RecoveryReceiptV2:
     deadline = deadline_at or datetime.now(UTC) + timedelta(seconds=300)
     if deadline.utcoffset() is None:
@@ -1587,6 +1623,7 @@ async def restore_backup(
                 bundle,
                 manifest_digest=manifest_digest,
                 authorization_path=authorization_path,
+                publication_access=publication_access,
             )
             _check_budget()
             return result
@@ -1630,6 +1667,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.bundle,
                     manifest_digest=args.manifest_digest,
                     authorization_path=args.authorization,
+                    publication_access=configured_content_publication_access(),
                     deadline_at=datetime.now(UTC)
                     + timedelta(seconds=args.deadline_seconds),
                 )
@@ -1647,9 +1685,16 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    except SnapshotError as error:
+        print(
+            canonical_bytes(
+                {"protocol": "fundamental-persistence-error-v1", "code": error.code}
+            ).decode("utf-8"),
+            file=sys.stderr,
+        )
+        return 2
     except (
         RecoveryError,
-        SnapshotError,
         ValueError,
         OSError,
         KeyError,
