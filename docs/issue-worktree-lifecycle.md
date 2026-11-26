@@ -53,6 +53,24 @@ Start child branches from the latest integration commit, not from another child 
 
 Check out a branch in only one worktree at a time. Give every active worktree a unique Compose project name and unique published host ports. Include the repository and issue or worktree identifier in the project name. Do not start a full stack in every worktree unless the checks need it.
 
+## Assess findings before expanding scope
+
+Assess findings before expanding implementation, adding delivery prerequisites, or removing robustness code or tests. A synthetic counterexample can prove a real defect. Its origin alone establishes neither production impact nor a reason to dismiss it.
+
+Record one short assessment per root cause in the existing issue or pull request. Have someone other than the change author check the assessment before using it to change delivery gates or remove protections.
+
+- **Reachability.** Identify the real caller, supported input, and path through existing validation and trust boundaries. Acceptance by an internal helper does not prove that the full workflow accepts the input. A retained input's hash check does not rule out the same mechanism in another legitimately acquired input.
+- **Impact and severity.** Name the affected user behavior, value, period, or required contract. Distinguish observed incidents, reproduced failures, and unproven possibilities. A demonstrated violation of acceptance criteria, canonical contracts, security or ownership boundaries, or shared architecture remains a blocker. A production incident is not required to establish that violation.
+- **Frequency and uncertainty.** Give observed occurrences and the real input population examined, including its limits. Record unknown frequency as unknown. Synthetic case counts are not occurrence rates. Not observing a case does not prove zero risk. Low frequency does not justify removing protection against severe harm.
+- **Existing protections.** Verify whether an owning boundary already rejects the input reliably. Preserve the distinction between an enforced guard and a configuration assumption.
+- **Cost and disposition.** Compare user impact with maintenance cost, false refusals, test cost, and simpler alternatives. Choose to retain, simplify, remove, or defer each mechanism with a reason. Evaluate standard libraries before extending custom syntax handling, while preserving source identity and domain rules.
+
+Use existing evidence first and keep further investigation bounded. If reachability or impact is unresolved, record the next check, owner, and review trigger rather than treating the finding as either proven harm or harmless. Findings outside the supported scope without a demonstrated required-contract violation may move to a linked follow-up without becoming a new global delivery prerequisite. Continue independent product slices; splitting an issue does not resolve an actual blocker.
+
+Preserve necessary correctness, security, provenance, resource bounds, and useful synthetic regression tests. Do not delete guards or tests just because they are lengthy, synthetic, or rarely exercised. Keep original failures and review verdicts when a later assessment changes priority. Never rewrite expectations, weaken a required contract, or hide a failure to pass a gate.
+
+Run focused checks during a change, then the applicable integration or full suite for delivery. Repeat checks when a new change, failure, or unresolved concern warrants them. Test counts and lines deleted are not measures of product completion.
+
 ## Require evidence before merge
 
 The pull request author records evidence that matches the change. Include:
