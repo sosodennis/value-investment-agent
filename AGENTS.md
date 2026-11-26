@@ -128,6 +128,7 @@ class TraceableField(BaseModel, Generic[T]):
 
 ### **3. Issue and Verification Gates**
 
+*   Before expanding scope, making a finding a delivery blocker, or removing robustness code or tests, apply [finding impact assessment](docs/issue-worktree-lifecycle.md#assess-findings-before-expanding-scope). Evaluate supported-path reachability, contract impact, observed frequency or uncertainty, severity, existing protections, and cost. Synthetic counterexamples do not automatically establish production impact, and rare but severe risks still require protection.
 *   When implementation encounters an engineering compromise against issue acceptance criteria, canonical contracts, security/ownership boundaries, or shared system architecture, immediately record it in a linked GitHub issue labeled `blocker`.
 *   Resolve the underlying design gap in the owning system layer. A workaround or UI-only concealment does not resolve a blocker.
 *   Do not mark blocked work VERIFIED, merge it, or close its issue until the actual diff, relevant tests, Docker health, and end-to-end behavior have been inspected and pass.
