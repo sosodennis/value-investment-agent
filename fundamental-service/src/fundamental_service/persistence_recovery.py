@@ -25,11 +25,23 @@ import asyncpg
 from pydantic import AwareDatetime, BaseModel, Field, ValidationError, model_validator
 
 from .contracts import CanonicalFactV1, SourceSnapshotV1, StrictModel
+from .publication_codec import (
+    PublicationManifest,
+    PublicationVerification,
+    decode_release_manifest,
+    decode_release_verification,
+    require_publication_pair,
+)
+from .data_releases import ArtifactRefV1, DataReleaseTrustRootsV1, DataReleaseError
+from .fiscal_release_contracts import (
+    FiscalReleaseManifestV1,
+    FiscalStoredVerificationV1,
+)
+from .fiscal_release_recovery import verify_retained_fiscal_publication
+
 from .data_releases import (
     ActiveDataReleaseV1,
     DataReleaseActivationCommandV1,
-    DataReleaseManifestV1,
-    DataReleaseVerificationV1,
 )
 from .facts import (
     CanonicalMappingV1,
@@ -564,9 +576,14 @@ def _metadata_state(model: type[RecordT], row: BackupRow) -> RecordT:
         raise RecoveryError("mutable metadata state has an invalid contract") from error
 
 
+_RELEASE_TRUST_ROOTS: ContextVar[DataReleaseTrustRootsV1 | None] = ContextVar(
+    "release_recovery_trust_roots", default=None
+)
+
+
 def _verify_release_activation_state(
-    manifests: dict[str, DataReleaseManifestV1],
-    verifications: dict[str, DataReleaseVerificationV1],
+    manifests: dict[str, PublicationManifest],
+    verifications: dict[str, PublicationVerification],
     pointers: dict[str, _ReleasePointerV1],
     activations: list[_ReleaseActivationV1],
 ) -> None:
@@ -615,8 +632,8 @@ def _verify_rows(
     accounting_facts: list[CanonicalFactV1] = []
     mappings: dict[str, CanonicalMappingV1] = {}
     artifacts: dict[str, tuple[str, str]] = {}
-    release_manifests: dict[str, DataReleaseManifestV1] = {}
-    release_verifications: dict[str, DataReleaseVerificationV1] = {}
+    release_manifests: dict[str, PublicationManifest] = {}
+    release_verifications: dict[str, PublicationVerification] = {}
     release_pointers: dict[str, _ReleasePointerV1] = {}
     release_activations: list[_ReleaseActivationV1] = []
 
@@ -687,7 +704,7 @@ def _verify_rows(
                 release_activations.append(_metadata_state(_ReleaseActivationV1, row))
             elif table.name == "data_release_manifests":
                 try:
-                    release_manifest = DataReleaseManifestV1.model_validate_json(
+                    release_manifest = decode_release_manifest(
                         _required_value(row, "payload")
                     )
                 except ValidationError as error:
@@ -701,10 +718,8 @@ def _verify_rows(
                 release_manifests[release_manifest.manifest_digest] = release_manifest
             elif table.name == "data_release_verifications":
                 try:
-                    release_verification = (
-                        DataReleaseVerificationV1.model_validate_json(
-                            _required_value(row, "payload")
-                        )
+                    release_verification = decode_release_verification(
+                        _required_value(row, "payload")
                     )
                 except ValidationError as error:
                     raise RecoveryError(
@@ -772,6 +787,45 @@ def _verify_rows(
     _verify_release_activation_state(
         release_manifests, release_verifications, release_pointers, release_activations
     )
+    for digest, publication in release_manifests.items():
+        verification = release_verifications[digest]
+        try:
+            require_publication_pair(publication, verification)
+            if isinstance(publication, FiscalReleaseManifestV1) and isinstance(
+                verification, FiscalStoredVerificationV1
+            ):
+                roots = _RELEASE_TRUST_ROOTS.get()
+                if roots is None:
+                    raise ValueError(
+                        "fiscal recovery requires external retained release trust roots"
+                    )
+
+                def read_fiscal_reference(reference: ArtifactRefV1) -> bytes:
+                    if artifacts.get(reference.artifact_id) != (
+                        reference.content_hash,
+                        reference.media_type,
+                    ):
+                        raise ValueError(
+                            "fiscal backup artifact reference is absent or differs"
+                        )
+                    item = require_content(reference.content_hash, reference.media_type)
+                    path = (
+                        root / item.path
+                        if content_root is None
+                        else content_root / item.path.removeprefix("content/")
+                    )
+                    raw = _read_regular_file(path, item.byte_length)
+                    if hashlib.sha256(raw).hexdigest() != reference.content_hash:
+                        raise ValueError("fiscal backup artifact bytes differ")
+                    return raw
+
+                verify_retained_fiscal_publication(
+                    publication, verification, roots, read_fiscal_reference
+                )
+        except (ValueError, DataReleaseError) as error:
+            raise RecoveryError(
+                "fiscal retained release verification is incomplete or invalid"
+            ) from error
     for snapshot in snapshots.snapshots.values():
         try:
             verify_history_components(snapshot, snapshots)
@@ -1542,6 +1596,7 @@ async def export_backup(
     *,
     source_revision: str,
     deadline_at: datetime | None = None,
+    release_trust_roots: DataReleaseTrustRootsV1 | None = None,
 ) -> RecoveryReceiptV2:
     deadline = deadline_at or datetime.now(UTC) + timedelta(seconds=300)
     if deadline.utcoffset() is None:
@@ -1550,6 +1605,7 @@ async def export_backup(
     if remaining <= 0 or remaining > 3600:
         raise RecoveryError("persistence recovery deadline is invalid or expired")
     token = _OPERATION_DEADLINE.set(deadline)
+    roots_token = _RELEASE_TRUST_ROOTS.set(release_trust_roots)
     try:
         async with asyncio.timeout(remaining):
             result = await _export_backup(
@@ -1561,6 +1617,7 @@ async def export_backup(
         raise RecoveryError("persistence recovery deadline exceeded") from error
     finally:
         _OPERATION_DEADLINE.reset(token)
+        _RELEASE_TRUST_ROOTS.reset(roots_token)
 
 
 async def restore_backup(
@@ -1571,6 +1628,7 @@ async def restore_backup(
     manifest_digest: str,
     authorization_path: Path,
     deadline_at: datetime | None = None,
+    release_trust_roots: DataReleaseTrustRootsV1 | None = None,
 ) -> RecoveryReceiptV2:
     deadline = deadline_at or datetime.now(UTC) + timedelta(seconds=300)
     if deadline.utcoffset() is None:
@@ -1579,6 +1637,7 @@ async def restore_backup(
     if remaining <= 0 or remaining > 3600:
         raise RecoveryError("persistence recovery deadline is invalid or expired")
     token = _OPERATION_DEADLINE.set(deadline)
+    roots_token = _RELEASE_TRUST_ROOTS.set(release_trust_roots)
     try:
         async with asyncio.timeout(remaining):
             result = await _restore_backup(
@@ -1594,6 +1653,7 @@ async def restore_backup(
         raise RecoveryError("persistence recovery deadline exceeded") from error
     finally:
         _OPERATION_DEADLINE.reset(token)
+        _RELEASE_TRUST_ROOTS.reset(roots_token)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1607,8 +1667,14 @@ def main(argv: list[str] | None = None) -> int:
     restore.add_argument("--manifest-digest", required=True)
     restore.add_argument("--authorization", type=Path, required=True)
     parser.add_argument("--deadline-seconds", type=int, default=300)
+    parser.add_argument("--release-trust-roots", type=Path)
     args = parser.parse_args(argv)
     try:
+        release_roots = (
+            DataReleaseTrustRootsV1.from_file(args.release_trust_roots)
+            if args.release_trust_roots
+            else None
+        )
         database_url = os.environ["FUNDAMENTAL_SERVICE_DATABASE_URL"]
         content_root = Path(os.environ["FUNDAMENTAL_SERVICE_DATA_ROOT"]) / "content"
         if args.operation == "export":
@@ -1618,6 +1684,7 @@ def main(argv: list[str] | None = None) -> int:
                     content_root,
                     args.destination,
                     source_revision=args.source_revision,
+                    release_trust_roots=release_roots,
                     deadline_at=datetime.now(UTC)
                     + timedelta(seconds=args.deadline_seconds),
                 )
@@ -1630,6 +1697,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.bundle,
                     manifest_digest=args.manifest_digest,
                     authorization_path=args.authorization,
+                    release_trust_roots=release_roots,
                     deadline_at=datetime.now(UTC)
                     + timedelta(seconds=args.deadline_seconds),
                 )

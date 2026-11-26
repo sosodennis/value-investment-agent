@@ -182,6 +182,12 @@ from ..conditional_reinvestment_release import (
 )
 
 
+from ..fiscal_read_contracts import FiscalReadRequestV1, FiscalReadResultV1
+from ..fiscal_release_contracts import ActiveFiscalReleaseV1, FiscalReleaseManifestV1
+from ..fiscal_releases import FiscalReleaseReader
+from ..publication_codec import ActivePublication, active_publication
+from collections.abc import Callable
+
 from ..forecast_timeline import ForecastTimelineError, verify_forecast_timeline_sources
 
 
@@ -441,6 +447,7 @@ class FundamentalApplication:
     reference_providers: tuple[MarketReferenceProviderPort, ...] = ()
     source_use_policy: SourceUsePolicyV1 | None = None
     statement_originals: OriginalPreparation | None = None
+    fiscal_reader_factory: Callable[[], FiscalReleaseReader] | None = None
     release_cache: CacheLifecycle = dataclass_field(
         default_factory=lambda: CacheLifecycle(max_entries=256),
         repr=False,
@@ -586,6 +593,13 @@ class FundamentalApplication:
                 "DATA_RELEASE_NOT_FOUND",
                 "the pinned data release manifest is unavailable",
                 status_code=404,
+                retryable=False,
+            )
+        if not isinstance(manifest, DataReleaseManifestV1):
+            raise ServiceError(
+                "DATA_RELEASE_PURPOSE_MISMATCH",
+                "this operation requires a canonical data release",
+                status_code=422,
                 retryable=False,
             )
         if manifest.manifest_digest != manifest_digest:
@@ -759,7 +773,7 @@ class FundamentalApplication:
             verification_digest=verification.verification_digest,
         )
 
-    def active_data_release(self, profile_id: str) -> ActiveDataReleaseWithManifestV1:
+    def active_data_release(self, profile_id: str) -> ActivePublication:
         if self.metadata_store is None:
             raise ServiceError(
                 "DATA_RELEASE_UNAVAILABLE",
@@ -791,8 +805,10 @@ class FundamentalApplication:
 
     @staticmethod
     def _active_release_response(
-        active: ActiveDataReleaseWithManifestV1,
-    ) -> ActiveDataReleaseWithManifestV1:
+        active: ActivePublication,
+    ) -> ActivePublication:
+        if isinstance(active, ActiveFiscalReleaseV1):
+            return active
         try:
             return active.model_copy(
                 update={"automatic_model": automatic_release_model(active.manifest)}
@@ -808,7 +824,8 @@ class FundamentalApplication:
         actor_id: str,
         organization_id: str,
         correlation_id: str,
-    ) -> ActiveDataReleaseWithManifestV1:
+        deadline_at: datetime | None = None,
+    ) -> ActivePublication:
         if self.metadata_store is None:
             raise ServiceError(
                 "DATA_RELEASE_UNAVAILABLE",
@@ -829,10 +846,36 @@ class FundamentalApplication:
             reason=request.reason,
         )
         try:
-            active = self.metadata_store.compare_and_swap_data_release(command)
+            candidate = self.metadata_store.get_data_release_manifest(
+                command.manifest_digest
+            )
+            if isinstance(candidate, FiscalReleaseManifestV1):
+                if self.fiscal_reader_factory is None:
+                    raise ServiceError(
+                        "FISCAL_READING_UNAVAILABLE",
+                        "fiscal release reader is unavailable",
+                        status_code=503,
+                        retryable=True,
+                    )
+                if deadline_at is None:
+                    raise ServiceError(
+                        "REQUEST_DEADLINE_REQUIRED",
+                        "fiscal activation requires an absolute deadline",
+                        status_code=422,
+                        retryable=False,
+                    )
+                active = self.fiscal_reader_factory().activate(
+                    command, self.metadata_store, deadline_at=deadline_at
+                )
+            else:
+                active = self.metadata_store.compare_and_swap_data_release(command)
             manifest = self.metadata_store.get_data_release_manifest(
                 active.manifest_digest
             )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
+        except ServiceError:
+            raise
         except DataReleaseError as error:
             raise _data_release_error(error) from error
         except Exception as error:  # pragma: no cover - persistence boundary
@@ -849,9 +892,7 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             )
-        return self._active_release_response(
-            ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
-        )
+        return self._active_release_response(active_publication(active, manifest))
 
     @timed_valuation_stage("release.snapshot_facts")
     def _release_snapshot_facts(
@@ -1325,6 +1366,23 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             ) from error
+
+    def read_fiscal_statements(
+        self, request: FiscalReadRequestV1, *, deadline_at: datetime
+    ) -> FiscalReadResultV1:
+        if self.fiscal_reader_factory is None:
+            raise ServiceError(
+                "FISCAL_READING_UNAVAILABLE",
+                "fiscal release reader is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            return self.fiscal_reader_factory().read(request, deadline_at=deadline_at)
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
 
     def read_annual_statements(
         self,
@@ -2101,6 +2159,13 @@ class FundamentalApplication:
                     "no active data release is available for this profile",
                     status_code=503,
                     retryable=True,
+                )
+            if not isinstance(active_release.manifest, DataReleaseManifestV1):
+                raise ServiceError(
+                    "DATA_RELEASE_PURPOSE_MISMATCH",
+                    "snapshot resolution requires a canonical data release",
+                    status_code=422,
+                    retryable=False,
                 )
             if not set(request.required_fields).issubset(
                 active_release.manifest.required_fields
