@@ -525,8 +525,20 @@ class DataReleaseActivationCommandV1(ReleaseModel):
 
 
 class DataReleaseCandidatePublishRequestV1(ReleaseModel):
-    manifest: DataReleaseManifestV1
+    manifest: IssuerOperatingReleaseManifestV1 | DataReleaseManifestV1
     verification: DataReleaseVerificationV1
+
+    @field_validator("manifest", mode="before")
+    @classmethod
+    def exact_purpose(cls, value: object) -> DataReleaseManifestV1:
+        from .publication_codec import decode_release_manifest
+
+        manifest = decode_release_manifest(canonical_bytes(value))
+        if not isinstance(manifest, DataReleaseManifestV1):
+            raise ValueError(
+                "fiscal publication requires its refs-only protected workflow"
+            )
+        return manifest
 
 
 class DataReleaseActivationRequestV1(ReleaseModel):

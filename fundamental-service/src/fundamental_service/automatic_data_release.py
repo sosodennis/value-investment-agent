@@ -11,9 +11,11 @@ from pathlib import Path
 from typing import Literal
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, TypeAdapter, model_validator, field_validator
 
 from .automatic_release_evidence import require_automatic_release_sources
+from .publication_codec import decode_release_manifest
+
 from .parser_action_evidence import require_current_parser_action_refs
 from .parser_action_identity import ParserBuildChecks
 from .automatic_market_authority import (
@@ -152,10 +154,26 @@ class AutomaticDataReleaseRequestV1(ReleaseModel):
         default=None, exclude_if=lambda value: value is None
     )
 
+    @field_validator("manifest", mode="before")
+    @classmethod
+    def exact_purpose(cls, value: object) -> DataReleaseManifestV1:
+        manifest = decode_release_manifest(canonical_bytes(value))
+        if not isinstance(manifest, DataReleaseManifestV1):
+            raise ValueError("fiscal releases require the refs-only fiscal workflow")
+        return manifest
+
 
 class AutomaticDataReleaseCandidateV1(ReleaseModel):
     manifest: IssuerOperatingReleaseManifestV1 | DataReleaseManifestV1
     verification: DataReleaseVerificationV1
+
+    @field_validator("manifest", mode="before")
+    @classmethod
+    def exact_purpose(cls, value: object) -> DataReleaseManifestV1:
+        manifest = decode_release_manifest(canonical_bytes(value))
+        if not isinstance(manifest, DataReleaseManifestV1):
+            raise ValueError("fiscal releases require the refs-only fiscal workflow")
+        return manifest
 
 
 class AutomaticDataReleaseDecisionV1(ReleaseModel):

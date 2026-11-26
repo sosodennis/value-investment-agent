@@ -48,8 +48,14 @@ from .contracts import (
     ValuationEvidenceReadResponseV1,
     ValuationInputV1,
 )
+from pydantic import TypeAdapter
+from .serialization import canonical_bytes
+
+from .fiscal_read_contracts import FiscalReadRequestV1, FiscalReadResultV1
+from .fiscal_releases import FiscalReleaseReader
+from .fiscal_release_runtime import configured_fiscal_release_reader
+from .publication_codec import ActivePublication
 from .data_releases import (
-    ActiveDataReleaseWithManifestV1,
     DataReleaseActivationRequestV1,
     DataReleaseCandidatePublishRequestV1,
     DataReleaseCandidateReceiptV1,
@@ -227,6 +233,7 @@ def create_app(
     reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
     source_use_policy: SourceUsePolicyV1 | None = None,
     statement_originals: OriginalPreparation | None = None,
+    fiscal_reader_factory: Callable[[], FiscalReleaseReader] | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -259,6 +266,7 @@ def create_app(
         metrics=metrics,
         metadata_store=metadata_store,
         statement_originals=statement_originals,
+        fiscal_reader_factory=fiscal_reader_factory,
         require_metadata=require_metadata,
         policy_registry=policy_registry,
         model_inventory=model_inventory,
@@ -690,6 +698,37 @@ def create_app(
         return success_response(request, result)
 
     @app.get(
+        "/v1/data/fiscal-statements",
+        response_model=TypedFundamentalResponseEnvelopeV1[FiscalReadResultV1],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/FundamentalFiscalStatementsRequestEnvelopeV1"
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def get_fiscal_statements(request: Request) -> JSONResponse:
+        value = decode_input(request, FiscalReadRequestV1)
+        result = await run_valuation_operation(
+            request,
+            application.read_fiscal_statements,
+            value,
+            deadline_at=request.state.deadline,
+        )
+        response = success_response(
+            request,
+            TypeAdapter(dict[str, object]).validate_json(canonical_bytes(result)),
+        )
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+
+    @app.get(
         "/v1/data/facts",
         response_model=TypedFundamentalResponseEnvelopeV1[FactsReadResponseV1],
         openapi_extra={
@@ -920,9 +959,7 @@ def create_app(
 
     @app.get(
         "/v1/data/releases/{profile_id}",
-        response_model=TypedFundamentalResponseEnvelopeV1[
-            ActiveDataReleaseWithManifestV1
-        ],
+        response_model=TypedFundamentalResponseEnvelopeV1[ActivePublication],
         openapi_extra={
             "requestBody": {
                 "required": True,
@@ -946,7 +983,7 @@ def create_app(
         result = application.active_data_release(profile_id)
         return success_response(request, result)
 
-    def change_data_release(
+    async def change_data_release(
         request: Request,
         profile_id: str,
         operation: Literal["activate", "rollback"],
@@ -962,12 +999,15 @@ def create_app(
                 status_code=422,
                 retryable=False,
             )
-        result = application.change_active_data_release(
+        result = await run_valuation_operation(
+            request,
+            application.change_active_data_release,
             profile_id,
             value,
             actor_id=actor_id,
             organization_id=organization_id,
             correlation_id=request.state.correlation_id,
+            deadline_at=request.state.deadline,
         )
         metric_name = (
             "data_release_activation_total"
@@ -979,9 +1019,7 @@ def create_app(
 
     @app.post(
         "/v1/data/releases/{profile_id}/activate",
-        response_model=TypedFundamentalResponseEnvelopeV1[
-            ActiveDataReleaseWithManifestV1
-        ],
+        response_model=TypedFundamentalResponseEnvelopeV1[ActivePublication],
         openapi_extra={
             "requestBody": {
                 "required": True,
@@ -999,13 +1037,11 @@ def create_app(
         },
     )
     async def activate_data_release(request: Request, profile_id: str) -> JSONResponse:
-        return change_data_release(request, profile_id, "activate")
+        return await change_data_release(request, profile_id, "activate")
 
     @app.post(
         "/v1/data/releases/{profile_id}/rollback",
-        response_model=TypedFundamentalResponseEnvelopeV1[
-            ActiveDataReleaseWithManifestV1
-        ],
+        response_model=TypedFundamentalResponseEnvelopeV1[ActivePublication],
         openapi_extra={
             "requestBody": {
                 "required": True,
@@ -1023,7 +1059,7 @@ def create_app(
         },
     )
     async def rollback_data_release(request: Request, profile_id: str) -> JSONResponse:
-        return change_data_release(request, profile_id, "rollback")
+        return await change_data_release(request, profile_id, "rollback")
 
     @app.post(
         "/v1/data/ingestions",
@@ -1272,6 +1308,10 @@ def create_app(
                 TypedFundamentalRequestEnvelopeV1[SecIngestionRequestV1],
             ),
             (
+                "FundamentalFiscalStatementsRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[FiscalReadRequestV1],
+            ),
+            (
                 "FundamentalAnnualStatementsRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[AnnualStatementsReadRequestV1],
             ),
@@ -1433,7 +1473,28 @@ def create_runtime_app() -> FastAPI:
             user_agent=user_agent,
             authorized_organizations=config.ingestion_authorized_organizations,
         )
+        fiscal_reader_factory = None
+        fiscal_reader_path = os.getenv("FUNDAMENTAL_FISCAL_RELEASE_READER_FILE")
+        if fiscal_reader_path:
+            if fiscal_sec_acquisition is None:
+                raise ValueError(
+                    "fiscal release reader requires configured fiscal acquisition"
+                )
+
+            def configured_reader() -> FiscalReleaseReader:
+                return configured_fiscal_release_reader(
+                    fiscal_sec_acquisition,
+                    metadata_store,
+                    PostgresArtifactStore(
+                        metadata_store, content_store, read_only=True
+                    ),
+                    Path(fiscal_reader_path),
+                )
+
+            fiscal_reader_factory = configured_reader
+
         app = create_app(
+            fiscal_reader_factory=fiscal_reader_factory,
             snapshot_repository=snapshot_repository,
             artifact_store=PostgresArtifactStore(metadata_store, content_store),
             content_store=content_store,
