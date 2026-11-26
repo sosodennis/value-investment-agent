@@ -147,9 +147,6 @@ def _runtime_tree(
                         "mode": stat.st_mode,
                         "uid": stat.st_uid,
                         "gid": stat.st_gid,
-                        "parser_uid": os.geteuid(),
-                        "parser_gid": os.getegid(),
-                        "parser_groups": tuple(sorted(os.getgroups())),
                     }
                 )
             result = sha256_digest(
