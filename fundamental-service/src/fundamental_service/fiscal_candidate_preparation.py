@@ -52,6 +52,7 @@ from .fiscal_statement_mapping import (
 from .fiscal_statement_policy import fiscal_statement_policy
 from .fiscal_validation_contracts import FiscalValidationPinV1
 from .metadata import metadata_operation_budget
+from .parser_action_identity import _ParserResourceOperation
 from .replay import (
     ArtifactPublicationDeadlineExceeded,
     ArtifactPublicationV1,
@@ -304,6 +305,7 @@ class FiscalCandidatePreparation:
         publication: ArtifactPublicationV1,
         materialized: FiscalCandidateMaterialization,
         *,
+        resources: _ParserResourceOperation,
         deadline_at: datetime,
         configuration_generation: str,
     ) -> CurrentFiscalCandidate:
@@ -399,6 +401,7 @@ class FiscalCandidatePreparation:
         control.require_current_epoch(control.entries)
         heads.update({head.stream_id: head for head in control.heads})
         records = tuple(record for _, record in reader.records if record is not None)
+        resources.finish()
         reader.check_current()
         final_authority = self._authority(signed, deadline_at)
         if (
@@ -455,8 +458,11 @@ class FiscalCandidatePreparation:
         self, reference: ArtifactRefV1, *, deadline_at: datetime
     ) -> CurrentFiscalCandidate:
         builder = self._builder
-        with metadata_operation_budget(
-            partial(self._budget, deadline_at), self._expired
+        with (
+            metadata_operation_budget(
+                partial(self._budget, deadline_at), self._expired
+            ),
+            _ParserResourceOperation(partial(self._budget, deadline_at)) as resources,
         ):
             try:
                 configuration_generation = self._configuration_digest()
@@ -473,6 +479,7 @@ class FiscalCandidatePreparation:
                         artifact=reader.get(reference.artifact_id), wrote=False
                     ),
                     materialized,
+                    resources=resources,
                     deadline_at=deadline_at,
                     configuration_generation=configuration_generation,
                 )
@@ -496,10 +503,18 @@ class FiscalCandidatePreparation:
                 command = FiscalPrepareCandidateCommandV1.model_validate_json(
                     canonical_bytes(command)
                 )
-                with self._capture_lock(
-                    sha256_digest(("fiscal-candidate", command.command_id)), deadline_at
+                with (
+                    self._capture_lock(
+                        sha256_digest(("fiscal-candidate", command.command_id)),
+                        deadline_at,
+                    ),
+                    _ParserResourceOperation(
+                        partial(self._budget, deadline_at)
+                    ) as resources,
                 ):
-                    return self._prepare_locked(self._builder, command, deadline_at)
+                    return self._prepare_locked(
+                        self._builder, command, deadline_at, resources=resources
+                    )
             except ArtifactPublicationDeadlineExceeded as error:
                 raise self._expired() from error
             except ValueError as error:
@@ -512,6 +527,8 @@ class FiscalCandidatePreparation:
         builder: FiscalProjectionBuilder,
         command: FiscalPrepareCandidateCommandV1,
         deadline_at: datetime,
+        *,
+        resources: _ParserResourceOperation,
     ) -> CurrentFiscalCandidate:
         budget = partial(self._budget, deadline_at)
         configuration_generation = self._configuration_digest()
@@ -684,6 +701,7 @@ class FiscalCandidatePreparation:
             signed,
             publication,
             materialized,
+            resources=resources,
             deadline_at=deadline_at,
             configuration_generation=configuration_generation,
         )

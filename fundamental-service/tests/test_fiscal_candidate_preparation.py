@@ -130,6 +130,45 @@ def test_real_factory_prepares_reads_retries_and_refuses_nonfirst_source(
     assert env.store.read(first.reference.artifact_id) == original
 
 
+@pytest.mark.parametrize("retry", (False, True))
+def test_candidate_prepare_rechecks_resource_bytes_after_owner_writes(
+    prepared_runtime, tmp_path, monkeypatch, retry
+):
+    from test_parser_resource_identity import resource_action_case
+
+    _, _, _, builder, command, _ = prepared_runtime
+    if retry:
+        original = builder.prepare(command, deadline_at=deadline())
+    resources = resource_action_case(tmp_path / "resources", monkeypatch)
+    source_read = builder.sources.read_with_metadata
+
+    def read_source(*args, **kwargs):
+        resources.request()
+        return source_read(*args, **kwargs)
+
+    monkeypatch.setattr(builder.sources, "read_with_metadata", read_source)
+    history = builder.preparation.history
+    append = history.append_once
+
+    def changed_after_write(*args, **kwargs):
+        result = append(*args, **kwargs)
+        resources.rules.write_bytes(b"other rules")
+        return result
+
+    monkeypatch.setattr(history, "append_once", changed_after_write)
+    with pytest.raises(SnapshotError) as caught:
+        builder.prepare(command, deadline_at=deadline())
+    assert caught.value.code == "FISCAL_CANDIDATE_INVALID"
+    assert isinstance(
+        caught.value.__cause__, resources.identity.IncompleteParserClosure
+    )
+    assert "bytes changed" in str(caught.value.__cause__)
+    if retry:
+        assert builder.artifacts.read(
+            original.reference.artifact_id
+        ) == canonical_bytes(original.candidate)
+
+
 def test_refs_only_candidate_command_rejects_financial_or_actor_input(prepared_runtime):
     _, _, _, _, command, _ = prepared_runtime
     for key in (
