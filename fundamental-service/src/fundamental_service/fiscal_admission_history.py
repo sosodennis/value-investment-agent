@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from typing import Annotated, Literal, Protocol, TypeVar, runtime_checkable
@@ -316,6 +317,15 @@ class FiscalHistoryAppendV1(StrictModel):
 
     entry: FiscalHistoryEntryV1
     wrote: bool
+
+
+@dataclass(frozen=True)
+class FiscalActivationObservationV1:
+    records: tuple[ArtifactRecordV1, ...]
+    heads: tuple[FiscalHistoryHeadV1, ...]
+    epoch: FiscalHistoryEpochV1
+    expires_at: datetime
+    deadline_at: datetime
 
 
 class FiscalAdmissionHistoryReaderPort(Protocol):
@@ -1045,7 +1055,17 @@ class PostgresFiscalAdmissionHistory:
         await connection.execute(
             text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
         )
-        observed_at = await connection.scalar(text("SELECT transaction_timestamp()"))
+        return await self._check_observation(records, heads, epoch, streams, connection)
+
+    async def _check_observation(
+        self,
+        records: tuple[ArtifactRecordV1, ...],
+        heads: tuple[FiscalHistoryHeadV1, ...],
+        epoch: FiscalHistoryEpochV1,
+        streams: tuple[str, ...],
+        connection: AsyncConnection,
+    ) -> FiscalHistoryReadV1:
+        observed_at = await connection.scalar(text("SELECT clock_timestamp()"))
         if not isinstance(observed_at, datetime):
             raise _unavailable("whole observation clock is unavailable")
         observed = await self._read(streams, connection, observed_through=observed_at)
@@ -1080,6 +1100,66 @@ class PostgresFiscalAdmissionHistory:
         ):
             raise _unavailable("whole observation contains unsealed history")
         return observed
+
+    async def validate_activation(
+        self, observation: FiscalActivationObservationV1, connection: AsyncConnection
+    ) -> FiscalHistoryReadV1:
+        records, heads = observation.records, observation.heads
+        if (
+            not records
+            or len(records) > self._max_entries
+            or len({record.artifact_id for record in records}) != len(records)
+            or len({head.stream_id for head in heads}) != len(heads)
+            or len(canonical_bytes((records, heads))) > self._max_bytes
+        ):
+            raise _unavailable(
+                "activation observation exceeds bounds or repeats an identity"
+            )
+        streams = tuple(
+            sorted(
+                {"evidence:" + record.artifact_id for record in records}
+                | {head.stream_id for head in heads}
+            )
+        )
+        if len(streams) > self._max_entries or any(
+            len(stream) > 1024 for stream in streams
+        ):
+            raise _unavailable("activation stream selection exceeds bounds")
+        await connection.execute(
+            text(
+                "LOCK TABLE fundamental.active_data_release_pointers IN ROW EXCLUSIVE MODE"
+            )
+        )
+        await connection.execute(
+            text(
+                "LOCK TABLE fundamental.fiscal_history_activation_receipts, "
+                "fundamental.fiscal_history_local_origin, fundamental.fiscal_history_origin, "
+                "fundamental.fiscal_history_restore_links IN SHARE MODE"
+            )
+        )
+        for record in sorted(records, key=lambda item: item.artifact_id):
+            if await self._artifact(connection, record.artifact_id) != record:
+                raise _unavailable("activation metadata changed")
+        for stream in streams:
+            await self._lock_stream(connection, stream)
+        result = await self._check_observation(
+            records, heads, observation.epoch, streams, connection
+        )
+        await self.require_activation_clock(observation, connection)
+        return result
+
+    @staticmethod
+    async def require_activation_clock(
+        observation: FiscalActivationObservationV1, connection: AsyncConnection
+    ) -> None:
+        _aware(observation.expires_at)
+        _aware(observation.deadline_at)
+        now = await connection.scalar(text("SELECT clock_timestamp()"))
+        if not isinstance(now, datetime) or now >= min(
+            observation.expires_at, observation.deadline_at
+        ):
+            raise _unavailable("activation permission or deadline expired")
+        observation.epoch.require_current_activity(now)
 
     def require_heads(
         self, heads: tuple[FiscalHistoryHeadV1, ...], *, deadline_at: datetime

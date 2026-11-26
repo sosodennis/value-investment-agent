@@ -39,16 +39,27 @@ from .contracts import (
     SecIngestionResponseV1,
     SourceSnapshotV1,
 )
+from .publication_codec import (
+    ActivePublication,
+    PublicationManifest,
+    PublicationVerification,
+    active_publication,
+    decode_release_manifest,
+    decode_release_verification,
+    verify_publication_pair,
+)
+from .fiscal_release_contracts import FiscalReleaseManifestV1
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .fiscal_admission_history import FiscalActivationObservationV1
+
 from .data_releases import (
     DATA_RELEASE_CAPABILITY,
     ActiveDataReleaseV1,
-    ActiveDataReleaseWithManifestV1,
     DataReleaseActivationCommandV1,
     DataReleaseError,
-    DataReleaseManifestV1,
     DataReleaseTrustRootsV1,
-    DataReleaseVerificationV1,
-    verify_data_release_candidate,
 )
 from .facts import (
     CanonicalFactRepository,
@@ -978,26 +989,47 @@ class PostgresMetadataStore:
 
     def publish_data_release_candidate(
         self,
-        manifest: DataReleaseManifestV1,
-        verification: DataReleaseVerificationV1,
+        manifest: PublicationManifest,
+        verification: PublicationVerification,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
     ) -> None:
         self._require_data_release_capability()
+        manifest = decode_release_manifest(canonical_bytes(manifest))
+        verification = decode_release_verification(canonical_bytes(verification))
         if self._data_release_trust_roots is None:
             raise DataReleaseError(
                 "DATA_RELEASE_TRUST_ROOTS_UNCONFIGURED",
                 "data release trust roots are required to publish a candidate",
             )
-        verify_data_release_candidate(
-            manifest, verification, self._data_release_trust_roots
+        verify_publication_pair(manifest, verification, self._data_release_trust_roots)
+        if isinstance(manifest, FiscalReleaseManifestV1) != (
+            fiscal_observation is not None
+        ):
+            raise DataReleaseError(
+                "FISCAL_PUBLICATION_OBSERVATION_REQUIRED",
+                "fiscal publication requires its complete owning observation",
+            )
+        self._runner.run(
+            self._publish_data_release_candidate(
+                manifest, verification, fiscal_observation=fiscal_observation
+            )
         )
-        self._runner.run(self._publish_data_release_candidate(manifest, verification))
 
     async def _publish_data_release_candidate(
         self,
-        manifest: DataReleaseManifestV1,
-        verification: DataReleaseVerificationV1,
+        manifest: PublicationManifest,
+        verification: PublicationVerification,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
     ) -> None:
+        from .fiscal_admission_history import PostgresFiscalAdmissionHistory
+
         async with self._runner._engine.begin() as connection:
+            if fiscal_observation is not None:
+                await PostgresFiscalAdmissionHistory(self).validate_activation(
+                    fiscal_observation, connection
+                )
             await connection.execute(
                 text(
                     "INSERT INTO fundamental.data_release_manifests "
@@ -1080,25 +1112,30 @@ class PostgresMetadataStore:
                     "stored data release verification cannot be replaced",
                 )
 
+            if fiscal_observation is not None:
+                await PostgresFiscalAdmissionHistory.require_activation_clock(
+                    fiscal_observation, connection
+                )
+
     def get_active_data_release(self, profile_id: str) -> ActiveDataReleaseV1 | None:
         self._require_data_release_capability()
         return self._runner.run(self._get_active_data_release(profile_id))
 
     def get_data_release_manifest(
         self, manifest_digest: str
-    ) -> DataReleaseManifestV1 | None:
+    ) -> PublicationManifest | None:
         self._require_data_release_capability()
         return self._runner.run(self._get_data_release_manifest(manifest_digest))
 
     def get_data_release_verification(
         self, manifest_digest: str
-    ) -> DataReleaseVerificationV1 | None:
+    ) -> PublicationVerification | None:
         self._require_data_release_capability()
         return self._runner.run(self._get_data_release_verification(manifest_digest))
 
     async def _get_data_release_verification(
         self, manifest_digest: str
-    ) -> DataReleaseVerificationV1 | None:
+    ) -> PublicationVerification | None:
         async with self._runner._engine.connect() as connection:
             row = (
                 (
@@ -1119,12 +1156,8 @@ class PostgresMetadataStore:
             )
         if row is None:
             return None
-        verification = DataReleaseVerificationV1.model_validate_json(
-            canonical_bytes(row["payload"])
-        )
-        manifest = DataReleaseManifestV1.model_validate_json(
-            canonical_bytes(row["manifest_payload"])
-        )
+        verification = decode_release_verification(canonical_bytes(row["payload"]))
+        manifest = decode_release_manifest(canonical_bytes(row["manifest_payload"]))
         if (
             verification.verification_digest != row["verification_digest"]
             or verification.manifest_digest != manifest_digest
@@ -1139,14 +1172,12 @@ class PostgresMetadataStore:
                 "DATA_RELEASE_TRUST_ROOTS_UNCONFIGURED",
                 "data release trust roots are required to read verification evidence",
             )
-        verify_data_release_candidate(
-            manifest, verification, self._data_release_trust_roots
-        )
+        verify_publication_pair(manifest, verification, self._data_release_trust_roots)
         return verification
 
     async def _get_data_release_manifest(
         self, manifest_digest: str
-    ) -> DataReleaseManifestV1 | None:
+    ) -> PublicationManifest | None:
         async with self._runner._engine.connect() as connection:
             payload = await connection.scalar(
                 text(
@@ -1160,7 +1191,13 @@ class PostgresMetadataStore:
             )
         if payload is None:
             return None
-        return DataReleaseManifestV1.model_validate_json(canonical_bytes(payload))
+        manifest = decode_release_manifest(canonical_bytes(payload))
+        if manifest.manifest_digest != manifest_digest:
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_MISMATCH", "stored manifest identity differs"
+            )
+        await self._get_data_release_verification(manifest_digest)
+        return manifest
 
     async def _get_active_data_release(
         self, profile_id: str
@@ -1191,13 +1228,13 @@ class PostgresMetadataStore:
 
     def get_active_data_release_with_manifest(
         self, profile_id: str
-    ) -> ActiveDataReleaseWithManifestV1 | None:
+    ) -> ActivePublication | None:
         self._require_data_release_capability()
         return self._runner.run(self._get_active_data_release_with_manifest(profile_id))
 
     async def _get_active_data_release_with_manifest(
         self, profile_id: str
-    ) -> ActiveDataReleaseWithManifestV1 | None:
+    ) -> ActivePublication | None:
         async with self._runner._engine.connect() as connection:
             row = (
                 (
@@ -1225,20 +1262,31 @@ class PostgresMetadataStore:
             revision=int(row["revision"]),
             activated_at=row["activated_at"],
         )
-        manifest = DataReleaseManifestV1.model_validate_json(
-            canonical_bytes(row["payload"])
-        )
-        return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
+        manifest = decode_release_manifest(canonical_bytes(row["payload"]))
+        await self._get_data_release_verification(active.manifest_digest)
+        return active_publication(active, manifest)
 
     def compare_and_swap_data_release(
-        self, command: DataReleaseActivationCommandV1
+        self,
+        command: DataReleaseActivationCommandV1,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
     ) -> ActiveDataReleaseV1:
         self._require_data_release_capability()
-        return self._runner.run(self._compare_and_swap_data_release(command))
+        return self._runner.run(
+            self._compare_and_swap_data_release(
+                command, fiscal_observation=fiscal_observation
+            )
+        )
 
     async def _compare_and_swap_data_release(
-        self, command: DataReleaseActivationCommandV1
+        self,
+        command: DataReleaseActivationCommandV1,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
     ) -> ActiveDataReleaseV1:
+        from .fiscal_admission_history import PostgresFiscalAdmissionHistory
+
         async with self._runner._engine.begin() as connection:
             await connection.execute(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:command_id, 0))"),
@@ -1250,11 +1298,16 @@ class PostgresMetadataStore:
             if previous_command is not None:
                 return self._replay_activation_command(previous_command, command)
 
+            if fiscal_observation is not None:
+                await PostgresFiscalAdmissionHistory(self).validate_activation(
+                    fiscal_observation, connection
+                )
+
             candidate = (
                 (
                     await connection.execute(
                         text(
-                            "SELECT manifest.profile_id "
+                            "SELECT manifest.profile_id, manifest.payload "
                             "FROM fundamental.data_release_manifests AS manifest "
                             "JOIN fundamental.data_release_verifications AS verification "
                             "USING (manifest_digest) "
@@ -1270,6 +1323,16 @@ class PostgresMetadataStore:
                 raise DataReleaseError(
                     "DATA_RELEASE_CANDIDATE_UNVERIFIED",
                     "verified data release candidate was not found for this profile",
+                )
+            candidate_manifest = decode_release_manifest(
+                canonical_bytes(candidate["payload"])
+            )
+            if isinstance(candidate_manifest, FiscalReleaseManifestV1) != (
+                fiscal_observation is not None
+            ):
+                raise DataReleaseError(
+                    "FISCAL_ACTIVATION_OBSERVATION_REQUIRED",
+                    "fiscal activation requires a complete owning current observation",
                 )
             if command.operation == "rollback":
                 previously_active = await connection.scalar(
@@ -1323,6 +1386,11 @@ class PostgresMetadataStore:
                     "DATA_RELEASE_POINTER_CONFLICT",
                     "active data release changed; reread and revalidate the candidate",
                     retryable=True,
+                )
+
+            if fiscal_observation is not None:
+                await PostgresFiscalAdmissionHistory.require_activation_clock(
+                    fiscal_observation, connection
                 )
 
             activated = (
@@ -2226,6 +2294,17 @@ class PostgresCanonicalFactRepository(CanonicalFactRepository):
         )
 
 
+_SCOPED_ARTIFACT_READS: ContextVar[
+    dict[tuple[PostgresMetadataStore, Path], _ScopedArtifactReads] | None
+] = ContextVar("fiscal_scoped_artifact_reads", default=None)
+
+
+@dataclass
+class _ScopedArtifactReads:
+    reader: _RetainedPostgresArtifactReads
+    sealed: bool = False
+
+
 class PostgresArtifactStore:
     """Artifact metadata in PostgreSQL and immutable bytes in the content volume."""
 
@@ -2322,10 +2401,59 @@ class PostgresArtifactStore:
         )
         return ArtifactPublicationV1(artifact=record, wrote=wrote)
 
+    def _scoped_reads(self) -> _ScopedArtifactReads | None:
+        active = _SCOPED_ARTIFACT_READS.get()
+        if not self._read_only or active is None:
+            return None
+        scoped = active.get((self._metadata, self._content._root.resolve()))
+        if scoped is not None and scoped.sealed:
+            raise RuntimeError("scoped artifact reads ended before final observation")
+        return scoped
+
+    @contextmanager
+    def scoped_read_operation(self) -> Iterator[None]:
+        if not self._read_only:
+            raise SnapshotError(
+                "READ_ONLY_STORAGE",
+                "scoped fiscal reads require a read-only artifact store",
+            )
+        key = (self._metadata, self._content._root.resolve())
+        active = _SCOPED_ARTIFACT_READS.get()
+        if active is not None and key in active:
+            self._scoped_reads()
+            yield
+            return
+        reader = _RetainedPostgresArtifactReads(
+            self, (), max_entries=512, max_bytes=2 * 1024 * 1024
+        )
+        scoped = _ScopedArtifactReads(reader)
+        token = _SCOPED_ARTIFACT_READS.set({**(active or {}), key: scoped})
+        try:
+            yield
+            if not scoped.sealed:
+                reader.finish()
+        finally:
+            reader.close()
+            _SCOPED_ARTIFACT_READS.reset(token)
+
+    def seal_scoped_read_operation(self) -> None:
+        scoped = self._scoped_reads()
+        if scoped is not None:
+            scoped.reader._require_current()
+            scoped.sealed = True
+
     def get(self, artifact_id: str) -> ArtifactRecordV1:
-        return self._metadata.get_artifact(artifact_id)
+        scoped = self._scoped_reads()
+        return (
+            scoped.reader.get(artifact_id)
+            if scoped is not None
+            else self._metadata.get_artifact(artifact_id)
+        )
 
     def read(self, artifact_id: str) -> bytes:
+        scoped = self._scoped_reads()
+        if scoped is not None:
+            return scoped.reader.read(artifact_id)
         record = self.get(artifact_id)
         return self._content.get(record.content_hash, media_type=record.media_type)
 
