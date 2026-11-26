@@ -1361,9 +1361,9 @@ def _css(node: etree._Element) -> dict[str, str]:
             "unsupported_presentation",
             "An original style declaration is incomplete or repeated",
         )
-        token = _CSS_SPACE.sub(" ", value.strip(_CSS_WS))
+        token = value.strip(_CSS_WS)
         value_token = _CSS_IMPORTANT.sub("", token).strip(_CSS_WS)
-        normalized = _CSS_SPACE.sub(" ", value_token.strip(_CSS_WS)).lower()
+        normalized = _CSS_SPACE.sub(" ", value_token).lower()
         if name == _PRESENTATION_GRAMMAR.annotation_property:
             _require(
                 node.tag == _PRESENTATION_GRAMMAR.annotation_element
