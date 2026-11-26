@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -50,12 +53,20 @@ def artifacts(metadata, tmp_path):
 
 
 @pytest.fixture
-def registry(environment, tmp_path):
+def protected_registry_directory() -> Iterator[Path]:
+    with TemporaryDirectory(
+        prefix="fundamental-registry-test-", dir=Path.home()
+    ) as root:
+        yield Path(root)
+
+
+@pytest.fixture
+def registry(environment, protected_registry_directory):
     root = environment.configuration[0].roots[0].identity
-    deployment = tmp_path / "deployment.json"
+    deployment = protected_registry_directory / "deployment.json"
     deployment.write_bytes(canonical_bytes(environment.configuration[0]))
     deployment.chmod(0o600)
-    key = tmp_path / "registry.pem"
+    key = protected_registry_directory / "registry.pem"
     key.write_bytes(
         environment.signer.private_key.private_bytes(
             serialization.Encoding.PEM,
@@ -64,7 +75,7 @@ def registry(environment, tmp_path):
         )
     )
     key.chmod(0o600)
-    orders = tmp_path / "orders"
+    orders = protected_registry_directory / "orders"
     orders.mkdir(mode=0o700)
     installation = FiscalRegistryInstallationV1(
         audience="ephemeral-registry",
