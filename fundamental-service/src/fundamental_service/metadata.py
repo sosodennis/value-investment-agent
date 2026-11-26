@@ -9,6 +9,7 @@ calculator or the existing repository protocols.
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import json
 import sys
@@ -21,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from importlib import resources
 from pathlib import Path
+from stat import S_ISDIR
 from threading import Event, Lock, Thread
 from typing import Any, BinaryIO, Literal, TypeVar
 from uuid import uuid4
@@ -2056,6 +2058,16 @@ class PostgresContentStore:
             raise SnapshotError(
                 "SOURCE_BYTES_UNAVAILABLE", "read-only content root is missing"
             )
+        if not read_only:
+            try:
+                root_stat = root.stat()
+            except FileNotFoundError:
+                pass
+            else:
+                if not S_ISDIR(root_stat.st_mode):
+                    raise NotADirectoryError(
+                        errno.ENOTDIR, "Not a directory", str(root)
+                    )
         self._root = root
         self._filesystem_view: FilesystemContentStore | None = None
         self._metadata = metadata
