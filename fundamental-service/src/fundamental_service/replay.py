@@ -172,6 +172,24 @@ class ArtifactPublicationV1(BaseModel):
     wrote: bool
 
 
+class ArtifactPublicationDeadlineExceeded(SnapshotError):
+    def __init__(self) -> None:
+        super().__init__(
+            "REQUEST_DEADLINE_EXCEEDED",
+            "artifact publication deadline expired",
+            retryable=True,
+        )
+
+
+def check_publication_budget(budget: Callable[[], float] | None) -> float | None:
+    if budget is None:
+        return None
+    remaining = budget()
+    if remaining <= 0:
+        raise ArtifactPublicationDeadlineExceeded()
+    return remaining
+
+
 class ArtifactStore:
     """Content-addressed immutable artifacts with append-only record history."""
 
@@ -242,9 +260,18 @@ class ArtifactStore:
                 return
             offset += len(frame)
 
-    def _append_record_unlocked(self, record: ArtifactRecordV1) -> None:
-        with self._record_log.open("ab") as handle:
-            handle.write(canonical_bytes(record) + b"\n")
+    def _append_record_unlocked(
+        self,
+        record: ArtifactRecordV1,
+        *,
+        publication_budget: Callable[[], float] | None = None,
+    ) -> None:
+        frame = canonical_bytes(record) + b"\n"
+        buffering = 0 if publication_budget is not None else -1
+        with self._record_log.open("ab", buffering=buffering) as handle:
+            check_publication_budget(publication_budget)
+            if handle.write(frame) != len(frame):
+                raise OSError("artifact record append was incomplete")
             handle.flush()
             os.fsync(handle.fileno())
 
@@ -277,6 +304,7 @@ class ArtifactStore:
         *,
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
+        publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
         return self.put_bytes_with_receipt(
             artifact_id,
@@ -284,6 +312,7 @@ class ArtifactStore:
             dependency_hashes,
             media_type=media_type,
             retention=retention,
+            publication_budget=publication_budget,
         )
 
     def put_bytes_with_receipt(
@@ -294,6 +323,7 @@ class ArtifactStore:
         *,
         media_type: str = "application/octet-stream",
         retention: Literal["evidence", "operational_cache"] = "evidence",
+        publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
         if not artifact_id:
             raise SnapshotError("ARTIFACT_ID_INVALID", "artifact_id is required")
@@ -322,6 +352,7 @@ class ArtifactStore:
                             "ARTIFACT_BYTES_UNAVAILABLE",
                             "published artifact bytes failed verification",
                         )
+                    check_publication_budget(publication_budget)
                     return ArtifactPublicationV1(artifact=previous, wrote=False)
                 if path.exists() and path.read_bytes() != payload:
                     raise SnapshotError(
@@ -348,7 +379,9 @@ class ArtifactStore:
                     media_type=media_type,
                     retention=retention,
                 )
-                self._append_record_unlocked(record)
+                self._append_record_unlocked(
+                    record, publication_budget=publication_budget
+                )
                 self._records[artifact_id] = record
                 return ArtifactPublicationV1(artifact=record, wrote=True)
 

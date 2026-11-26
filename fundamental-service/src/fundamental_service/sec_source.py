@@ -39,6 +39,21 @@ class SecSourceError(SnapshotError):
     """Stable failures from the free SEC source boundary."""
 
 
+def sec_deadline_exceeded() -> SecSourceError:
+    return SecSourceError(
+        "REQUEST_DEADLINE_EXCEEDED", "SEC acquisition deadline expired", retryable=True
+    )
+
+
+def _request_remaining(deadline_at: datetime | None) -> float | None:
+    if deadline_at is None:
+        return None
+    remaining = (deadline_at - datetime.now(timezone.utc)).total_seconds()
+    if remaining <= 0:
+        raise sec_deadline_exceeded()
+    return remaining
+
+
 @dataclass(frozen=True)
 class SecRequestPolicy:
     user_agent: str
@@ -322,17 +337,7 @@ class SecEdgarSourceAdapter:
     ) -> _SecResponse:
         last_error: Exception | None = None
         for attempt in range(self.policy.max_attempts):
-            remaining = (
-                None
-                if deadline_at is None
-                else (deadline_at - datetime.now(timezone.utc)).total_seconds()
-            )
-            if remaining is not None and remaining <= 0:
-                raise SecSourceError(
-                    "REQUEST_DEADLINE_EXCEEDED",
-                    "SEC acquisition deadline expired",
-                    retryable=True,
-                )
+            _request_remaining(deadline_at)
             if self._request_slot is not None:
                 delay = self._request_slot(self.policy.min_interval_seconds)
             elif self._last_request_at is not None:
@@ -340,6 +345,7 @@ class SecEdgarSourceAdapter:
                 delay = max(0.0, self.policy.min_interval_seconds - elapsed)
             else:
                 delay = 0.0
+            remaining = _request_remaining(deadline_at)
             if remaining is not None and delay >= remaining:
                 raise SecSourceError(
                     "REQUEST_DEADLINE_EXCEEDED",
@@ -348,16 +354,6 @@ class SecEdgarSourceAdapter:
                 )
             if delay > 0:
                 self._sleep(delay)
-                if deadline_at is not None:
-                    remaining = (
-                        deadline_at - datetime.now(timezone.utc)
-                    ).total_seconds()
-                    if remaining <= 0:
-                        raise SecSourceError(
-                            "REQUEST_DEADLINE_EXCEEDED",
-                            "SEC acquisition deadline expired",
-                            retryable=True,
-                        )
             request = Request(
                 uri,
                 headers={
@@ -373,6 +369,7 @@ class SecEdgarSourceAdapter:
                     ),
                 },
             )
+            remaining = _request_remaining(deadline_at)
             self._last_request_at = time.monotonic()
             try:
                 with self._opener(

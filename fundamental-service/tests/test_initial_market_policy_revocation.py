@@ -16,7 +16,8 @@ from fundamental_service.policies import (
     initial_policy_records,
 )
 from fundamental_service.metadata import PostgresMetadataStore
-from fundamental_service.persistence_recovery import export_backup, restore_backup
+from fundamental_service.persistence_recovery import export_backup
+from recovery_test_support import restore_backup, assert_same_data_plane_projection
 from fundamental_service.serialization import sha256_digest
 
 
@@ -118,12 +119,10 @@ def test_postgres_backup_cannot_reenable_revoked_market_seeds(
         export_backup(source_db, source, backups, source_revision="1" * 40)
     )
     assert receipt.wrote
-    assert (
-        asyncio.run(
-            export_backup(source_db, source, backups, source_revision="1" * 40)
-        ).wrote
-        is False
+    repeated = asyncio.run(
+        export_backup(source_db, source, backups, source_revision="1" * 40)
     )
+    assert_same_data_plane_projection(receipt, repeated, backups)
     bundle = backups / receipt.manifest_digest
     target = tmp_path / "restored"
     assert (
@@ -131,8 +130,8 @@ def test_postgres_backup_cannot_reenable_revoked_market_seeds(
             restore_backup(
                 target_db, target, bundle, manifest_digest=receipt.manifest_digest
             )
-        )
-        == receipt
+        ).manifest_digest
+        == receipt.manifest_digest
     )
     assert (
         asyncio.run(

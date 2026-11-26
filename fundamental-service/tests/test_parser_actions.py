@@ -764,7 +764,8 @@ def test_postgres_single_flight_restart_and_empty_store_restore(
         PostgresContentStore,
         PostgresMetadataStore,
     )
-    from fundamental_service.persistence_recovery import export_backup, restore_backup
+    from fundamental_service.persistence_recovery import export_backup
+    from recovery_test_support import restore_backup
 
     source_db, target_db = recovery_databases
     c = case(tmp_path)

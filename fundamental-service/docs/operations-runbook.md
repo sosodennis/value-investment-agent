@@ -576,9 +576,12 @@ fundamental-persistence export \
 
 The receipt identifies `/backups/fundamental/<manifest_digest>/manifest.json`.
 Copy the complete directory to retained storage outside the disposable service
-volume. The canonical manifest pins the implementation revision, migration and
-schema digests, PostgreSQL major version, every table's columns/row count/file
-digest, and every source/content file's digest and length. Source bytes from
+volume. The `fundamental-persistence-backup-v2` canonical manifest pins the implementation
+revision, migration and schema digests, PostgreSQL major version, every table's
+columns, row count and file digest, and every content file's digest and length.
+It also pins the source history origin, trusted heads and database-clock frontier F.
+Export takes all metadata SHARE locks in READ COMMITTED before reading any rows.
+Every exported history writer must have a sealed commit receipt with U < F. Source bytes from
 failed ingestion are included even if registration was interrupted. Missing or
 corrupt snapshot/fact/artifact source bytes refuse publication. Table values are
 exported as sorted canonical JSON lines containing PostgreSQL text values;
@@ -586,8 +589,9 @@ timestamps retain their original UTC values. Operational audit rows remain part
 of the backup, separate from valuation identity.
 
 The complete backup is staged, verified and atomically renamed to its digest.
-Re-exporting identical state and revision returns `wrote=false` without touching
-the existing directory. An existing corrupt backup is rejected, never replaced.
+A later export records a new frontier and therefore has a new manifest identity,
+even when financial data is unchanged. Existing bundles are never rewritten.
+An existing corrupt bundle is rejected.
 Record the receipt and exact command in acceptance evidence. Export is not an
 independent mapping review or a release signature.
 
@@ -597,23 +601,125 @@ the recorded digest, obtained independently of the backup's current contents:
 ```sh
 fundamental-persistence restore \
   --bundle /backups/fundamental/<manifest_digest> \
-  --manifest-digest <manifest_digest>
+  --manifest-digest <manifest_digest> \
+  --authorization /run/fundamental-maintenance/recovery-authorization.json
 ```
+
+Provision the authorization separately from the bundle. Serialize a validated
+`RecoveryAuthorizationV1` with `canonical_bytes`; keep its file private to the
+offline maintenance process UID, with no symlink and at most 16 KiB. The pin binds
+the manifest digest, source origin, exact target PostgreSQL system identifier,
+timeline and database OID, runtime database role, and a retained source-fence
+reference. Its canonical digest is the recovery operation ID. Do not let the
+bundle supply this trust root. A missing or mismatched pin refuses import.
+
+Use the actual metadata owner connection for offline recovery. The pin's runtime
+role must exist, be independent of that owner, and lack privileged attributes,
+owner membership, protected relation ownership, schema CREATE, recovery staging
+access and installer EXECUTE. These checks include every role PostgreSQL permits
+the runtime to assume with SET ROLE. The runtime must not hold an effective ADMIN
+OPTION, including through an assumed role or inherited membership, because it
+could grant itself SET or INHERIT. Membership with SET FALSE, INHERIT FALSE and
+ADMIN FALSE does not by itself grant those capabilities. The runtime and its
+SET actors must also lack effective `pg_read_server_files`,
+`pg_write_server_files` and `pg_execute_server_program` membership. They must
+not have EXECUTE on any `pg_catalog` overload of `pg_read_file`,
+`pg_read_binary_file`, `lo_import` or `lo_export`, including privileges inherited
+from other roles or PUBLIC. The check reads PostgreSQL privileges without
+executing file or program operations. Record evidence that this exact role is
+the role used by the deployed runtime DSN. The ACL check
+validates the named role; it cannot detect a decoy role or prove deployment
+configuration. Record the runtime
+and maintenance OS UIDs and filesystem permissions too. A private file owned by
+the maintenance process proves neither OS UID separation nor that the runtime
+cannot replace its parent directory. Do not report recovery readiness until those
+deployment boundaries are verified. Never run the runtime with the maintenance
+DSN or a writable authorization directory.
+
+Fence the source and retain that operational evidence before allowing target
+writes. The command validates the bound reference, not the external fence itself.
+If the source cannot be fenced, retain the bundle for historical audit and keep
+the target offline. The pin does not prove that no revocation occurred after F.
 
 Restore checks the entire inventory, referenced bytes, schema and runtime
 compatibility before importing rows. It initializes the owned schema only when
 absent. An existing target must be empty apart from schema bootstrap records, or
-already contain exactly the backed-up metadata; unrelated data is refused. The
+contain the same completed recovery operation and its intact imported prefix;
+unrelated data or a different operation is refused. The
 content root may contain only a matching subset of the backup's objects. Bytes
 are published atomically before a single metadata transaction imports all rows
-in foreign-key order. Failure rolls back the metadata transaction; already
+in foreign-key order. The owner-only staging ticket binds the current backend,
+full transaction ID, target origin, manifest and exact normalized staged rows.
+Ordinary history guards accept only matching staged INSERTs; restore never
+disables triggers or truncates history. Failure rolls back the metadata transaction; already
 restored matching bytes are retained for retry. Temporary copy bytes stay in
 `.restore-pending`, which is outside the published
 content inventory; a killed copy cannot publish a partial object or block retry.
 Uncommitted staging bytes are retained locally and excluded from export.
-The acquisition-audit sequence continues beyond restored IDs. The transaction verifies the restored table
-digests before commit. Repeating a complete restore returns `wrote=false` and
-does not modify existing content files.
+The acquisition-audit sequence continues beyond restored IDs. The transaction
+verifies the imported logical projection before commit. A separate transaction
+seals the original import full XID with its genuine local commit time C and fresh
+visibility upper bound U, requiring F < C <= U. A fresh read observes the receipt
+and a later PostgreSQL clock value before the command reports success. The
+recovery host clock does not establish visibility of a database commit. An
+interruption after import leaves a pending
+activation. Repeat the same command and pin to seal that original XID. Missing
+commit proof keeps activation refused; a retry never replaces C with the current
+time. Repeating a completed restore returns `wrote=false`, preserves legitimate
+later local appends, and verifies both the original prefix and current metadata,
+content and lineage.
+
+Recovery opens input files without following symlinks or waiting for a FIFO
+writer. The opened descriptor must identify a regular file within its byte
+limit. This applies to the authorization pin, manifest, table rows, content
+hashing, parser-result reads and copy sources. These checks use the original
+operation deadline; a nonregular input does not start a new timeout.
+
+Retry compares mutable metadata by its owner contract. The SEC request slot
+keeps the `sec-edgar` key and cannot move backwards. Release pointers may advance
+through the complete, contiguous activation audit, including an explicit rollback
+to a previously active release. Every candidate keeps its manifest and
+verification identities, and the current pointer must equal the final audit
+result. A rebuilt parser cache may select another retained result for the same
+action key only when its immutable result body and report still validate that
+key. Existing source, artifact, release and audit rows retain their exact imported
+identities and bytes. These checks do not reapprove a release or replace its
+deployment trust-root and current-authority checks.
+
+The target keeps its new local origin. Imported event bytes, digests, full XIDs
+and sealed C/U remain unchanged. Reads preserve each ancestor recovery interval:
+F < T < C is `recovery_gap`, and C <= T <= U is ambiguous. Later local epochs need
+local state evidence; an imported active state is not carried through a gap.
+Re-export and another restore retain all ancestor intervals.
+
+Imported grants, reviews and decisions are historical audit evidence. They do
+not authorize current actions. Current consumers must call
+`FiscalHistoryReadV1.require_current_epoch` with the actual authority and decision
+entries required for their operation, then validate fresh external dependencies
+in the owning service. A new metadata checkpoint alone does not revalidate a
+previous grant. Re-establish exact roles through the independent deployment
+administrator and perform new local reviews and decisions after activation.
+
+The history owner supplies `FiscalIssuanceContextV1` before a signing or review
+capability starts. Registry and classifier executions, authority and
+classification signatures, and source-preparation execution evidence bind that
+same origin. Current reads require the local origin; historical authority replay
+compares the signature with its retained event origin. A restored orphan or an
+execution from another origin cannot acquire current permission through a new
+checkpoint. Retries retain existing signed bytes and expiry.
+
+An unchanged retained focus witness is a dependency proof, not a new grant or
+review execution. Its current owner must still verify exact source, parser
+actions, reports, delivery, resources, build, authority, key, expiry, revocation
+and metadata. A fresh local classification can consume that verified retained
+proof while preserving the witness's original execution identity.
+
+Both entrypoints accept one absolute deadline; the CLI uses `--deadline-seconds`
+with a default of 300 seconds and a maximum of 3600. Installed limits are 8 GiB
+of bundle data, 256 MiB of metadata, one million rows, 100,000 objects and 8 MiB
+per row. Lock waits, hash, copy, staging and readback share the same budget.
+The v2 wire does not accept old v1 bundles. Retain their pinned original image
+for reading them; do not rewrite old signed artifacts or retained backups.
 
 Deployment secrets, trust roots, parser/taxonomy assets and service configuration
 are not data backup contents. Restore their separately pinned deployment inputs
@@ -879,3 +985,73 @@ python -m fundamental_service.statement_preparation_runner \
 Microsoft FY2020 的 HTML block LF 表示差異只由 `sec_html_representation_registry.py` 中的單一來源登錄批准。登錄綁定原件 hashes、精確 offsets、schema/context proof、V18 profile 與 taxonomy cache。未知表示差異回報 `SOURCE_HTML_REPRESENTATION_UNREGISTERED`；profile/cache 不符回報 `SOURCE_HTML_REPRESENTATION_RESOURCE_SCOPE_MISMATCH`。不得藉由補登 hash 或忽略拒絕來取得資料資格。新登錄需先核對原文、submission、ZIP、schema 和內容語義，提交獨立審閱證據，然後更新 policy pins 並重新驗收。機器 proof 位於 `tests/fixtures/sec-integrity/msft-2020-html-block-representation-proof.json`，來源 bytes 仍依既有 capture 流程保留與重取。
 
 重跑相同 retained inputs 與版本會重用 publication；新原文 hash、parser input、profile、mapping 或 executable pin 需形成新輸入。Registry 外原件、金融 SIC、錯 namespace、缺 validation、cutoff 不符及資料毀損均具名拒絕。五年度為 coverage 目標，`supported_history_threshold` 維持 null。正式成功仍須核對服務數字、每格來源、partial 結果與 workspace 行為。
+
+## 建立季度來源的 diagnostic focus witness
+
+先配置獨立 fiscal acquisition owner。完整設定 `FUNDAMENTAL_FISCAL_SEC_TAXONOMY_CACHE_DIR`、`FUNDAMENTAL_FISCAL_SEC_TAXONOMY_MANIFEST_ID`、`FUNDAMENTAL_FISCAL_SEC_TAXONOMY_VERSION`、`FUNDAMENTAL_FISCAL_SEC_TAXONOMY_CACHE_SHA256`、`FUNDAMENTAL_FISCAL_SEC_SUPPORTED_FILING_YEARS` 與 `FUNDAMENTAL_FISCAL_SEC_SUPPORTED_FILING_FORMS`。沿用部署的共享 SEC contact、EDGAR、XULE 與完整 DQC catalog pins。年度 owner 保留自己的 cache 與 forms。Fiscal CLI 缺少 fiscal owner 時回報 `FISCAL_VALIDATION_UNCONFIGURED`。
+
+由部署 operator 提供兩個檔案，並以唯讀掛載交給服務。
+
+- `FUNDAMENTAL_FISCAL_FOCUS_AUTHORITY_FILE` 指向 `FiscalFocusValidatorAuthorityV1` JSON。它包含實際機器 `authority_id`、`principal_id`、role `fiscal-diagnostic-focus-validator-v1`、raw Ed25519 公鑰的 base64、`status` 與含時區的 `valid_until`。部署設定是 trust root，CLI 不接受 caller 傳入角色或公鑰。
+- `FUNDAMENTAL_FISCAL_FOCUS_PRIVATE_KEY_FILE` 指向對應的 Ed25519 PKCS8 PEM。限制檔案權限為 `600` 或更窄。兩個配置檔皆須是非 symlink 的一般檔案，且各不超過 16 KiB。缺檔、錯格式、非一般檔案或不符角色均具名拒絕。
+
+以相同固定 source revision 取得 retained discovery 與原件 validation。`discover` 使用 `--cik`、`--valuation-timestamp`，`validate` 使用 `--discovery-artifact-id`、`--accession`，`read` 使用 `--artifact-id`。這些命令由 `python -m fundamental_service.fiscal_source_runner` 執行，共用必要的 `--source-revision` 與 1 至 900 秒的 `--timeout-seconds`。
+
+原件必須已完成完整 EFM/DQC、metadata matched，且 raw refusal 只有唯一 active `DQC.US.0015.5970`，才能建立 witness。
+
+```sh
+python -m fundamental_service.fiscal_source_runner \
+  --source-revision "$IMPLEMENTATION_COMMIT" --timeout-seconds 900 \
+  focus-witness --source-artifact-id "$FISCAL_ORIGINAL_ARTIFACT_ID"
+```
+
+輸出 `evidence` 是 signed witness，`publication` 保存 immutable artifact 身分與 `wrote`。服務重建完整 parser inputs，對必要的雙表示執行受限官方 validator，再比對全量 facts、findings 與唯一 actual focus。重試相同 retained inputs、build 與 key 會重用相同 signed bytes。
+
+```sh
+python -m fundamental_service.fiscal_source_runner \
+  --source-revision "$IMPLEMENTATION_COMMIT" --timeout-seconds 900 \
+  read-focus-witness --artifact-id "$FOCUS_WITNESS_ARTIFACT_ID"
+```
+
+讀取重驗來源、完整 dependencies、資源、build、簽章、目前 authority 與期限，並在回傳前再次檢查。它不重新取得原件或執行 validator。Authority 可透過部署配置撤銷。Witness 最長有效 30 日，且不得超過 authority 期限。已過期或撤銷的 witness 不能以原簽章繼續 current read；新 build、來源或 key 需要新證據身分。
+
+所有命令在同一 absolute deadline 內處理 metadata、lock、worker、publication 與 stdout pipe 寫入。消費端停止讀取時，命令到期即停止等待，以 stderr 的具名 JSON 和 exit 2 結束。失敗可能已送出部分 stdout bytes，僅 exit 0 的完整 JSON 可作成功輸出。這份 witness 只證明來源診斷。原 raw active finding 與 blocking 保留，季度或 TTM 展示仍需獨立分類與分權 release decision，年度及估值資格沿原政策。
+
+## 固定季度與 TTM candidate 給獨立審閱
+
+`prepare-candidate` 執行既有 fiscal mapper 與 projector，簽署整個 candidate 的實際 preparation 結果。它不授予 display release、年度資料或估值資格。Raw-refused source 仍需要 source owner 的正式 preparation、focus witness 與獨立 accounting classification。這些 producer 的部署與實質審閱必須另外完成，candidate 簽章不能替代。
+
+先保留前節的 fiscal acquisition、PostgreSQL history 與完整 resource pins。部署配置下列檔案。命令不接受 key、principal、role、job 或 epoch overrides。
+
+- `FUNDAMENTAL_FISCAL_AUTHORITY_DEPLOYMENT_FILE` 指向 `FiscalAuthorityDeploymentV1` JSON。Root、provisioning refs 與 active grants 必須已由 authority owner 正式建立。
+- `FUNDAMENTAL_FISCAL_CANDIDATE_AUTHORITY_ID` 選定 roster 中的 `machine` principal 與 `source_preparer` grant。
+- `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE` 保留 fiscal mapping evaluator 的當前公鑰與 `fiscal_mapping_policy_digest()`。
+- 寫入 process 另掛載 `FUNDAMENTAL_FISCAL_CANDIDATE_PRIVATE_KEY_FILE` 與 `FUNDAMENTAL_FISCAL_MAPPING_PRIVATE_KEY_FILE`。使用各自對應的 Ed25519 PKCS8 PEM。私鑰檔須由該 process 的 OS user 擁有，權限為 `600` 或更窄。部署檔須是非 symlink 的一般檔案，大小不超過 1 MiB。
+
+`command.json` 必須符合 `FiscalPrepareCandidateCommandV1`。必要欄位為 `command_id`、完整 `discovery_ref` 與含時區的絕對 `expires_at`。`security_id` 是可選 selector。`classification_bindings` 按 `source_validation_ref.artifact_id` 排序，每個 raw-refused source 提供一組 exact source、witness 與 classification refs。不得提供財務 rows、公式、期間 labels 或簽署者身分。
+
+```sh
+python -m fundamental_service.fiscal_source_runner \
+  --source-revision "$RETAINED_SOURCE_REVISION" --timeout-seconds 60 \
+  prepare-candidate --command-file command.json
+```
+
+輸出 `evidence` 為 `FiscalStatementCandidateV2`。其 signed body 包含唯一 `FiscalCandidateContentV1`、原 discovery 與 validation pin、全部 source uses、mapping approvals、projection、period 與 row lineage、實際 machine execution 及 issuance context。Preparation executable digest 與原 source revision 分開保留。Job ID 由部署能力產生，真正的信任根是 deployment grant、key custody 與固定 builder 程式。
+
+從 `publication.artifact` 保留完整 ref，指定 role `fiscal-statement-candidate-v2`，寫入 `candidate-ref.json`。Ref 同時包含 stable artifact ID、content hash 與 media type。
+
+```sh
+python -m fundamental_service.fiscal_source_runner \
+  --source-revision "$RETAINED_SOURCE_REVISION" --timeout-seconds 60 \
+  read-candidate --candidate-ref-file candidate-ref.json
+```
+
+讀取 process 使用專用的 `read_only_operator_lifespan` 與 `PostgresMetadataStore.start_read_only()`，只檢查現有 schema 和 capabilities。它不執行 migrations 或發布 model、policy catalog，即使一般服務配置允許 auto-migrate。缺少 prerequisite 時具名拒絕並關閉資源。部署 reader 使用只有 SELECT 的資料庫角色與唯讀 content volume。
+
+Content 和 artifact reader 只驗現有 registration 與 byte length。缺 registration 或長度不符即拒絕，不自動 INSERT、repair 或更新 retained journal。一般服務和寫入 operator 保留原 publication 與 recovery 行為。
+
+讀取 process 只需要 public deployment、mapping trust 與適用的 focus authority。它不載入 candidate、mapping 或 focus 私鑰，且沒有 history append、checkpoint 或 seal 能力。它從原 discovery 重建完整內容，再於一個有界 PostgreSQL snapshot 核對全部 metadata、storage、heads、sealed entries 與 current epoch。Source、classification、witness、grant、build、policy、expiry 或任何 binding 改變均拒絕。Raw parser action refs 保留原 owner 驗證的 evidence，不會創造未參與的 preparer、focus validator 或 classifier。
+
+相同 command 重試保留首次 signed bytes、execution、expiry 與 source identity。變更 command scope、pins 或 expiry 必須使用新 command ID。若 `FISCAL_CANDIDATE_SIGNING_OUTCOME_UNAVAILABLE` 表示 signing intent 已留存而沒有可證明的 durable signature，該 command 不再重簽。用新 command ID 執行真實新工作。已留存 signed bytes 的同代重試可續做缺少的 publication history；純讀不補寫。Restore 後舊 candidate 或 signed orphan 保留原 issuance，不能靠新 append 取得 current。新的本代 command 需要真正本代 invocation 與有效 grants。
+
+這個入口只回 current preparation 結果。Historical source、witness 與 classification replay 尚無完整 owning port，因此沒有 candidate as-of approval 入口。正式 display decision、outer release、authenticated API 與 workspace 驗收仍是後續 gate。

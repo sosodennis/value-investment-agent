@@ -1,0 +1,3857 @@
+{
+  "case_id": "msft-historical",
+  "issuer_id": "0000789019",
+  "cutoff_at": "2024-11-02T00:00:00Z",
+  "target_quarter_ends": [
+    "2022-12-31",
+    "2023-03-31",
+    "2023-06-30",
+    "2023-09-30",
+    "2023-12-31",
+    "2024-03-31",
+    "2024-06-30",
+    "2024-09-30"
+  ],
+  "quarter_periods": [
+    {
+      "quarter_id": "msft-historical:2023:Q2:2022-12-31",
+      "accession_number": "0001564590-23-000733",
+      "fiscal_year_focus": "2023",
+      "fiscal_period_focus": "Q2",
+      "start_date": "2022-10-01",
+      "end_date": "2022-12-31",
+      "inclusive_calendar_days": 92,
+      "period_source": {
+        "kind": "inline_revenue_fact_context",
+        "accession_number": "0001564590-23-000733",
+        "row_id": "revenue",
+        "qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "context_id": "C_0000789019_20221001_20221231",
+        "table_index": 9,
+        "row_index": 10,
+        "fact_index": 56
+      },
+      "dei_observations": {
+        "DocumentPeriodEndDate": {
+          "value": "December 31, 2022",
+          "fact_index": 19,
+          "context_id": "C_0000789019_20220701_20221231",
+          "source_locator": {
+            "fact_index": 19,
+            "table_index": 1,
+            "row_index": 2,
+            "context_id": "C_0000789019_20220701_20221231"
+          },
+          "iso_date": "2022-12-31"
+        },
+        "DocumentFiscalYearFocus": {
+          "value": "2023",
+          "fact_index": 1,
+          "context_id": "C_0000789019_20220701_20221231",
+          "source_locator": {
+            "fact_index": 1,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_0000789019_20220701_20221231"
+          }
+        },
+        "DocumentFiscalPeriodFocus": {
+          "value": "Q2",
+          "fact_index": 2,
+          "context_id": "C_0000789019_20220701_20221231",
+          "source_locator": {
+            "fact_index": 2,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_0000789019_20220701_20221231"
+          }
+        },
+        "DocumentType": {
+          "value": "10-Q",
+          "fact_index": 17,
+          "context_id": "C_0000789019_20220701_20221231",
+          "source_locator": {
+            "fact_index": 17,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_0000789019_20220701_20221231"
+          }
+        },
+        "EntityCentralIndexKey": {
+          "value": "0000789019",
+          "fact_index": 3,
+          "context_id": "C_0000789019_20220701_20221231",
+          "source_locator": {
+            "fact_index": 3,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_0000789019_20220701_20221231"
+          }
+        }
+      },
+      "source_evidence": {
+        "primary_html_sha256": "c6546587a981291186cc107ed02f15d0a23356ecea20fa4b4511e9f5490fa45c",
+        "primary_html_receipt": {
+          "captured_at": "2026-11-24T15:36:08.087003Z",
+          "content_hash": "c6546587a981291186cc107ed02f15d0a23356ecea20fa4b4511e9f5490fa45c",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 5328709,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:07 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 24 Jan 2023 21:35:38 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-23-000733",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459023000733/msft-10q_20221231.htm"
+        },
+        "primary_statement_tables": {
+          "income_statement": {
+            "selected_table_index": 9,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "cost_of_revenue",
+                  "gross_profit",
+                  "income_before_tax",
+                  "income_tax_expense",
+                  "net_income",
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Revenue: Product $ 16,517 $ 20,779 $ 32,258 $ 37,410 Service and other 36,230 30,949 70,611 59,635 Total revenue 52,747 51,728 102,869 97,045 Cost of revenue: Product 5,690 6,331 9,992 10,123 Service and other 11,798 10,629 22,948 20,483 Total cost of revenue 17,488 16,960 32,940 30,606 Gross margin 35,259 34,768 69,929 66,439 Research and development 6,844 5,758 "
+              },
+              {
+                "table_index": 62,
+                "row_ids_covered": [
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 2,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Revenue Productivity and Business Processes $ 17,002 $ 15,936 $ 33,467 $ 30,975 Intelligent Cloud 21,508 18,262 41,833 35,174 More Personal Computing 14,237 17,530 27,569 30,896 Total $ 52,747 $ 51,728 $ 102,869 $ 97,045 Operating Income Productivity and Business Processes $ 8,175 $ 7,688 $ 16,498 $ 15,269 Intelligent Cloud 8,904 8,323 17,882 16,004 More Personal Computing 3,320 6,236 7,537 11,212 Tot"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Net income $ 16,425 $ 18,765 $ 33,981 $ 39,270 Other comprehensive income (loss), net of tax: Net change related to derivatives ( 32 ) 0 ( 25 ) 2 Net change related to investments 348 ( 743 ) ( 1,549 ) ( 1,165 ) Translation adjustments and other 570 ( 103 ) ( 205 ) ( 222 ) Other comprehensive income (loss) 886 ( 846 ) ( 1,779 ) ( 1,385 ) Comprehensive income $ 17,311 $ 17,919 $ 32,202 $ 37"
+              },
+              {
+                "table_index": 12,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Operations Net income $ 16,425 $ 18,765 $ 33,981 $ 39,270 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 3,648 3,496 6,438 6,708 Stock-based compensation expense 2,538 1,897 4,730 3,599 Net recognized losses (gains) on investments and derivatives 214 ( 307 ) 192 ( 671 ) Deferred income taxes ( 1,305 ) 183 ( 2,496 ) ( 5,787 ) Changes i"
+              },
+              {
+                "table_index": 13,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Common stock and paid-in capital Balance, beginning of period $ 88,535 $ 83,751 $ 86,939 $ 83,111 Common stock issued 243 291 818 903 Common stock repurchased ( 1,090 ) ( 1,411 ) ( 2,261 ) ( 3,088 ) Stock-based compensation expense 2,538 1,897 4,730 3,599 Other, net ( 1 ) 0 ( 1 ) 3 Balance, end of period 90,225 84,528 90,225 84,528 Retained earnings Balance, begin"
+              },
+              {
+                "table_index": 17,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions, except earnings per share) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Net income available for common shareholders (A) $ 16,425 $ 18,765 $ 33,981 $ 39,270 Weighted average outstanding shares of common stock (B) 7,451 7,505 7,454 7,509 Dilutive effect of stock-based awards 22 50 25 52 Common stock and common stock equivalents (C) 7,473 7,555 7,479 7,561 Earnings Per Share Basic (A/B) $ 2.20 $ 2.50 $ 4.56 $ 5.23 Diluted (A/C) $ 2.20 $ 2.48 $ 4.5"
+              },
+              {
+                "table_index": 63,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 United States (a) $ 26,976 $ 26,463 $ 52,843 $ 49,293 Other countries 25,771 25,265 50,026 47,752 Total $ 52,747 $ 51,728 $ 102,869 $ 97,045"
+              },
+              {
+                "table_index": 65,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Server products and cloud services $ 19,594 $ 16,382 $ 37,982 $ 31,452 Office products and cloud services 11,837 11,251 23,385 22,059 Windows 4,808 6,594 10,121 12,268 Gaming 4,758 5,442 8,368 9,035 LinkedIn 3,876 3,531 7,539 6,667 Search and news advertising 3,223 3,064 6,151 5,720 Enterprise Services 1,862 1,823 3,738 3,614 Devices 1,430 2,357 2,878 3,771 Other 1,359 1,284 2,707 2,459 Total $ 52,747"
+              }
+            ]
+          },
+          "balance_sheet": {
+            "selected_table_index": 11,
+            "selection_score": [
+              4,
+              11
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 11,
+                "row_ids_covered": [
+                  "cash_and_equivalents",
+                  "current_assets",
+                  "current_liabilities",
+                  "inventory",
+                  "liabilities_and_equity",
+                  "operating_current_payables",
+                  "operating_current_receivables",
+                  "property_plant_and_equipment",
+                  "total_assets",
+                  "total_equity",
+                  "total_liabilities"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "",
+                "table_excerpt": "(In millions) (Unaudited) December 31, 2022 June 30, 2022 Assets Current assets: Cash and cash equivalents $ 15,646 $ 13,931 Short-term investments 83,862 90,826 Total cash, cash equivalents, and short-term investments 99,508 104,757 Accounts receivable, net of allowance for doubtful accounts of $ 485 and $ 633 35,833 44,261 Inventories 2,980 3,742 Other current assets 19,502 16,924 Total current assets 157,823 169,684 Property and equipment, net of accumulated depreciation of $ 63,459 and $ 59,"
+              },
+              {
+                "table_index": 13,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Common stock and paid-in capital Balance, beginning of period $ 88,535 $ 83,751 $ 86,939 $ 83,111 Common stock issued 243 291 818 903 Common stock repurchased ( 1,090 ) ( 1,411 ) ( 2,261 ) ( 3,088 ) Stock-based compensation expense 2,538 1,897 4,730 3,599 Other, net ( 1 ) 0 ( 1 ) 3 Balance, end of period 90,225 84,528 90,225 84,528 Retained earnings Balance, begin"
+              },
+              {
+                "table_index": 51,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Derivatives Balance, beginning of period $ ( 6 ) $ ( 17 ) $ ( 13 ) $ ( 19 ) Unrealized gains (losses), net of tax of $ 13 , $( 3 ), $ 2 , and $( 6 ) 49 ( 11 ) 9 ( 21 ) Reclassification adjustments for (gains) losses included in other income (expense), net ( 103 ) 14 ( 44 ) 29 Tax expense (benefit) included in provision for income taxes 22 ( 3 ) 10 ( 6 ) Amounts reclassified from accumulated other comp"
+              },
+              {
+                "table_index": 21,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments December 31, 2022 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 6,423 $ 0 $ 0 $ 6,423 $ 3,307 $ 3,116 $ 0 Certificates of deposit Level 2 2,694 0 0 2,694 2,250 444 0 U.S. government securities Level 1 67,941 0 ( 3,963 ) 63,978 1,029 62,949 0 U.S. agency securities Level 2 5,525 0 ( 6 ) 5,"
+              },
+              {
+                "table_index": 22,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments June 30, 2022 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 2,500 $ 0 $ 0 $ 2,500 $ 2,498 $ 2 $ 0 Certificates of deposit Level 2 2,071 0 0 2,071 2,032 39 0 U.S. government securities Level 1 79,696 29 ( 2,178 ) 77,547 9 77,538 0 U.S. agency securities Level 2 419 0 ( 9 ) 410 0 410 0 Fore"
+              },
+              {
+                "table_index": 32,
+                "row_ids_covered": [
+                  "inventory"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "",
+                "table_excerpt": "(In millions) December 31, 2022 June 30, 2022 Raw materials $ 1,060 $ 1,144 Work in process 38 82 Finished goods 1,882 2,516 Total $ 2,980 $ 3,742"
+              },
+              {
+                "table_index": 47,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "",
+                "table_excerpt": "(In millions, except lease term and discount rate) December 31, 2022 June 30, 2022 Operating Leases Operating lease right-of-use assets $ 13,624 $ 13,148 Other current liabilities $ 2,287 $ 2,228 Operating lease liabilities 11,998 11,489 Total operating lease liabilities $ 14,285 $ 13,717 Finance Leases Property and equipment, at cost $ 18,514 $ 17,388 Accumulated depreciation ( 3,920 ) ( 3,285 ) Property and equipment, net $ 14,594 $ 14,103 Other current liabilities $ 1,105 $ 1,060 Other long-t"
+              }
+            ]
+          },
+          "cash_flow": {
+            "selected_table_index": 12,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 12,
+                "row_ids_covered": [
+                  "cash_flow_beginning_balance",
+                  "cash_flow_ending_balance",
+                  "effect_of_exchange_rates_on_cash",
+                  "financing_cash_flow",
+                  "investing_cash_flow",
+                  "net_change_in_cash",
+                  "operating_cash_flow"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2022 2021 2022 2021 Operations Net income $ 16,425 $ 18,765 $ 33,981 $ 39,270 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 3,648 3,496 6,438 6,708 Stock-based compensation expense 2,538 1,897 4,730 3,599 Net recognized losses (gains) on investments and derivatives 214 ( 307 ) 192 ( 671 ) Deferred income taxes ( 1,305 ) 183 ( 2,496 ) ( 5,787 ) Changes i"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "quarter_id": "msft-historical:2023:Q3:2023-03-31",
+      "accession_number": "0000950170-23-014423",
+      "fiscal_year_focus": "2023",
+      "fiscal_period_focus": "Q3",
+      "start_date": "2023-01-01",
+      "end_date": "2023-03-31",
+      "inclusive_calendar_days": 90,
+      "period_source": {
+        "kind": "inline_revenue_fact_context",
+        "accession_number": "0000950170-23-014423",
+        "row_id": "revenue",
+        "qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "context_id": "C_f4c092f4-8a02-4406-8410-cb2ccbd948a7",
+        "table_index": 6,
+        "row_index": 11,
+        "fact_index": 56
+      },
+      "dei_observations": {
+        "DocumentPeriodEndDate": {
+          "value": "March 31, 2023",
+          "fact_index": 19,
+          "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd",
+          "source_locator": {
+            "fact_index": 19,
+            "table_index": 0,
+            "row_index": 3,
+            "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd"
+          },
+          "iso_date": "2023-03-31"
+        },
+        "DocumentFiscalYearFocus": {
+          "value": "2023",
+          "fact_index": 1,
+          "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd",
+          "source_locator": {
+            "fact_index": 1,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd"
+          }
+        },
+        "DocumentFiscalPeriodFocus": {
+          "value": "Q3",
+          "fact_index": 12,
+          "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd",
+          "source_locator": {
+            "fact_index": 12,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd"
+          }
+        },
+        "DocumentType": {
+          "value": "10-Q",
+          "fact_index": 17,
+          "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd",
+          "source_locator": {
+            "fact_index": 17,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd"
+          }
+        },
+        "EntityCentralIndexKey": {
+          "value": "0000789019",
+          "fact_index": 11,
+          "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd",
+          "source_locator": {
+            "fact_index": 11,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_e3cbe141-c492-42cf-ada1-7faa18cad7bd"
+          }
+        }
+      },
+      "source_evidence": {
+        "primary_html_sha256": "be02f0d09ba558a9fb1b31b1381bdbfccf0850047ddbd33d6a312197588936bc",
+        "primary_html_receipt": {
+          "captured_at": "2026-11-24T15:36:12.400253Z",
+          "content_hash": "be02f0d09ba558a9fb1b31b1381bdbfccf0850047ddbd33d6a312197588936bc",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 8205847,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:11 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 25 Apr 2023 20:09:22 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-014423",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023014423/msft-20230331.htm"
+        },
+        "primary_statement_tables": {
+          "income_statement": {
+            "selected_table_index": 6,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 6,
+                "row_ids_covered": [
+                  "cost_of_revenue",
+                  "gross_profit",
+                  "income_before_tax",
+                  "income_tax_expense",
+                  "net_income",
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "INCOME STA TEMENTS | ITEM 1. FINANCI AL STATEMENTS | PART I. FINANCI AL INFORMATION | Item 1",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Revenue: Product $ 15,588 $ 17,366 $ 47,846 $ 54,776 Service and other 37,269 31,994 107,880 91,629 Total revenue 52,857 49,360 155,726 146,405 Cost of revenue: Product 3,941 4,584 13,933 14,707 Service and other 12,187 11,031 35,135 31,514 Total cost of revenue 16,128 15,615 49,068 46,221 Gross margin 36,729 33,745 106,658 100,184 Research and development 6,984 6,306 "
+              },
+              {
+                "table_index": 42,
+                "row_ids_covered": [
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 2,
+                "table_heading": "Segment revenue and operating income were as follows during the periods presented:",
+                "table_excerpt": "(In millions) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Revenue Productivity and Business Processes $ 17,516 $ 15,789 $ 50,983 $ 46,764 Intelligent Cloud 22,081 18,987 63,914 54,161 More Personal Computing 13,260 14,584 40,829 45,480 Total $ 52,857 $ 49,360 $ 155,726 $ 146,405 Operating Income Productivity and Business Processes $ 8,639 $ 7,185 $ 25,137 $ 22,454 Intelligent Cloud 9,476 8,391 27,358 24,395 More Personal Computing 4,237 4,788 11,774 16,000 Total "
+              },
+              {
+                "table_index": 7,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "COMPREHENSIVE IN COME STATEMENTS | Item 1 | PART I | 3",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Net income $ 18,299 $ 16,728 $ 52,280 $ 55,998 Other comprehensive income (loss), net of tax: Net change related to derivatives ( 9 ) 6 ( 34 ) 8 Net change related to investments 753 ( 2,882 ) ( 796 ) ( 4,047 ) Translation adjustments and other 69 ( 37 ) ( 136 ) ( 259 ) Other comprehensive income (loss) 813 ( 2,913 ) ( 966 ) ( 4,298 ) Comprehensive income $ 19,112 $ 13,815 $ 51,314 $ 51,700"
+              },
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "CASH FLOWS STATEMENTS | Item 1 | PART I | 5",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Operations Net income $ 18,299 $ 16,728 $ 52,280 $ 55,998 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 3,549 3,773 9,987 10,481 Stock-based compensation expense 2,465 1,906 7,195 5,505 Net recognized losses (gains) on investments and derivatives ( 40 ) 105 152 ( 566 ) Deferred income taxes ( 1,675 ) ( 198 ) ( 4,171 ) ( 5,985 ) Changes in"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | Item 1 | PART I | 6",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Common stock and paid-in capital Balance, beginning of period $ 90,225 $ 84,528 $ 86,939 $ 83,111 Common stock issued 536 477 1,354 1,380 Common stock repurchased ( 1,133 ) ( 1,313 ) ( 3,394 ) ( 4,401 ) Stock-based compensation expense 2,465 1,906 7,195 5,505 Other, net 0 169 ( 1 ) 172 Balance, end of period 92,093 85,767 92,093 85,767 Retained earnings Balance, beginn"
+              },
+              {
+                "table_index": 11,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The components of basic and diluted EPS were as follows:",
+                "table_excerpt": "(In millions, except earnings per share) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Net income available for common shareholders (A) $ 18,299 $ 16,728 $ 52,280 $ 55,998 Weighted average outstanding shares of common stock (B) 7,441 7,493 7,450 7,504 Dilutive effect of stock-based awards 23 41 24 48 Common stock and common stock equivalents (C) 7,464 7,534 7,474 7,552 Earnings Per Share Basic (A/B) $ 2.46 $ 2.23 $ 7.02 $ 7.46 Diluted (A/C) $ 2.45 $ 2.22 $ 6.99 $ 7"
+              },
+              {
+                "table_index": 43,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 United States (a) $ 26,007 $ 24,771 $ 78,850 $ 74,064 Other countries 26,850 24,589 76,876 72,341 Total $ 52,857 $ 49,360 $ 155,726 $ 146,405"
+              },
+              {
+                "table_index": 44,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "Revenue, classified by significant product and service offerings, was as follows:",
+                "table_excerpt": "(In millions) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Server products and cloud services $ 20,025 $ 17,046 $ 58,007 $ 48,498 Office products and cloud services 12,438 11,164 35,823 33,223 Windows 5,328 6,069 15,449 18,337 Gaming 3,607 3,740 11,975 12,775 LinkedIn 3,697 3,437 11,236 10,104 Search and news advertising 3,045 2,945 9,196 8,665 Enterprise Services 2,007 1,891 5,745 5,505 Devices 1,282 1,835 4,160 5,606 Other 1,428 1,233 4,135 3,692 Total $ 52,857 "
+              }
+            ]
+          },
+          "balance_sheet": {
+            "selected_table_index": 8,
+            "selection_score": [
+              4,
+              11
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 8,
+                "row_ids_covered": [
+                  "cash_and_equivalents",
+                  "current_assets",
+                  "current_liabilities",
+                  "inventory",
+                  "liabilities_and_equity",
+                  "operating_current_payables",
+                  "operating_current_receivables",
+                  "property_plant_and_equipment",
+                  "total_assets",
+                  "total_equity",
+                  "total_liabilities"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "BALANCE SHEETS | Item 1 | PART I | 4",
+                "table_excerpt": "(In millions) (Unaudited) March 31, 2023 June 30, 2022 Assets Current assets: Cash and cash equivalents $ 26,562 $ 13,931 Short-term investments 77,865 90,826 Total cash, cash equivalents, and short-term investments 104,427 104,757 Accounts receivable, net of allowance for doubtful accounts of $ 495 and $ 633 37,420 44,261 Inventories 2,877 3,742 Other current assets 19,165 16,924 Total current assets 163,889 169,684 Property and equipment, net of accumulated depreciation of $ 65,998 and $ 59,66"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | Item 1 | PART I | 6",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Common stock and paid-in capital Balance, beginning of period $ 90,225 $ 84,528 $ 86,939 $ 83,111 Common stock issued 536 477 1,354 1,380 Common stock repurchased ( 1,133 ) ( 1,313 ) ( 3,394 ) ( 4,401 ) Stock-based compensation expense 2,465 1,906 7,195 5,505 Other, net 0 169 ( 1 ) 172 Balance, end of period 92,093 85,767 92,093 85,767 Retained earnings Balance, beginn"
+              },
+              {
+                "table_index": 41,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The following table summarizes the changes in accumulated other comprehensive income (loss) by component:",
+                "table_excerpt": "(In millions) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Derivatives Balance, beginning of period $ ( 38 ) $ ( 17 ) $ ( 13 ) $ ( 19 ) Unrealized gains (losses), net of tax of $ 1 , $( 1 ), $ 3 , and $( 7 ) 5 ( 6 ) 14 ( 27 ) Reclassification adjustments for (gains) losses included in other income (expense), net ( 18 ) 15 ( 62 ) 44 Tax expense (benefit) included in provision for income taxes 4 ( 3 ) 14 ( 9 ) Amounts reclassified from accumulated other comprehensiv"
+              },
+              {
+                "table_index": 15,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments March 31, 2023 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 9,853 $ 0 $ 0 $ 9,853 $ 9,207 $ 646 $ 0 Certificates of deposit Level 2 2,229 0 0 2,229 2,185 44 0 U.S. government securities Level 1 66,318 1 ( 3,169 ) 63,150 1,550 61,600 0 U.S. agency securities Level 2 7,469 1 ( 2 ) 7,468 4,"
+              },
+              {
+                "table_index": 16,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments June 30, 2022 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 2,500 $ 0 $ 0 $ 2,500 $ 2,498 $ 2 $ 0 Certificates of deposit Level 2 2,071 0 0 2,071 2,032 39 0 U.S. government securities Level 1 79,696 29 ( 2,178 ) 77,547 9 77,538 0 U.S. agency securities Level 2 419 0 ( 9 ) 410 0 410 0 Fore"
+              },
+              {
+                "table_index": 25,
+                "row_ids_covered": [
+                  "inventory"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of inventories were as follows:",
+                "table_excerpt": "(In millions) March 31, 2023 June 30, 2022 Raw materials $ 1,055 $ 1,144 Work in process 35 82 Finished goods 1,787 2,516 Total $ 2,877 $ 3,742"
+              },
+              {
+                "table_index": 37,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "Supplemental balance sheet information related to leases was as follows:",
+                "table_excerpt": "(In millions, except lease term and discount rate) March 31, 2023 June 30, 2022 Operating Leases Operating lease right-of-use assets $ 13,879 $ 13,148 Other current liabilities $ 2,327 $ 2,228 Operating lease liabilities 12,312 11,489 Total operating lease liabilities $ 14,639 $ 13,717 Finance Leases Property and equipment, at cost $ 19,652 $ 17,388 Accumulated depreciation ( 4,287 ) ( 3,285 ) Property and equipment, net $ 15,365 $ 14,103 Other current liabilities $ 1,153 $ 1,060 Other long-term"
+              }
+            ]
+          },
+          "cash_flow": {
+            "selected_table_index": 9,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "cash_flow_beginning_balance",
+                  "cash_flow_ending_balance",
+                  "effect_of_exchange_rates_on_cash",
+                  "financing_cash_flow",
+                  "investing_cash_flow",
+                  "net_change_in_cash",
+                  "operating_cash_flow"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "CASH FLOWS STATEMENTS | Item 1 | PART I | 5",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2023 2022 2023 2022 Operations Net income $ 18,299 $ 16,728 $ 52,280 $ 55,998 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 3,549 3,773 9,987 10,481 Stock-based compensation expense 2,465 1,906 7,195 5,505 Net recognized losses (gains) on investments and derivatives ( 40 ) 105 152 ( 566 ) Deferred income taxes ( 1,675 ) ( 198 ) ( 4,171 ) ( 5,985 ) Changes in"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "quarter_id": "msft-historical:2023:FY:2023-06-30",
+      "accession_number": "0000950170-23-035122",
+      "fiscal_year_focus": "2023",
+      "fiscal_period_focus": "FY",
+      "start_date": "2023-04-01",
+      "end_date": "2023-06-30",
+      "inclusive_calendar_days": 91,
+      "period_source": {
+        "kind": "annual_duration_context_plus_preceding_quarter_boundary",
+        "fiscal_year_context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5",
+        "fiscal_year_start": "2022-07-01",
+        "preceding_quarter_accession": "0000950170-23-014423",
+        "preceding_quarter_end": "2023-03-31"
+      },
+      "dei_observations": {
+        "DocumentPeriodEndDate": {
+          "value": "June 30, 2023",
+          "fact_index": 31,
+          "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5",
+          "source_locator": {
+            "fact_index": 31,
+            "table_index": 1,
+            "row_index": 1,
+            "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5"
+          },
+          "iso_date": "2023-06-30"
+        },
+        "DocumentFiscalYearFocus": {
+          "value": "2023",
+          "fact_index": 32,
+          "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5",
+          "source_locator": {
+            "fact_index": 32,
+            "table_index": 1,
+            "row_index": 1,
+            "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5"
+          }
+        },
+        "DocumentFiscalPeriodFocus": {
+          "value": "FY",
+          "fact_index": 2,
+          "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5",
+          "source_locator": {
+            "fact_index": 2,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5"
+          }
+        },
+        "DocumentType": {
+          "value": "10-K",
+          "fact_index": 29,
+          "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5",
+          "source_locator": {
+            "fact_index": 29,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5"
+          }
+        },
+        "EntityCentralIndexKey": {
+          "value": "0000789019",
+          "fact_index": 0,
+          "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5",
+          "source_locator": {
+            "fact_index": 0,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_da7a1266-ce2b-41b7-83ff-bb6e03dc1fa5"
+          }
+        }
+      },
+      "source_evidence": {
+        "primary_html_sha256": "5ac3868026e907cd8316298af5bd88b095ed0f1dd6b5580b507bcb9fe2cfc6dd",
+        "primary_html_receipt": {
+          "captured_at": "2026-11-24T15:36:16.586584Z",
+          "content_hash": "5ac3868026e907cd8316298af5bd88b095ed0f1dd6b5580b507bcb9fe2cfc6dd",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 9963707,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:15 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 27 Jul 2023 20:03:24 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-035122",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm"
+        },
+        "primary_statement_tables": {
+          "income_statement": {
+            "selected_table_index": 24,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 24,
+                "row_ids_covered": [
+                  "cost_of_revenue",
+                  "gross_profit",
+                  "income_before_tax",
+                  "income_tax_expense",
+                  "net_income",
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "INC OME STATEMENTS | ITEM 8. FINANCIAL STATE MENTS AND SUPPLEMENTARY DATA | Item 8 | PART II",
+                "table_excerpt": "(In millions, except per share amounts) Year Ended June 30, 2023 2022 2021 Revenue: Product $ 64,699 $ 72,732 $ 71,074 Service and other 147,216 125,538 97,014 Total revenue 211,915 198,270 168,088 Cost of revenue: Product 17,804 19,064 18,219 Service and other 48,059 43,586 34,013 Total cost of revenue 65,863 62,650 52,232 Gross margin 146,052 135,620 115,856 Research and development 27,195 24,512 20,716 Sales and marketing 22,759 21,825 20,117 General and administrative 7,575 5,900 5,107 Opera"
+              },
+              {
+                "table_index": 76,
+                "row_ids_covered": [
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 2,
+                "table_heading": "Segment revenue and operating income were as follows during the periods presented:",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 Revenue Productivity and Business Processes $ 69,274 $ 63,364 $ 53,915 Intelligent Cloud 87,907 74,965 59,728 More Personal Computing 54,734 59,941 54,445 Total $ 211,915 $ 198,270 $ 168,088 Operating Income Productivity and Business Processes $ 34,189 $ 29,690 $ 24,351 Intelligent Cloud 37,884 33,203 26,471 More Personal Computing 16,450 20,490 19,094 Total $ 88,523 $ 83,383 $ 69,916"
+              },
+              {
+                "table_index": 25,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "COMPREHENSIVE IN COME STATEMENTS | Item 8 | PART II | 58",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 Net income $ 72,361 $ 72,738 $ 61,271 Other comprehensive income (loss), net of tax: Net change related to derivatives ( 14 ) 6 19 Net change related to investments ( 1,444 ) ( 5,360 ) ( 2,266 ) Translation adjustments and other ( 207 ) ( 1,146 ) 873 Other comprehensive loss ( 1,665 ) ( 6,500 ) ( 1,374 ) Comprehensive income $ 70,696 $ 66,238 $ 59,897"
+              },
+              {
+                "table_index": 27,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "CASH FLOWS S TATEMENTS | Item 8 | PART II | 60",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 Operations Net income $ 72,361 $ 72,738 $ 61,271 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 13,861 14,460 11,686 Stock-based compensation expense 9,611 7,502 6,118 Net recognized losses (gains) on investments and derivatives 196 ( 409 ) ( 1,249 ) Deferred income taxes ( 6,059 ) ( 5,702 ) ( 150 ) Changes in operating assets and liabilities: Accounts receivable ( 4,087 ) ( 6,834 ) ( 6,481 )"
+              },
+              {
+                "table_index": 28,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | Item 8 | PART II | 61",
+                "table_excerpt": "(In millions, except per share amounts) Year Ended June 30, 2023 2022 2021 Common stock and paid-in capital Balance, beginning of period $ 86,939 $ 83,111 $ 80,552 Common stock issued 1,866 1,841 1,963 Common stock repurchased ( 4,696 ) ( 5,688 ) ( 5,539 ) Stock-based compensation expense 9,611 7,502 6,118 Other, net ( 2 ) 173 17 Balance, end of period 93,718 86,939 83,111 Retained earnings Balance, beginning of period 84,281 57,055 34,566 Net income 72,361 72,738 61,271 Common stock cash divide"
+              },
+              {
+                "table_index": 31,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The components of basic and diluted EPS were as follows:",
+                "table_excerpt": "(In millions, except earnings per share) Year Ended June 30, 2023 2022 2021 Net income available for common shareholders (A) $ 72,361 $ 72,738 $ 61,271 Weighted average outstanding shares of common stock (B) 7,446 7,496 7,547 Dilutive effect of stock-based awards 26 44 61 Common stock and common stock equivalents (C) 7,472 7,540 7,608 Earnings Per Share Basic (A/B) $ 9.72 $ 9.70 $ 8.12 Diluted (A/C) $ 9.68 $ 9.65 $ 8.05"
+              },
+              {
+                "table_index": 77,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 United States (a) $ 106,744 $ 100,218 $ 83,953 Other countries 105,171 98,052 84,135 Total $ 211,915 $ 198,270 $ 168,088"
+              },
+              {
+                "table_index": 78,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "Revenue, classified by significant product and service offerings, was as follows:",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 Server products and cloud services $ 79,970 $ 67,350 $ 52,589 Office products and cloud services 48,728 44,862 39,872 Windows 21,507 24,732 22,488 Gaming 15,466 16,230 15,370 LinkedIn 15,145 13,816 10,289 Search and news advertising 12,208 11,591 9,267 Enterprise Services 7,722 7,407 6,943 Devices 5,521 7,306 7,143 Dynamics 5,437 4,687 3,754 Other 211 289 373 Total $ 211,915 $ 198,270 $ 168,088"
+              },
+              {
+                "table_index": 57,
+                "row_ids_covered": [
+                  "income_tax_expense"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of the provision for income taxes were as follows:",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 Current Taxes U.S. federal $ 14,009 $ 8,329 $ 3,285 U.S. state and local 2,322 1,679 1,229 Foreign 6,678 6,672 5,467 Current taxes $ 23,009 $ 16,680 $ 9,981 Deferred Taxes U.S. federal $ ( 6,146 ) $ ( 4,815 ) $ 25 U.S. state and local ( 477 ) ( 1,062 ) ( 204 ) Foreign 564 175 29 Deferred taxes $ ( 6,059 ) $ ( 5,702 ) $ ( 150 ) Provision for income taxes $ 16,950 $ 10,978 $ 9,831"
+              },
+              {
+                "table_index": 58,
+                "row_ids_covered": [
+                  "income_before_tax"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "U.S. and foreign components of income before income taxes were as follows:",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 U.S. $ 52,917 $ 47,837 $ 34,972 Foreign 36,394 35,879 36,130 Income before income taxes $ 89,311 $ 83,716 $ 71,102"
+              }
+            ]
+          },
+          "balance_sheet": {
+            "selected_table_index": 26,
+            "selection_score": [
+              4,
+              11
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 26,
+                "row_ids_covered": [
+                  "cash_and_equivalents",
+                  "current_assets",
+                  "current_liabilities",
+                  "inventory",
+                  "liabilities_and_equity",
+                  "operating_current_payables",
+                  "operating_current_receivables",
+                  "property_plant_and_equipment",
+                  "total_assets",
+                  "total_equity",
+                  "total_liabilities"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "BALANCE SHEETS | Item 8 | PART II | 59",
+                "table_excerpt": "(In millions) June 30, 2023 2022 Assets Current assets: Cash and cash equivalents $ 34,704 $ 13,931 Short-term investments 76,558 90,826 Total cash, cash equivalents, and short-term investments 111,262 104,757 Accounts receivable, net of allowance for doubtful accounts of $ 650 and $ 633 48,688 44,261 Inventories 2,500 3,742 Other current assets 21,807 16,924 Total current assets 184,257 169,684 Property and equipment, net of accumulated depreciation of $ 68,251 and $ 59,660 95,641 74,398 Operat"
+              },
+              {
+                "table_index": 28,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | Item 8 | PART II | 61",
+                "table_excerpt": "(In millions, except per share amounts) Year Ended June 30, 2023 2022 2021 Common stock and paid-in capital Balance, beginning of period $ 86,939 $ 83,111 $ 80,552 Common stock issued 1,866 1,841 1,963 Common stock repurchased ( 4,696 ) ( 5,688 ) ( 5,539 ) Stock-based compensation expense 9,611 7,502 6,118 Other, net ( 2 ) 173 17 Balance, end of period 93,718 86,939 83,111 Retained earnings Balance, beginning of period 84,281 57,055 34,566 Net income 72,361 72,738 61,271 Common stock cash divide"
+              },
+              {
+                "table_index": 71,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 Derivatives Balance, beginning of period $ ( 13 ) $ ( 19 ) $ ( 38 ) Unrealized gains (losses), net of tax of $ 9 , $( 15 ), and $ 9 34 ( 57 ) 34 Reclassification adjustments for (gains) losses included in other income (expense), net ( 61 ) 79 ( 17 ) Tax expense (benefit) included in provision for income taxes 13 ( 16 ) 2 Amounts reclassified from accumulated other comprehensive income (loss) ( 48 ) 63 ( 15 ) Net change related to derivatives, net "
+              },
+              {
+                "table_index": 35,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments June 30, 2023 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 16,589 $ 0 $ 0 $ 16,589 $ 12,231 $ 4,358 $ 0 Certificates of deposit Level 2 2,701 0 0 2,701 2,657 44 0 U.S. government securities Level 1 65,237 2 ( 3,870 ) 61,369 2,991 58,378 0 U.S. agency securities Level 2 2,703 0 0 2,703 89"
+              },
+              {
+                "table_index": 36,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments June 30, 2022 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 2,500 $ 0 $ 0 $ 2,500 $ 2,498 $ 2 $ 0 Certificates of deposit Level 2 2,071 0 0 2,071 2,032 39 0 U.S. government securities Level 1 79,696 29 ( 2,178 ) 77,547 9 77,538 0 U.S. agency securities Level 2 419 0 ( 9 ) 410 0 410 0 Fore"
+              },
+              {
+                "table_index": 45,
+                "row_ids_covered": [
+                  "inventory"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of inventories were as follows:",
+                "table_excerpt": "(In millions) June 30, 2023 2022 Raw materials $ 709 $ 1,144 Work in process 23 82 Finished goods 1,768 2,516 Total $ 2,500 $ 3,742"
+              },
+              {
+                "table_index": 46,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of property and equipment were as follows:",
+                "table_excerpt": "(In millions) June 30, 2023 2022 Land $ 5,683 $ 4,734 Buildings and improvements 68,465 55,014 Leasehold improvements 8,537 7,819 Computer equipment and software 74,961 60,631 Furniture and equipment 6,246 5,860 Total, at cost 163,892 134,058 Accumulated depreciation ( 68,251 ) ( 59,660 ) Total, net $ 95,641 $ 74,398"
+              },
+              {
+                "table_index": 66,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "Supplemental balance sheet information related to leases was as follows:",
+                "table_excerpt": "(In millions, except lease term and discount rate) June 30, 2023 2022 Operating Leases Operating lease right-of-use assets $ 14,346 $ 13,148 Other current liabilities $ 2,409 $ 2,228 Operating lease liabilities 12,728 11,489 Total operating lease liabilities $ 15,137 $ 13,717 Finance Leases Property and equipment, at cost $ 20,538 $ 17,388 Accumulated depreciation ( 4,647 ) ( 3,285 ) Property and equipment, net $ 15,891 $ 14,103 Other current liabilities $ 1,197 $ 1,060 Other long-term liabiliti"
+              }
+            ]
+          },
+          "cash_flow": {
+            "selected_table_index": 27,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 27,
+                "row_ids_covered": [
+                  "cash_flow_beginning_balance",
+                  "cash_flow_ending_balance",
+                  "effect_of_exchange_rates_on_cash",
+                  "financing_cash_flow",
+                  "investing_cash_flow",
+                  "net_change_in_cash",
+                  "operating_cash_flow"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "CASH FLOWS S TATEMENTS | Item 8 | PART II | 60",
+                "table_excerpt": "(In millions) Year Ended June 30, 2023 2022 2021 Operations Net income $ 72,361 $ 72,738 $ 61,271 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 13,861 14,460 11,686 Stock-based compensation expense 9,611 7,502 6,118 Net recognized losses (gains) on investments and derivatives 196 ( 409 ) ( 1,249 ) Deferred income taxes ( 6,059 ) ( 5,702 ) ( 150 ) Changes in operating assets and liabilities: Accounts receivable ( 4,087 ) ( 6,834 ) ( 6,481 )"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "quarter_id": "msft-historical:2024:Q1:2023-09-30",
+      "accession_number": "0000950170-23-054855",
+      "fiscal_year_focus": "2024",
+      "fiscal_period_focus": "Q1",
+      "start_date": "2023-07-01",
+      "end_date": "2023-09-30",
+      "inclusive_calendar_days": 92,
+      "period_source": {
+        "kind": "inline_revenue_fact_context",
+        "accession_number": "0000950170-23-054855",
+        "row_id": "revenue",
+        "qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9",
+        "table_index": 6,
+        "row_index": 11,
+        "fact_index": 56
+      },
+      "dei_observations": {
+        "DocumentPeriodEndDate": {
+          "value": "September 30, 2023",
+          "fact_index": 23,
+          "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9",
+          "source_locator": {
+            "fact_index": 23,
+            "table_index": 0,
+            "row_index": 3,
+            "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9"
+          },
+          "iso_date": "2023-09-30"
+        },
+        "DocumentFiscalYearFocus": {
+          "value": "2024",
+          "fact_index": 4,
+          "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9",
+          "source_locator": {
+            "fact_index": 4,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9"
+          }
+        },
+        "DocumentFiscalPeriodFocus": {
+          "value": "Q1",
+          "fact_index": 0,
+          "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9",
+          "source_locator": {
+            "fact_index": 0,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9"
+          }
+        },
+        "DocumentType": {
+          "value": "10-Q",
+          "fact_index": 21,
+          "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9",
+          "source_locator": {
+            "fact_index": 21,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9"
+          }
+        },
+        "EntityCentralIndexKey": {
+          "value": "0000789019",
+          "fact_index": 3,
+          "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9",
+          "source_locator": {
+            "fact_index": 3,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_705576da-7be5-4d51-9ee4-7b08149476e9"
+          }
+        }
+      },
+      "source_evidence": {
+        "primary_html_sha256": "0925eabdeac1673d3e21d233ced1c8a4d3ae1207fe456ed2d6f7f55e646d76a7",
+        "primary_html_receipt": {
+          "captured_at": "2026-11-24T15:36:21.232394Z",
+          "content_hash": "0925eabdeac1673d3e21d233ced1c8a4d3ae1207fe456ed2d6f7f55e646d76a7",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 4966867,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:20 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 24 Oct 2023 20:08:52 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-054855",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023054855/msft-20230930.htm"
+        },
+        "primary_statement_tables": {
+          "income_statement": {
+            "selected_table_index": 6,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 6,
+                "row_ids_covered": [
+                  "cost_of_revenue",
+                  "gross_profit",
+                  "income_before_tax",
+                  "income_tax_expense",
+                  "net_income",
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "INCOME STA TEMENTS | ITEM 1. FINANCI AL STATEMENTS | PART I. FINANCI AL INFORMATION | Item 1",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended September 30, 2023 2022 Revenue: Product $ 15,535 $ 15,741 Service and other 40,982 34,381 Total revenue 56,517 50,122 Cost of revenue: Product 3,531 4,302 Service and other 12,771 11,150 Total cost of revenue 16,302 15,452 Gross margin 40,215 34,670 Research and development 6,659 6,628 Sales and marketing 5,187 5,126 General and administrative 1,474 1,398 Operating income 26,895 21,518 Other income, net 389 54 Income before "
+              },
+              {
+                "table_index": 40,
+                "row_ids_covered": [
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 2,
+                "table_heading": "Segment revenue and operating income were as follows during the periods presented:",
+                "table_excerpt": "(In millions) Three Months Ended September 30, 2023 2022 Revenue Productivity and Business Processes $ 18,592 $ 16,465 Intelligent Cloud 24,259 20,325 More Personal Computing 13,666 13,332 Total $ 56,517 $ 50,122 Operating Income Productivity and Business Processes $ 9,970 $ 8,323 Intelligent Cloud 11,751 8,978 More Personal Computing 5,174 4,217 Total $ 26,895 $ 21,518"
+              },
+              {
+                "table_index": 7,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "COMPREHENSIVE IN COME STATEMENTS | Item 1 | PART I | 3",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended September 30, 2023 2022 Net income $ 22,291 $ 17,556 Other comprehensive income (loss), net of tax: Net change related to derivatives 21 7 Net change related to investments ( 260 ) ( 1,897 ) Translation adjustments and other ( 355 ) ( 775 ) Other comprehensive loss ( 594 ) ( 2,665 ) Comprehensive income $ 21,697 $ 14,891"
+              },
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "CASH FLOWS STATEMENTS | Item 1 | PART I | 5",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended September 30, 2023 2022 Operations Net income $ 22,291 $ 17,556 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 3,921 2,790 Stock-based compensation expense 2,507 2,192 Net recognized losses (gains) on investments and derivatives 14 ( 22 ) Deferred income taxes ( 568 ) ( 1,191 ) Changes in operating assets and liabilities: Accounts receivable 11,034 11,729 Inventories ( 505 ) ( 543 ) Other current"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | Item 1 | PART I | 6",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended September 30, 2023 2022 Common stock and paid-in capital Balance, beginning of period $ 93,718 $ 86,939 Common stock issued 685 575 Common stock repurchased ( 1,401 ) ( 1,171 ) Stock-based compensation expense 2,507 2,192 Other, net ( 1 ) 0 Balance, end of period 95,508 88,535 Retained earnings Balance, beginning of period 118,848 84,281 Net income 22,291 17,556 Common stock cash dividends ( 5,571 ) ( 5,064 ) Common stock rep"
+              },
+              {
+                "table_index": 11,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The components of basic and diluted EPS were as follows:",
+                "table_excerpt": "(In millions, except earnings per share) Three Months Ended September 30, 2023 2022 Net income available for common shareholders (A) $ 22,291 $ 17,556 Weighted average outstanding shares of common stock (B) 7,429 7,457 Dilutive effect of stock-based awards 33 28 Common stock and common stock equivalents (C) 7,462 7,485 Earnings Per Share Basic (A/B) $ 3.00 $ 2.35 Diluted (A/C) $ 2.99 $ 2.35"
+              },
+              {
+                "table_index": 41,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended September 30, 2023 2022 United States (a) $ 28,812 $ 25,867 Other countries 27,705 24,255 Total $ 56,517 $ 50,122"
+              },
+              {
+                "table_index": 42,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "Revenue, classified by significant product and service offerings, was as follows:",
+                "table_excerpt": "(In millions) Three Months Ended September 30, 2023 2022 Server products and cloud services $ 22,308 $ 18,388 Office products and cloud services 13,140 11,577 Windows 5,567 5,313 Gaming 3,919 3,610 LinkedIn 3,913 3,628 Search and news advertising 3,053 2,913 Enterprise and partner services 1,944 1,929 Dynamics 1,540 1,260 Devices 1,125 1,448 Other 8 56 Total $ 56,517 $ 50,122"
+              }
+            ]
+          },
+          "balance_sheet": {
+            "selected_table_index": 8,
+            "selection_score": [
+              4,
+              11
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 8,
+                "row_ids_covered": [
+                  "cash_and_equivalents",
+                  "current_assets",
+                  "current_liabilities",
+                  "inventory",
+                  "liabilities_and_equity",
+                  "operating_current_payables",
+                  "operating_current_receivables",
+                  "property_plant_and_equipment",
+                  "total_assets",
+                  "total_equity",
+                  "total_liabilities"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "BALANCE SHEETS | Item 1 | PART I | 4",
+                "table_excerpt": "(In millions) (Unaudited) September 30, 2023 June 30, 2023 Assets Current assets: Cash and cash equivalents $ 80,452 $ 34,704 Short-term investments 63,499 76,558 Total cash, cash equivalents, and short-term investments 143,951 111,262 Accounts receivable, net of allowance for doubtful accounts of $ 512 and $ 650 36,953 48,688 Inventories 3,000 2,500 Other current assets 23,682 21,807 Total current assets 207,586 184,257 Property and equipment, net of accumulated depreciation of $ 69,486 and $ 6"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | Item 1 | PART I | 6",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended September 30, 2023 2022 Common stock and paid-in capital Balance, beginning of period $ 93,718 $ 86,939 Common stock issued 685 575 Common stock repurchased ( 1,401 ) ( 1,171 ) Stock-based compensation expense 2,507 2,192 Other, net ( 1 ) 0 Balance, end of period 95,508 88,535 Retained earnings Balance, beginning of period 118,848 84,281 Net income 22,291 17,556 Common stock cash dividends ( 5,571 ) ( 5,064 ) Common stock rep"
+              },
+              {
+                "table_index": 39,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The following table summarizes the changes in accumulated other comprehensive income (loss) by component:",
+                "table_excerpt": "(In millions) Three Months Ended September 30, 2023 2022 Derivatives Balance, beginning of period $ ( 27 ) $ ( 13 ) Unrealized losses, net of tax of $( 4 ) and $( 11 ) ( 15 ) ( 40 ) Reclassification adjustments for losses included in other income (expense), net 46 59 Tax benefit included in provision for income taxes ( 10 ) ( 12 ) Amounts reclassified from accumulated other comprehensive loss 36 47 Net change related to derivatives, net of tax of $ 6 and $ 1 21 7 Balance, end of period $ ( 6 ) $"
+              },
+              {
+                "table_index": 15,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments September 30, 2023 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 3,008 $ 0 $ 0 $ 3,008 $ 3,005 $ 3 $ 0 Certificates of deposit Level 2 1,694 0 0 1,694 1,650 44 0 U.S. government securities Level 1 56,210 2 ( 4,147 ) 52,065 255 51,810 0 U.S. agency securities Level 2 29 0 0 29 0 29 0 Forei"
+              },
+              {
+                "table_index": 16,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments June 30, 2023 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 16,589 $ 0 $ 0 $ 16,589 $ 12,231 $ 4,358 $ 0 Certificates of deposit Level 2 2,701 0 0 2,701 2,657 44 0 U.S. government securities Level 1 65,237 2 ( 3,870 ) 61,369 2,991 58,378 0 U.S. agency securities Level 2 2,703 0 0 2,703 89"
+              },
+              {
+                "table_index": 25,
+                "row_ids_covered": [
+                  "inventory"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of inventories were as follows:",
+                "table_excerpt": "(In millions) September 30, 2023 June 30, 2023 Raw materials $ 520 $ 709 Work in process 15 23 Finished goods 2,465 1,768 Total $ 3,000 $ 2,500"
+              },
+              {
+                "table_index": 35,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "Supplemental balance sheet information related to leases was as follows:",
+                "table_excerpt": "(In millions, except lease term and discount rate) September 30, 2023 June 30, 2023 Operating Leases Operating lease right-of-use assets $ 15,435 $ 14,346 Other current liabilities $ 2,538 $ 2,409 Operating lease liabilities 13,487 12,728 Total operating lease liabilities $ 16,025 $ 15,137 Finance Leases Property and equipment, at cost $ 21,892 $ 20,538 Accumulated depreciation ( 4,949 ) ( 4,647 ) Property and equipment, net $ 16,943 $ 15,891 Other current liabilities $ 1,577 $ 1,197 Other long-"
+              }
+            ]
+          },
+          "cash_flow": {
+            "selected_table_index": 9,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "cash_flow_beginning_balance",
+                  "cash_flow_ending_balance",
+                  "effect_of_exchange_rates_on_cash",
+                  "financing_cash_flow",
+                  "investing_cash_flow",
+                  "net_change_in_cash",
+                  "operating_cash_flow"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "CASH FLOWS STATEMENTS | Item 1 | PART I | 5",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended September 30, 2023 2022 Operations Net income $ 22,291 $ 17,556 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 3,921 2,790 Stock-based compensation expense 2,507 2,192 Net recognized losses (gains) on investments and derivatives 14 ( 22 ) Deferred income taxes ( 568 ) ( 1,191 ) Changes in operating assets and liabilities: Accounts receivable 11,034 11,729 Inventories ( 505 ) ( 543 ) Other current"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "quarter_id": "msft-historical:2024:Q2:2023-12-31",
+      "accession_number": "0000950170-24-008814",
+      "fiscal_year_focus": "2024",
+      "fiscal_period_focus": "Q2",
+      "start_date": "2023-10-01",
+      "end_date": "2023-12-31",
+      "inclusive_calendar_days": 92,
+      "period_source": {
+        "kind": "inline_revenue_fact_context",
+        "accession_number": "0000950170-24-008814",
+        "row_id": "revenue",
+        "qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "context_id": "C_59d0cdd1-a3a0-4a29-b4c3-2685aebdf33d",
+        "table_index": 6,
+        "row_index": 11,
+        "fact_index": 60
+      },
+      "dei_observations": {
+        "DocumentPeriodEndDate": {
+          "value": "December 31, 2023",
+          "fact_index": 23,
+          "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9",
+          "source_locator": {
+            "fact_index": 23,
+            "table_index": 0,
+            "row_index": 3,
+            "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9"
+          },
+          "iso_date": "2023-12-31"
+        },
+        "DocumentFiscalYearFocus": {
+          "value": "2024",
+          "fact_index": 4,
+          "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9",
+          "source_locator": {
+            "fact_index": 4,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9"
+          }
+        },
+        "DocumentFiscalPeriodFocus": {
+          "value": "Q2",
+          "fact_index": 2,
+          "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9",
+          "source_locator": {
+            "fact_index": 2,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9"
+          }
+        },
+        "DocumentType": {
+          "value": "10-Q",
+          "fact_index": 21,
+          "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9",
+          "source_locator": {
+            "fact_index": 21,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9"
+          }
+        },
+        "EntityCentralIndexKey": {
+          "value": "0000789019",
+          "fact_index": 1,
+          "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9",
+          "source_locator": {
+            "fact_index": 1,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_f33c7408-b54a-4d92-8538-2a7b76c26ba9"
+          }
+        }
+      },
+      "source_evidence": {
+        "primary_html_sha256": "b812e789f307ec1c1ef1a9828ff3fc77c4b5258aa32e74fb11ea85e40611d0d6",
+        "primary_html_receipt": {
+          "captured_at": "2026-11-24T15:36:24.580780Z",
+          "content_hash": "b812e789f307ec1c1ef1a9828ff3fc77c4b5258aa32e74fb11ea85e40611d0d6",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 5673416,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:23 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jan 2024 21:07:02 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-008814",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024008814/msft-20231231.htm"
+        },
+        "primary_statement_tables": {
+          "income_statement": {
+            "selected_table_index": 6,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 6,
+                "row_ids_covered": [
+                  "cost_of_revenue",
+                  "gross_profit",
+                  "income_before_tax",
+                  "income_tax_expense",
+                  "net_income",
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "INCOME STA TEMENTS | ITEM 1. FINANCI AL STATEMENTS | PART I. FINANCI AL INFORMATION | Item 1",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Revenue: Product $ 18,941 $ 16,517 $ 34,476 $ 32,258 Service and other 43,079 36,230 84,061 70,611 Total revenue 62,020 52,747 118,537 102,869 Cost of revenue: Product 5,964 5,690 9,495 9,992 Service and other 13,659 11,798 26,430 22,948 Total cost of revenue 19,623 17,488 35,925 32,940 Gross margin 42,397 35,259 82,612 69,929 Research and development 7,142 6,844 "
+              },
+              {
+                "table_index": 43,
+                "row_ids_covered": [
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 2,
+                "table_heading": "Segment revenue and operating income were as follows during the periods presented:",
+                "table_excerpt": "(In millions) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Revenue Productivity and Business Processes $ 19,249 $ 17,002 $ 37,841 $ 33,467 Intelligent Cloud 25,880 21,508 50,139 41,833 More Personal Computing 16,891 14,237 30,557 27,569 Total $ 62,020 $ 52,747 $ 118,537 $ 102,869 Operating Income Productivity and Business Processes $ 10,284 $ 8,175 $ 20,254 $ 16,498 Intelligent Cloud 12,461 8,904 24,212 17,882 More Personal Computing 4,287 3,320 9,461 7,537 T"
+              },
+              {
+                "table_index": 7,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "COMPREHENSIVE IN COME STATEMENTS | Item 1 | PART I | 3",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Net income $ 21,870 $ 16,425 $ 44,161 $ 33,981 Other comprehensive income (loss), net of tax: Net change related to derivatives ( 3 ) ( 32 ) 18 ( 25 ) Net change related to investments 1,331 348 1,071 ( 1,549 ) Translation adjustments and other 660 570 305 ( 205 ) Other comprehensive income (loss) 1,988 886 1,394 ( 1,779 ) Comprehensive income $ 23,858 $ 17,311 $ 45,555 $ 32,202"
+              },
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "CASH FLOWS STATEMENTS | Item 1 | PART I | 5",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Operations Net income $ 21,870 $ 16,425 $ 44,161 $ 33,981 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 5,959 3,648 9,880 6,438 Stock-based compensation expense 2,828 2,538 5,335 4,730 Net recognized losses on investments and derivatives 198 214 212 192 Deferred income taxes ( 1,702 ) ( 1,305 ) ( 2,270 ) ( 2,496 ) Changes in operatin"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | Item 1 | PART I | 6",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Common stock and paid-in capital Balance, beginning of period $ 95,508 $ 88,535 $ 93,718 $ 86,939 Common stock issued 261 243 946 818 Common stock repurchased ( 1,300 ) ( 1,090 ) ( 2,701 ) ( 2,261 ) Stock-based compensation expense 2,828 2,538 5,335 4,730 Other, net 183 ( 1 ) 182 ( 1 ) Balance, end of period 97,480 90,225 97,480 90,225 Retained earnings Balance, b"
+              },
+              {
+                "table_index": 11,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The components of basic and diluted EPS were as follows:",
+                "table_excerpt": "(In millions, except per share amounts) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Net income available for common shareholders (A) $ 21,870 $ 16,425 $ 44,161 $ 33,981 Weighted average outstanding shares of common stock (B) 7,432 7,451 7,431 7,454 Dilutive effect of stock-based awards 36 22 34 25 Common stock and common stock equivalents (C) 7,468 7,473 7,465 7,479 Earnings Per Share Basic (A/B) $ 2.94 $ 2.20 $ 5.94 $ 4.56 Diluted (A/C) $ 2.93 $ 2.20 $ 5.92"
+              },
+              {
+                "table_index": 44,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 United States (a) $ 32,295 $ 26,976 $ 61,107 $ 52,843 Other countries 29,725 25,771 57,430 50,026 Total $ 62,020 $ 52,747 $ 118,537 $ 102,869"
+              },
+              {
+                "table_index": 45,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "Revenue, classified by significant product and service offerings, was as follows:",
+                "table_excerpt": "(In millions) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Server products and cloud services $ 23,953 $ 19,594 $ 46,261 $ 37,982 Office products and cloud services 13,477 11,867 26,617 23,444 Gaming 7,111 4,758 11,030 8,368 Windows 5,262 4,808 10,829 10,121 LinkedIn 4,195 3,833 8,108 7,461 Search and news advertising 3,220 3,209 6,273 6,122 Enterprise and partner services 1,917 1,907 3,861 3,836 Dynamics products and cloud services 1,576 1,302 3,116 2,562 De"
+              }
+            ]
+          },
+          "balance_sheet": {
+            "selected_table_index": 8,
+            "selection_score": [
+              4,
+              11
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 8,
+                "row_ids_covered": [
+                  "cash_and_equivalents",
+                  "current_assets",
+                  "current_liabilities",
+                  "inventory",
+                  "liabilities_and_equity",
+                  "operating_current_payables",
+                  "operating_current_receivables",
+                  "property_plant_and_equipment",
+                  "total_assets",
+                  "total_equity",
+                  "total_liabilities"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "BALANCE SHEETS | Item 1 | PART I | 4",
+                "table_excerpt": "(In millions) (Unaudited) December 31, 2023 June 30, 2023 Assets Current assets: Cash and cash equivalents $ 17,305 $ 34,704 Short-term investments 63,712 76,558 Total cash, cash equivalents, and short-term investments 81,017 111,262 Accounts receivable, net of allowance for doubtful accounts of $ 591 and $ 650 42,831 48,688 Inventories 1,615 2,500 Other current assets 21,930 21,807 Total current assets 147,393 184,257 Property and equipment, net of accumulated depreciation of $ 72,949 and $ 68,"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | Item 1 | PART I | 6",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Common stock and paid-in capital Balance, beginning of period $ 95,508 $ 88,535 $ 93,718 $ 86,939 Common stock issued 261 243 946 818 Common stock repurchased ( 1,300 ) ( 1,090 ) ( 2,701 ) ( 2,261 ) Stock-based compensation expense 2,828 2,538 5,335 4,730 Other, net 183 ( 1 ) 182 ( 1 ) Balance, end of period 97,480 90,225 97,480 90,225 Retained earnings Balance, b"
+              },
+              {
+                "table_index": 42,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The following table summarizes the changes in accumulated other comprehensive income (loss) by component:",
+                "table_excerpt": "(In millions) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Derivatives Balance, beginning of period $ ( 6 ) $ ( 6 ) $ ( 27 ) $ ( 13 ) Unrealized gains, net of tax of $ 10 , $ 13 , $ 6 , and $ 2 37 49 22 9 Reclassification adjustments for gains included in other income (expense), net ( 51 ) ( 103 ) ( 5 ) ( 44 ) Tax expense included in provision for income taxes 11 22 1 10 Amounts reclassified from accumulated other comprehensive loss ( 40 ) ( 81 ) ( 4 ) ( 34 )"
+              },
+              {
+                "table_index": 15,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments December 31, 2023 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 4,577 $ 0 $ 0 $ 4,577 $ 4,574 $ 3 $ 0 Certificates of deposit Level 2 2,973 0 0 2,973 2,931 42 0 U.S. government securities Level 1 54,775 11 ( 2,848 ) 51,938 0 51,938 0 U.S. agency securities Level 2 24 0 0 24 0 24 0 Foreign"
+              },
+              {
+                "table_index": 16,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity Investments June 30, 2023 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 16,589 $ 0 $ 0 $ 16,589 $ 12,231 $ 4,358 $ 0 Certificates of deposit Level 2 2,701 0 0 2,701 2,657 44 0 U.S. government securities Level 1 65,237 2 ( 3,870 ) 61,369 2,991 58,378 0 U.S. agency securities Level 2 2,703 0 0 2,703 89"
+              },
+              {
+                "table_index": 25,
+                "row_ids_covered": [
+                  "inventory"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of inventories were as follows:",
+                "table_excerpt": "(In millions) December 31, 2023 June 30, 2023 Raw materials $ 382 $ 709 Work in process 12 23 Finished goods 1,221 1,768 Total $ 1,615 $ 2,500"
+              },
+              {
+                "table_index": 38,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "Supplemental balance sheet information related to leases was as follows:",
+                "table_excerpt": "(In millions, except lease term and discount rate) December 31, 2023 June 30, 2023 Operating Leases Operating lease right-of-use assets $ 16,398 $ 14,346 Other current liabilities $ 2,787 $ 2,409 Operating lease liabilities 14,155 12,728 Total operating lease liabilities $ 16,942 $ 15,137 Finance Leases Property and equipment, at cost $ 24,245 $ 20,538 Accumulated depreciation ( 5,484 ) ( 4,647 ) Property and equipment, net $ 18,761 $ 15,891 Other current liabilities $ 1,691 $ 1,197 Other long-t"
+              }
+            ]
+          },
+          "cash_flow": {
+            "selected_table_index": 9,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "cash_flow_beginning_balance",
+                  "cash_flow_ending_balance",
+                  "effect_of_exchange_rates_on_cash",
+                  "financing_cash_flow",
+                  "investing_cash_flow",
+                  "net_change_in_cash",
+                  "operating_cash_flow"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "CASH FLOWS STATEMENTS | Item 1 | PART I | 5",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended December 31, Six Months Ended December 31, 2023 2022 2023 2022 Operations Net income $ 21,870 $ 16,425 $ 44,161 $ 33,981 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 5,959 3,648 9,880 6,438 Stock-based compensation expense 2,828 2,538 5,335 4,730 Net recognized losses on investments and derivatives 198 214 212 192 Deferred income taxes ( 1,702 ) ( 1,305 ) ( 2,270 ) ( 2,496 ) Changes in operatin"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "quarter_id": "msft-historical:2024:Q3:2024-03-31",
+      "accession_number": "0000950170-24-048288",
+      "fiscal_year_focus": "2024",
+      "fiscal_period_focus": "Q3",
+      "start_date": "2024-01-01",
+      "end_date": "2024-03-31",
+      "inclusive_calendar_days": 91,
+      "period_source": {
+        "kind": "inline_revenue_fact_context",
+        "accession_number": "0000950170-24-048288",
+        "row_id": "revenue",
+        "qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "context_id": "C_a2d4882c-16ef-4eef-8599-7bb7014adb07",
+        "table_index": 6,
+        "row_index": 11,
+        "fact_index": 61
+      },
+      "dei_observations": {
+        "DocumentPeriodEndDate": {
+          "value": "March 31, 2024",
+          "fact_index": 23,
+          "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678",
+          "source_locator": {
+            "fact_index": 23,
+            "table_index": 0,
+            "row_index": 3,
+            "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678"
+          },
+          "iso_date": "2024-03-31"
+        },
+        "DocumentFiscalYearFocus": {
+          "value": "2024",
+          "fact_index": 24,
+          "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678",
+          "source_locator": {
+            "fact_index": 24,
+            "table_index": 0,
+            "row_index": 3,
+            "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678"
+          }
+        },
+        "DocumentFiscalPeriodFocus": {
+          "value": "Q3",
+          "fact_index": 1,
+          "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678",
+          "source_locator": {
+            "fact_index": 1,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678"
+          }
+        },
+        "DocumentType": {
+          "value": "10-Q",
+          "fact_index": 21,
+          "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678",
+          "source_locator": {
+            "fact_index": 21,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678"
+          }
+        },
+        "EntityCentralIndexKey": {
+          "value": "0000789019",
+          "fact_index": 0,
+          "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678",
+          "source_locator": {
+            "fact_index": 0,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_b68e61d2-1a3b-4a7a-b8d1-ad74757a8678"
+          }
+        }
+      },
+      "source_evidence": {
+        "primary_html_sha256": "7404758f56633f6c251444132ba6d9e7576b752196356ecb2b93b78d3bf45ef4",
+        "primary_html_receipt": {
+          "captured_at": "2026-11-24T15:36:28.558408Z",
+          "content_hash": "7404758f56633f6c251444132ba6d9e7576b752196356ecb2b93b78d3bf45ef4",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 5698665,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:27 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 25 Apr 2024 20:08:00 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-048288",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024048288/msft-20240331.htm"
+        },
+        "primary_statement_tables": {
+          "income_statement": {
+            "selected_table_index": 6,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 6,
+                "row_ids_covered": [
+                  "cost_of_revenue",
+                  "gross_profit",
+                  "income_before_tax",
+                  "income_tax_expense",
+                  "net_income",
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "INCOME STA TEMENTS | ITEM 1. FINANCI AL STATEMENTS | PART I. FINANCI AL INFORMATION | PART I Item 1",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Revenue: Product $ 17,080 $ 15,588 $ 51,556 $ 47,846 Service and other 44,778 37,269 128,839 107,880 Total revenue 61,858 52,857 180,395 155,726 Cost of revenue: Product 4,339 3,941 13,834 13,933 Service and other 14,166 12,187 40,596 35,135 Total cost of revenue 18,505 16,128 54,430 49,068 Gross margin 43,353 36,729 125,965 106,658 Research and development 7,653 6,984"
+              },
+              {
+                "table_index": 44,
+                "row_ids_covered": [
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 2,
+                "table_heading": "Segment revenue and operating income were as follows during the periods presented:",
+                "table_excerpt": "(In millions) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Revenue Productivity and Business Processes $ 19,570 $ 17,516 $ 57,411 $ 50,983 Intelligent Cloud 26,708 22,081 76,847 63,914 More Personal Computing 15,580 13,260 46,137 40,829 Total $ 61,858 $ 52,857 $ 180,395 $ 155,726 Operating Income Productivity and Business Processes $ 10,143 $ 8,639 $ 30,397 $ 25,137 Intelligent Cloud 12,513 9,476 36,725 27,358 More Personal Computing 4,925 4,237 14,386 11,774 Tota"
+              },
+              {
+                "table_index": 7,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "COMPREHENSIVE IN COME STATEMENTS | PART I Item 1 | 3 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Net income $ 21,939 $ 18,299 $ 66,100 $ 52,280 Other comprehensive income (loss), net of tax: Net change related to derivatives 10 ( 9 ) 28 ( 34 ) Net change related to investments ( 202 ) 753 869 ( 796 ) Translation adjustments and other ( 294 ) 69 11 ( 136 ) Other comprehensive income (loss) ( 486 ) 813 908 ( 966 ) Comprehensive income $ 21,453 $ 19,112 $ 67,008 $ 51,314"
+              },
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "CASH FLOWS STATEMENTS | PART I Item 1 | 5 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Operations Net income $ 21,939 $ 18,299 $ 66,100 $ 52,280 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 6,027 3,549 15,907 9,987 Stock-based compensation expense 2,703 2,465 8,038 7,195 Net recognized losses (gains) on investments and derivatives 49 ( 40 ) 261 152 Deferred income taxes ( 1,323 ) ( 1,675 ) ( 3,593 ) ( 4,171 ) Changes in op"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | PART I Item 1 | 6 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Common stock and paid-in capital Balance, beginning of period $ 97,480 $ 90,225 $ 93,718 $ 86,939 Common stock issued 522 536 1,468 1,354 Common stock repurchased ( 1,512 ) ( 1,133 ) ( 4,213 ) ( 3,394 ) Stock-based compensation expense 2,703 2,465 8,038 7,195 Other, net 0 0 182 ( 1 ) Balance, end of period 99,193 92,093 99,193 92,093 Retained earnings Balance, beginnin"
+              },
+              {
+                "table_index": 11,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The components of basic and diluted EPS were as follows:",
+                "table_excerpt": "(In millions, except per share amounts) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Net income available for common shareholders (A) $ 21,939 $ 18,299 $ 66,100 $ 52,280 Weighted average outstanding shares of common stock (B) 7,431 7,441 7,431 7,450 Dilutive effect of stock-based awards 41 23 36 24 Common stock and common stock equivalents (C) 7,472 7,464 7,467 7,474 Earnings Per Share Basic (A/B) $ 2.95 $ 2.46 $ 8.90 $ 7.02 Diluted (A/C) $ 2.94 $ 2.45 $ 8.85 $ 6."
+              },
+              {
+                "table_index": 45,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 United States (a) $ 31,437 $ 26,007 $ 92,544 $ 78,850 Other countries 30,421 26,850 87,851 76,876 Total $ 61,858 $ 52,857 $ 180,395 $ 155,726"
+              },
+              {
+                "table_index": 46,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "Revenue, classified by significant product and service offerings, was as follows:",
+                "table_excerpt": "(In millions) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Server products and cloud services $ 24,832 $ 20,025 $ 71,093 $ 58,007 Office products and cloud services 13,911 12,468 40,528 35,912 Windows 5,929 5,328 16,758 15,449 Gaming 5,451 3,607 16,481 11,975 LinkedIn 4,013 3,659 12,121 11,120 Search and news advertising 3,134 3,036 9,407 9,158 Enterprise and partner services 1,861 2,047 5,722 5,883 Dynamics products and cloud services 1,646 1,389 4,762 3,951 Devi"
+              }
+            ]
+          },
+          "balance_sheet": {
+            "selected_table_index": 8,
+            "selection_score": [
+              4,
+              11
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 8,
+                "row_ids_covered": [
+                  "cash_and_equivalents",
+                  "current_assets",
+                  "current_liabilities",
+                  "inventory",
+                  "liabilities_and_equity",
+                  "operating_current_payables",
+                  "operating_current_receivables",
+                  "property_plant_and_equipment",
+                  "total_assets",
+                  "total_equity",
+                  "total_liabilities"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "BALANCE SHEETS | PART I Item 1 | 4 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) (Unaudited) March 31, 2024 June 30, 2023 Assets Current assets: Cash and cash equivalents $ 19,634 $ 34,704 Short-term investments 60,387 76,558 Total cash, cash equivalents, and short-term investments 80,021 111,262 Accounts receivable, net of allowance for doubtful accounts of $ 616 and $ 650 44,029 48,688 Inventories 1,304 2,500 Other current assets 21,826 21,807 Total current assets 147,180 184,257 Property and equipment, net of accumulated depreciation of $ 74,945 and $ 68,251"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | PART I Item 1 | 6 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Common stock and paid-in capital Balance, beginning of period $ 97,480 $ 90,225 $ 93,718 $ 86,939 Common stock issued 522 536 1,468 1,354 Common stock repurchased ( 1,512 ) ( 1,133 ) ( 4,213 ) ( 3,394 ) Stock-based compensation expense 2,703 2,465 8,038 7,195 Other, net 0 0 182 ( 1 ) Balance, end of period 99,193 92,093 99,193 92,093 Retained earnings Balance, beginnin"
+              },
+              {
+                "table_index": 43,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The following table summarizes the changes in accumulated other comprehensive income (loss) by component:",
+                "table_excerpt": "(In millions) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Derivatives Balance, beginning of period $ ( 9 ) $ ( 38 ) $ ( 27 ) $ ( 13 ) Unrealized gains (losses), net of tax of $( 5 ) , $ 1 , $ 1 , and $ 3 ( 19 ) 5 3 14 Reclassification adjustments for (gains) losses included in other income (expense), net 37 ( 18 ) 32 ( 62 ) Tax expense (benefit) included in provision for income taxes ( 8 ) 4 ( 7 ) 14 Amounts reclassified from accumulated other comprehensive loss "
+              },
+              {
+                "table_index": 15,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity and Other Investments March 31, 2024 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 5,535 $ 0 $ 0 $ 5,535 $ 5,535 $ 0 $ 0 Certificates of deposit Level 2 2,300 0 0 2,300 2,256 44 0 U.S. government securities Level 1 52,036 3 ( 3,074 ) 48,965 4 48,961 0 U.S. agency securities Level 2 23 0 0 23 0 23 0 F"
+              },
+              {
+                "table_index": 16,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity and Other Investments June 30, 2023 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 16,589 $ 0 $ 0 $ 16,589 $ 12,231 $ 4,358 $ 0 Certificates of deposit Level 2 2,701 0 0 2,701 2,657 44 0 U.S. government securities Level 1 65,237 2 ( 3,870 ) 61,369 2,991 58,378 0 U.S. agency securities Level 2 2,703 0 "
+              },
+              {
+                "table_index": 25,
+                "row_ids_covered": [
+                  "inventory"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of inventories were as follows:",
+                "table_excerpt": "(In millions) March 31, 2024 June 30, 2023 Raw materials $ 341 $ 709 Work in process 12 23 Finished goods 951 1,768 Total $ 1,304 $ 2,500"
+              },
+              {
+                "table_index": 39,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "Supplemental balance sheet information related to leases was as follows:",
+                "table_excerpt": "(In millions, except lease term and discount rate) March 31, 2024 June 30, 2023 Operating Leases Operating lease right-of-use assets $ 17,371 $ 14,346 Other current liabilities $ 3,413 $ 2,409 Operating lease liabilities 14,469 12,728 Total operating lease liabilities $ 17,882 $ 15,137 Finance Leases Property and equipment, at cost $ 27,328 $ 20,538 Accumulated depreciation ( 5,865 ) ( 4,647 ) Property and equipment, net $ 21,463 $ 15,891 Other current liabilities $ 1,869 $ 1,197 Other long-term"
+              }
+            ]
+          },
+          "cash_flow": {
+            "selected_table_index": 9,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "cash_flow_beginning_balance",
+                  "cash_flow_ending_balance",
+                  "effect_of_exchange_rates_on_cash",
+                  "financing_cash_flow",
+                  "investing_cash_flow",
+                  "net_change_in_cash",
+                  "operating_cash_flow"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "CASH FLOWS STATEMENTS | PART I Item 1 | 5 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended March 31, Nine Months Ended March 31, 2024 2023 2024 2023 Operations Net income $ 21,939 $ 18,299 $ 66,100 $ 52,280 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 6,027 3,549 15,907 9,987 Stock-based compensation expense 2,703 2,465 8,038 7,195 Net recognized losses (gains) on investments and derivatives 49 ( 40 ) 261 152 Deferred income taxes ( 1,323 ) ( 1,675 ) ( 3,593 ) ( 4,171 ) Changes in op"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "quarter_id": "msft-historical:2024:FY:2024-06-30",
+      "accession_number": "0000950170-24-087843",
+      "fiscal_year_focus": "2024",
+      "fiscal_period_focus": "FY",
+      "start_date": "2024-04-01",
+      "end_date": "2024-06-30",
+      "inclusive_calendar_days": 91,
+      "period_source": {
+        "kind": "annual_duration_context_plus_preceding_quarter_boundary",
+        "fiscal_year_context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337",
+        "fiscal_year_start": "2023-07-01",
+        "preceding_quarter_accession": "0000950170-24-048288",
+        "preceding_quarter_end": "2024-03-31"
+      },
+      "dei_observations": {
+        "DocumentPeriodEndDate": {
+          "value": "June 30, 2024",
+          "fact_index": 28,
+          "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337",
+          "source_locator": {
+            "fact_index": 28,
+            "table_index": 1,
+            "row_index": 1,
+            "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337"
+          },
+          "iso_date": "2024-06-30"
+        },
+        "DocumentFiscalYearFocus": {
+          "value": "2024",
+          "fact_index": 29,
+          "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337",
+          "source_locator": {
+            "fact_index": 29,
+            "table_index": 1,
+            "row_index": 1,
+            "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337"
+          }
+        },
+        "DocumentFiscalPeriodFocus": {
+          "value": "FY",
+          "fact_index": 1,
+          "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337",
+          "source_locator": {
+            "fact_index": 1,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337"
+          }
+        },
+        "DocumentType": {
+          "value": "10-K",
+          "fact_index": 26,
+          "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337",
+          "source_locator": {
+            "fact_index": 26,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337"
+          }
+        },
+        "EntityCentralIndexKey": {
+          "value": "0000789019",
+          "fact_index": 2,
+          "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337",
+          "source_locator": {
+            "fact_index": 2,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_6dbdb3a2-9baf-41b4-922d-f59879124337"
+          }
+        }
+      },
+      "source_evidence": {
+        "primary_html_sha256": "321fd42528989d20b979a438c1fd185260e45e4c902a9089524aad1e6146f65d",
+        "primary_html_receipt": {
+          "captured_at": "2026-11-24T15:36:32.461921Z",
+          "content_hash": "321fd42528989d20b979a438c1fd185260e45e4c902a9089524aad1e6146f65d",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 6861027,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:31 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jul 2024 20:09:31 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-087843",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/msft-20240630.htm"
+        },
+        "primary_statement_tables": {
+          "income_statement": {
+            "selected_table_index": 24,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 24,
+                "row_ids_covered": [
+                  "cost_of_revenue",
+                  "gross_profit",
+                  "income_before_tax",
+                  "income_tax_expense",
+                  "net_income",
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "INC OME STATEMENTS | ITEM 8. FINANCIAL STATE MENTS AND SUPPLEMENTARY DATA | PART II Item 8 | 55",
+                "table_excerpt": "(In millions, except per share amounts) Year Ended June 30, 2024 2023 2022 Revenue: Product $ 64,773 $ 64,699 $ 72,732 Service and other 180,349 147,216 125,538 Total revenue 245,122 211,915 198,270 Cost of revenue: Product 15,272 17,804 19,064 Service and other 58,842 48,059 43,586 Total cost of revenue 74,114 65,863 62,650 Gross margin 171,008 146,052 135,620 Research and development 29,510 27,195 24,512 Sales and marketing 24,456 22,759 21,825 General and administrative 7,609 7,575 5,900 Oper"
+              },
+              {
+                "table_index": 78,
+                "row_ids_covered": [
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 2,
+                "table_heading": "Segment revenue and operating income were as follows during the periods presented:",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 Revenue Productivity and Business Processes $ 77,728 $ 69,274 $ 63,364 Intelligent Cloud 105,362 87,907 74,965 More Personal Computing 62,032 54,734 59,941 Total $ 245,122 $ 211,915 $ 198,270 Operating Income Productivity and Business Processes $ 40,540 $ 34,189 $ 29,690 Intelligent Cloud 49,584 37,884 33,203 More Personal Computing 19,309 16,450 20,490 Total $ 109,433 $ 88,523 $ 83,383"
+              },
+              {
+                "table_index": 25,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "COMPREHENSIVE IN COME STATEMENTS | PART II Item 8 | 56 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 Net income $ 88,136 $ 72,361 $ 72,738 Other comprehensive income (loss), net of tax: Net change related to derivatives 24 ( 14 ) 6 Net change related to investments 957 ( 1,444 ) ( 5,360 ) Translation adjustments and other ( 228 ) ( 207 ) ( 1,146 ) Other comprehensive income (loss) 753 ( 1,665 ) ( 6,500 ) Comprehensive income $ 88,889 $ 70,696 $ 66,238"
+              },
+              {
+                "table_index": 27,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "CASH FLOWS S TATEMENTS | PART II Item 8 | 58 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 Operations Net income $ 88,136 $ 72,361 $ 72,738 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 22,287 13,861 14,460 Stock-based compensation expense 10,734 9,611 7,502 Net recognized losses (gains) on investments and derivatives 305 196 ( 409 ) Deferred income taxes ( 4,738 ) ( 6,059 ) ( 5,702 ) Changes in operating assets and liabilities: Accounts receivable ( 7,191 ) ( 4,087 ) ( 6,834 ) In"
+              },
+              {
+                "table_index": 28,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | PART II Item 8 | 59 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions, except per share amounts) Year Ended June 30, 2024 2023 2022 Common stock and paid-in capital Balance, beginning of period $ 93,718 $ 86,939 $ 83,111 Common stock issued 2,002 1,866 1,841 Common stock repurchased ( 5,712 ) ( 4,696 ) ( 5,688 ) Stock-based compensation expense 10,734 9,611 7,502 Other, net 181 ( 2 ) 173 Balance, end of period 100,923 93,718 86,939 Retained earnings Balance, beginning of period 118,848 84,281 57,055 Net income 88,136 72,361 72,738 Common stock cash di"
+              },
+              {
+                "table_index": 31,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The components of basic and diluted EPS were as follows:",
+                "table_excerpt": "(In millions, except per share amounts) Year Ended June 30, 2024 2023 2022 Net income available for common shareholders (A) $ 88,136 $ 72,361 $ 72,738 Weighted average outstanding shares of common stock (B) 7,431 7,446 7,496 Dilutive effect of stock-based awards 38 26 44 Common stock and common stock equivalents (C) 7,469 7,472 7,540 Earnings Per Share Basic (A/B) $ 11.86 $ 9.72 $ 9.70 Diluted (A/C) $ 11.80 $ 9.68 $ 9.65"
+              },
+              {
+                "table_index": 79,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 United States (a) $ 124,704 $ 106,744 $ 100,218 Other countries 120,418 105,171 98,052 Total $ 245,122 $ 211,915 $ 198,270"
+              },
+              {
+                "table_index": 80,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "Revenue, classified by significant product and service offerings, was as follows:",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 Server products and cloud services $ 97,726 $ 79,970 $ 67,350 Office products and cloud services 54,875 48,848 44,970 Windows 23,244 21,507 24,732 Gaming 21,503 15,466 16,230 LinkedIn 16,372 14,989 13,631 Search and news advertising 12,576 12,158 11,526 Enterprise and partner services 7,594 7,900 7,605 Dynamics products and cloud services 6,481 5,437 4,687 Devices 4,706 5,521 7,306 Other 45 119 233 Total $ 245,122 $ 211,915 $ 198,270"
+              },
+              {
+                "table_index": 59,
+                "row_ids_covered": [
+                  "income_tax_expense"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of the provision for income taxes were as follows:",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 Current Taxes U.S. federal $ 12,165 $ 14,009 $ 8,329 U.S. state and local 2,366 2,322 1,679 Foreign 9,858 6,678 6,672 Current taxes $ 24,389 $ 23,009 $ 16,680 Deferred Taxes U.S. federal $ ( 4,791 ) $ ( 6,146 ) $ ( 4,815 ) U.S. state and local ( 379 ) ( 477 ) ( 1,062 ) Foreign 432 564 175 Deferred taxes $ ( 4,738 ) $ ( 6,059 ) $ ( 5,702 ) Provision for income taxes $ 19,651 $ 16,950 $ 10,978"
+              },
+              {
+                "table_index": 60,
+                "row_ids_covered": [
+                  "income_before_tax"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "U.S. and foreign components of income before income taxes were as follows:",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 U.S. $ 62,886 $ 52,917 $ 47,837 Foreign 44,901 36,394 35,879 Income before income taxes $ 107,787 $ 89,311 $ 83,716"
+              }
+            ]
+          },
+          "balance_sheet": {
+            "selected_table_index": 26,
+            "selection_score": [
+              4,
+              11
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 26,
+                "row_ids_covered": [
+                  "cash_and_equivalents",
+                  "current_assets",
+                  "current_liabilities",
+                  "inventory",
+                  "liabilities_and_equity",
+                  "operating_current_payables",
+                  "operating_current_receivables",
+                  "property_plant_and_equipment",
+                  "total_assets",
+                  "total_equity",
+                  "total_liabilities"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "BALANCE SHEETS | PART II Item 8 | 57 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) June 30, 2024 2023 Assets Current assets: Cash and cash equivalents $ 18,315 $ 34,704 Short-term investments 57,228 76,558 Total cash, cash equivalents, and short-term investments 75,543 111,262 Accounts receivable, net of allowance for doubtful accounts of $ 830 and $ 650 56,924 48,688 Inventories 1,246 2,500 Other current assets 26,021 21,807 Total current assets 159,734 184,257 Property and equipment, net of accumulated depreciation of $ 76,421 and $ 68,251 135,591 95,641 Operat"
+              },
+              {
+                "table_index": 28,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | PART II Item 8 | 59 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions, except per share amounts) Year Ended June 30, 2024 2023 2022 Common stock and paid-in capital Balance, beginning of period $ 93,718 $ 86,939 $ 83,111 Common stock issued 2,002 1,866 1,841 Common stock repurchased ( 5,712 ) ( 4,696 ) ( 5,688 ) Stock-based compensation expense 10,734 9,611 7,502 Other, net 181 ( 2 ) 173 Balance, end of period 100,923 93,718 86,939 Retained earnings Balance, beginning of period 118,848 84,281 57,055 Net income 88,136 72,361 72,738 Common stock cash di"
+              },
+              {
+                "table_index": 73,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 Derivatives Balance, beginning of period $ ( 27 ) $ ( 13 ) $ ( 19 ) Unrealized gains (losses), net of tax of $( 4 ) , $ 9 , and $( 15 ) ( 14 ) 34 ( 57 ) Reclassification adjustments for (gains) losses included in other income (expense), net 48 ( 61 ) 79 Tax expense (benefit) included in provision for income taxes ( 10 ) 13 ( 16 ) Amounts reclassified from accumulated other comprehensive loss 38 ( 48 ) 63 Net change related to derivatives, net of t"
+              },
+              {
+                "table_index": 35,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity and Other Investments June 30, 2024 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 4,666 $ 0 $ 0 $ 4,666 $ 4,666 $ 0 $ 0 Certificates of deposit Level 2 1,547 0 0 1,547 1,503 44 0 U.S. government securities Level 1 49,603 4 ( 2,948 ) 46,659 14 46,645 0 U.S. agency securities Level 2 17 0 0 17 0 17 0 F"
+              },
+              {
+                "table_index": 36,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity and Other Investments June 30, 2023 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 16,589 $ 0 $ 0 $ 16,589 $ 12,231 $ 4,358 $ 0 Certificates of deposit Level 2 2,701 0 0 2,701 2,657 44 0 U.S. government securities Level 1 65,237 2 ( 3,870 ) 61,369 2,991 58,378 0 U.S. agency securities Level 2 2,703 0 "
+              },
+              {
+                "table_index": 45,
+                "row_ids_covered": [
+                  "inventory"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of inventories were as follows:",
+                "table_excerpt": "(In millions) June 30, 2024 2023 Raw materials $ 394 $ 709 Work in process 7 23 Finished goods 845 1,768 Total $ 1,246 $ 2,500"
+              },
+              {
+                "table_index": 46,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of property and equipment were as follows:",
+                "table_excerpt": "(In millions) June 30, 2024 2023 Land $ 8,163 $ 5,683 Buildings and improvements 93,943 68,465 Leasehold improvements 9,594 8,537 Computer equipment and software 93,780 74,961 Furniture and equipment 6,532 6,246 Total, at cost 212,012 163,892 Accumulated depreciation ( 76,421 ) ( 68,251 ) Total, net $ 135,591 $ 95,641"
+              },
+              {
+                "table_index": 68,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "Supplemental balance sheet information related to leases was as follows:",
+                "table_excerpt": "(In millions, except lease term and discount rate) June 30, 2024 2023 Operating Leases Operating lease right-of-use assets $ 18,961 $ 14,346 Other current liabilities $ 3,580 $ 2,409 Operating lease liabilities 15,497 12,728 Total operating lease liabilities $ 19,077 $ 15,137 Finance Leases Property and equipment, at cost $ 32,248 $ 20,538 Accumulated depreciation ( 6,386 ) ( 4,647 ) Property and equipment, net $ 25,862 $ 15,891 Other current liabilities $ 2,349 $ 1,197 Other long-term liabiliti"
+              }
+            ]
+          },
+          "cash_flow": {
+            "selected_table_index": 27,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 27,
+                "row_ids_covered": [
+                  "cash_flow_beginning_balance",
+                  "cash_flow_ending_balance",
+                  "effect_of_exchange_rates_on_cash",
+                  "financing_cash_flow",
+                  "investing_cash_flow",
+                  "net_change_in_cash",
+                  "operating_cash_flow"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "CASH FLOWS S TATEMENTS | PART II Item 8 | 58 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) Year Ended June 30, 2024 2023 2022 Operations Net income $ 88,136 $ 72,361 $ 72,738 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 22,287 13,861 14,460 Stock-based compensation expense 10,734 9,611 7,502 Net recognized losses (gains) on investments and derivatives 305 196 ( 409 ) Deferred income taxes ( 4,738 ) ( 6,059 ) ( 5,702 ) Changes in operating assets and liabilities: Accounts receivable ( 7,191 ) ( 4,087 ) ( 6,834 ) In"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "quarter_id": "msft-historical:2025:Q1:2024-09-30",
+      "accession_number": "0000950170-24-118967",
+      "fiscal_year_focus": "2025",
+      "fiscal_period_focus": "Q1",
+      "start_date": "2024-07-01",
+      "end_date": "2024-09-30",
+      "inclusive_calendar_days": 92,
+      "period_source": {
+        "kind": "inline_revenue_fact_context",
+        "accession_number": "0000950170-24-118967",
+        "row_id": "revenue",
+        "qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163",
+        "table_index": 6,
+        "row_index": 11,
+        "fact_index": 56
+      },
+      "dei_observations": {
+        "DocumentPeriodEndDate": {
+          "value": "September 30, 2024",
+          "fact_index": 23,
+          "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163",
+          "source_locator": {
+            "fact_index": 23,
+            "table_index": 0,
+            "row_index": 3,
+            "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163"
+          },
+          "iso_date": "2024-09-30"
+        },
+        "DocumentFiscalYearFocus": {
+          "value": "2025",
+          "fact_index": 4,
+          "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163",
+          "source_locator": {
+            "fact_index": 4,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163"
+          }
+        },
+        "DocumentFiscalPeriodFocus": {
+          "value": "Q1",
+          "fact_index": 0,
+          "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163",
+          "source_locator": {
+            "fact_index": 0,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163"
+          }
+        },
+        "DocumentType": {
+          "value": "10-Q",
+          "fact_index": 21,
+          "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163",
+          "source_locator": {
+            "fact_index": 21,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163"
+          }
+        },
+        "EntityCentralIndexKey": {
+          "value": "0000789019",
+          "fact_index": 2,
+          "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163",
+          "source_locator": {
+            "fact_index": 2,
+            "table_index": null,
+            "row_index": null,
+            "context_id": "C_d3ddc11e-6dbd-479e-bbe6-c539e2f4c163"
+          }
+        }
+      },
+      "source_evidence": {
+        "primary_html_sha256": "c270beb7c7691f9242c579a4c713a53fccbde96e8b813b31d36ec1014bfff020",
+        "primary_html_receipt": {
+          "captured_at": "2026-11-24T15:36:36.622299Z",
+          "content_hash": "c270beb7c7691f9242c579a4c713a53fccbde96e8b813b31d36ec1014bfff020",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 4284075,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:35 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 30 Oct 2024 20:08:25 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-118967",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024118967/msft-20240930.htm"
+        },
+        "primary_statement_tables": {
+          "income_statement": {
+            "selected_table_index": 6,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 6,
+                "row_ids_covered": [
+                  "cost_of_revenue",
+                  "gross_profit",
+                  "income_before_tax",
+                  "income_tax_expense",
+                  "net_income",
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "INCOME STA TEMENTS | ITEM 1. FINANCI AL STATEMENTS | PART I. FINANCI AL INFORMATION | PART I Item 1",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended September 30, 2024 2023 Revenue: Product $ 15,272 $ 15,535 Service and other 50,313 40,982 Total revenue 65,585 56,517 Cost of revenue: Product 3,294 3,531 Service and other 16,805 12,771 Total cost of revenue 20,099 16,302 Gross margin 45,486 40,215 Research and development 7,544 6,659 Sales and marketing 5,717 5,187 General and administrative 1,673 1,474 Operating income 30,552 26,895 Other income (expense), net ( 283 ) 389"
+              },
+              {
+                "table_index": 43,
+                "row_ids_covered": [
+                  "operating_income",
+                  "revenue"
+                ],
+                "core_rows_covered": 2,
+                "table_heading": "Segment revenue and operating income were as follows during the periods presented:",
+                "table_excerpt": "(In millions) Three Months Ended September 30, 2024 2023 Revenue Productivity and Business Processes $ 28,317 $ 25,226 Intelligent Cloud 24,092 20,013 More Personal Computing 13,176 11,278 Total $ 65,585 $ 56,517 Operating Income Productivity and Business Processes $ 16,516 $ 14,297 Intelligent Cloud 10,503 8,908 More Personal Computing 3,533 3,690 Total $ 30,552 $ 26,895"
+              },
+              {
+                "table_index": 7,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "COMPREHENSIVE IN COME STATEMENTS | PART I Item 1 | 3 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended September 30, 2024 2023 Net income $ 24,667 $ 22,291 Other comprehensive income (loss), net of tax: Net change related to derivatives ( 10 ) 21 Net change related to investments 1,114 ( 260 ) Translation adjustments and other 304 ( 355 ) Other comprehensive income (loss) 1,408 ( 594 ) Comprehensive income $ 26,075 $ 21,697"
+              },
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "CASH FLOWS STATEMENTS | PART I Item 1 | 5 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended September 30, 2024 2023 Operations Net income $ 24,667 $ 22,291 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 7,383 3,921 Stock-based compensation expense 2,832 2,507 Net recognized losses (gains) on investments and derivatives ( 125 ) 14 Deferred income taxes ( 1,433 ) ( 568 ) Changes in operating assets and liabilities: Accounts receivable 14,037 11,034 Inventories ( 373 ) ( 505 ) Other curren"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | PART I Item 1 | 6 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended September 30, 2024 2023 Common stock and paid-in capital Balance, beginning of period $ 100,923 $ 93,718 Common stock issued 706 685 Common stock repurchased ( 1,485 ) ( 1,401 ) Stock-based compensation expense 2,832 2,507 Other, net 0 ( 1 ) Balance, end of period 102,976 95,508 Retained earnings Balance, beginning of period 173,144 118,848 Net income 24,667 22,291 Common stock cash dividends ( 6,171 ) ( 5,571 ) Common stock "
+              },
+              {
+                "table_index": 11,
+                "row_ids_covered": [
+                  "net_income"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The components of basic and diluted EPS were as follows:",
+                "table_excerpt": "(In millions, except earnings per share) Three Months Ended September 30, 2024 2023 Net income available for common shareholders (A) $ 24,667 $ 22,291 Weighted average outstanding shares of common stock (B) 7,433 7,429 Dilutive effect of stock-based awards 37 33 Common stock and common stock equivalents (C) 7,470 7,462 Earnings Per Share Basic (A/B) $ 3.32 $ 3.00 Diluted (A/C) $ 3.30 $ 2.99"
+              },
+              {
+                "table_index": 44,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Three Months Ended September 30, 2024 2023 United States (a) $ 33,913 $ 28,812 Other countries 31,672 27,705 Total $ 65,585 $ 56,517"
+              },
+              {
+                "table_index": 45,
+                "row_ids_covered": [
+                  "revenue"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "Revenue, classified by significant product and service offerings, was as follows:",
+                "table_excerpt": "(In millions) Three Months Ended September 30, 2024 2023 Server products and cloud services $ 22,155 $ 18,062 Microsoft 365 Commercial products and cloud services 20,449 18,044 Gaming 5,621 3,919 Windows and Devices 4,329 4,340 LinkedIn 4,292 3,913 Search and news advertising 3,225 3,018 Enterprise and partner services 1,928 1,944 Dynamics products and cloud services 1,849 1,626 Microsoft 365 Consumer products and cloud services 1,727 1,643 Other 10 8 Total $ 65,585 $ 56,517"
+              }
+            ]
+          },
+          "balance_sheet": {
+            "selected_table_index": 8,
+            "selection_score": [
+              4,
+              11
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 8,
+                "row_ids_covered": [
+                  "cash_and_equivalents",
+                  "current_assets",
+                  "current_liabilities",
+                  "inventory",
+                  "liabilities_and_equity",
+                  "operating_current_payables",
+                  "operating_current_receivables",
+                  "property_plant_and_equipment",
+                  "total_assets",
+                  "total_equity",
+                  "total_liabilities"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "BALANCE SHEETS | PART I Item 1 | 4 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) (Unaudited) September 30, 2024 June 30, 2024 Assets Current assets: Cash and cash equivalents $ 20,840 $ 18,315 Short-term investments 57,588 57,228 Total cash, cash equivalents, and short-term investments 78,428 75,543 Accounts receivable, net of allowance for doubtful accounts of $ 647 and $ 830 44,148 56,924 Inventories 1,626 1,246 Other current assets 25,724 26,021 Total current assets 149,926 159,734 Property and equipment, net of accumulated depreciation of $ 80,517 and $ 76,"
+              },
+              {
+                "table_index": 10,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "STOCKHOLDERS’ EQ UITY STATEMENTS | PART I Item 1 | 6 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions, except per share amounts) (Unaudited) Three Months Ended September 30, 2024 2023 Common stock and paid-in capital Balance, beginning of period $ 100,923 $ 93,718 Common stock issued 706 685 Common stock repurchased ( 1,485 ) ( 1,401 ) Stock-based compensation expense 2,832 2,507 Other, net 0 ( 1 ) Balance, end of period 102,976 95,508 Retained earnings Balance, beginning of period 173,144 118,848 Net income 24,667 22,291 Common stock cash dividends ( 6,171 ) ( 5,571 ) Common stock "
+              },
+              {
+                "table_index": 42,
+                "row_ids_covered": [
+                  "total_equity"
+                ],
+                "core_rows_covered": 1,
+                "table_heading": "The following table summarizes the changes in accumulated other comprehensive income (loss) by component:",
+                "table_excerpt": "(In millions) Three Months Ended September 30, 2024 2023 Derivatives Balance, beginning of period $ ( 3 ) $ ( 27 ) Unrealized gains (losses), net of tax of $ 7 and $( 4 ) 29 ( 15 ) Reclassification adjustments for (gains) losses included in other income (expense), net ( 49 ) 46 Tax expense (benefit) included in provision for income taxes 10 ( 10 ) Amounts reclassified from accumulated other comprehensive loss ( 39 ) 36 Net change related to derivatives, net of tax of $( 3 ) and $ 6 ( 10 ) 21 Bal"
+              },
+              {
+                "table_index": 15,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of investments were as follows:",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity and Other Investments September 30, 2024 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 6,513 $ 0 $ 0 $ 6,513 $ 6,513 $ 0 $ 0 Certificates of deposit Level 2 2,899 0 0 2,899 2,855 44 0 U.S. government securities Level 1 48,764 16 ( 1,828 ) 46,952 0 46,952 0 U.S. agency securities Level 2 17 0 0 17 0 1"
+              },
+              {
+                "table_index": 16,
+                "row_ids_covered": [
+                  "cash_and_equivalents"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "",
+                "table_excerpt": "(In millions) Fair Value Level Adjusted Cost Basis Unrealized Gains Unrealized Losses Recorded Basis Cash and Cash Equivalents Short-term Investments Equity and Other Investments June 30, 2024 Changes in Fair Value Recorded in Other Comprehensive Income Commercial paper Level 2 $ 4,666 $ 0 $ 0 $ 4,666 $ 4,666 $ 0 $ 0 Certificates of deposit Level 2 1,547 0 0 1,547 1,503 44 0 U.S. government securities Level 1 49,603 4 ( 2,948 ) 46,659 14 46,645 0 U.S. agency securities Level 2 17 0 0 17 0 17 0 F"
+              },
+              {
+                "table_index": 25,
+                "row_ids_covered": [
+                  "inventory"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "The components of inventories were as follows:",
+                "table_excerpt": "(In millions) September 30, 2024 June 30, 2024 Raw materials $ 488 $ 394 Work in process 11 7 Finished goods 1,127 845 Total $ 1,626 $ 1,246"
+              },
+              {
+                "table_index": 38,
+                "row_ids_covered": [
+                  "property_plant_and_equipment"
+                ],
+                "core_rows_covered": 0,
+                "table_heading": "Supplemental balance sheet information related to leases was as follows:",
+                "table_excerpt": "(In millions, except lease term and discount rate) September 30, 2024 June 30, 2024 Operating Leases Operating lease right-of-use assets $ 20,528 $ 18,961 Other current liabilities $ 4,009 $ 3,580 Operating lease liabilities 16,361 15,497 Total operating lease liabilities $ 20,370 $ 19,077 Finance Leases Property and equipment, at cost $ 37,186 $ 32,248 Accumulated depreciation ( 7,070 ) ( 6,386 ) Property and equipment, net $ 30,116 $ 25,862 Other current liabilities $ 2,504 $ 2,349 Other long-"
+              }
+            ]
+          },
+          "cash_flow": {
+            "selected_table_index": 9,
+            "selection_score": [
+              4,
+              7
+            ],
+            "selection_basis": "unique primary table with the largest canonical row coverage and core-row coverage",
+            "all_candidate_tables": [
+              {
+                "table_index": 9,
+                "row_ids_covered": [
+                  "cash_flow_beginning_balance",
+                  "cash_flow_ending_balance",
+                  "effect_of_exchange_rates_on_cash",
+                  "financing_cash_flow",
+                  "investing_cash_flow",
+                  "net_change_in_cash",
+                  "operating_cash_flow"
+                ],
+                "core_rows_covered": 4,
+                "table_heading": "CASH FLOWS STATEMENTS | PART I Item 1 | 5 | Refer to accompanying notes.",
+                "table_excerpt": "(In millions) (Unaudited) Three Months Ended September 30, 2024 2023 Operations Net income $ 24,667 $ 22,291 Adjustments to reconcile net income to net cash from operations: Depreciation, amortization, and other 7,383 3,921 Stock-based compensation expense 2,832 2,507 Net recognized losses (gains) on investments and derivatives ( 125 ) 14 Deferred income taxes ( 1,433 ) ( 568 ) Changes in operating assets and liabilities: Accounts receivable 14,037 11,034 Inventories ( 373 ) ( 505 ) Other curren"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "prior_ytd_quarter_end": "2022-09-30",
+  "target_quarter_count": 8,
+  "rolling_ttm_windows": 5,
+  "source_filing_count": 9,
+  "filings": [
+    {
+      "accession_number": "0001564590-22-035087",
+      "form": "10-Q",
+      "filing_date": "2022-10-25",
+      "accepted_at": "2022-10-25T20:08:55.000Z",
+      "reported_period_end": "2022-09-30",
+      "primary_document": "msft-10q_20220930.htm",
+      "source_role": "prior_ytd_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:02.076671Z",
+          "content_hash": "bc2fb61221c8f4ed3d768ca9ed06f085a1d8551aac47e3f5c2acf7fa630e1bdd",
+          "declared_size": 292092,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 292092,
+          "response_headers": [
+            [
+              "content-length",
+              "292092"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:01 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 25 Oct 2022 20:10:04 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-22-035087",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459022035087/0001564590-22-035087-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:04.565066Z",
+          "content_hash": "fa88db75f9f9fdc41df8b68fd18efee3da4ddb75d0d48eae252fc39d24acc8a2",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 18509528,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:03 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 25 Oct 2022 20:10:05 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-22-035087",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459022035087/0001564590-22-035087.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:35:57.718488Z",
+          "content_hash": "6d9bf6bf806cea0e0318c7aae4ceaaa1e61720663d9f400d0ba83b24eca0dc78",
+          "declared_size": 10610,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 10610,
+          "response_headers": [
+            [
+              "content-length",
+              "10610"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:35:57 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-22-035087",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459022035087/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:03.138382Z",
+          "content_hash": "14507e8c612e7c5dc9ff4cfc36b8351d3ba093eb80bfcfc21a6ccb651109716f",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 4048809,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:02 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 25 Oct 2022 20:10:14 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-22-035087",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459022035087/msft-10q_20220930.htm"
+        }
+      ]
+    },
+    {
+      "accession_number": "0001564590-23-000733",
+      "form": "10-Q",
+      "filing_date": "2023-01-24",
+      "accepted_at": "2023-01-24T21:34:20.000Z",
+      "reported_period_end": "2022-12-31",
+      "primary_document": "msft-10q_20221231.htm",
+      "source_role": "target_quarter_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:07.036018Z",
+          "content_hash": "b2cfb4394590b4f40fecb872eec345b83b233a652c2d873e690e4bf6891b5158",
+          "declared_size": 311681,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 311681,
+          "response_headers": [
+            [
+              "content-length",
+              "311681"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:05 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 24 Jan 2023 21:35:28 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-23-000733",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459023000733/0001564590-23-000733-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:09.502270Z",
+          "content_hash": "ccf0c4450a4e63808793e82f7eddf1f5819640a2d925b4070d145fdcf510bf35",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 22217673,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:08 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 24 Jan 2023 21:35:29 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-23-000733",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459023000733/0001564590-23-000733.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:04.938166Z",
+          "content_hash": "c9ce75bace8c17d9fb0aaba07b335f1fbb467df6ee0e4428a2a400037fb2e816",
+          "declared_size": 10409,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 10409,
+          "response_headers": [
+            [
+              "content-length",
+              "10409"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:04 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-23-000733",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459023000733/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:08.087003Z",
+          "content_hash": "c6546587a981291186cc107ed02f15d0a23356ecea20fa4b4511e9f5490fa45c",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 5328709,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:07 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 24 Jan 2023 21:35:38 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0001564590-23-000733",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000156459023000733/msft-10q_20221231.htm"
+        }
+      ]
+    },
+    {
+      "accession_number": "0000950170-23-014423",
+      "form": "10-Q",
+      "filing_date": "2023-04-25",
+      "accepted_at": "2023-04-25T20:07:43.000Z",
+      "reported_period_end": "2023-03-31",
+      "primary_document": "msft-20230331.htm",
+      "source_role": "target_quarter_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:10.989114Z",
+          "content_hash": "2e6b213bdb0c2870f878910e2e227915fbd3177588570b6108f3cb1925d4041f",
+          "declared_size": 395699,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 395699,
+          "response_headers": [
+            [
+              "content-length",
+              "395699"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:10 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 25 Apr 2023 20:09:14 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-014423",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023014423/0000950170-23-014423-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:14.204820Z",
+          "content_hash": "a5ae6478795bd290a6495a89d88eaed773a8d569275a9622546fb32837c8460a",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 32928186,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:12 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 25 Apr 2023 20:09:15 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-014423",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023014423/0000950170-23-014423.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:09.915297Z",
+          "content_hash": "8664f04e7d5944fdbe2d4a38ba5f3e072abbe371f87a2986270f149625b8b45c",
+          "declared_size": 10402,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 10402,
+          "response_headers": [
+            [
+              "content-length",
+              "10402"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:09 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-014423",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023014423/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:12.400253Z",
+          "content_hash": "be02f0d09ba558a9fb1b31b1381bdbfccf0850047ddbd33d6a312197588936bc",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 8205847,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:11 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 25 Apr 2023 20:09:22 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-014423",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023014423/msft-20230331.htm"
+        }
+      ]
+    },
+    {
+      "accession_number": "0000950170-23-035122",
+      "form": "10-K",
+      "filing_date": "2023-07-27",
+      "accepted_at": "2023-07-27T20:01:56.000Z",
+      "reported_period_end": "2023-06-30",
+      "primary_document": "msft-20230630.htm",
+      "source_role": "target_quarter_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:15.321276Z",
+          "content_hash": "914cb7a2643efe16eec2e34949afc8a5c1effcfd0bd188d71995eabbfc165180",
+          "declared_size": 526992,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 526992,
+          "response_headers": [
+            [
+              "content-length",
+              "526992"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:15 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 27 Jul 2023 20:03:09 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-035122",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/0000950170-23-035122-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:18.616310Z",
+          "content_hash": "25643504869832e040eb3c2716af7609dd7289854381fa847be2eeebe4c9f5b2",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 40966463,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:16 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 27 Jul 2023 20:03:10 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-035122",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/0000950170-23-035122.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:14.648379Z",
+          "content_hash": "822271d894ee7bcac93cb0b0cc14ae934171a565d8ee75072091d21eed970b5e",
+          "declared_size": 12890,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 12890,
+          "response_headers": [
+            [
+              "content-length",
+              "12890"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:14 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-035122",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:16.586584Z",
+          "content_hash": "5ac3868026e907cd8316298af5bd88b095ed0f1dd6b5580b507bcb9fe2cfc6dd",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 9963707,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:15 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 27 Jul 2023 20:03:24 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-035122",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm"
+        }
+      ]
+    },
+    {
+      "accession_number": "0000950170-23-054855",
+      "form": "10-Q",
+      "filing_date": "2023-10-24",
+      "accepted_at": "2023-10-24T20:07:40.000Z",
+      "reported_period_end": "2023-09-30",
+      "primary_document": "msft-20230930.htm",
+      "source_role": "target_quarter_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:20.204657Z",
+          "content_hash": "f2771243078c9a4c08dbca8ec5d687773500d96f54f01b75c716c564c879d1c2",
+          "declared_size": 317457,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 317457,
+          "response_headers": [
+            [
+              "content-length",
+              "317457"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:19 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 24 Oct 2023 20:08:43 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-054855",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023054855/0000950170-23-054855-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:22.602518Z",
+          "content_hash": "63b723c8a4a1629fd581c70e7d22726d24459afb55126737be59b6c00362f617",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 22646771,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:21 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 24 Oct 2023 20:08:44 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-054855",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023054855/0000950170-23-054855.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:18.982644Z",
+          "content_hash": "9198d591c397b4045ae1a9764902b0440d9847c5218086b4c34af84e68b398a9",
+          "declared_size": 10214,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 10214,
+          "response_headers": [
+            [
+              "content-length",
+              "10214"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:18 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-054855",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023054855/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:21.232394Z",
+          "content_hash": "0925eabdeac1673d3e21d233ced1c8a4d3ae1207fe456ed2d6f7f55e646d76a7",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 4966867,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:20 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 24 Oct 2023 20:08:52 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-23-054855",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017023054855/msft-20230930.htm"
+        }
+      ]
+    },
+    {
+      "accession_number": "0000950170-24-008814",
+      "form": "10-Q",
+      "filing_date": "2024-01-30",
+      "accepted_at": "2024-01-30T21:05:46.000Z",
+      "reported_period_end": "2023-12-31",
+      "primary_document": "msft-20231231.htm",
+      "source_role": "target_quarter_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:23.592996Z",
+          "content_hash": "238adf6ebb7f61ab0ea469ee34a7d38bbea617e7dcb265e2efbf077e873c1452",
+          "declared_size": 356846,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 356846,
+          "response_headers": [
+            [
+              "content-length",
+              "356846"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:23 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jan 2024 21:06:52 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-008814",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024008814/0000950170-24-008814-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:26.047642Z",
+          "content_hash": "31a4b7dde49985dfa9eb0cf057c7367e4c554a8ee42f8af1ccc1a3555cfe7a3a",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 24016884,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:24 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jan 2024 21:06:52 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-008814",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024008814/0000950170-24-008814.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:23.016769Z",
+          "content_hash": "c268ab618d870c9743adc5c47fc7b86378d9345acda21a33d3a5fd5bd9cff167",
+          "declared_size": 10342,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 10342,
+          "response_headers": [
+            [
+              "content-length",
+              "10342"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:23 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-008814",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024008814/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:24.580780Z",
+          "content_hash": "b812e789f307ec1c1ef1a9828ff3fc77c4b5258aa32e74fb11ea85e40611d0d6",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 5673416,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:23 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jan 2024 21:07:02 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-008814",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024008814/msft-20231231.htm"
+        }
+      ]
+    },
+    {
+      "accession_number": "0000950170-24-048288",
+      "form": "10-Q",
+      "filing_date": "2024-04-25",
+      "accepted_at": "2024-04-25T20:06:24.000Z",
+      "reported_period_end": "2024-03-31",
+      "primary_document": "msft-20240331.htm",
+      "source_role": "target_quarter_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:27.483050Z",
+          "content_hash": "33c43354c96c1732fa043886d68467ed5a9a1fdf0421c4386ada443748065e52",
+          "declared_size": 365927,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 365927,
+          "response_headers": [
+            [
+              "content-length",
+              "365927"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:27 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 25 Apr 2024 20:07:51 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-048288",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024048288/0000950170-24-048288-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:30.133164Z",
+          "content_hash": "0466ce28d9e8c7057ee900e304d078ec09ff8788c3ec8c31878a49f6da1601db",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 24292762,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:28 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 25 Apr 2024 20:07:52 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-048288",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024048288/0000950170-24-048288.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:26.432126Z",
+          "content_hash": "836529d6da641a47c3291f5c64727af2eeb302d5cfdf188e2528bf27831a2d0a",
+          "declared_size": 10434,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 10434,
+          "response_headers": [
+            [
+              "content-length",
+              "10434"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:26 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-048288",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024048288/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:28.558408Z",
+          "content_hash": "7404758f56633f6c251444132ba6d9e7576b752196356ecb2b93b78d3bf45ef4",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 5698665,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:27 GMT"
+            ],
+            [
+              "last-modified",
+              "Thu, 25 Apr 2024 20:08:00 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-048288",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024048288/msft-20240331.htm"
+        }
+      ]
+    },
+    {
+      "accession_number": "0000950170-24-087843",
+      "form": "10-K",
+      "filing_date": "2024-07-30",
+      "accepted_at": "2024-07-30T20:06:22.000Z",
+      "reported_period_end": "2024-06-30",
+      "primary_document": "msft-20240630.htm",
+      "source_role": "target_quarter_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:31.429121Z",
+          "content_hash": "5a7653632f53c2529c4da82d25043fc52f05bfbe536837345aa5904560d92a82",
+          "declared_size": 551435,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 551435,
+          "response_headers": [
+            [
+              "content-length",
+              "551435"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:30 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jul 2024 20:09:20 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-087843",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/0000950170-24-087843-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:34.056772Z",
+          "content_hash": "56c7efc2d90a2372035653cc9fd873829b83f4adb178c1f32e484a48e0d809bb",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 30375960,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:32 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jul 2024 20:09:20 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-087843",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/0000950170-24-087843.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:30.453147Z",
+          "content_hash": "5692bbfccc76991d2cba6f4ddf2a8db9487dfce51ac5dded0b2607660a65a966",
+          "declared_size": 13604,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 13604,
+          "response_headers": [
+            [
+              "content-length",
+              "13604"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:30 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-087843",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:32.461921Z",
+          "content_hash": "321fd42528989d20b979a438c1fd185260e45e4c902a9089524aad1e6146f65d",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 6861027,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:31 GMT"
+            ],
+            [
+              "last-modified",
+              "Tue, 30 Jul 2024 20:09:31 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-087843",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/msft-20240630.htm"
+        }
+      ]
+    },
+    {
+      "accession_number": "0000950170-24-118967",
+      "form": "10-Q",
+      "filing_date": "2024-10-30",
+      "accepted_at": "2024-10-30T20:07:17.000Z",
+      "reported_period_end": "2024-09-30",
+      "primary_document": "msft-20240930.htm",
+      "source_role": "target_quarter_source",
+      "source_responses": [
+        {
+          "captured_at": "2026-11-24T15:36:35.658277Z",
+          "content_hash": "c2633b021dcd9f36160b732de59abf30dbe16fa234de8e92dc7583f312e5b5a5",
+          "declared_size": 323264,
+          "http_status": 200,
+          "media_type": "application/zip",
+          "received_size": 323264,
+          "response_headers": [
+            [
+              "content-length",
+              "323264"
+            ],
+            [
+              "content-type",
+              "application/zip"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:35 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 30 Oct 2024 20:08:17 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-118967",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024118967/0000950170-24-118967-xbrl.zip"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:38.024845Z",
+          "content_hash": "869604009236bade7152e0275bc940cd6f625af066d8d296ae27a9cf6477fed8",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/plain",
+          "received_size": 20482578,
+          "response_headers": [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:36 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 30 Oct 2024 20:08:17 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-118967",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024118967/0000950170-24-118967.txt"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:34.506208Z",
+          "content_hash": "2387057eec60f18e8da9fbe259eb85c0cf411ebef8007930e1caebc8abbede52",
+          "declared_size": 10249,
+          "http_status": 200,
+          "media_type": "application/json",
+          "received_size": 10249,
+          "response_headers": [
+            [
+              "content-length",
+              "10249"
+            ],
+            [
+              "content-type",
+              "application/json; charset=utf-8"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:34 GMT"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-118967",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024118967/index.json"
+        },
+        {
+          "captured_at": "2026-11-24T15:36:36.622299Z",
+          "content_hash": "c270beb7c7691f9242c579a4c713a53fccbde96e8b813b31d36ec1014bfff020",
+          "declared_size": null,
+          "http_status": 200,
+          "media_type": "text/html",
+          "received_size": 4284075,
+          "response_headers": [
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "date",
+              "Tue, 24 Nov 2026 15:36:35 GMT"
+            ],
+            [
+              "last-modified",
+              "Wed, 30 Oct 2024 20:08:25 GMT"
+            ],
+            [
+              "x-akamai-transformed",
+              "0 - 0 -"
+            ]
+          ],
+          "schema_version": "sec-response-receipt.v1",
+          "scope": {
+            "accession_number": "0000950170-24-118967",
+            "cik": "0000789019",
+            "source_profile": "issue495-quarterly-golden-source-capture-v1",
+            "valuation_timestamp": "2024-11-02T00:00:00Z"
+          },
+          "uri": "https://www.sec.gov/Archives/edgar/data/789019/000095017024118967/msft-20240930.htm"
+        }
+      ]
+    }
+  ],
+  "catalog_capture": {
+    "annual_inspection_catalog_artifact": "annual-discovery:2bd452f3417c6250a8afd305da296fc6e3fa3ab8047d50bacf614d0ac3d2ff10",
+    "annual_inspection_catalog_digest": "fba801678dc19600361f1e74cb528acecdef7e7dda34c81c9f8193e4806d431a",
+    "response_receipts": [
+      {
+        "captured_at": "2026-11-24T15:05:50.577616Z",
+        "content_hash": "0c7415804bdda6f5daea74122223596eecc02ee5fe23de8e83cf4e2630ff03e0",
+        "declared_size": null,
+        "http_status": 200,
+        "media_type": "application/json",
+        "received_size": 186831,
+        "response_headers": [
+          [
+            "content-type",
+            "application/json"
+          ],
+          [
+            "date",
+            "Tue, 24 Nov 2026 15:05:50 GMT"
+          ]
+        ],
+        "schema_version": "sec-response-receipt.v1",
+        "scope": {
+          "cik": "0000789019",
+          "protocol": "sec-original-annual-discovery-v1",
+          "valuation_timestamp": "2024-11-02T00:00:00Z"
+        },
+        "uri": "https://data.sec.gov/submissions/CIK0000789019.json"
+      }
+    ]
+  }
+}
