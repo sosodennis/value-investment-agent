@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 from .data_releases import DataReleaseError
+from .content_publication import configured_content_publication_access
 from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
 from .replay import ArtifactPublicationV1, ArtifactRecordV1, ArtifactStore
 
@@ -61,7 +62,12 @@ def command_artifacts(
     try:
         metadata.start()
         yield PostgresArtifactStore(
-            metadata, PostgresContentStore(Path(data_root) / "content", metadata)
+            metadata,
+            PostgresContentStore(
+                Path(data_root) / "content",
+                metadata,
+                publication_access=configured_content_publication_access(),
+            ),
         )
     finally:
         metadata.close()

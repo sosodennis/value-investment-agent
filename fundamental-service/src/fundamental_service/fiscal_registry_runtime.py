@@ -21,6 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from .contracts import StrictModel
+from .content_publication import configured_content_publication_access
 from .data_releases import ArtifactRefV1
 from .fiscal_admission_authority import FiscalAuthorityOwner
 from .fiscal_admission_history import (
@@ -140,6 +141,7 @@ def fiscal_registry_executable_digest() -> str:
                 "contracts.py",
                 "replay.py",
                 "snapshots.py",
+                "content_publication.py",
             )
         )
     )
@@ -696,7 +698,12 @@ def configured_fiscal_registry_runtime() -> Iterator[FiscalRegistryRuntime]:
     try:
         metadata.start_read_only()
         artifacts = PostgresArtifactStore(
-            metadata, PostgresContentStore(Path(data_root) / "content", metadata)
+            metadata,
+            PostgresContentStore(
+                Path(data_root) / "content",
+                metadata,
+                publication_access=configured_content_publication_access(),
+            ),
         )
         yield FiscalRegistryRuntime(
             installation=installation,

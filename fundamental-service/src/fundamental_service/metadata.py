@@ -65,6 +65,7 @@ from .replay import (
     check_publication_budget,
 )
 from .serialization import canonical_bytes, sha256_digest
+from .content_publication import ContentPublicationAccess, PrivateContentPublication
 from .snapshots import FilesystemContentStore, SnapshotError, SnapshotRepository
 
 SCHEMA = "fundamental"
@@ -2083,6 +2084,7 @@ class PostgresMetadataStore:
 class _ReadOnlyFilesystemContentStore(FilesystemContentStore):
     def __init__(self, root: Path) -> None:
         self.root = root
+        self._publication_access = PrivateContentPublication()
 
     def put(self, content: bytes, *, media_type: str) -> str:
         raise SnapshotError(
@@ -2094,7 +2096,12 @@ class PostgresContentStore:
     """Filesystem bytes with PostgreSQL content-object metadata."""
 
     def __init__(
-        self, root: Path, metadata: PostgresMetadataStore, *, read_only: bool = False
+        self,
+        root: Path,
+        metadata: PostgresMetadataStore,
+        *,
+        read_only: bool = False,
+        publication_access: ContentPublicationAccess = PrivateContentPublication(),
     ) -> None:
         if read_only and not root.is_dir():
             raise SnapshotError(
@@ -2114,6 +2121,9 @@ class PostgresContentStore:
         self._filesystem_view: FilesystemContentStore | None = None
         self._metadata = metadata
         self._read_only = read_only
+        self._publication_access = (
+            PrivateContentPublication() if read_only else publication_access
+        )
 
     @property
     def _filesystem(self) -> FilesystemContentStore:
@@ -2121,7 +2131,9 @@ class PostgresContentStore:
             self._filesystem_view = (
                 _ReadOnlyFilesystemContentStore(self._root)
                 if self._read_only
-                else FilesystemContentStore(self._root)
+                else FilesystemContentStore(
+                    self._root, publication_access=self._publication_access
+                )
             )
         return self._filesystem_view
 
