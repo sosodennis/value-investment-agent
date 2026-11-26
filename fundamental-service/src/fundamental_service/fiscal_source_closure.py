@@ -80,6 +80,12 @@ class FiscalArtifactRead:
         self._check_deadline = check_deadline
         self._records: dict[str, ArtifactRecordV1 | None] = {}
         self._bodies: dict[str, tuple[str, int]] = {}
+        self._parent: FiscalArtifactRead | None = None
+
+    def for_consumer(self) -> FiscalArtifactRead:
+        reader = FiscalArtifactRead(self._artifacts, self._check_deadline)
+        reader._parent = self
+        return reader
 
     def current(self, identity: str) -> ArtifactRecordV1 | None:
         self._check_deadline()
@@ -95,6 +101,14 @@ class FiscalArtifactRead:
     def expect(self, identity: str, record: ArtifactRecordV1 | None) -> None:
         if self._records.setdefault(identity, record) != record:
             raise _invalid("fiscal validation artifact metadata changed")
+        if self._parent is not None:
+            self._parent.expect(identity, record)
+
+    def _expect_body(self, identity: str, body: tuple[str, int]) -> None:
+        if self._bodies.setdefault(identity, body) != body:
+            raise _invalid("fiscal validation artifact bytes changed")
+        if self._parent is not None:
+            self._parent._expect_body(identity, body)
 
     def get(self, artifact_id: str) -> ArtifactRecordV1:
         record = self.current(artifact_id)
@@ -117,9 +131,7 @@ class FiscalArtifactRead:
         self._check_deadline()
         if hashlib.sha256(raw).hexdigest() != record.content_hash:
             raise _invalid("fiscal validation artifact bytes changed")
-        body = (record.content_hash, len(raw))
-        if self._bodies.setdefault(artifact_id, body) != body:
-            raise _invalid("fiscal validation artifact bytes changed")
+        self._expect_body(artifact_id, (record.content_hash, len(raw)))
         return raw
 
     def check_bodies(self) -> None:

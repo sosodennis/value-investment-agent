@@ -167,6 +167,7 @@ class FiscalClassificationSourceResolver:
             return SnapshotError("FISCAL_CLASSIFICATION_INVALID", message)
 
         check_deadline()
+        reader = reader.for_consumer()
         raw = read_retained_artifact(reader, source_ref)
         sources, discovery_owner, witnesses, content_store = (
             self.sources,

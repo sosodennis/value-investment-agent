@@ -508,9 +508,43 @@ def test_retained_sec_policy_producer_classifies_and_current_reader_replays(
                 require_production_evidence=True,
             )
             runtime.installation.private_key_file.unlink()
-            result = reader.require_candidate_source(
-                source.scope, (reference,), deadline_at=deadline()
-            )
+            derivation = None
+            observe = resolver.observe
+
+            def observe_source(*args, **kwargs):
+                nonlocal derivation
+                derivation = observe(*args, **kwargs)
+                return derivation
+
+            with monkeypatch.context() as capture:
+                capture.setattr(resolver, "observe", observe_source)
+                with reader.open_candidate_source(
+                    source.scope, (reference,), deadline_at=deadline()
+                ) as admission:
+                    result = admission.current()
+                    assert derivation is not None
+                    accreditation_id = (
+                        reader.producer_evidence.accreditation().artifact_id
+                    )
+                    read = artifacts.read
+
+                    def refuse_late_parent_body(identity):
+                        if identity == accreditation_id:
+                            raise SnapshotError(
+                                "ARTIFACT_BYTES_UNAVAILABLE",
+                                "synthetic late parent body unavailable",
+                            )
+                        return read(identity)
+
+                    with monkeypatch.context() as late:
+                        late.setattr(artifacts, "read", refuse_late_parent_body)
+                        derivation.check_current()
+                        with pytest.raises(
+                            SnapshotError,
+                            match="synthetic late parent body unavailable",
+                        ) as raised:
+                            admission.current()
+                        assert raised.value.code == "ARTIFACT_BYTES_UNAVAILABLE"
             assert result.source_use.scope == source.scope
             assert len(result.activities) == 3
             original = release.read_bytes()

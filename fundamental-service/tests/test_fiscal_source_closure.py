@@ -14,7 +14,10 @@ from fundamental_service.contracts import (
     SecIntegrityEvidenceV1,
 )
 from fundamental_service.data_releases import ArtifactRefV1
-from fundamental_service.fiscal_source_closure import FiscalSourceClosure
+from fundamental_service.fiscal_source_closure import (
+    FiscalArtifactRead,
+    FiscalSourceClosure,
+)
 from fundamental_service.fiscal_source_contracts import evaluate_fiscal_issuer
 from fundamental_service.fiscal_validation_contracts import (
     FiscalOriginalValidationRequestV1,
@@ -75,6 +78,170 @@ def _closure(harness, source, *, lock=None, pin=None):
         capture_lock=lock or (lambda key, deadline_at: uncontended_lock(key)),
         clock=lambda: harness.now,
     )
+
+
+@pytest.mark.parametrize("parent_read_first", (False, True))
+def test_consumer_keeps_overlap_but_does_not_inherit_parent_reads(
+    tmp_path, parent_read_first
+):
+    artifacts = ArtifactStore(tmp_path)
+    shared = artifacts.put("shared", {"value": "shared"})
+    later = artifacts.put("later", {"value": "later"})
+    parent = FiscalArtifactRead(artifacts, lambda: 60)
+    shared_raw = artifacts.read(shared.artifact_id)
+    if parent_read_first:
+        parent.read(shared.artifact_id)
+    consumer = parent.for_consumer()
+    assert consumer.records == ()
+    assert consumer.read(shared.artifact_id) == shared_raw
+    parent.read(later.artifact_id)
+    assert consumer.records == ((shared.artifact_id, shared),)
+    assert parent.records == (
+        (shared.artifact_id, shared),
+        (later.artifact_id, later),
+    )
+
+    artifacts._artifact_path(later.content_hash, later.media_type).write_bytes(
+        b"changed"
+    )
+    consumer.check_bodies()
+    with pytest.raises(SnapshotError):
+        parent.check_bodies()
+    artifacts._artifact_path(shared.content_hash, shared.media_type).write_bytes(
+        b"changed"
+    )
+    with pytest.raises(SnapshotError):
+        consumer.check_bodies()
+
+
+@pytest.mark.parametrize("consumer", (False, True))
+def test_reader_keeps_metadata_absence_and_non_enrolling_probe(tmp_path, consumer):
+    artifacts = ArtifactStore(tmp_path)
+    metadata = artifacts.put("metadata", {"value": "metadata"}, ("1" * 64,))
+    parent = FiscalArtifactRead(artifacts, lambda: 60)
+    reader = parent.for_consumer() if consumer else parent
+    assert reader.current("missing") is None
+    assert reader.records == ()
+    reader.expect(metadata.artifact_id, metadata)
+    reader.expect("absent", None)
+    assert (
+        parent.records
+        == reader.records
+        == (
+            (metadata.artifact_id, metadata),
+            ("absent", None),
+        )
+    )
+    artifacts._artifact_path(metadata.content_hash, metadata.media_type).write_bytes(
+        b"unconsumed body"
+    )
+    reader.check_bodies()
+    artifacts.put("absent", {"value": "appeared"})
+    for observed in (reader, parent):
+        with pytest.raises(SnapshotError, match="metadata changed"):
+            observed.check_current()
+    with pytest.raises(SnapshotError, match="metadata changed"):
+        reader.get("absent")
+    assert dict(reader.records)["absent"] is None
+    assert dict(parent.records)["absent"] is None
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        {"content_hash": "2" * 64},
+        {"media_type": "text/plain"},
+        {"dependency_hashes": ("3" * 64,)},
+        {"status": "invalidated"},
+        {"retention": "operational_cache"},
+    ),
+)
+def test_consumer_metadata_conflict_cannot_replace_parent_observation(tmp_path, change):
+    artifacts = ArtifactStore(tmp_path)
+    record = artifacts.put("metadata", {"value": "metadata"})
+    parent = FiscalArtifactRead(artifacts, lambda: 60)
+    parent.expect(record.artifact_id, record)
+    consumer = parent.for_consumer()
+    changed = record.model_copy(update=change)
+    with pytest.raises(SnapshotError, match="metadata changed"):
+        consumer.expect(record.artifact_id, changed)
+    assert parent.records == ((record.artifact_id, record),)
+    assert consumer.records == ((record.artifact_id, changed),)
+    with pytest.raises(SnapshotError, match="metadata changed"):
+        consumer.expect(record.artifact_id, record)
+    parent.check_current()
+
+
+@pytest.mark.parametrize("consumer", (False, True))
+@pytest.mark.parametrize("failure", ("io", "registration", "hash", "deadline"))
+def test_reader_does_not_return_bytes_after_store_or_deadline_failure(
+    tmp_path, monkeypatch, consumer, failure
+):
+    artifacts = ArtifactStore(tmp_path)
+    record = artifacts.put("body", {"value": "body"})
+    expired = False
+
+    def budget():
+        if expired:
+            raise SnapshotError("REQUEST_DEADLINE_EXCEEDED", "deadline expired")
+        return 60
+
+    parent = FiscalArtifactRead(artifacts, budget)
+    reader = parent.for_consumer() if consumer else parent
+    original = artifacts.read
+
+    def read(identity):
+        nonlocal expired
+        if failure == "io":
+            raise OSError("synthetic read failed")
+        if failure == "registration":
+            raise SnapshotError("CONTENT_NOT_FOUND", "synthetic registration missing")
+        if failure == "hash":
+            return b"changed"
+        raw = original(identity)
+        expired = True
+        return raw
+
+    monkeypatch.setattr(artifacts, "read", read)
+    with pytest.raises((OSError, SnapshotError)) as raised:
+        reader.read(record.artifact_id)
+    if failure == "io":
+        assert isinstance(raised.value, OSError)
+        assert str(raised.value) == "synthetic read failed"
+    else:
+        assert isinstance(raised.value, SnapshotError)
+        assert (
+            raised.value.code
+            == {
+                "registration": "CONTENT_NOT_FOUND",
+                "hash": "FISCAL_VALIDATION_INVALID",
+                "deadline": "REQUEST_DEADLINE_EXCEEDED",
+            }[failure]
+        )
+    assert parent.records == reader.records == ((record.artifact_id, record),)
+    monkeypatch.setattr(artifacts, "read", original)
+    expired = False
+    assert reader.read(record.artifact_id) == original(record.artifact_id)
+    parent.check_bodies()
+
+
+@pytest.mark.parametrize("conflicting_owner", ("local", "parent"))
+def test_consumer_body_conflict_does_not_return_bytes_or_replace_first_length(
+    tmp_path, conflicting_owner
+):
+    artifacts = ArtifactStore(tmp_path)
+    record = artifacts.put("body", {"value": "body"})
+    parent = FiscalArtifactRead(artifacts, lambda: 60)
+    consumer = parent.for_consumer()
+    owner = consumer if conflicting_owner == "local" else parent
+    owner._expect_body(
+        record.artifact_id,
+        (record.content_hash, len(artifacts.read(record.artifact_id)) + 1),
+    )
+    with pytest.raises(SnapshotError, match="bytes changed"):
+        consumer.read(record.artifact_id)
+    with pytest.raises(SnapshotError, match="bytes changed"):
+        owner.check_bodies()
 
 
 @dataclass
