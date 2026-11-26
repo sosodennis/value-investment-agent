@@ -421,18 +421,15 @@ class ParserBuildChecks:
             self.current()
 
 
-def parser_action_input(
-    path: Path,
-    *,
-    representation: Literal["normalized", "archive"],
-    delivery_revision: str,
-    normalization_inputs: tuple[str, ...],
-    profile: ArelleValidationProfileV1,
-    taxonomy_version: str,
-    taxonomy_cache_dir: Path,
-    source_content_hash: str,
-    build_checks: ParserBuildChecks | None = None,
-) -> ParserActionInput:
+@dataclass(frozen=True)
+class ParserActionResources:
+    physical: tuple[tuple[str, str], ...]
+    logical: tuple[tuple[str, str], ...]
+
+
+def parser_action_resources(
+    profile: ArelleValidationProfileV1, taxonomy_cache_dir: Path
+) -> ParserActionResources:
     resources: list[tuple[str, str]] = []
     for name, directory in (
         ("taxonomy", taxonomy_cache_dir),
@@ -460,6 +457,25 @@ def parser_action_input(
                 digest = hashlib.file_digest(handle, "sha256").hexdigest()
                 resources.append((str(item), digest))
                 logical_files.append((role + ":" + item.name, digest))
+    return ParserActionResources(
+        tuple(sorted(dict(resources).items())),
+        tuple(sorted((*resource_trees, *logical_files))),
+    )
+
+
+def parser_action_input(
+    path: Path,
+    *,
+    representation: Literal["normalized", "archive"],
+    delivery_revision: str,
+    normalization_inputs: tuple[str, ...],
+    profile: ArelleValidationProfileV1,
+    taxonomy_version: str,
+    taxonomy_cache_dir: Path,
+    source_content_hash: str,
+    build_checks: ParserBuildChecks | None = None,
+) -> ParserActionInput:
+    resources = parser_action_resources(profile, taxonomy_cache_dir)
     staged = _files(path.parent)
     if dict(staged).get(path.name) != source_content_hash:
         raise SnapshotError("SOURCE_HASH_MISMATCH", "parser action input differs")
@@ -468,7 +484,7 @@ def parser_action_input(
         entrypoint=path.name,
         files=staged,
         normalization_inputs=tuple(sorted(set(normalization_inputs))),
-        resources=tuple(sorted(dict(resources).items())),
+        resources=resources.physical,
         profile_digest=profile.digest(),
         taxonomy_version=taxonomy_version,
         source_content_hash=source_content_hash,
@@ -482,7 +498,7 @@ def parser_action_input(
             return ParserActionInputV3.model_validate(
                 {
                     **fields,
-                    "resources": tuple(sorted((*resource_trees, *logical_files))),
+                    "resources": resources.logical,
                     "build": build,
                 }
             )

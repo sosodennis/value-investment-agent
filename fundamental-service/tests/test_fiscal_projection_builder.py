@@ -71,6 +71,32 @@ class SyntheticRetainedSourcePort:
             item, ((identity, self.artifacts.get(identity)),)
         )
 
+    def observe(self, identity, *, deadline_at):
+        from copy import deepcopy
+
+        owner = self
+        original = deepcopy(self.read_with_metadata(identity, deadline_at=deadline_at))
+
+        class Read:
+            @property
+            def evidence(self):
+                return deepcopy(original.evidence)
+
+            @property
+            def records(self):
+                return original.records
+
+            def check_current(self):
+                assert (
+                    owner.read_with_metadata(identity, deadline_at=deadline_at)
+                    == original
+                )
+                raw = owner.artifacts.read(identity)
+                assert raw == canonical_bytes(original.evidence.model_dump(mode="json"))
+                assert datetime.now(UTC) < deadline_at
+
+        return Read()
+
 
 class SyntheticClassificationPort:
     def __init__(self, bindings):

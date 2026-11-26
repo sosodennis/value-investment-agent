@@ -185,6 +185,41 @@ class FiscalSourceProducerEvidenceVerifier:
     def __init__(self, accreditation: AccountingAccreditationProvider) -> None:
         self.accreditation = accreditation
 
+    def require_current(
+        self,
+        reference: ArtifactRefV1,
+        expires_at: datetime,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        now: datetime,
+    ) -> FiscalAccountingAccreditationV1:
+        check_deadline()
+        expected = self.accreditation()
+        raw = _body(reader, reference, "fiscal-accounting-accreditation-v1")
+        accreditation = FiscalAccountingAccreditationV1.model_validate_json(raw)
+        if (
+            expected != reference
+            or raw != canonical_bytes(accreditation)
+            or accreditation.policy != source_accounting_policy_identity()
+            or accreditation.classifier_executable_digest
+            != fiscal_source_producer_executable_digest()
+            or not accreditation.valid_from
+            <= now
+            < expires_at
+            <= accreditation.valid_until
+        ):
+            raise producer_invalid(
+                "accounting policy accreditation is not current and exact"
+            )
+        read_retained_artifact(reader, accreditation.independent_review_ref)
+        if self.accreditation() != expected:
+            raise producer_invalid(
+                "accounting accreditation changed during verification"
+            )
+        check_deadline()
+        return accreditation
+
     def verify(
         self,
         command: FiscalRecordClassificationCommandV2,
@@ -199,25 +234,13 @@ class FiscalSourceProducerEvidenceVerifier:
     ) -> tuple[FiscalClassifierReviewExecutionV1, FiscalSourcePreparationExecutionV1]:
         check_deadline()
         expected = self.accreditation()
-        raw = _body(
-            reader, proof.accreditation_ref, "fiscal-accounting-accreditation-v1"
+        accreditation = self.require_current(
+            proof.accreditation_ref,
+            command.expires_at,
+            reader=reader,
+            check_deadline=check_deadline,
+            now=now,
         )
-        accreditation = FiscalAccountingAccreditationV1.model_validate_json(raw)
-        if (
-            expected != proof.accreditation_ref
-            or raw != canonical_bytes(accreditation)
-            or accreditation.policy != source_accounting_policy_identity()
-            or accreditation.classifier_executable_digest
-            != fiscal_source_producer_executable_digest()
-            or not accreditation.valid_from
-            <= now
-            < command.expires_at
-            <= accreditation.valid_until
-        ):
-            raise producer_invalid(
-                "accounting policy accreditation is not current and exact"
-            )
-        read_retained_artifact(reader, accreditation.independent_review_ref)
         invocation, order = read_producer_invocation(
             reader, proof.invocation_ref, role="classifier"
         )

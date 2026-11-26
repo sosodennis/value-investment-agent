@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -16,7 +16,11 @@ from .parser_action_contracts import (
     parser_action_markers,
 )
 from .parser_action_evidence import read_parser_action_result
-from .parser_action_identity import ParserBuildChecks, parser_action_input
+from .parser_action_identity import (
+    ParserBuildChecks,
+    parser_action_input,
+    parser_action_resources,
+)
 from .serialization import canonical_bytes
 from .snapshots import ContentAddressedStore, SnapshotError
 
@@ -69,9 +73,67 @@ class RetainedFiscalAction:
 
 
 @dataclass(frozen=True)
+class ParserActionRuntimeObservation:
+    request: ParserActionInputV3
+    profile_json: bytes
+    taxonomy_cache_dir: Path
+    delivery_revision: str
+
+    def check_current(
+        self,
+        profile: ArelleValidationProfileV1,
+        taxonomy_cache_dir: Path,
+        delivery_revision: str,
+    ) -> None:
+        if (
+            canonical_bytes(profile.model_dump(mode="json")) != self.profile_json
+            or taxonomy_cache_dir != self.taxonomy_cache_dir
+            or delivery_revision != self.delivery_revision
+            or profile.digest() != self.request.profile_digest
+            or parser_action_resources(profile, taxonomy_cache_dir).logical
+            != self.request.resources
+            or ParserBuildChecks().current() != self.request.build
+        ):
+            raise _invalid("retained parser runtime changed during source admission")
+
+
+@dataclass
+class FiscalParserRuntimeRead:
+    observations: list[ParserActionRuntimeObservation] = field(default_factory=list)
+
+    def observe(
+        self,
+        request: ParserActionInputV3,
+        profile: ArelleValidationProfileV1,
+        taxonomy_cache_dir: Path,
+        delivery_revision: str,
+    ) -> None:
+        self.observations.append(
+            ParserActionRuntimeObservation(
+                request.model_copy(deep=True),
+                canonical_bytes(profile.model_dump(mode="json")),
+                taxonomy_cache_dir,
+                delivery_revision,
+            )
+        )
+
+    def check_current(
+        self,
+        profile: ArelleValidationProfileV1,
+        taxonomy_cache_dir: Path,
+        delivery_revision: str,
+    ) -> None:
+        if not self.observations:
+            raise _invalid("retained source has no consumed parser runtime")
+        for observation in self.observations:
+            observation.check_current(profile, taxonomy_cache_dir, delivery_revision)
+
+
+@dataclass(frozen=True)
 class RetainedFiscalActions:
     normalized: RetainedFiscalAction
     archive: RetainedFiscalAction | None
+    runtime_read: FiscalParserRuntimeRead | None = None
 
     @property
     def refs(self) -> tuple[ArtifactRefV1, ...]:
@@ -130,6 +192,12 @@ class RetainedFiscalActions:
         ):
             raise _invalid(
                 "retained parser action differs from its staged inputs or resources"
+            )
+        if self.runtime_read is not None:
+            if not isinstance(expected, ParserActionInputV3):
+                raise _invalid("source admission requires complete parser runtime")
+            self.runtime_read.observe(
+                expected, profile, taxonomy_cache_dir, delivery_revision
             )
         return action.report
 

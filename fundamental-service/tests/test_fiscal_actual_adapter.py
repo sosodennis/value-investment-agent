@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 import base64
+import os
 import json
 from asyncio import CancelledError
 from contextlib import redirect_stderr, redirect_stdout
@@ -810,6 +811,19 @@ def test_configured_fiscal_validation_and_retained_replay(
             assert len(worker_calls) == 2
             assert_scratch_clean()
             return
+        observation = None
+        if witness_case in {
+            "valid",
+            "read-source-revoked",
+            "read-authority-revoked",
+            "read-authority-expired",
+            "read-authority-wrong-key",
+        }:
+            observation = owner.observe(
+                published_witness.witness.artifact_id, deadline_at=harness.deadline
+            )
+            assert observation.witness == published_witness.witness
+            observation.check_current()
         if witness_case == "read-metadata-expired":
             expire_metadata_lookup()
             expected_read_error = "REQUEST_DEADLINE_EXCEEDED"
@@ -866,11 +880,56 @@ def test_configured_fiscal_validation_and_retained_replay(
                     published_witness.witness.artifact_id, deadline_at=harness.deadline
                 )
             assert failure.value.code == expected_read_error
+            if observation is not None:
+                with pytest.raises(SnapshotError) as current_failure:
+                    observation.check_current()
+                assert current_failure.value.code == expected_read_error
             _check_metadata_budget()
             assert len(worker_calls) == 2
             assert_scratch_clean()
             return
         before_replay = harness.inventory()
+        if observation is not None:
+            observation.check_current()
+            original_rules_stat = ruleset.stat()
+            original_rules = ruleset.read_bytes()
+            try:
+                ruleset.write_bytes(original_rules + b"changed")
+                with pytest.raises(SnapshotError):
+                    observation.check_current()
+            finally:
+                ruleset.write_bytes(original_rules)
+                os.utime(
+                    ruleset,
+                    ns=(
+                        original_rules_stat.st_atime_ns,
+                        original_rules_stat.st_mtime_ns,
+                    ),
+                )
+            raw_receipt = next(
+                item
+                for item in evidence.outcome.responses
+                if item.uri == evidence.outcome.integrity.primary_document_uri
+            )
+            raw_path = harness.content._path(
+                raw_receipt.content_hash, raw_receipt.media_type
+            )
+            original_content_stat = raw_path.stat()
+            original_content = raw_path.read_bytes()
+            try:
+                raw_path.write_bytes(original_content[:-1] + b"!")
+                with pytest.raises(SnapshotError):
+                    observation.check_current()
+            finally:
+                raw_path.write_bytes(original_content)
+                os.utime(
+                    raw_path,
+                    ns=(
+                        original_content_stat.st_atime_ns,
+                        original_content_stat.st_mtime_ns,
+                    ),
+                )
+            observation.check_current()
         assert (
             owner.read(
                 published_witness.witness.artifact_id, deadline_at=harness.deadline
@@ -907,8 +966,14 @@ def test_configured_fiscal_validation_and_retained_replay(
     assert len(parsed) == (2 if blocked else 1)
     assert len(fetches) == 4
     assert harness.inventory() == before
+    source_observation = closure.observe(
+        evidence.artifact_id, deadline_at=harness.deadline
+    )
+    source_observation.check_current()
     original_build = build
     build = build.model_copy(update={"runtime_digest": "4" * 64})
+    with pytest.raises(SnapshotError):
+        source_observation.check_current()
     with pytest.raises(SnapshotError, match="retained fiscal runtime differs"):
         closure.read(evidence.artifact_id, deadline_at=harness.deadline)
     build = original_build

@@ -194,10 +194,44 @@ class RetainedSECAdapter:
                 == ref.content_hash
             )
 
+    def observe(self, request, outcome, *, artifacts, deadline_at):
+        owner = self
+        self.verify(request, outcome, artifacts=artifacts, deadline_at=deadline_at)
+
+        class Read:
+            def check_current(self):
+                owner.verify(
+                    request, outcome, artifacts=artifacts, deadline_at=deadline_at
+                )
+                assert datetime.now(UTC) < deadline_at
+
+        return Read()
+
 
 class RetainedFocusAdapter:
     def __init__(self, source, authority, artifacts):
         self.source, self.authority, self.artifacts = source, authority, artifacts
+
+    def observe(self, artifact_id, *, deadline_at):
+        from copy import deepcopy
+
+        owner = self
+        original = deepcopy(self.read(artifact_id, deadline_at=deadline_at))
+
+        class Read:
+            @property
+            def witness(self):
+                return deepcopy(original)
+
+            @property
+            def records(self):
+                return ((artifact_id, owner.artifacts.get(artifact_id)),)
+
+            def check_current(self):
+                assert owner.read(artifact_id, deadline_at=deadline_at) == original
+                assert datetime.now(UTC) < deadline_at
+
+        return Read()
 
     def read(self, artifact_id, *, deadline_at):
         witness = self.source.witness

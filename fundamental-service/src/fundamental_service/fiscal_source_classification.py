@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from copy import deepcopy
 from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import partial
@@ -46,6 +47,7 @@ from .fiscal_classification_review import verify_fiscal_source_review
 from .fiscal_classification_source import (
     FiscalClassificationSource,
     FiscalClassificationSourcePort,
+    FiscalClassificationSourceReadPort,
 )
 from .fiscal_source_closure import FiscalArtifactRead
 from .metadata import metadata_operation_budget
@@ -128,6 +130,14 @@ def _signature(
         raise _invalid("classification or preparation signature is invalid") from error
 
 
+class _AdmissionSourceRead:
+    def __init__(self, deadline_at: datetime) -> None:
+        self.deadline_at = deadline_at
+        self.inputs: bytes | None = None
+        self.owner: FiscalClassificationSourcePort | None = None
+        self.derivation: FiscalClassificationSourceReadPort | None = None
+
+
 class _ClassificationRead:
     def __init__(self, reader: FiscalArtifactRead) -> None:
         self.reader = reader
@@ -137,6 +147,7 @@ class _ClassificationRead:
         self.epoch: FiscalHistoryEpochV1 | None = None
         self.activities: tuple[VerifiedFiscalActivity, ...] = ()
         self.accreditation: ArtifactRefV1 | None = None
+        self.source_admission: _AdmissionSourceRead | None = None
 
     def observe(self, history: FiscalHistoryReadV1) -> None:
         if self.epoch is not None and self.epoch != history.epoch:
@@ -258,14 +269,42 @@ class FiscalSourceClassificationOwner:
                 "FISCAL_CLASSIFICATION_SOURCE_UNCONFIGURED",
                 "classification requires a trusted source scope resolver",
             )
-        source = self.sources.resolve(
-            command.source_validation_ref,
-            command.witness_ref,
-            command.security_id,
-            reader=state.reader,
-            check_deadline=partial(self._budget, deadline_at),
-            deadline_at=deadline_at,
-        )
+        admission = state.source_admission
+        if admission is None:
+            source = self.sources.resolve(
+                command.source_validation_ref,
+                command.witness_ref,
+                command.security_id,
+                reader=state.reader,
+                check_deadline=partial(self._budget, deadline_at),
+                deadline_at=deadline_at,
+            )
+        else:
+            if deadline_at != admission.deadline_at:
+                raise _invalid("classification admission deadline changed")
+            inputs = canonical_bytes(
+                (
+                    command.source_validation_ref,
+                    command.witness_ref,
+                    command.security_id,
+                )
+            )
+            if admission.derivation is None:
+                admission.inputs = inputs
+                admission.owner = self.sources
+                admission.derivation = self.sources.observe(
+                    command.source_validation_ref,
+                    command.witness_ref,
+                    command.security_id,
+                    reader=state.reader,
+                    check_deadline=partial(self._budget, admission.deadline_at),
+                    deadline_at=admission.deadline_at,
+                )
+            else:
+                if inputs != admission.inputs or self.sources is not admission.owner:
+                    raise _invalid("classification admission source inputs changed")
+                admission.derivation.check_current()
+            source = admission.derivation.source
         self._budget(deadline_at)
         if (
             source.scope.source_validation_ref != command.source_validation_ref
@@ -677,7 +716,7 @@ class FiscalSourceClassificationOwner:
             ):
                 raise _invalid("classification authority changed before return")
             observed.append(current.observed_at)
-        state.reader.check_current()
+        state.reader.check_bodies()
         heads = dict(state.heads)
         for authority in state.authorities.values():
             for head in authority.history_heads:
@@ -710,6 +749,18 @@ class FiscalSourceClassificationOwner:
             or self.producer_evidence.accreditation() != state.accreditation
         ):
             raise _invalid("accounting accreditation changed before return")
+        if state.accreditation is not None:
+            if self.producer_evidence is None:
+                raise _invalid("accounting accreditation verifier is unavailable")
+            self.producer_evidence.require_current(
+                state.accreditation,
+                signed.command.expires_at,
+                reader=state.reader,
+                check_deadline=partial(self._budget, deadline_at),
+                now=now,
+            )
+        state.reader.check_bodies()
+        now = self._now()
         if now >= deadline_at:
             raise self._expired()
         if now >= signed.command.expires_at or now >= source.witness.expires_at:
@@ -930,6 +981,7 @@ class FiscalSourceClassificationOwner:
                     )
                 )
                 ref = classification_refs[0]
+                state.source_admission = _AdmissionSourceRead(deadline_at)
                 signed = self._load(ref, state, deadline_at)
                 if signed.review.scope != scope:
                     raise _invalid(
@@ -943,27 +995,32 @@ class FiscalSourceClassificationOwner:
                             state.reader.get(head.subject_id)
                 source = self._source(signed.command, state, deadline_at)
                 self._finish(signed, state, deadline_at)
-                return VerifiedClassifiedCandidateSource(
-                    source_use=ClassifiedSourceForCandidateV1(
-                        scope=scope, classification_refs=classification_refs
-                    ),
-                    activities=state.activities,
-                    consumed_metadata=tuple(
-                        record
-                        for _, record in state.reader.records
-                        if record is not None
-                    ),
-                    history_heads=tuple(state.heads.values())
-                    + tuple(
-                        head
-                        for authority in state.authorities.values()
-                        for head in authority.history_heads
-                    ),
-                    expires_at=(signed.command.expires_at, source.witness.expires_at)
-                    + tuple(
-                        authority.grant.valid_until
-                        for authority in state.authorities.values()
-                    ),
+                return deepcopy(
+                    VerifiedClassifiedCandidateSource(
+                        source_use=ClassifiedSourceForCandidateV1(
+                            scope=scope, classification_refs=classification_refs
+                        ),
+                        activities=state.activities,
+                        consumed_metadata=tuple(
+                            record
+                            for _, record in state.reader.records
+                            if record is not None
+                        ),
+                        history_heads=tuple(state.heads.values())
+                        + tuple(
+                            head
+                            for authority in state.authorities.values()
+                            for head in authority.history_heads
+                        ),
+                        expires_at=(
+                            signed.command.expires_at,
+                            source.witness.expires_at,
+                        )
+                        + tuple(
+                            authority.grant.valid_until
+                            for authority in state.authorities.values()
+                        ),
+                    )
                 )
             except (ValueError, DataReleaseError) as error:
                 raise _invalid(

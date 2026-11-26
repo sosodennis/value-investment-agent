@@ -30,10 +30,23 @@ from .replay import (
 from .sec_capture import sec_response_artifact_id
 from .sec_source import SecSourceError
 from .serialization import canonical_bytes
-from .snapshots import SnapshotError
+from .snapshots import ContentAddressedStore, SnapshotError
+
+
+class FiscalSourceValidationRead(Protocol):
+    def check_current(self) -> None: ...
 
 
 class FiscalSourceValidationPort(Protocol):
+    def observe(
+        self,
+        request: ResolvedFiscalValidationRequestV1,
+        outcome: FiscalValidationOutcomeV1,
+        *,
+        artifacts: EvidenceArtifactReader,
+        deadline_at: datetime,
+    ) -> FiscalSourceValidationRead: ...
+
     def validate(
         self, request: ResolvedFiscalValidationRequestV1, *, deadline_at: datetime
     ) -> FiscalValidationOutcomeV1: ...
@@ -66,6 +79,7 @@ class FiscalArtifactRead:
         self._artifacts = artifacts
         self._check_deadline = check_deadline
         self._records: dict[str, ArtifactRecordV1 | None] = {}
+        self._bodies: dict[str, tuple[str, int]] = {}
 
     def current(self, identity: str) -> ArtifactRecordV1 | None:
         self._check_deadline()
@@ -103,7 +117,15 @@ class FiscalArtifactRead:
         self._check_deadline()
         if hashlib.sha256(raw).hexdigest() != record.content_hash:
             raise _invalid("fiscal validation artifact bytes changed")
+        body = (record.content_hash, len(raw))
+        if self._bodies.setdefault(artifact_id, body) != body:
+            raise _invalid("fiscal validation artifact bytes changed")
         return raw
+
+    def check_bodies(self) -> None:
+        for identity in tuple(self._bodies):
+            self.read(identity)
+        self.check_current()
 
     def check_current(self) -> None:
         for identity, expected in self._records.items():
@@ -120,6 +142,76 @@ class FiscalArtifactRead:
 class FiscalSourceMetadataRead:
     evidence: FiscalOriginalValidationEvidenceV1
     records: tuple[tuple[str, ArtifactRecordV1 | None], ...]
+
+
+class FiscalSourceContentRead:
+    def __init__(
+        self, content: ContentAddressedStore, check_deadline: Callable[[], float]
+    ) -> None:
+        self._content = content
+        self._check_deadline = check_deadline
+        self._consumed: dict[tuple[str, str], int] = {}
+
+    def get(self, digest: str, *, media_type: str) -> bytes:
+        self._check_deadline()
+        raw = self._content.get(digest, media_type=media_type)
+        self._check_deadline()
+        key = (digest, media_type)
+        if hashlib.sha256(raw).hexdigest() != digest or self._consumed.setdefault(
+            key, len(raw)
+        ) != len(raw):
+            raise _invalid("retained fiscal source content changed")
+        return raw
+
+    def put(self, content: bytes, *, media_type: str) -> str:
+        raise _invalid("source observation cannot publish content")
+
+    def check_current(self) -> None:
+        for digest, media_type in tuple(self._consumed):
+            self.get(digest, media_type=media_type)
+
+
+@dataclass(frozen=True)
+class FiscalSourceRead:
+    owner: FiscalSourceClosure
+    source_owner: FiscalSourceValidationPort
+    reader: FiscalArtifactRead
+    validation: FiscalSourceValidationRead
+    _evidence: FiscalOriginalValidationEvidenceV1
+    deadline_at: datetime
+    artifacts: EvidenceArtifactStore
+    discovery: FiscalDiscovery
+
+    @property
+    def evidence(self) -> FiscalOriginalValidationEvidenceV1:
+        return self._evidence.model_copy(deep=True)
+
+    @property
+    def records(self) -> tuple[tuple[str, ArtifactRecordV1 | None], ...]:
+        return self.reader.records
+
+    def check_current(self) -> None:
+        with self.owner._operation(self.deadline_at):
+            self._check_current()
+
+    def _check_current(self) -> None:
+        self.owner._before_deadline(self.deadline_at)
+        if (
+            self.owner._configured_source() is not self.source_owner
+            or self.owner._artifacts is not self.artifacts
+            or self.owner._discovery is not self.discovery
+        ):
+            raise _invalid("configured fiscal source owner changed")
+        if (
+            self.owner._resolve(
+                self._evidence.request.selection, self.reader, self.deadline_at
+            )
+            != self._evidence.request
+        ):
+            raise _invalid("fiscal source discovery changed during admission")
+        self.validation.check_current()
+        self.reader.check_bodies()
+        self.owner._before_deadline(self.deadline_at)
 
 
 def _read_json(
@@ -213,6 +305,18 @@ class FiscalSourceClosure:
         reader: FiscalArtifactRead,
         deadline_at: datetime,
     ) -> None:
+        self._verify_artifacts(evidence, reader)
+        self._configured_source().verify(
+            evidence.request,
+            evidence.outcome,
+            artifacts=reader,
+            deadline_at=deadline_at,
+        )
+        reader.check_current()
+
+    def _verify_artifacts(
+        self, evidence: FiscalOriginalValidationEvidenceV1, reader: FiscalArtifactRead
+    ) -> None:
         request, outcome = evidence.request, evidence.outcome
         _read_json(
             reader,
@@ -233,12 +337,8 @@ class FiscalSourceClosure:
                     raise _invalid("fiscal parser actions require JSON evidence")
                 require_retained_artifact(reader, ref)
                 reader.read(ref.artifact_id)
-        self._configured_source().verify(
-            request, outcome, artifacts=reader, deadline_at=deadline_at
-        )
-        reader.check_current()
 
-    def _read(
+    def _read_evidence(
         self,
         artifact_id: str,
         reader: FiscalArtifactRead,
@@ -264,10 +364,58 @@ class FiscalSourceClosure:
                 raise _invalid(
                     "fiscal validation request differs from current discovery"
                 )
-            self._verify(evidence, reader, deadline_at)
         except (ValueError, DataReleaseError) as error:
             raise _invalid("retained fiscal validation failed verification") from error
         return evidence
+
+    def _read(
+        self,
+        artifact_id: str,
+        reader: FiscalArtifactRead,
+        deadline_at: datetime,
+        *,
+        expected_request: ResolvedFiscalValidationRequestV1 | None = None,
+    ) -> FiscalOriginalValidationEvidenceV1:
+        try:
+            evidence = self._read_evidence(
+                artifact_id, reader, deadline_at, expected_request=expected_request
+            )
+            self._verify(evidence, reader, deadline_at)
+            return evidence
+        except (ValueError, DataReleaseError) as error:
+            raise _invalid("retained fiscal validation failed verification") from error
+
+    def observe(self, artifact_id: str, *, deadline_at: datetime) -> FiscalSourceRead:
+        with self._operation(deadline_at):
+            artifacts, discovery = self._artifacts, self._discovery
+            reader = FiscalArtifactRead(
+                artifacts, partial(self._before_deadline, deadline_at)
+            )
+            source = self._configured_source()
+            try:
+                evidence = self._read_evidence(artifact_id, reader, deadline_at)
+                self._verify_artifacts(evidence, reader)
+                validation = source.observe(
+                    evidence.request,
+                    evidence.outcome,
+                    artifacts=reader,
+                    deadline_at=deadline_at,
+                )
+                reader.check_current()
+                return FiscalSourceRead(
+                    self,
+                    source,
+                    reader,
+                    validation,
+                    evidence,
+                    deadline_at,
+                    artifacts,
+                    discovery,
+                )
+            except (ValueError, DataReleaseError) as error:
+                raise _invalid(
+                    "retained fiscal validation failed verification"
+                ) from error
 
     def read(
         self, artifact_id: str, *, deadline_at: datetime

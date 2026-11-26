@@ -431,6 +431,45 @@ class SyntheticSourceResolver:
         check_deadline,
         deadline_at,
     ):
+        source = self._read_current(
+            source_ref,
+            witness_ref,
+            security_id,
+            reader=reader,
+            check_deadline=check_deadline,
+            deadline_at=deadline_at,
+        )
+        self.key.public_key().verify(
+            bytes.fromhex(source.witness.signature), source.witness.signing_bytes()
+        )
+        return source
+
+    def observe(self, *args, **kwargs):
+        from copy import deepcopy
+
+        owner = self
+        original = deepcopy(self.resolve(*args, **kwargs))
+
+        class Read:
+            @property
+            def source(self):
+                return deepcopy(original)
+
+            def check_current(self):
+                assert owner._read_current(*args, **kwargs) == original
+
+        return Read()
+
+    def _read_current(
+        self,
+        source_ref,
+        witness_ref,
+        security_id,
+        *,
+        reader,
+        check_deadline,
+        deadline_at,
+    ):
         self.on_resolve()
         check_deadline()
         assert security_id is None
@@ -442,9 +481,6 @@ class SyntheticSourceResolver:
         )
         assert read_retained_artifact(reader, witness_ref) == canonical_bytes(
             source.witness
-        )
-        self.key.public_key().verify(
-            bytes.fromhex(source.witness.signature), source.witness.signing_bytes()
         )
         if datetime.now(UTC) >= source.witness.expires_at:
             raise SnapshotError(
@@ -655,6 +691,36 @@ def environment(tmp_path):
             yield env
         finally:
             metadata.close()
+
+
+def test_each_admission_rebuilds_and_returns_detached_proof(environment, monkeypatch):
+    env = environment
+    first = env.owner.record_classification(
+        env.command, expected_head=None, deadline_at=deadline()
+    )
+    ref = reference(first.publication.artifact, "fiscal-source-classification-v1")
+    calls, current = [], []
+    resolve = env.resolver.resolve
+
+    def counted(*args, **kwargs):
+        calls.append(True)
+        return resolve(*args, **kwargs)
+
+    monkeypatch.setattr(env.resolver, "resolve", counted)
+    env.resolver.on_resolve = lambda: current.append(True)
+    admitted = env.owner.require_candidate_source(
+        env.source.scope, (ref,), deadline_at=deadline()
+    )
+    assert (len(calls), len(current)) == (1, 4)
+    object.__setattr__(
+        admitted.source_use.scope.permitted_inputs[0], "value", Decimal("123")
+    )
+    assert env.source.scope.permitted_inputs[0].value == Decimal("-1000000")
+    fresh = env.owner.require_candidate_source(
+        env.source.scope, (ref,), deadline_at=deadline()
+    )
+    assert fresh.source_use.scope.permitted_inputs[0].value == Decimal("-1000000")
+    assert (len(calls), len(current)) == (2, 8)
 
 
 def test_signed_classification_candidate_and_same_command_retry(environment):

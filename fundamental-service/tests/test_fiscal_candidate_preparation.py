@@ -326,6 +326,27 @@ def synthetic_retained_classifications(
     witnesses = {}
 
     class RetainedSyntheticWitnesses:
+        def observe(self, identity, *, deadline_at):
+            from copy import deepcopy
+
+            owner = self
+            original = deepcopy(self.read(identity, deadline_at=deadline_at))
+
+            class Read:
+                @property
+                def witness(self):
+                    return deepcopy(original)
+
+                @property
+                def records(self):
+                    return ((identity, env.store.get(identity)),)
+
+                def check_current(self):
+                    assert owner.read(identity, deadline_at=deadline_at) == original
+                    assert datetime.now(UTC) < deadline_at
+
+            return Read()
+
         def read(self, identity, *, deadline_at):
             value = witnesses[identity]
             assert read_retained_artifact(
@@ -1247,6 +1268,13 @@ def test_complete_source_configuration_rotation_before_snapshot_refuses(
     state = {"generation": "active", "calls": 0}
 
     class CurrentSources:
+        def observe(self, *args, **kwargs):
+            if state["generation"] != "active":
+                raise SnapshotError(
+                    "SYNTHETIC_FOCUS_REVOKED", "synthetic source configuration revoked"
+                )
+            return resolver.observe(*args, **kwargs)
+
         def resolve(self, *args, **kwargs):
             if state["generation"] != "active":
                 raise SnapshotError(

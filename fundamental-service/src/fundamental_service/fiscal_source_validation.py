@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -23,11 +24,13 @@ from .data_releases import ArtifactRefV1
 from .dqc_applicability import DqcFilingContextV1, dqc_applicability_policy_digest
 from .dqc_rulesets import DQC_V18_PROFILE_ID, DQC_V18_RULESETS
 from .fiscal_parser_evidence import (
+    FiscalParserRuntimeRead,
     RetainedFiscalActions,
     RetainedFiscalValidation,
     read_fiscal_parser_actions,
     read_fiscal_rejection,
 )
+from .fiscal_source_closure import FiscalSourceContentRead, FiscalSourceValidationRead
 from .fiscal_source_contracts import FiscalOriginalSourceV1, evaluate_fiscal_issuer
 from .fiscal_validation_contracts import (
     FiscalValidationCompleteRefusedV1,
@@ -232,6 +235,8 @@ class SecFiscalSourceValidation:
         retained: FiscalValidationMatchedV1
         | FiscalValidationCompleteRefusedV1
         | None = None,
+        content_read: FiscalSourceContentRead | None = None,
+        runtime_read: FiscalParserRuntimeRead | None = None,
     ) -> FiscalValidationMatchedV1 | FiscalValidationCompleteRefusedV1:
         check = partial(fiscal_validation_budget, deadline_at)
         check()
@@ -273,7 +278,7 @@ class SecFiscalSourceValidation:
             owner.adapter,
             scope=request.scope,
             receipts=self.store,
-            content=owner.content_store,
+            content=content_read if content_read is not None else owner.content_store,
             capture_lock=owner._capture_lock,
             check_deadline=check,
             replay_reader=artifacts if retained is not None else None,
@@ -330,6 +335,10 @@ class SecFiscalSourceValidation:
                 build_checks=build_checks,
                 delivery_revision=runtime.delivery_revision,
             )
+            if runtime_read is not None:
+                actions = RetainedFiscalActions(
+                    actions.normalized, actions.archive, runtime_read
+                )
         rejection_ref = None
         try:
             validated = owner.ingestion.validate_filing(
@@ -355,7 +364,13 @@ class SecFiscalSourceValidation:
                 form=filing.form,
                 deadline_at=deadline_at,
                 retained_fiscal=(
-                    RetainedFiscalValidation(artifacts, owner.content_store, actions)
+                    RetainedFiscalValidation(
+                        artifacts,
+                        content_read
+                        if content_read is not None
+                        else owner.content_store,
+                        actions,
+                    )
                     if actions is not None
                     else None
                 ),
@@ -516,3 +531,122 @@ class SecFiscalSourceValidation:
                 "FISCAL_VALIDATION_INVALID",
                 "retained fiscal validation differs from source replay",
             )
+
+    def observe(
+        self,
+        request: ResolvedFiscalValidationRequestV1,
+        outcome: FiscalValidationOutcomeV1,
+        *,
+        artifacts: EvidenceArtifactReader,
+        deadline_at: datetime,
+    ) -> FiscalSourceValidationRead:
+        if isinstance(outcome, FiscalValidationIncompleteV1):
+            raise SnapshotError(
+                "FISCAL_VALIDATION_INVALID",
+                "source admission requires a complete replay",
+            )
+        content = FiscalSourceContentRead(
+            self.acquisition.content_store,
+            partial(fiscal_validation_budget, deadline_at),
+        )
+        runtime = FiscalParserRuntimeRead()
+        observation = _FiscalValidationRead(
+            self,
+            request.model_copy(deep=True),
+            outcome.runtime.model_copy(deep=True),
+            content,
+            runtime,
+            deadline_at,
+        )
+        try:
+            replayed = self._collect(
+                request,
+                deadline_at=deadline_at,
+                artifacts=artifacts,
+                retained=outcome,
+                content_read=content,
+                runtime_read=runtime,
+            )
+        except (IncompleteParserClosure, OSError) as error:
+            raise SnapshotError(
+                "FISCAL_PARSER_BUILD_UNAVAILABLE",
+                "current parser build could not be verified",
+            ) from error
+        if replayed != outcome:
+            raise SnapshotError(
+                "FISCAL_VALIDATION_INVALID",
+                "retained fiscal validation differs from source replay",
+            )
+        observation.check_current()
+        return observation
+
+
+class _FiscalValidationRead:
+    def __init__(
+        self,
+        owner: SecFiscalSourceValidation,
+        request: ResolvedFiscalValidationRequestV1,
+        runtime: FiscalValidationRuntimeV1,
+        content: FiscalSourceContentRead,
+        parser: FiscalParserRuntimeRead,
+        deadline_at: datetime,
+    ) -> None:
+        self._owner = owner
+        self._request = request
+        self._runtime = runtime
+        self._content = content
+        self._parser = parser
+        self._deadline_at = deadline_at
+        self._acquisition = owner.acquisition
+        self._settings = deepcopy(owner.acquisition.settings)
+        self._store = owner.store
+        self._content_store = owner.acquisition.content_store
+        self._adapter = owner.acquisition.adapter
+        self._ingestion = owner.acquisition.ingestion
+
+    def check_current(self) -> None:
+        fiscal_validation_budget(self._deadline_at)
+        owner = self._owner
+        if (
+            owner.acquisition is not self._acquisition
+            or owner.acquisition.settings != self._settings
+            or owner.store is not self._store
+            or owner.acquisition.content_store is not self._content_store
+            or owner.acquisition.adapter is not self._adapter
+            or owner.acquisition.ingestion is not self._ingestion
+            or owner.pin != self._request.pin
+            or version("arelle-release") != "2.47.4"
+            or self._request.valuation_timestamp > datetime.now(UTC)
+        ):
+            raise SnapshotError(
+                "FISCAL_RUNTIME_PIN_MISMATCH", "fiscal source configuration changed"
+            )
+        try:
+            profile = resolve_fiscal_validation_profile(
+                owner.acquisition, self._runtime.dqc_namespace
+            )
+            current = self._runtime.model_copy(
+                update={
+                    "pin": owner.pin,
+                    "validation_profile_id": profile.profile_id,
+                    "validation_profile_digest": profile.digest(),
+                    "delivery_revision": owner.pin.declared_source_revision,
+                    "parser_build": ParserBuildChecks().current(),
+                }
+            )
+            if current != self._runtime:
+                raise SnapshotError(
+                    "FISCAL_RUNTIME_PIN_MISMATCH", "retained fiscal runtime changed"
+                )
+            self._parser.check_current(
+                profile,
+                owner.acquisition.settings.taxonomy_cache_dir,
+                current.delivery_revision,
+            )
+            self._content.check_current()
+        except (IncompleteParserClosure, OSError) as error:
+            raise SnapshotError(
+                "FISCAL_PARSER_BUILD_UNAVAILABLE",
+                "current parser build could not be verified",
+            ) from error
+        fiscal_validation_budget(self._deadline_at)
