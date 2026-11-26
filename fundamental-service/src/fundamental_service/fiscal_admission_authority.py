@@ -69,6 +69,17 @@ class FiscalRegistrySignerPort(Protocol):
     ) -> str: ...
 
 
+class FiscalRegistryRecoveryPort(Protocol):
+    def restore(
+        self,
+        command: FiscalAuthorityCommandV1,
+        *,
+        operator: FiscalRegistryOperatorV1,
+        issuance: FiscalIssuanceContextV1,
+        deadline_at: datetime,
+    ) -> SignedFiscalAuthorityRecordV1 | None: ...
+
+
 def _ref(record: ArtifactRecordV1) -> ArtifactRefV1:
     return ArtifactRefV1(
         role=_RECORD_ROLE,
@@ -180,12 +191,14 @@ class FiscalAuthorityOwner:
         history: FiscalAdmissionHistoryReaderPort | None,
         deployment: Callable[[], FiscalAuthorityDeploymentV1],
         signer: FiscalRegistrySignerPort | None = None,
+        recovery: FiscalRegistryRecoveryPort | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._artifacts = artifacts
         self._history = history
         self._deployment = deployment
         self._signer = signer
+        self._recovery = recovery
         self._clock = clock
 
     def _now(self) -> datetime:
@@ -711,9 +724,41 @@ class FiscalAuthorityOwner:
         )
         if self._signer is None:
             raise _refused("registry signing capability is not configured")
-        signature = self._signer.sign(
-            unsigned.signing_bytes(), operator=issuer, deadline_at=deadline_at
+        recovered = (
+            self._recovery.restore(
+                record.command,
+                operator=issuer,
+                issuance=issuance,
+                deadline_at=deadline_at,
+            )
+            if self._recovery is not None
+            else None
         )
+        if recovered is not None:
+            if (
+                recovered.record.command != record.command
+                or recovered.issuer != issuer
+                or recovered.issuance != issuance
+                or recovered.root_evidence_ref != root.evidence_ref
+                or recovered.record.kind != record.kind
+                or recovered.signed_at > self._now()
+            ):
+                raise _invalid("registry recovery differs from the exact invocation")
+            if isinstance(recovered.record, FiscalAuthorityGrantV1) and (
+                not isinstance(record, FiscalAuthorityGrantV1)
+                or recovered.record.identity != record.identity
+                or recovered.record.provisioning_ref != record.provisioning_ref
+                or not recovered.record.valid_from
+                <= self._now()
+                < recovered.record.valid_until
+            ):
+                raise _refused("registry recovery grant is different or expired")
+            unsigned = recovered
+            signature = recovered.signature
+        else:
+            signature = self._signer.sign(
+                unsigned.signing_bytes(), operator=issuer, deadline_at=deadline_at
+            )
         self._budget(deadline_at)
         signed = unsigned.model_copy(update={"signature": signature})
         try:

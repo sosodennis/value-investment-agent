@@ -685,6 +685,34 @@ class PostgresFiscalAdmissionHistory:
         self._validate_streams(stream_ids)
         return self._run(partial(self._consistent_read, stream_ids), deadline_at)
 
+    def read_if_present(
+        self, stream_id: str, *, deadline_at: datetime
+    ) -> FiscalHistoryReadV1 | None:
+        self._validate_streams((stream_id,))
+        return self._run(partial(self._read_if_present, stream_id), deadline_at)
+
+    async def _read_if_present(
+        self, stream_id: str, connection: AsyncConnection
+    ) -> FiscalHistoryReadV1 | None:
+        await connection.execute(
+            text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        )
+        observed = await connection.scalar(text("SELECT transaction_timestamp()"))
+        if not isinstance(observed, datetime):
+            raise _unavailable("history observation time is unavailable")
+        if await self._head(connection, stream_id) is None:
+            local = await connection.scalar(
+                text("SELECT fundamental.fiscal_history_origin_id()")
+            )
+            epoch = await self._epoch(connection, str(local))
+            try:
+                epoch.issuance_context
+                epoch.require_current_activity(observed)
+            except ValueError as error:
+                raise _unavailable(str(error)) from error
+            return None
+        return await self._read((stream_id,), connection, observed_through=observed)
+
     async def _consistent_read(
         self, stream_ids: tuple[str, ...], connection: AsyncConnection
     ) -> FiscalHistoryReadV1:

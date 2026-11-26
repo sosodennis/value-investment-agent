@@ -594,6 +594,48 @@ class PostgresMetadataStore:
     def release_ingestion_lock(self, lease: IngestionLockLease) -> None:
         self._runner.run(self._release_ingestion_lock(lease.lease_id), cleanup=True)
 
+    def require_ingestion_lock(self, lease: IngestionLockLease) -> datetime:
+        self._require_ready()
+        return self._runner.run(self._require_ingestion_lock(lease))
+
+    async def _require_ingestion_lock(self, lease: IngestionLockLease) -> datetime:
+        held = self._ingestion_lock_connections.get(lease.lease_id)
+        if held is None or held[0] != lease.advisory_key or held[1].closed:
+            raise SnapshotError(
+                "INGESTION_LOCK_LOST", "ingestion lease is no longer held"
+            )
+        connection = held[1]
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT clock_timestamp() AS observed_at, EXISTS ("
+                        "SELECT 1 FROM pg_catalog.pg_locks WHERE locktype='advisory' "
+                        "AND pid=pg_backend_pid() AND granted AND objsubid=1 "
+                        "AND classid=:high AND objid=:low) AS held"
+                    ),
+                    {
+                        "high": (lease.advisory_key & ((1 << 64) - 1)) >> 32,
+                        "low": lease.advisory_key & ((1 << 32) - 1),
+                    },
+                )
+            )
+            .mappings()
+            .one()
+        )
+        _check_metadata_budget()
+        await connection.commit()
+        if not row["held"]:
+            raise SnapshotError(
+                "INGESTION_LOCK_LOST", "ingestion lease is no longer held"
+            )
+        observed_at = row["observed_at"]
+        if not isinstance(observed_at, datetime) or observed_at.utcoffset() is None:
+            raise SnapshotError(
+                "INGESTION_LOCK_LOST", "ingestion lease clock is invalid"
+            )
+        return observed_at
+
     @staticmethod
     async def _discard_lock_connection(connection: AsyncConnection) -> None:
         try:
