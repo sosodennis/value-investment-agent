@@ -306,7 +306,7 @@ class DataReleaseCanaryRunner:
                     "FISCAL_CANARY_UNCONFIGURED",
                     "fiscal canary requires its read-only owner and absolute deadline",
                 )
-            report, _, _ = self._fiscal_reader.canary(
+            report = self._fiscal_reader.canary(
                 manifest, verification.signed, deadline_at=deadline_at
             )
             return report

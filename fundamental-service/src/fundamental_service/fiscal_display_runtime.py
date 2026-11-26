@@ -184,6 +184,7 @@ class FiscalDisplayRuntime:
             metadata,
         )
         self._installation_file = installation_file
+        self._read_artifacts = artifacts.as_read_only()
         self.history = PostgresFiscalAdmissionHistory(metadata)
 
     def configuration(self) -> FiscalAuthorityDeploymentV1:
@@ -276,7 +277,7 @@ class FiscalDisplayRuntime:
             or latest.origin_id != order.issuance.origin_id
         ):
             raise _refused("display decision was revoked, superseded or imported")
-        raw = self.artifacts.read(latest.body.payload_ref.artifact_id)
+        raw = self._read_artifacts.read(latest.body.payload_ref.artifact_id)
         signed = SignedFiscalDisplayDecisionV1.model_validate_json(raw)
         if signed.body.command.request != order.request:
             raise SnapshotError(
@@ -344,9 +345,10 @@ class FiscalDisplayRuntime:
                     owner = FiscalDisplayAdmission(
                         candidates=self.candidates,
                         artifacts=self.artifacts,
+                        read_artifacts=self._read_artifacts,
                         history=self.history,
                         authorities=FiscalAuthorityOwner(
-                            artifacts=self.artifacts,
+                            artifacts=self._read_artifacts,
                             history=self.history,
                             deployment=self.configuration,
                         ),
@@ -359,7 +361,7 @@ class FiscalDisplayRuntime:
                                 self._order(order.order_id),
                                 _candidate_configuration_generation(
                                     request,
-                                    artifacts=self.artifacts,
+                                    artifacts=self._read_artifacts,
                                     deployment_uid=self.installation.deployment_uid,
                                     mapping_trust_roots_file=self.installation.mapping_trust_roots_file,
                                     focus_authority_file=self.installation.focus_authority_file,
@@ -369,20 +371,21 @@ class FiscalDisplayRuntime:
                         ),
                         authorize=authorize,
                     )
-                    result = owner.review_and_decide(
+                    operation = owner.open_review_and_decide(
                         order.request,
                         expected_head=order.expected_head,
                         deadline_at=deadline_at,
                     )
-                    self._require(order, lease, deadline_at)
-                    if (
-                        self.candidates.current_configuration_digest()
-                        != candidate_generation
-                    ):
-                        raise _refused(
-                            "display candidate configuration changed before return"
-                        )
-                    return result
+                    with operation:
+                        self._require(order, lease, deadline_at)
+                        if (
+                            self.candidates.current_configuration_digest()
+                            != candidate_generation
+                        ):
+                            raise _refused(
+                                "display candidate configuration changed before return"
+                            )
+                    return operation.completed
                 finally:
                     self.metadata.release_ingestion_lock(lease)
             except ValueError as error:
@@ -474,6 +477,7 @@ def build_fiscal_display_reader(
     return FiscalDisplayAdmission(
         candidates=candidates,
         artifacts=readonly,
+        read_artifacts=readonly,
         history=history,
         authorities=FiscalAuthorityOwner(
             artifacts=readonly, history=history, deployment=deployment

@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import os
+from asyncio import current_task
+from threading import get_ident
+from contextvars import ContextVar
+
 import base64
 from copy import deepcopy
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from functools import partial
 from typing import Literal, Protocol
@@ -165,6 +171,129 @@ class _ClassificationRead:
         for head in history.heads:
             if self.heads.setdefault(head.stream_id, head) != head:
                 raise _invalid("classification history changed during verification")
+
+
+_CLASSIFICATION_READS: ContextVar[tuple[object, ...]] = ContextVar(
+    "fiscal_classification_reads", default=()
+)
+
+
+def _classification_actor() -> tuple[object, ...]:
+    try:
+        task: object | None = current_task()
+    except RuntimeError:
+        task = None
+    return (
+        os.getpid(),
+        get_ident(),
+        task,
+        os.getuid(),
+        os.geteuid(),
+        os.getgid(),
+        os.getegid(),
+        tuple(sorted(os.getgroups())),
+    )
+
+
+class FiscalClassifiedSourceRead:
+    def __init__(
+        self,
+        owner: FiscalSourceClassificationOwner,
+        scope: FiscalSourceUseScopeV1,
+        classification_refs: tuple[ArtifactRefV1, ...],
+        signed: SignedClassification,
+        state: _ClassificationRead,
+        deadline_at: datetime,
+        actor: tuple[object, ...],
+    ) -> None:
+        self._owner, self._scope, self._refs = (
+            owner,
+            deepcopy(scope),
+            deepcopy(classification_refs),
+        )
+        self._signed, self._state, self._deadline_at = signed, state, deadline_at
+        self._owners = (
+            owner.artifacts,
+            owner.history,
+            owner.authorities,
+            owner.sources,
+            owner.producer_evidence,
+            owner.clock,
+            owner.require_production_evidence,
+        )
+        self._actor = actor
+        self._closed = False
+
+    def close(self) -> None:
+        self._closed = True
+        self._state.source_admission = None
+
+    def current(self) -> VerifiedClassifiedCandidateSource:
+        if self._closed:
+            raise _invalid("classification observation is closed")
+        owner = self._owner
+        if (
+            self._actor != _classification_actor()
+            or self not in _CLASSIFICATION_READS.get()
+        ):
+            self.close()
+            raise _invalid("classification observation belongs to another execution")
+        try:
+            if self._owners != (
+                owner.artifacts,
+                owner.history,
+                owner.authorities,
+                owner.sources,
+                owner.producer_evidence,
+                owner.clock,
+                owner.require_production_evidence,
+            ):
+                raise _invalid("classification configured owner changed")
+            return self._current()
+        except BaseException:
+            self.close()
+            raise
+
+    def _current(self) -> VerifiedClassifiedCandidateSource:
+        owner, signed, state, deadline_at = (
+            self._owner,
+            self._signed,
+            self._state,
+            self._deadline_at,
+        )
+        scope, classification_refs = self._scope, self._refs
+        owner._finish(signed, state, deadline_at)
+        for authority in state.authorities.values():
+            for head in authority.history_heads:
+                if head.stream_kind == "evidence":
+                    state.reader.get(head.subject_id)
+        source = owner._source(signed.command, state, deadline_at)
+        owner._finish(signed, state, deadline_at)
+        return deepcopy(
+            VerifiedClassifiedCandidateSource(
+                source_use=ClassifiedSourceForCandidateV1(
+                    scope=scope, classification_refs=classification_refs
+                ),
+                activities=state.activities,
+                consumed_metadata=tuple(
+                    record for _, record in state.reader.records if record is not None
+                ),
+                history_heads=tuple(state.heads.values())
+                + tuple(
+                    head
+                    for authority in state.authorities.values()
+                    for head in authority.history_heads
+                ),
+                expires_at=(
+                    signed.command.expires_at,
+                    source.witness.expires_at,
+                )
+                + tuple(
+                    authority.grant.valid_until
+                    for authority in state.authorities.values()
+                ),
+            )
+        )
 
 
 class FiscalSourceClassificationOwner:
@@ -959,16 +1088,19 @@ class FiscalSourceClassificationOwner:
                     "classification failed typed evidence verification"
                 ) from error
 
-    def require_candidate_source(
+    @contextmanager
+    def open_candidate_source(
         self,
         scope: FiscalSourceUseScopeV1,
         classification_refs: tuple[ArtifactRefV1, ...],
         *,
         deadline_at: datetime,
-    ) -> VerifiedClassifiedCandidateSource:
+    ) -> Iterator[FiscalClassifiedSourceRead]:
+        actor = _classification_actor()
         with metadata_operation_budget(
             partial(self._budget, deadline_at), self._expired
         ):
+            read: FiscalClassifiedSourceRead | None = None
             try:
                 self._budget(deadline_at)
                 if len(classification_refs) != 1:
@@ -988,41 +1120,30 @@ class FiscalSourceClassificationOwner:
                         "classification does not authorize the exact candidate source scope"
                     )
                 self._history_state(signed, ref, state, deadline_at)
-                self._finish(signed, state, deadline_at)
-                for authority in state.authorities.values():
-                    for head in authority.history_heads:
-                        if head.stream_kind == "evidence":
-                            state.reader.get(head.subject_id)
-                source = self._source(signed.command, state, deadline_at)
-                self._finish(signed, state, deadline_at)
-                return deepcopy(
-                    VerifiedClassifiedCandidateSource(
-                        source_use=ClassifiedSourceForCandidateV1(
-                            scope=scope, classification_refs=classification_refs
-                        ),
-                        activities=state.activities,
-                        consumed_metadata=tuple(
-                            record
-                            for _, record in state.reader.records
-                            if record is not None
-                        ),
-                        history_heads=tuple(state.heads.values())
-                        + tuple(
-                            head
-                            for authority in state.authorities.values()
-                            for head in authority.history_heads
-                        ),
-                        expires_at=(
-                            signed.command.expires_at,
-                            source.witness.expires_at,
-                        )
-                        + tuple(
-                            authority.grant.valid_until
-                            for authority in state.authorities.values()
-                        ),
-                    )
+                read = FiscalClassifiedSourceRead(
+                    self, scope, classification_refs, signed, state, deadline_at, actor
                 )
+                token = _CLASSIFICATION_READS.set((*_CLASSIFICATION_READS.get(), read))
+                try:
+                    yield read
+                finally:
+                    _CLASSIFICATION_READS.reset(token)
             except (ValueError, DataReleaseError) as error:
                 raise _invalid(
                     "classification failed typed evidence verification"
                 ) from error
+            finally:
+                if read is not None:
+                    read.close()
+
+    def require_candidate_source(
+        self,
+        scope: FiscalSourceUseScopeV1,
+        classification_refs: tuple[ArtifactRefV1, ...],
+        *,
+        deadline_at: datetime,
+    ) -> VerifiedClassifiedCandidateSource:
+        with self.open_candidate_source(
+            scope, classification_refs, deadline_at=deadline_at
+        ) as read:
+            return read.current()

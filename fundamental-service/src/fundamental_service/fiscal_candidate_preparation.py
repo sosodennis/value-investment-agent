@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
+from asyncio import current_task
+from threading import get_ident
+from contextvars import ContextVar, Token
+from copy import deepcopy
 from collections.abc import Callable
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from types import TracebackType
+from typing import TYPE_CHECKING, Literal, Protocol
 from uuid import uuid4
 
 from cryptography.exceptions import InvalidSignature
@@ -65,6 +71,7 @@ if TYPE_CHECKING:
     from .fiscal_projection_builder import (
         FiscalCandidateMaterialization,
         FiscalProjectionBuilder,
+        _MaterializationRead,
     )
 
 _ROLE = "fiscal-statement-candidate-v2"
@@ -150,6 +157,7 @@ class FiscalCandidatePreparation:
         *,
         builder: FiscalProjectionBuilder,
         artifacts: EvidenceArtifactStore,
+        read_artifacts: EvidenceArtifactStore,
         history: FiscalAdmissionHistoryReaderPort,
         authorities: FiscalAuthorityOwner,
         authority_id: str,
@@ -160,6 +168,7 @@ class FiscalCandidatePreparation:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._builder = builder
+        self._read_artifacts = read_artifacts
         self.artifacts, self.history, self.authorities = artifacts, history, authorities
         self.authority_id, self.clock = authority_id, clock
         self._configuration_digest = configuration_digest
@@ -277,27 +286,6 @@ class FiscalCandidatePreparation:
             )
         )
 
-    def _reconstruct(
-        self,
-        builder: FiscalProjectionBuilder,
-        signed: FiscalStatementCandidateV2,
-        deadline_at: datetime,
-    ) -> FiscalCandidateMaterialization:
-        body = signed.body
-        materialized = builder._build(
-            body.content.discovery_ref,
-            security_id=body.command.security_id,
-            classification_bindings=body.command.classification_bindings,
-            deadline_at=deadline_at,
-            publish=False,
-            retained_mapping_refs=body.content.mapping_refs,
-        )
-        if materialized.content != body.content:
-            raise _invalid(
-                "candidate does not reproduce from its complete current source closure"
-            )
-        return materialized
-
     def _finish(
         self,
         builder: FiscalProjectionBuilder,
@@ -308,9 +296,10 @@ class FiscalCandidatePreparation:
         resources: _ParserResourceOperation,
         deadline_at: datetime,
         configuration_generation: str,
+        terminal: bool,
     ) -> CurrentFiscalCandidate:
         budget = partial(self._budget, deadline_at)
-        reader = FiscalArtifactRead(self.artifacts, budget)
+        reader = FiscalArtifactRead(self._read_artifacts, budget)
         for record in materialized.consumed_metadata:
             reader.expect(record.artifact_id, record)
         reference = _ref(publication.artifact, _ROLE)
@@ -336,29 +325,7 @@ class FiscalCandidatePreparation:
         heads = {head.stream_id: head for head in authority.history_heads}
         expiries = [signed.body.command.expires_at, authority.grant.valid_until]
         for proof in materialized.source_evidence:
-            use = proof.source_use
-            fresh = builder.sources.read_with_metadata(
-                use.scope.source_validation_ref.artifact_id, deadline_at=deadline_at
-            )
-            for identity, source_record in fresh.records:
-                reader.expect(identity, source_record)
-            if (
-                sha256_digest(fresh.evidence.model_dump(mode="json"))
-                != use.scope.source_validation_ref.content_hash
-            ):
-                raise _invalid("candidate source changed before completion")
             if isinstance(proof, VerifiedClassifiedCandidateSource):
-                if builder.classifications is None:
-                    raise _invalid("candidate classification owner disappeared")
-                current = builder.classifications.require_candidate_source(
-                    proof.source_use.scope,
-                    proof.source_use.classification_refs,
-                    deadline_at=deadline_at,
-                )
-                if current != proof:
-                    raise _invalid(
-                        "candidate classification proof changed before completion"
-                    )
                 expiries.extend(proof.expires_at)
                 for record in proof.consumed_metadata:
                     reader.expect(record.artifact_id, record)
@@ -401,7 +368,8 @@ class FiscalCandidatePreparation:
         control.require_current_epoch(control.entries)
         heads.update({head.stream_id: head for head in control.heads})
         records = tuple(record for _, record in reader.records if record is not None)
-        resources.finish()
+        if terminal:
+            resources.finish()
         reader.check_current()
         final_authority = self._authority(signed, deadline_at)
         if (
@@ -454,39 +422,18 @@ class FiscalCandidatePreparation:
             materialized.source_documents,
         )
 
+    def open_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> FiscalCandidateOperation:
+        return FiscalCandidateOperation(self, reference, deadline_at)
+
     def verify_candidate(
         self, reference: ArtifactRefV1, *, deadline_at: datetime
     ) -> CurrentFiscalCandidate:
-        builder = self._builder
-        with (
-            metadata_operation_budget(
-                partial(self._budget, deadline_at), self._expired
-            ),
-            _ParserResourceOperation(partial(self._budget, deadline_at)) as resources,
-        ):
-            try:
-                configuration_generation = self._configuration_digest()
-                reader = FiscalArtifactRead(
-                    self.artifacts, partial(self._budget, deadline_at)
-                )
-                signed = self._load(reader, reference)
-                self._authority(signed, deadline_at)
-                materialized = self._reconstruct(builder, signed, deadline_at)
-                return self._finish(
-                    builder,
-                    signed,
-                    ArtifactPublicationV1(
-                        artifact=reader.get(reference.artifact_id), wrote=False
-                    ),
-                    materialized,
-                    resources=resources,
-                    deadline_at=deadline_at,
-                    configuration_generation=configuration_generation,
-                )
-            except ValueError as error:
-                raise _invalid(
-                    "candidate failed typed evidence verification"
-                ) from error
+        operation = self.open_candidate(reference, deadline_at=deadline_at)
+        with operation:
+            pass
+        return operation.completed
 
     def prepare(
         self, command: FiscalPrepareCandidateCommandV1, *, deadline_at: datetime
@@ -511,9 +458,14 @@ class FiscalCandidatePreparation:
                     _ParserResourceOperation(
                         partial(self._budget, deadline_at)
                     ) as resources,
+                    ExitStack() as materializations,
                 ):
                     return self._prepare_locked(
-                        self._builder, command, deadline_at, resources=resources
+                        self._builder,
+                        command,
+                        deadline_at,
+                        resources=resources,
+                        materializations=materializations,
                     )
             except ArtifactPublicationDeadlineExceeded as error:
                 raise self._expired() from error
@@ -529,12 +481,13 @@ class FiscalCandidatePreparation:
         deadline_at: datetime,
         *,
         resources: _ParserResourceOperation,
+        materializations: ExitStack,
     ) -> CurrentFiscalCandidate:
         budget = partial(self._budget, deadline_at)
         configuration_generation = self._configuration_digest()
         if self._now() >= command.expires_at:
             raise _invalid("candidate command is already expired")
-        reader = FiscalArtifactRead(self.artifacts, budget)
+        reader = FiscalArtifactRead(self._read_artifacts, budget)
         intent = self._intent(builder, command)
         previous = reader.current(command.artifact_id(_INTENT))
         if previous is not None and reader.read(
@@ -560,7 +513,21 @@ class FiscalCandidatePreparation:
                     "candidate command identity is immutable",
                 )
             self._authority(signed, deadline_at)
-            materialized = self._reconstruct(builder, signed, deadline_at)
+            materialization = materializations.enter_context(
+                builder._open_materialization(
+                    signed.body.content.discovery_ref,
+                    security_id=signed.body.command.security_id,
+                    classification_bindings=signed.body.command.classification_bindings,
+                    deadline_at=deadline_at,
+                    publish=False,
+                    retained_mapping_refs=signed.body.content.mapping_refs,
+                )
+            )
+            materialized = materialization.current()
+            if materialized.content != signed.body.content:
+                raise _invalid(
+                    "candidate does not reproduce from its complete current source closure"
+                )
             publication = ArtifactPublicationV1(artifact=existing, wrote=False)
         else:
             if marker is not None:
@@ -591,13 +558,16 @@ class FiscalCandidatePreparation:
             issuance = epoch.issuance_context
             started_at = self._now()
             execution_id = "candidate-job:" + uuid4().hex
-            materialized = builder._build(
-                command.discovery_ref,
-                security_id=command.security_id,
-                classification_bindings=command.classification_bindings,
-                deadline_at=deadline_at,
-                publish=True,
+            materialization = materializations.enter_context(
+                builder._open_materialization(
+                    command.discovery_ref,
+                    security_id=command.security_id,
+                    classification_bindings=command.classification_bindings,
+                    deadline_at=deadline_at,
+                    publish=True,
+                )
             )
+            materialized = materialization.current()
             completed_at = self._now()
             current = self.authorities.read_current(
                 self.authority_id,
@@ -673,12 +643,12 @@ class FiscalCandidatePreparation:
             record.artifact_id: record for record in materialized.consumed_metadata
         }
         for role in (_INTENT, _SIGNING, _ROLE):
-            record = self.artifacts.get(command.artifact_id(role))
+            record = self._read_artifacts.get(command.artifact_id(role))
             records[record.artifact_id] = record
         authority = self._authority(signed, deadline_at)
         for head in authority.history_heads:
             if head.stream_kind == "evidence":
-                records[head.subject_id] = self.artifacts.get(head.subject_id)
+                records[head.subject_id] = self._read_artifacts.get(head.subject_id)
         if not isinstance(self.history, FiscalAdmissionHistoryPort):
             raise _invalid("candidate history write capability is not configured")
         values = tuple(sorted(records.values(), key=lambda record: record.artifact_id))
@@ -696,6 +666,8 @@ class FiscalCandidatePreparation:
             expected_head=None,
             deadline_at=deadline_at,
         )
+        materialized = materialization.current()
+        materializations.close()
         return self._finish(
             builder,
             signed,
@@ -704,4 +676,217 @@ class FiscalCandidatePreparation:
             resources=resources,
             deadline_at=deadline_at,
             configuration_generation=configuration_generation,
+            terminal=True,
         )
+
+
+class FiscalCandidateRead(Protocol):
+    def current(self) -> CurrentFiscalCandidate: ...
+
+
+_CANDIDATE_OPERATION: ContextVar[FiscalCandidateOperation | None] = ContextVar(
+    "fiscal_candidate_operation", default=None
+)
+
+
+def _candidate_actor() -> tuple[object, ...]:
+    try:
+        task: object | None = current_task()
+    except RuntimeError:
+        task = None
+    return (
+        os.getpid(),
+        get_ident(),
+        task,
+        os.getuid(),
+        os.geteuid(),
+        os.getgid(),
+        os.getegid(),
+        tuple(sorted(os.getgroups())),
+    )
+
+
+class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
+    def __init__(
+        self,
+        owner: FiscalCandidatePreparation,
+        reference: ArtifactRefV1,
+        deadline_at: datetime,
+    ) -> None:
+        self._owner, self._reference, self._deadline_at = (
+            owner,
+            deepcopy(reference),
+            deadline_at,
+        )
+        self._phase: Literal["new", "open", "completed", "failed"] = "new"
+        self._scope, self._children = ExitStack(), ExitStack()
+        self._token: Token[FiscalCandidateOperation | None] | None = None
+        self._result: CurrentFiscalCandidate | None = None
+        self._materialization: _MaterializationRead | None = None
+        self._resources: _ParserResourceOperation | None = None
+        self._signed: FiscalStatementCandidateV2 | None = None
+        self._publication: ArtifactPublicationV1 | None = None
+        self._generation = ""
+        self._actor = _candidate_actor()
+        self._owners = (
+            owner._builder,
+            owner.artifacts,
+            owner._read_artifacts,
+            owner.history,
+            owner.authorities,
+            owner.authority_id,
+            owner._configuration_digest,
+            owner.clock,
+        )
+
+    def _require(self) -> None:
+        owner = self._owner
+        if (
+            self._phase != "open"
+            or _CANDIDATE_OPERATION.get() is not self
+            or self._actor != _candidate_actor()
+        ):
+            raise _invalid(
+                "candidate observation is closed or belongs to another execution"
+            )
+        if self._owners != (
+            owner._builder,
+            owner.artifacts,
+            owner._read_artifacts,
+            owner.history,
+            owner.authorities,
+            owner.authority_id,
+            owner._configuration_digest,
+            owner.clock,
+        ):
+            raise _invalid("candidate configured owner changed")
+
+    def __enter__(self) -> FiscalCandidateRead:
+        if self._phase != "new" or self._actor != _candidate_actor():
+            raise _invalid("candidate observation cannot reopen or change execution")
+        self._phase = "open"
+        self._token = _CANDIDATE_OPERATION.set(self)
+        owner = self._owner
+        try:
+            self._scope.enter_context(
+                metadata_operation_budget(
+                    partial(owner._budget, self._deadline_at), owner._expired
+                )
+            )
+            self._resources = self._scope.enter_context(
+                _ParserResourceOperation(partial(owner._budget, self._deadline_at))
+            )
+            self._generation = owner.current_configuration_digest()
+            reader = FiscalArtifactRead(
+                owner._read_artifacts, partial(owner._budget, self._deadline_at)
+            )
+            self._signed = owner._load(reader, self._reference)
+            owner._authority(self._signed, self._deadline_at)
+            body = self._signed.body
+            self._materialization = self._children.enter_context(
+                owner._builder._open_materialization(
+                    body.content.discovery_ref,
+                    security_id=body.command.security_id,
+                    classification_bindings=body.command.classification_bindings,
+                    deadline_at=self._deadline_at,
+                    publish=False,
+                    retained_mapping_refs=body.content.mapping_refs,
+                )
+            )
+            self._publication = ArtifactPublicationV1(
+                artifact=reader.get(self._reference.artifact_id), wrote=False
+            )
+            self.current()
+            return self
+        except BaseException as error:
+            self._phase = "failed"
+            self._cleanup(type(error), error, error.__traceback__)
+            if isinstance(error, ValueError):
+                raise _invalid(
+                    "candidate failed typed evidence verification"
+                ) from error
+            raise
+
+    def _current(self, *, terminal: bool) -> CurrentFiscalCandidate:
+        self._require()
+        if (
+            self._materialization is None
+            or self._signed is None
+            or self._publication is None
+            or self._resources is None
+        ):
+            raise _invalid("candidate observation has no complete first proof")
+        materialized = self._materialization.current()
+        if materialized.content != self._signed.body.content:
+            raise _invalid(
+                "candidate does not reproduce from its complete current source closure"
+            )
+        if terminal:
+            self._children.close()
+        return self._owner._finish(
+            self._owner._builder,
+            self._signed,
+            self._publication,
+            materialized,
+            resources=self._resources,
+            deadline_at=self._deadline_at,
+            configuration_generation=self._generation,
+            terminal=terminal,
+        )
+
+    def current(self) -> CurrentFiscalCandidate:
+        try:
+            return deepcopy(self._current(terminal=False))
+        except ValueError as error:
+            self._phase = "failed"
+            raise _invalid("candidate failed typed evidence verification") from error
+        except BaseException:
+            self._phase = "failed"
+            raise
+
+    def _cleanup(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        try:
+            self._children.__exit__(exc_type, exc, tb)
+            self._scope.__exit__(exc_type, exc, tb)
+        finally:
+            if self._token is not None:
+                _CANDIDATE_OPERATION.reset(self._token)
+                self._token = None
+            self._materialization = None
+            self._signed = None
+            self._publication = None
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> Literal[False]:
+        try:
+            if exc_type is None:
+                self._result = deepcopy(self._current(terminal=True))
+                self._phase = "completed"
+        except BaseException as error:
+            self._phase = "failed"
+            self._cleanup(type(error), error, error.__traceback__)
+            if isinstance(error, ValueError):
+                raise _invalid(
+                    "candidate failed typed evidence verification"
+                ) from error
+            raise
+        else:
+            if exc_type is not None:
+                self._phase = "failed"
+            self._cleanup(exc_type, exc, tb)
+        return False
+
+    @property
+    def completed(self) -> CurrentFiscalCandidate:
+        if self._phase != "completed" or self._result is None:
+            raise _invalid("candidate observation did not complete")
+        return deepcopy(self._result)

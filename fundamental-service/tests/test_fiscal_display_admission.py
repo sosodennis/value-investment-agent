@@ -208,7 +208,7 @@ def display(environment, tmp_path, protected_deployment_root):
         ),
         mapping_private_key_file=key_file(
             protected_deployment_root / "mapping.pem",
-            source_builder.mapping_approvals.private_key(),
+            source_builder.mapping_publications.private_key(),
         ),
     )
     inputs = FiscalPreparationInputs(

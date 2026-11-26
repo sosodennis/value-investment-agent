@@ -426,9 +426,13 @@ class FiscalReleaseRuntime:
             result: FiscalReleaseCandidateReceiptV1 | ActiveDataReleaseV1
             if order.activation is not None:
                 result = service.activate(order.activation, deadline_at=deadline_at)
+                authorize(order.approved, deadline_at)
             else:
-                result = service.publish(order.approved, deadline_at=deadline_at)
-            authorize(order.approved, deadline_at)
+                with service.open_publication(
+                    order.approved, deadline_at=deadline_at
+                ) as receipt:
+                    authorize(order.approved, deadline_at)
+                    result = receipt.model_copy(deep=True)
             return result
         finally:
             self.metadata.release_ingestion_lock(lease)

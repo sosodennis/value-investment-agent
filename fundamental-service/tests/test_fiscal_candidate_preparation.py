@@ -62,7 +62,7 @@ def prepared_runtime(environment, tmp_path):
         ),
         mapping_private_key_file=key_file(
             tmp_path / "synthetic-mapping.pem",
-            source_builder.mapping_approvals.private_key(),
+            source_builder.mapping_publications.private_key(),
         ),
     )
     inputs = FiscalPreparationInputs(
@@ -686,7 +686,8 @@ def test_mixed_source_factory_preserves_verified_classification_activities(
         canonical_bytes(source_builder.mapping_approvals.trust_roots())
     )
     key_file(
-        config.mapping_private_key_file, source_builder.mapping_approvals.private_key()
+        config.mapping_private_key_file,
+        source_builder.mapping_publications.private_key(),
     )
     inputs = FiscalPreparationInputs(
         env.store,
@@ -850,7 +851,7 @@ def test_wrong_deployment_key_refuses_before_financial_work(
     def forbidden(*args, **kwargs):
         raise AssertionError("wrong candidate key entered the financial builder")
 
-    monkeypatch.setattr(builder, "_build", forbidden)
+    monkeypatch.setattr(builder, "_open_materialization", forbidden)
     with pytest.raises(SnapshotError) as failure:
         builder.prepare(command, deadline_at=deadline())
     assert failure.value.code == "FISCAL_CANDIDATE_INVALID"
@@ -1240,7 +1241,7 @@ def test_current_apple_factory_preserves_all_frozen_cells(prepared_runtime, tmp_
     config.mapping_trust_roots_file.write_bytes(
         canonical_bytes(source.mapping_approvals.trust_roots())
     )
-    key_file(config.mapping_private_key_file, source.mapping_approvals.private_key())
+    key_file(config.mapping_private_key_file, source.mapping_publications.private_key())
     inputs = FiscalPreparationInputs(
         env.store, source.content, source.discovery, source.sources, source.pin, None
     )
@@ -1303,7 +1304,7 @@ def test_complete_source_configuration_rotation_before_snapshot_refuses(
     config.mapping_trust_roots_file.write_bytes(
         canonical_bytes(source.mapping_approvals.trust_roots())
     )
-    key_file(config.mapping_private_key_file, source.mapping_approvals.private_key())
+    key_file(config.mapping_private_key_file, source.mapping_publications.private_key())
     state = {"generation": "active", "calls": 0}
 
     class CurrentSources:
@@ -1381,3 +1382,113 @@ def test_complete_source_configuration_rotation_before_snapshot_refuses(
         reader.verify_candidate(first.reference, deadline_at=deadline())
     assert policy_rotation.value.code == "FISCAL_CANDIDATE_INVALID"
     resolver.accounting_release_file.write_bytes(release_bytes)
+
+
+def test_live_candidate_results_are_detached_and_closed_reads_refuse(prepared_runtime):
+    from decimal import Decimal
+
+    _, _, _, builder, command, _ = prepared_runtime
+    first = builder.prepare(command, deadline_at=deadline())
+    operation = builder.open_candidate(first.reference, deadline_at=deadline())
+    with operation as read:
+        result = read.current()
+        object.__setattr__(result.projection.quarter_nodes[0], "value", Decimal("0"))
+        object.__setattr__(result.content.source_uses[0].scope, "issuer_id", "other")
+        assert_frozen_candidate_projection(read.current(), "aapl-historical")
+        assert read.current().content == first.content
+    assert operation.completed.content == first.content
+    assert operation.completed.observed_at >= first.observed_at
+    with pytest.raises(SnapshotError, match="closed"):
+        read.current()
+    with pytest.raises(SnapshotError, match="reopen"):
+        with operation:
+            pass
+
+
+def test_live_candidate_missing_registration_does_not_repair_or_reactivate(
+    prepared_runtime,
+):
+    from sqlalchemy import text
+
+    env, _, _, builder, command, _ = prepared_runtime
+    first = builder.prepare(command, deadline_at=deadline())
+    reference = first.content.projection_ref
+    original = env.store.read(reference.artifact_id)
+
+    async def remove(connection):
+        await connection.execute(
+            text(
+                "DELETE FROM fundamental.content_objects WHERE content_hash=:digest AND media_type=:media"
+            ),
+            {"digest": reference.content_hash, "media": reference.media_type},
+        )
+
+    operation = builder.open_candidate(first.reference, deadline_at=deadline())
+    with pytest.raises(SnapshotError):
+        with operation as read:
+            env.metadata.run_fiscal_admission_history(remove)
+            with pytest.raises(SnapshotError):
+                read.current()
+            with pytest.raises(SnapshotError) as missing:
+                env.metadata.content_byte_length(
+                    reference.content_hash, media_type=reference.media_type
+                )
+            assert missing.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
+            env.store._content.put(original, media_type=reference.media_type)
+            with pytest.raises(SnapshotError, match="closed"):
+                read.current()
+    with pytest.raises(SnapshotError, match="complete"):
+        _ = operation.completed
+    assert (
+        builder.verify_candidate(first.reference, deadline_at=deadline()).content
+        == first.content
+    )
+
+
+@pytest.mark.parametrize("interruption", ["cancel", "thread"])
+def test_live_candidate_discards_interrupted_execution(prepared_runtime, interruption):
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    _, _, _, builder, command, _ = prepared_runtime
+    first = builder.prepare(command, deadline_at=deadline())
+    operation = builder.open_candidate(first.reference, deadline_at=deadline())
+    error = asyncio.CancelledError if interruption == "cancel" else SnapshotError
+    with pytest.raises(error):
+        with operation as read:
+            if interruption == "cancel":
+                raise asyncio.CancelledError("cancel candidate read")
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(read.current).result()
+    with pytest.raises(SnapshotError):
+        read.current()
+    with pytest.raises(SnapshotError):
+        _ = operation.completed
+    assert (
+        builder.verify_candidate(first.reference, deadline_at=deadline()).content
+        == first.content
+    )
+
+
+def test_live_candidate_rechecks_consumed_mapping_body(prepared_runtime):
+    env, _, _, builder, command, _ = prepared_runtime
+    first = builder.prepare(command, deadline_at=deadline())
+    reference = first.content.mapping_refs[-1]
+    path = env.store._content._filesystem._path(
+        reference.content_hash, reference.media_type
+    )
+    original = path.read_bytes()
+    operation = builder.open_candidate(first.reference, deadline_at=deadline())
+    try:
+        with pytest.raises(SnapshotError):
+            with operation as read:
+                path.write_bytes(original + b" ")
+                read.current()
+    finally:
+        path.write_bytes(original)
+    with pytest.raises(SnapshotError):
+        read.current()
+    assert (
+        builder.verify_candidate(first.reference, deadline_at=deadline()).content
+        == first.content
+    )

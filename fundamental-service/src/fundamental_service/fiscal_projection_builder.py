@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import os
+from asyncio import current_task
+from threading import get_ident
+from contextvars import ContextVar
+
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, ExitStack, contextmanager
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -27,7 +34,12 @@ from .fiscal_candidate_contracts import (
     VerifiedRawSourceForCandidateV1,
 )
 from .fiscal_discovery import FiscalDiscovery
-from .fiscal_source_closure import FiscalArtifactRead, FiscalSourceClosure
+from .fiscal_source_closure import (
+    FiscalArtifactRead,
+    FiscalSourceClosure,
+    FiscalSourceContentRead,
+    FiscalSourceRead,
+)
 from .fiscal_statement_contracts import (
     FiscalBasisFilingV1,
     FiscalBasisObservationV1,
@@ -77,19 +89,24 @@ from .snapshots import ContentAddressedStore, SnapshotError
 if TYPE_CHECKING:
     from .fiscal_candidate_preparation import (
         FiscalCandidatePreparation,
+        FiscalCandidateOperation,
         CurrentFiscalCandidate,
     )
 from .statement_contracts import StatementScopeV1
 
 
+class FiscalClassifiedSourceReadPort(Protocol):
+    def current(self) -> VerifiedClassifiedCandidateSource: ...
+
+
 class FiscalCandidateClassificationPort(Protocol):
-    def require_candidate_source(
+    def open_candidate_source(
         self,
         scope: FiscalSourceUseScopeV1,
         classification_refs: tuple[ArtifactRefV1, ...],
         *,
         deadline_at: datetime,
-    ) -> VerifiedClassifiedCandidateSource: ...
+    ) -> AbstractContextManager[FiscalClassifiedSourceReadPort]: ...
 
 
 class FiscalCoverageBasisEvidenceV1(StrictModel):
@@ -120,6 +137,174 @@ def _invalid(message: str) -> SnapshotError:
     return SnapshotError("FISCAL_PROJECTION_SOURCE_INVALID", message)
 
 
+@dataclass(frozen=True)
+class _RawMaterializedSource:
+    source: FiscalSourceRead
+    proof: VerifiedRawCandidateSource
+
+
+@dataclass(frozen=True)
+class _ClassifiedMaterializedSource:
+    source: FiscalSourceRead
+    admission: FiscalClassifiedSourceReadPort
+    proof: VerifiedClassifiedCandidateSource
+
+
+_MATERIALIZATION_READS: ContextVar[tuple[object, ...]] = ContextVar(
+    "fiscal_materialization_reads", default=()
+)
+
+
+def _materialization_actor() -> tuple[object, ...]:
+    try:
+        task: object | None = current_task()
+    except RuntimeError:
+        task = None
+    return (
+        os.getpid(),
+        get_ident(),
+        task,
+        os.getuid(),
+        os.geteuid(),
+        os.getgid(),
+        os.getegid(),
+        tuple(sorted(os.getgroups())),
+    )
+
+
+class _MaterializationRead:
+    def __init__(self, owner: FiscalProjectionBuilder, deadline_at: datetime) -> None:
+        self.owner, self.deadline_at = owner, deadline_at
+        self.reader = FiscalArtifactRead(
+            owner.read_artifacts, partial(owner._budget, deadline_at)
+        )
+        self.content = FiscalSourceContentRead(
+            owner.content, partial(owner._budget, deadline_at)
+        )
+        self.children = ExitStack()
+        self.sources: list[_RawMaterializedSource | _ClassifiedMaterializedSource] = []
+        self.approvals: list[tuple[FiscalStatementMappingBatchV1, ArtifactRefV1]] = []
+        self.image: FiscalCandidateMaterialization | None = None
+        self._owners = (
+            owner.discovery,
+            owner.sources,
+            owner.artifacts,
+            owner.read_artifacts,
+            owner.mapping_publications,
+            owner.content,
+            owner.mapping_approvals,
+            owner.classifications,
+            owner.clock,
+        )
+        self._configuration = self._configured()
+        self._actor = _materialization_actor()
+        self._closed = False
+
+    def _configured(self) -> bytes:
+        return canonical_bytes(
+            (
+                self.owner.pin,
+                fiscal_statement_registry(),
+                fiscal_mapping_policy_digest(),
+                fiscal_display_profile_digest(),
+                fiscal_statement_policy().digest,
+                fiscal_projection_executable_digest(),
+            )
+        )
+
+    def close(self) -> None:
+        self._closed = True
+        self.children.close()
+        self.sources.clear()
+        self.approvals.clear()
+        self.image = None
+
+    def current(self) -> FiscalCandidateMaterialization:
+        if self._closed or self.image is None:
+            raise _invalid("fiscal materialization observation is closed")
+        if (
+            self._actor != _materialization_actor()
+            or self not in _MATERIALIZATION_READS.get()
+        ):
+            self.close()
+            raise _invalid("materialization observation belongs to another execution")
+        try:
+            owner = self.owner
+            owner._budget(self.deadline_at)
+            if (
+                self._owners
+                != (
+                    owner.discovery,
+                    owner.sources,
+                    owner.artifacts,
+                    owner.read_artifacts,
+                    owner.mapping_publications,
+                    owner.content,
+                    owner.mapping_approvals,
+                    owner.classifications,
+                    owner.clock,
+                )
+                or self._configuration != self._configured()
+            ):
+                raise _invalid(
+                    "fiscal materialization configured owner or policy changed"
+                )
+            discovery_ref = self.image.content.discovery_ref
+            discovery = owner.discovery.read(
+                discovery_ref.artifact_id, deadline_at=self.deadline_at
+            )
+            if read_retained_artifact(self.reader, discovery_ref) != canonical_bytes(
+                discovery
+            ):
+                raise _invalid("fiscal discovery changed during materialization")
+            proofs: list[VerifiedFiscalCandidateSource] = []
+            for slot in self.sources:
+                slot.source.check_current()
+                if (
+                    sha256_digest(slot.source.evidence.model_dump(mode="json"))
+                    != slot.proof.source_use.scope.source_validation_ref.content_hash
+                ):
+                    raise _invalid("candidate source changed before completion")
+                for identity, record in slot.source.records:
+                    self.reader.expect(identity, record)
+                if isinstance(slot, _ClassifiedMaterializedSource):
+                    proof = slot.admission.current()
+                    if proof != slot.proof:
+                        raise _invalid(
+                            "candidate classification proof changed before completion"
+                        )
+                    for record in proof.consumed_metadata:
+                        self.reader.expect(record.artifact_id, record)
+                    proofs.append(proof)
+                else:
+                    proofs.append(slot.proof)
+            if owner.mapping_approvals is None:
+                raise _invalid("candidate mapping authority disappeared")
+            for batch, approval in self.approvals:
+                owner.mapping_approvals.verify(
+                    batch, approval, deadline_at=self.deadline_at
+                )
+            self.content.check_current()
+            self.reader.check_bodies()
+            owner._budget(self.deadline_at)
+            return deepcopy(
+                FiscalCandidateMaterialization(
+                    self.image.content,
+                    self.image.projection,
+                    tuple(
+                        record
+                        for _, record in self.reader.records
+                        if record is not None
+                    ),
+                    tuple(proofs),
+                    self.image.source_documents,
+                )
+            )
+        except BaseException:
+            self.close()
+            raise
+
+
 class FiscalProjectionBuilder:
     def __init__(
         self,
@@ -127,9 +312,11 @@ class FiscalProjectionBuilder:
         discovery: FiscalDiscovery,
         sources: FiscalSourceClosure,
         artifacts: EvidenceArtifactStore,
+        read_artifacts: EvidenceArtifactStore,
         content: ContentAddressedStore,
         pin: FiscalValidationPinV1,
         mapping_approvals: FiscalMappingVerifier | None,
+        mapping_publications: FiscalMappingApprovalOwner | None = None,
         preparation: FiscalCandidatePreparation | None = None,
         classifications: FiscalCandidateClassificationPort | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -140,6 +327,8 @@ class FiscalProjectionBuilder:
             artifacts,
             content,
         )
+        self.read_artifacts = read_artifacts
+        self.mapping_publications = mapping_publications
         self.pin, self.mapping_approvals = pin, mapping_approvals
         self.preparation, self.classifications, self.clock = (
             preparation,
@@ -372,7 +561,18 @@ class FiscalProjectionBuilder:
             )
         return self.preparation.verify_candidate(reference, deadline_at=deadline_at)
 
-    def _build(
+    def open_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> FiscalCandidateOperation:
+        if self.preparation is None:
+            raise SnapshotError(
+                "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
+                "candidate reader is not configured",
+            )
+        return self.preparation.open_candidate(reference, deadline_at=deadline_at)
+
+    @contextmanager
+    def _open_materialization(
         self,
         discovery_ref: ArtifactRefV1,
         *,
@@ -381,7 +581,35 @@ class FiscalProjectionBuilder:
         deadline_at: datetime,
         publish: bool,
         retained_mapping_refs: tuple[ArtifactRefV1, ...] = (),
-    ) -> FiscalCandidateMaterialization:
+    ) -> Iterator[_MaterializationRead]:
+        read = _MaterializationRead(self, deadline_at)
+        token = _MATERIALIZATION_READS.set((*_MATERIALIZATION_READS.get(), read))
+        try:
+            self._materialize(
+                discovery_ref,
+                security_id=security_id,
+                classification_bindings=classification_bindings,
+                deadline_at=deadline_at,
+                publish=publish,
+                retained_mapping_refs=retained_mapping_refs,
+                read=read,
+            )
+            yield read
+        finally:
+            read.close()
+            _MATERIALIZATION_READS.reset(token)
+
+    def _materialize(
+        self,
+        discovery_ref: ArtifactRefV1,
+        *,
+        security_id: str | None,
+        classification_bindings: tuple[FiscalCandidateClassificationBindingV1, ...],
+        deadline_at: datetime,
+        publish: bool,
+        retained_mapping_refs: tuple[ArtifactRefV1, ...] = (),
+        read: _MaterializationRead,
+    ) -> None:
         budget = partial(self._budget, deadline_at)
         budget()
         if self.mapping_approvals is None:
@@ -389,7 +617,7 @@ class FiscalProjectionBuilder:
                 "FISCAL_MAPPING_AUTHORITY_UNCONFIGURED",
                 "fiscal projection preparation requires a configured mapping authority",
             )
-        reader = FiscalArtifactRead(self.artifacts, budget)
+        reader = read.reader
         discovery = self.discovery.read(
             discovery_ref.artifact_id, deadline_at=deadline_at
         )
@@ -441,7 +669,7 @@ class FiscalProjectionBuilder:
                 valuation_timestamp=discovery.request.valuation_timestamp,
                 pin=self.pin,
             )
-            source_read = self.sources.read_with_metadata(
+            source_read = self.sources.observe(
                 resolved.completed_artifact_id, deadline_at=deadline_at
             )
             for identity, record in source_read.records:
@@ -488,7 +716,7 @@ class FiscalProjectionBuilder:
             )
             if archive_receipt is None:
                 raise _invalid("fiscal original archive receipt is missing")
-            archive = self.content.get(
+            archive = read.content.get(
                 archive_receipt.content_hash, media_type=archive_receipt.media_type
             )
             budget()
@@ -562,10 +790,16 @@ class FiscalProjectionBuilder:
                 read_retained_artifact(reader, classification.witness_ref)
                 for reference in classification.classification_refs:
                     read_retained_artifact(reader, reference)
-                admitted = self.classifications.require_candidate_source(
-                    use_scope,
-                    classification.classification_refs,
-                    deadline_at=deadline_at,
+                admission = read.children.enter_context(
+                    self.classifications.open_candidate_source(
+                        use_scope,
+                        classification.classification_refs,
+                        deadline_at=deadline_at,
+                    )
+                )
+                admitted = admission.current()
+                read.sources.append(
+                    _ClassifiedMaterializedSource(source_read, admission, admitted)
                 )
                 if admitted.source_use.scope != use_scope:
                     raise _invalid(
@@ -578,17 +812,17 @@ class FiscalProjectionBuilder:
             else:
                 raw_use = VerifiedRawSourceForCandidateV1(scope=use_scope)
                 source_uses.append(raw_use)
-                source_evidence.append(
-                    VerifiedRawCandidateSource(
-                        raw_use,
-                        evidence.outcome.action_refs,
-                        tuple(
-                            record
-                            for _, record in source_read.records
-                            if record is not None
-                        ),
-                    )
+                raw_proof = VerifiedRawCandidateSource(
+                    raw_use,
+                    evidence.outcome.action_refs,
+                    tuple(
+                        record
+                        for _, record in source_read.records
+                        if record is not None
+                    ),
                 )
+                source_evidence.append(raw_proof)
+                read.sources.append(_RawMaterializedSource(source_read, raw_proof))
             batch_ref = self._retain(
                 batch,
                 "fiscal-statement-mapping-v1",
@@ -598,12 +832,12 @@ class FiscalProjectionBuilder:
                 deadline_at=deadline_at,
             )
             if publish:
-                if not isinstance(self.mapping_approvals, FiscalMappingApprovalOwner):
+                if self.mapping_publications is None:
                     raise SnapshotError(
                         "FISCAL_MAPPING_AUTHORITY_UNCONFIGURED",
                         "mapping write capability is not configured",
                     )
-                approval_ref = self.mapping_approvals.approve(
+                approval_ref = self.mapping_publications.approve(
                     batch, batch_ref, deadline_at=deadline_at
                 )
             else:
@@ -630,6 +864,7 @@ class FiscalProjectionBuilder:
                 approval_ref = possible_ref
             self.mapping_approvals.verify(batch, approval_ref, deadline_at=deadline_at)
             read_retained_artifact(reader, approval_ref)
+            read.approvals.append((batch, approval_ref))
             mapping_refs.extend((batch_ref, approval_ref))
             disclosure_refs = tuple(
                 self._retain(
@@ -821,23 +1056,7 @@ class FiscalProjectionBuilder:
             projection_policy_digest=fiscal_statement_policy().digest,
             executable_digest=fiscal_projection_executable_digest(),
         )
-        for source in source_uses:
-            if isinstance(source, ClassifiedSourceForCandidateV1):
-                if (
-                    self.classifications is None
-                    or self.classifications.require_candidate_source(
-                        source.scope,
-                        source.classification_refs,
-                        deadline_at=deadline_at,
-                    ).source_use
-                    != source
-                ):
-                    raise _invalid("candidate classification changed before completion")
-        for batch, approval in zip(mapped.values(), mapping_refs[1::2], strict=True):
-            self.mapping_approvals.verify(batch, approval, deadline_at=deadline_at)
-        reader.check_current()
-        budget()
-        return FiscalCandidateMaterialization(
+        read.image = FiscalCandidateMaterialization(
             content=candidate,
             projection=projection,
             source_evidence=tuple(source_evidence),

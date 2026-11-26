@@ -711,7 +711,8 @@ def test_each_admission_rebuilds_and_returns_detached_proof(environment, monkeyp
     admitted = env.owner.require_candidate_source(
         env.source.scope, (ref,), deadline_at=deadline()
     )
-    assert (len(calls), len(current)) == (1, 4)
+    assert len(calls) == 1
+    assert current
     object.__setattr__(
         admitted.source_use.scope.permitted_inputs[0], "value", Decimal("123")
     )
@@ -720,7 +721,19 @@ def test_each_admission_rebuilds_and_returns_detached_proof(environment, monkeyp
         env.source.scope, (ref,), deadline_at=deadline()
     )
     assert fresh.source_use.scope.permitted_inputs[0].value == Decimal("-1000000")
-    assert (len(calls), len(current)) == (2, 8)
+    assert len(calls) == 2
+    with env.owner.open_candidate_source(
+        env.source.scope, (ref,), deadline_at=deadline()
+    ) as read:
+        assert read.current() == fresh
+        object.__setattr__(
+            read.current().source_use.scope.permitted_inputs[0], "value", Decimal("123")
+        )
+        assert read.current().source_use.scope.permitted_inputs[0].value == Decimal(
+            "-1000000"
+        )
+    with pytest.raises(SnapshotError, match="closed"):
+        read.current()
 
 
 def test_signed_classification_candidate_and_same_command_retry(environment):

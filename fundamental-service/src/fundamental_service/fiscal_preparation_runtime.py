@@ -147,11 +147,16 @@ def build_fiscal_candidate_runtime(
             if isinstance(inputs.content, PostgresContentStore)
             else inputs.content,
         )
+    read_artifacts = (
+        inputs.artifacts.as_read_only()
+        if isinstance(inputs.artifacts, PostgresArtifactStore)
+        else inputs.artifacts
+    )
     history: FiscalAdmissionHistoryReaderPort = PostgresFiscalAdmissionHistory(metadata)
     if not write:
         history = ReadOnlyFiscalAdmissionHistory(history)
     authorities = FiscalAuthorityOwner(
-        artifacts=inputs.artifacts,
+        artifacts=read_artifacts,
         history=history,
         deployment=lambda: FiscalAuthorityDeploymentV1.model_validate_json(
             _configuration(deployment.authority_deployment_file)
@@ -161,7 +166,7 @@ def build_fiscal_candidate_runtime(
         inputs.accounting_accreditation or public_accounting_accreditation_provider()
     )
     classifier = FiscalSourceClassificationOwner(
-        artifacts=inputs.artifacts,
+        artifacts=read_artifacts,
         history=history,
         authorities=authorities,
         sources=inputs.classification_sources,
@@ -182,7 +187,7 @@ def build_fiscal_candidate_runtime(
             _configuration(deployment.mapping_trust_roots_file)
         )
 
-    mapping: FiscalMappingVerifier
+    mapping_publications: FiscalMappingApprovalOwner | None = None
     candidate_path, mapping_path = (
         deployment.candidate_private_key_file,
         deployment.mapping_private_key_file,
@@ -193,20 +198,23 @@ def build_fiscal_candidate_runtime(
                 "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
                 "candidate and mapping write capabilities are required",
             )
-        mapping = FiscalMappingApprovalOwner(
+        mapping_publications = FiscalMappingApprovalOwner(
             artifacts=inputs.artifacts,
             trust_roots=roots,
             private_key=lambda: _private_key(mapping_path),
         )
-    else:
-        mapping = FiscalMappingVerifier(artifacts=inputs.artifacts, trust_roots=roots)
+    mapping = FiscalMappingVerifier(artifacts=read_artifacts, trust_roots=roots)
     builder = FiscalProjectionBuilder(
         discovery=inputs.discovery,
         sources=inputs.sources,
         artifacts=inputs.artifacts,
-        content=inputs.content,
+        read_artifacts=read_artifacts,
+        content=inputs.content.as_read_only()
+        if isinstance(inputs.content, PostgresContentStore)
+        else inputs.content,
         pin=inputs.pin,
         mapping_approvals=mapping,
+        mapping_publications=mapping_publications,
         classifications=classifier,
     )
 
@@ -227,6 +235,7 @@ def build_fiscal_candidate_runtime(
     builder.preparation = FiscalCandidatePreparation(
         builder=builder,
         artifacts=inputs.artifacts,
+        read_artifacts=read_artifacts,
         history=history,
         authorities=authorities,
         authority_id=deployment.candidate_authority_id,
@@ -257,23 +266,26 @@ def configured_fiscal_candidate_runtime(
     declared_source_revision: str,
     write: bool,
 ) -> FiscalProjectionBuilder:
-    if not write:
-        if not isinstance(
-            acquisition.content_store, PostgresContentStore
-        ) or not isinstance(acquisition.capture_store, PostgresArtifactStore):
-            raise SnapshotError(
-                "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
-                "candidate reader requires PostgreSQL read-only storage",
-            )
-        acquisition = SecAcquisitionUseCase(
-            adapter=acquisition.adapter,
-            ingestion=acquisition.ingestion,
-            metadata=metadata,
-            content_store=acquisition.content_store.as_read_only(),
-            settings=acquisition.settings,
-            authorized_organizations=acquisition.authorized_organizations,
-            capture_store=acquisition.capture_store.as_read_only(),
+    if not isinstance(
+        acquisition.content_store, PostgresContentStore
+    ) or not isinstance(acquisition.capture_store, PostgresArtifactStore):
+        raise SnapshotError(
+            "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
+            "candidate observations require PostgreSQL read-only storage",
         )
+    writer_artifacts, writer_content = (
+        acquisition.capture_store,
+        acquisition.content_store,
+    )
+    acquisition = SecAcquisitionUseCase(
+        adapter=acquisition.adapter,
+        ingestion=acquisition.ingestion,
+        metadata=metadata,
+        content_store=acquisition.content_store.as_read_only(),
+        settings=acquisition.settings,
+        authorized_organizations=acquisition.authorized_organizations,
+        capture_store=acquisition.capture_store.as_read_only(),
+    )
     sources = acquisition.fiscal_source_closure(
         declared_source_revision=declared_source_revision
     )
@@ -293,8 +305,8 @@ def configured_fiscal_candidate_runtime(
         )
 
     inputs = FiscalPreparationInputs(
-        acquisition.capture_store,
-        acquisition.content_store,
+        writer_artifacts if write else acquisition.capture_store,
+        writer_content if write else acquisition.content_store,
         discovery,
         sources,
         FiscalValidationPinV1(

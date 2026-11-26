@@ -6,6 +6,7 @@ import shutil
 import json
 from pathlib import Path
 from datetime import UTC, datetime, timedelta
+from contextlib import contextmanager
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -21,7 +22,9 @@ from fundamental_service.data_releases import (
 from fundamental_service.fiscal_candidate_contracts import (
     FiscalPrepareCandidateCommandV1,
 )
-from fundamental_service.fiscal_display_admission import FiscalDisplayAdmission
+from fundamental_service.fiscal_display_admission import (
+    FiscalDisplayOperation,
+)
 from fundamental_service.fiscal_display_runtime import build_fiscal_display_reader
 from fundamental_service.fiscal_preparation_runtime import (
     FiscalPreparationInputs,
@@ -41,7 +44,6 @@ from fundamental_service.fiscal_release_runtime import (
     release_configuration_digest,
 )
 from fundamental_service.fiscal_releases import FiscalReleaseService
-from fundamental_service.fiscal_source_closure import FiscalArtifactRead
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
 import test_fiscal_display_admission as display_cases
@@ -81,7 +83,7 @@ def classified_display(display, tmp_path, protected_deployment_root, monkeypatch
         )
         key_file(
             config.mapping_private_key_file,
-            source_builder.mapping_approvals.private_key(),
+            source_builder.mapping_publications.private_key(),
         )
         inputs = FiscalPreparationInputs(
             env.store,
@@ -190,7 +192,7 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
                 current.reference, current.candidate.reference, deadline_at=deadline()
             )
     accreditation.write_bytes(original)
-    review = FiscalDisplayAdmission.review_and_decide
+    review = FiscalDisplayOperation.__enter__
 
     def display_runtime_last_cut(self, *args, **kwargs):
         result = review(self, *args, **kwargs)
@@ -198,9 +200,7 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
         return result
 
     with monkeypatch.context() as patch:
-        patch.setattr(
-            FiscalDisplayAdmission, "review_and_decide", display_runtime_last_cut
-        )
+        patch.setattr(FiscalDisplayOperation, "__enter__", display_runtime_last_cut)
         with pytest.raises(SnapshotError, match="configuration"):
             display.runtime.apply(display.order.order_id, deadline_at=deadline())
     accreditation.write_bytes(original)
@@ -236,12 +236,7 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
     approved = FiscalPublishV1(
         candidate_ref=current.candidate.reference, decision_ref=current.reference
     )
-    observed = reader.observe(approved, deadline_at=deadline())
-    reader.finish(
-        observed,
-        FiscalArtifactRead(reader.artifacts, lambda: 60),
-        deadline_at=deadline(),
-    )
+    reader.observe(approved, deadline_at=deadline())
     finish_release = reader.history.finish_observation
 
     def release_last_cut(*args, **kwargs):
@@ -252,11 +247,7 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
     with monkeypatch.context() as patch:
         patch.setattr(reader.history, "finish_observation", release_last_cut)
         with pytest.raises(SnapshotError, match="configuration"):
-            reader.finish(
-                observed,
-                FiscalArtifactRead(reader.artifacts, lambda: 60),
-                deadline_at=deadline(),
-            )
+            reader.observe(approved, deadline_at=deadline())
     accreditation.write_bytes(original)
     orders = protected_deployment_root / "release-orders"
     orders.mkdir(mode=0o700)
@@ -293,15 +284,18 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
     )
     first = runtime.apply(order.order_id, deadline_at=deadline())
     assert first.wrote
-    publish = FiscalReleaseService.publish
+    publish = FiscalReleaseService.open_publication
 
+    @contextmanager
     def release_runtime_last_cut(self, *args, **kwargs):
-        result = publish(self, *args, **kwargs)
-        rotate()
-        return result
+        with publish(self, *args, **kwargs) as result:
+            rotate()
+            yield result
 
     with monkeypatch.context() as patch:
-        patch.setattr(FiscalReleaseService, "publish", release_runtime_last_cut)
+        patch.setattr(
+            FiscalReleaseService, "open_publication", release_runtime_last_cut
+        )
         with pytest.raises(ValueError, match="binding"):
             runtime.apply(order.order_id, deadline_at=deadline())
     accreditation.write_bytes(original)

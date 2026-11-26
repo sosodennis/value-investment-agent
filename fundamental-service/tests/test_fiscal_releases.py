@@ -335,12 +335,9 @@ def test_retry_canary_tamper_and_purpose_scope_boundaries(published, monkeypatch
     monkeypatch.setattr(display.env.metadata, "get_data_release_verification", original)
     new_configuration = ["generation-one"]
     reader.configuration_digest = lambda: new_configuration[0]
-    _, _, observed, journal = reader.pinned(
-        receipt.manifest_digest, deadline_at=deadline()
-    )
-    new_configuration[0] = "generation-two"
     with pytest.raises(SnapshotError, match="configuration"):
-        reader.finish(observed, journal, deadline_at=deadline())
+        with reader._open_pinned(receipt.manifest_digest, deadline_at=deadline()):
+            new_configuration[0] = "generation-two"
 
 
 def test_authenticated_http_typed_dag_and_conditional_read(published):
@@ -603,10 +600,11 @@ def test_same_transaction_activation_blocks_metadata_writer_then_current_refuses
     from fundamental_service.data_releases import DataReleaseError
 
     display, _, _, reader, receipt = published
-    _, _, observation, journal = reader.pinned(
+    with reader._open_pinned(
         receipt.manifest_digest, deadline_at=deadline()
-    )
-    snapshot = reader.finish(observation, journal, deadline_at=deadline())
+    ) as operation:
+        observation = operation.observation
+        snapshot = operation._complete()
     locked, release_lock, writer_started = Event(), Event(), Event()
     original = PostgresFiscalAdmissionHistory.validate_activation
 
@@ -696,10 +694,10 @@ def test_pointer_wait_crosses_expiry_without_activation(published):
         finally:
             await connection.close()
 
-    _, _, observation, journal = reader.pinned(
+    with reader._open_pinned(
         receipt.manifest_digest, deadline_at=deadline()
-    )
-    snapshot = reader.finish(observation, journal, deadline_at=deadline())
+    ) as operation:
+        snapshot = operation._complete()
     locked, unlock = Event(), Event()
     with ThreadPoolExecutor(max_workers=2) as pool:
         holder = pool.submit(asyncio.run, initialize_and_lock(locked, unlock))
@@ -1050,10 +1048,10 @@ def test_same_transaction_revoke_writer_waits_and_old_observation_refuses(
     )
 
     display, current, _, reader, receipt = published
-    _, _, observation, journal = reader.pinned(
+    with reader._open_pinned(
         receipt.manifest_digest, deadline_at=deadline()
-    )
-    snapshot = reader.finish(observation, journal, deadline_at=deadline())
+    ) as operation:
+        snapshot = operation._complete()
     stream_id = (
         "control:display-decision:"
         + current.decision.body.command.request.locator_digest
@@ -1129,10 +1127,10 @@ def test_recovery_table_fence_waits_for_same_transaction_activation(
     from fundamental_service.persistence_recovery import _lock, _installed_tables
 
     display, _, _, reader, receipt = published
-    _, _, observation, journal = reader.pinned(
+    with reader._open_pinned(
         receipt.manifest_digest, deadline_at=deadline()
-    )
-    snapshot = reader.finish(observation, journal, deadline_at=deadline())
+    ) as operation:
+        snapshot = operation._complete()
     locked, unlock, recovery_started = Event(), Event(), Event()
     original = PostgresFiscalAdmissionHistory.validate_activation
 
