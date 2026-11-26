@@ -1050,6 +1050,14 @@ python -m fundamental_service.fiscal_source_runner \
 
 Content 和 artifact reader 只驗現有 registration 與 byte length。缺 registration 或長度不符即拒絕，不自動 INSERT、repair 或更新 retained journal。一般服務和寫入 operator 保留原 publication 與 recovery 行為。
 
+跨 UID reader 的部署在所有 writer 與 restore process 設定同一個 `FUNDAMENTAL_SERVICE_CONTENT_READER_GID`。未設定時維持 private publication，新檔案0600。空值、非法 GID 或 publisher 不屬於該群組時回 `CONTENT_PUBLICATION_ACCESS_UNAVAILABLE`，不降回 private。此群組可讀整個 content root，部署必須信任其全部成員。API 與 fiscal authority 的授權檢查仍各自執行。
+
+同一 content root 使用單一非 root publisher 數字 UID。Registry、source preparer、classifier 與 release 各自位於獨立 container、PID 與 mount namespace，只掛自己的 owner-only key 和 DB secret，使用各自非 admin DB role。Installed code、installation 與 orders 由部署 owner 保護。每個 container 設定 `cap_drop: [ALL]` 與 `no-new-privileges`，不掛 Docker socket、宿主 `/proc` 或他方 keys。Reader 使用另一 UID，加入 reader GID，無 key，DB 只有 SELECT，content mount 唯讀且沒有另一個可寫別名。
+
+Group publication 的新 content root 與 hash directory 由 publisher 擁有，GID 為 reader GID，mode0750。新 bytes 在原子發布前於 temp FD 設定 GID 與0640並 fsync。Restore 使用同一政策，staging directory 保持 owner-only。部署 owner 另行確認 root 以上路徑可供 reader traversal。所有既存目錄與物件只驗不修，不符時回 `CONTENT_ACCESS_INSTALL_REQUIRED`；OS 拒絕讀取回 `SOURCE_BYTES_FORBIDDEN`，不是 revoked 語義判定。
+
+既存 private content 只能由部署 owner 依本次明列的 exact registered inventory 一次安裝。先核每筆 hash、length、regular file、publisher owner 與 root confinement，再只調整列明 bytes 和必要 root/hash directories 的 GID 與上述 mode。保留 bytes、mtime、metadata refs 與原授權期限，記錄 inventory digest 及前後 bytes digest。不要遞迴掃 root bulk chmod，也不要在每次 CLI 後修復。安裝中斷時依同一 inventory 重試；尚未安裝的內容繼續具名拒絕。舊 grant 自然到期仍須拒絕 current，新 current 正控使用真正 fresh order，不修改舊 signed bytes 或時間。
+
 讀取 process 只需要 public deployment、mapping trust 與適用的 focus authority。它不載入 candidate、mapping 或 focus 私鑰，且沒有 history append、checkpoint 或 seal 能力。它從原 discovery 重建完整內容，再於一個有界 PostgreSQL snapshot 核對全部 metadata、storage、heads、sealed entries 與 current epoch。Source、classification、witness、grant、build、policy、expiry 或任何 binding 改變均拒絕。Raw parser action refs 保留原 owner 驗證的 evidence，不會創造未參與的 preparer、focus validator 或 classifier。
 
 相同 command 重試保留首次 signed bytes、execution、expiry 與 source identity。變更 command scope、pins 或 expiry 必須使用新 command ID。若 `FISCAL_CANDIDATE_SIGNING_OUTCOME_UNAVAILABLE` 表示 signing intent 已留存而沒有可證明的 durable signature，該 command 不再重簽。用新 command ID 執行真實新工作。已留存 signed bytes 的同代重試可續做缺少的 publication history；純讀不補寫。Restore 後舊 candidate 或 signed orphan 保留原 issuance，不能靠新 append 取得 current。新的本代 command 需要真正本代 invocation 與有效 grants。

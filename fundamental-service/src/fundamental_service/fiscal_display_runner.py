@@ -11,6 +11,7 @@ from pathlib import Path
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from .content_publication import configured_content_publication_access
 from .fiscal_display_runtime import (
     FiscalDisplayRuntime,
     _budget,
@@ -59,6 +60,7 @@ async def _run(order_id: str, deadline_at: datetime) -> bytes:
                 PostgresContentStore(
                     Path(os.environ["FUNDAMENTAL_SERVICE_DATA_ROOT"]) / "content",
                     metadata,
+                    publication_access=configured_content_publication_access(),
                 ),
             ),
             metadata=metadata,

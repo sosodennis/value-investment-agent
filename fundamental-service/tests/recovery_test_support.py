@@ -6,6 +6,10 @@ from datetime import datetime
 from pathlib import Path
 
 from fundamental_service.history_recovery_contracts import RecoveryAuthorizationV1
+from fundamental_service.content_publication import (
+    ContentPublicationAccess,
+    PrivateContentPublication,
+)
 from fundamental_service.persistence_recovery import (
     RecoveryReceiptV2,
     _connect,
@@ -46,6 +50,7 @@ async def restore_backup(
     manifest_digest: str,
     authorization_path: Path | None = None,
     deadline_at: datetime | None = None,
+    publication_access: ContentPublicationAccess = PrivateContentPublication(),
 ) -> RecoveryReceiptV2:
     if authorization_path is not None:
         return await restore_authorized_backup(
@@ -55,6 +60,7 @@ async def restore_backup(
             manifest_digest=manifest_digest,
             authorization_path=authorization_path,
             deadline_at=deadline_at,
+            publication_access=publication_access,
         )
     role = os.environ["FUNDAMENTAL_TEST_RECOVERY_RUNTIME_ROLE"]
     connection = await _connect(database_url)
@@ -85,4 +91,5 @@ async def restore_backup(
         manifest_digest=manifest_digest,
         authorization_path=path,
         deadline_at=deadline_at,
+        publication_access=publication_access,
     )
