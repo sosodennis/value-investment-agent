@@ -239,7 +239,7 @@ async def test_typed_signed_service_get_rejects_mismatched_request_binding(misma
     if mismatch == "frequency":
         payload = wire("ttm")
     if mismatch == "protocol":
-        payload["contract_version"] = "fundamental.fiscal-statements.v2"
+        payload["contract_version"] = "fundamental.fiscal-statements.unsupported"
     if mismatch == "periodset":
         payload["binding"]["selected_period_set_digest"] = "b" * 64
 
