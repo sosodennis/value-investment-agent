@@ -870,8 +870,8 @@ jobs:
 
       - name: Ensure generated contracts are committed
         run: |
-          if [[ -n "$(git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/statement-read-artifact.schema.v2.json frontend/src/types/generated/statement-catalog.schema.v2.json frontend/src/types/generated/api-contract.ts finance-agent-core/src/shared/artifacts/fiscal_statement_contracts.py)" ]]; then
+          if [[ -n "$(git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/statement-read-artifact.schema.v3.json frontend/src/types/generated/statement-catalog.schema.v2.json frontend/src/types/generated/api-contract.ts finance-agent-core/src/shared/artifacts/fiscal_statement_contracts.py)" ]]; then
             echo "Generated contract artifacts are out of sync. Run: bash scripts/generate-contracts.sh"
-            git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/statement-read-artifact.schema.v2.json frontend/src/types/generated/statement-catalog.schema.v2.json frontend/src/types/generated/api-contract.ts finance-agent-core/src/shared/artifacts/fiscal_statement_contracts.py
+            git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/statement-read-artifact.schema.v3.json frontend/src/types/generated/statement-catalog.schema.v2.json frontend/src/types/generated/api-contract.ts finance-agent-core/src/shared/artifacts/fiscal_statement_contracts.py
             exit 1
           fi

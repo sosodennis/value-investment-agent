@@ -92,7 +92,7 @@ class SyntheticDiscoveryPort:
         return value.evidence, value.records
 
 
-def synthetic_retained_input_binding(evidence, reference):
+def synthetic_prepared_source_binding(evidence, reference):
     from fundamental_service.fiscal_parser_evidence import (
         fiscal_source_closure_contract_digest,
     )
@@ -104,7 +104,6 @@ def synthetic_retained_input_binding(evidence, reference):
         FiscalRetainedContentV1,
     )
 
-    # This adapter assumes source preparation. Real origin traversal is tested at its source owner.
     outcome = evidence.outcome
     primary = next(
         item
@@ -204,7 +203,7 @@ class SyntheticRetainedSourcePort:
 
             def retained_input_binding(self, reference):
                 self.check_current()
-                return synthetic_retained_input_binding(original.evidence, reference)
+                return synthetic_prepared_source_binding(original.evidence, reference)
 
             def check_current(self):
                 assert (

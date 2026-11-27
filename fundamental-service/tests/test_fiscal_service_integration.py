@@ -262,7 +262,7 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
         workflow_identity="integration-fiscal-workflow",
         source_revision="b" * 40,
         verification_suite_digest=automatic_release_suite_digest(),
-        canary_configuration_file=release_cases.synthetic_canary_configuration(
+        canary_configuration_file=release_cases.synthetic_workflow_canary_configuration(
             protected_deployment_root / "canary.json", reader, monkeypatch
         ),
     )

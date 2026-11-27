@@ -89,7 +89,6 @@ _MAX_SEC_XBRL_SELECTED_BYTES = 48_000_000
 
 
 def read_sec_xbrl_member(content: bytes, member_name: str) -> bytes:
-    """Read one retained parser member under the ingestion archive bounds."""
     if (
         len(content) > _MAX_SEC_XBRL_ARCHIVE_BYTES
         or not member_name

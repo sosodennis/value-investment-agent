@@ -114,7 +114,7 @@ def release(display):
     return display, current, service, reader
 
 
-def synthetic_canary_configuration(path, reader, monkeypatch):
+def synthetic_workflow_canary_configuration(path, reader, monkeypatch):
     from contextlib import contextmanager
     from fundamental_service import fiscal_release_runtime
 
@@ -131,7 +131,6 @@ def synthetic_canary_configuration(path, reader, monkeypatch):
         assert datetime.now(UTC) < deadline_at
         yield reader
 
-    # This adapter exercises protected order/signing sequencing, not production DB-role custody.
     monkeypatch.setattr(fiscal_release_runtime, "_readonly_canary_reader", compose)
     return path
 
@@ -1025,7 +1024,7 @@ def test_protected_workflow_publish_and_exact_order_refusal(
         workflow_identity="ephemeral-fiscal-workflow",
         source_revision="b" * 40,
         verification_suite_digest=automatic_release_suite_digest(),
-        canary_configuration_file=synthetic_canary_configuration(
+        canary_configuration_file=synthetic_workflow_canary_configuration(
             protected_deployment_root / "canary.json", reader, monkeypatch
         ),
     )
@@ -1209,10 +1208,13 @@ def test_crash_retry_keeps_first_signed_bytes_and_unknown_outcome_refuses(
     original_bytes = display.env.store.put_bytes_with_receipt
     original_publish = display.env.metadata.publish_data_release_candidate
     crashed = False
+    canary_identity = None
 
     def after_put(identity, *args, **kwargs):
-        nonlocal crashed
+        nonlocal crashed, canary_identity
         result = original_put(identity, *args, **kwargs)
+        if identity.startswith("fiscal-release-canary-v2:"):
+            canary_identity = identity
         prefix = {
             "signed": "fiscal-release-signed-v2:",
             "canary": "fiscal-release-canary-v2:",
@@ -1257,9 +1259,50 @@ def test_crash_retry_keeps_first_signed_bytes_and_unknown_outcome_refuses(
     )
     observation = reader.observe(approved, deadline_at=deadline())
     identity = "fiscal-release-signed-v2:" + observation.manifest.manifest_digest
+    marker_id = "fiscal-release-signing-v2:" + observation.manifest.manifest_digest
+    assert canary_identity is not None
+    retained_report = display.env.store.read(canary_identity)
     if cut == "signing":
-        with pytest.raises(SnapshotError, match="first live workflow"):
+        from dataclasses import replace
+        from types import SimpleNamespace
+
+        marker = display.env.store.read(marker_id)
+        with pytest.raises(SnapshotError) as missing:
+            display.env.store.read(identity)
+        assert missing.value.code == "ARTIFACT_NOT_FOUND"
+        original_authorize = service.signing.authorize
+
+        def refuse_sign(payload):
+            pytest.fail("unknown signing outcome must not sign again")
+
+        def authorize(approved, deadline_at):
+            original_authorize(approved, deadline_at)
+            return SimpleNamespace(sign=refuse_sign)
+
+        monkeypatch.setattr(
+            service, "signing", replace(service.signing, authorize=authorize)
+        )
+        with pytest.raises(SnapshotError) as refused:
             service.publish(approved, deadline_at=deadline())
+        assert refused.value.code == "FISCAL_RELEASE_SIGNING_OUTCOME_UNAVAILABLE"
+        assert display.env.store.read(marker_id) == marker
+        assert display.env.store.read(canary_identity) == retained_report
+        with pytest.raises(SnapshotError) as missing:
+            display.env.store.read(identity)
+        assert missing.value.code == "ARTIFACT_NOT_FOUND"
+    elif cut == "canary":
+        for absent in (identity, marker_id):
+            with pytest.raises(SnapshotError) as missing:
+                display.env.store.read(absent)
+            assert missing.value.code == "ARTIFACT_NOT_FOUND"
+        resumed = service.publish(approved, deadline_at=deadline())
+        assert resumed.manifest_digest == observation.manifest.manifest_digest
+        assert resumed.canary_ref.artifact_id == canary_identity
+        assert display.env.store.read(canary_identity) == retained_report
+        signed = json.loads(display.env.store.read(identity))
+        assert signed["manifest_digest"] == resumed.manifest_digest
+        assert signed["canary_ref"] == resumed.canary_ref.model_dump(mode="json")
+        assert display.env.store.read(marker_id)
     else:
         original = display.env.store.read(identity)
         resumed = service.publish(approved, deadline_at=deadline())

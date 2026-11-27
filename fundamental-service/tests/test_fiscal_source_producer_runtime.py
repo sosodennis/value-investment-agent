@@ -217,10 +217,10 @@ class RetainedSECAdapter:
 
             def retained_input_binding(self, reference):
                 from test_fiscal_projection_builder import (
-                    synthetic_retained_input_binding,
+                    synthetic_prepared_source_binding,
                 )
 
-                return synthetic_retained_input_binding(owner.evidence, reference)
+                return synthetic_prepared_source_binding(owner.evidence, reference)
 
             def check_current(self):
                 owner.verify(
