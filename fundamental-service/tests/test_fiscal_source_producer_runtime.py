@@ -606,18 +606,25 @@ def test_retained_sec_policy_producer_classifies_and_current_reader_replays(
                     accreditation_id = (
                         reader.producer_evidence.accreditation().artifact_id
                     )
-                    read = artifacts.read_bounded
+                    checked = artifacts.read_bounded_checked
 
-                    def refuse_late_parent_body(identity, *, maximum_bytes):
-                        if identity == accreditation_id:
+                    def refuse_late_parent_body(identity, *, before):
+                        if identity != accreditation_id:
+                            return checked(identity, before=before)
+
+                        def refuse_body(record):
+                            before(record)
                             raise SnapshotError(
                                 "ARTIFACT_BYTES_UNAVAILABLE",
                                 "synthetic late parent body unavailable",
                             )
-                        return read(identity, maximum_bytes=maximum_bytes)
+
+                        return checked(identity, before=refuse_body)
 
                     with monkeypatch.context() as late:
-                        late.setattr(artifacts, "read_bounded", refuse_late_parent_body)
+                        late.setattr(
+                            artifacts, "read_bounded_checked", refuse_late_parent_body
+                        )
                         derivation.check_current()
                         with pytest.raises(
                             SnapshotError,
