@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import os
 import pytest
+import test_fiscal_source_classification as classification_cases
 from cryptography.hazmat.primitives import serialization
-from pydantic import ValidationError
-
 from fundamental_service.fiscal_candidate_contracts import (
     FiscalPrepareCandidateCommandV2,
 )
@@ -18,9 +17,9 @@ from fundamental_service.fiscal_preparation_runtime import (
 )
 from fundamental_service.serialization import canonical_bytes
 from fundamental_service.snapshots import SnapshotError
-from test_fiscal_projection_builder import _case, assert_frozen_candidate_projection
-import test_fiscal_source_classification as classification_cases
+from pydantic import ValidationError
 from test_fiscal_admission_authority import change_status
+from test_fiscal_projection_builder import _case, assert_frozen_candidate_projection
 
 environment = classification_cases.environment
 
@@ -122,6 +121,12 @@ def test_real_factory_prepares_reads_retries_and_refuses_nonfirst_source(
     loaded = reader.verify_candidate(first.reference, deadline_at=deadline())
     assert loaded.reference == first.reference
     assert loaded.content == first.content
+    with monkeypatch.context() as patch:
+        patch.setattr(reader, "_open_current_materialization", forbidden)
+        replayed = reader.replay_candidate(first.reference, deadline_at=deadline())
+    assert replayed.reference == first.reference
+    assert replayed.content == first.content
+    assert_frozen_candidate_projection(replayed, "aapl-historical")
     other = list(sources)[-1]
     assert other != list(sources)[0]
     change_status(env, other, "invalidated")
@@ -272,7 +277,10 @@ def synthetic_retained_classifications(
     import hashlib
     import tempfile
     from contextlib import nullcontext
+    from types import SimpleNamespace
+
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from fundamental_service.arelle_parser import fact_semantic_digest
     from fundamental_service.artifact_evidence import read_retained_artifact
     from fundamental_service.fiscal_candidate_contracts import (
         FiscalCandidateClassificationBindingV1,
@@ -280,12 +288,12 @@ def synthetic_retained_classifications(
     from fundamental_service.fiscal_classification_source import (
         FiscalClassificationSourceResolver,
     )
+    from fundamental_service.fiscal_diagnostic_focus import ArelleActualFocusFactV1
     from fundamental_service.fiscal_focus_witness import (
         FiscalDiagnosticFocusWitnessV1,
-        SignedFiscalDiagnosticFocusWitnessV1,
         FiscalFocusActionBindingV1,
+        SignedFiscalDiagnosticFocusWitnessV1,
     )
-    from fundamental_service.fiscal_diagnostic_focus import ArelleActualFocusFactV1
     from fundamental_service.fiscal_source_accounting_policy import (
         source_accounting_policy_identity,
     )
@@ -304,17 +312,15 @@ def synthetic_retained_classifications(
         public_accounting_accreditation_provider,
     )
     from fundamental_service.parser_action_contracts import (
-        ParserActionResultV2,
         ParserActionDeliveryV2,
+        ParserActionResultV2,
     )
     from fundamental_service.sec_capture import sec_response_artifact_id
     from fundamental_service.serialization import sha256_digest
-    from fundamental_service.arelle_parser import fact_semantic_digest
     from test_fiscal_source_producer_runtime import (
         RetainedDiscoveryAdapter,
         RetainedSECAdapter,
     )
-    from types import SimpleNamespace
 
     root = Path(os.environ["ISSUE495_RETAINED_EVIDENCE_ROOT"])
     parent = Path(os.environ.get("ISSUE495_PRODUCER_PROTECTED_TEMP", str(Path.home())))
@@ -483,8 +489,8 @@ def synthetic_retained_classifications(
             for result in results
         )
         report = outcome.claim.report
-        from lxml import etree
         from fundamental_service.ingestion import read_sec_xbrl_archive
+        from lxml import etree
 
         candidates = [
             fact
@@ -776,8 +782,9 @@ def test_mixed_source_factory_preserves_verified_classification_activities(
 def test_success_exit_rechecks_last_dependency_and_whole_snapshot(
     prepared_runtime, monkeypatch, dependency
 ):
-    from sqlalchemy import text
     from uuid import uuid4
+
+    from sqlalchemy import text
 
     env, _, config, builder, command, sources = prepared_runtime
     result = builder.prepare(command, deadline_at=deadline())
@@ -850,6 +857,7 @@ def test_success_exit_rechecks_last_dependency_and_whole_snapshot(
 
 def test_parent_metadata_budget_cancels_candidate_before_any_issuance(prepared_runtime):
     from time import monotonic
+
     from fundamental_service.metadata import metadata_operation_budget
 
     env, _, _, builder, command, _ = prepared_runtime
@@ -1032,6 +1040,7 @@ def test_second_process_same_command_lease_never_signs_concurrently(
 ):
     import subprocess
     import sys
+
     from fundamental_service.serialization import sha256_digest
 
     env, _, config, builder, command, _ = prepared_runtime
@@ -1106,9 +1115,10 @@ def test_restored_candidate_orphan_keeps_issuance_and_fresh_local_command_really
     prepared_runtime, tmp_path, monkeypatch, orphan
 ):
     from dataclasses import replace
+
+    from test_fiscal_admission_authority import reference
     from test_fiscal_current_epoch import recovered, regrant
     from test_fiscal_projection_builder import SyntheticRetainedSourcePort
-    from test_fiscal_admission_authority import reference
 
     env, inputs, config, builder, command, sources = prepared_runtime
     if orphan:
@@ -1175,9 +1185,10 @@ def test_fiscal_runner_prepare_and_exact_ref_read_use_real_factory_results(
     import json
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
-    from fastapi import FastAPI
+
     import fundamental_service.app as app_module
     import fundamental_service.fiscal_source_runner as runner
+    from fastapi import FastAPI
     from test_fiscal_admission_authority import reference
 
     env, inputs, config, builder, command, _ = prepared_runtime

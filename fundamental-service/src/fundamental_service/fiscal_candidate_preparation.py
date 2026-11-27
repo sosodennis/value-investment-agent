@@ -4,15 +4,15 @@ import base64
 import hashlib
 import os
 from asyncio import current_task
-from threading import get_ident
-from contextvars import ContextVar, Token
-from copy import deepcopy
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack, nullcontext
+from contextvars import ContextVar, Token
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
+from threading import get_ident
 from types import TracebackType
 from typing import TYPE_CHECKING, Literal, Protocol
 from uuid import uuid4
@@ -38,16 +38,16 @@ from .fiscal_admission_history import (
 )
 from .fiscal_authority_contracts import CurrentFiscalAuthorityV1
 from .fiscal_candidate_contracts import (
-    FiscalSourceDocumentObservation,
     FiscalCandidateBodyV3,
     FiscalCandidateContentV2,
     FiscalCandidatePreparationExecutionV2,
     FiscalPrepareCandidateCommandV2,
+    FiscalSourceDocumentObservation,
     FiscalStatementCandidateV3,
-    _TrustedCandidateCorrectness,
-    VerifiedFiscalActivity,
     VerifiedClassifiedCandidateSource,
+    VerifiedFiscalActivity,
     VerifiedFiscalCandidateSource,
+    _TrustedCandidateCorrectness,
 )
 from .fiscal_source_closure import (
     FiscalArtifactRead,
@@ -470,6 +470,11 @@ class FiscalCandidatePreparation:
     ) -> FiscalCandidateOperation:
         return FiscalCandidateOperation(self, reference, deadline_at)
 
+    def _open_display_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> _FiscalCandidateSession:
+        return _FiscalCandidateSession(self, reference, deadline_at)
+
     def verify_candidate(
         self, reference: ArtifactRefV1, *, deadline_at: datetime
     ) -> CurrentFiscalCandidate:
@@ -759,7 +764,7 @@ class FiscalCandidateRead(Protocol):
     def current(self) -> CurrentFiscalCandidate: ...
 
 
-_CANDIDATE_OPERATION: ContextVar[FiscalCandidateOperation | None] = ContextVar(
+_CANDIDATE_OPERATION: ContextVar[_FiscalCandidateSession | None] = ContextVar(
     "fiscal_candidate_operation", default=None
 )
 
@@ -781,7 +786,7 @@ def _candidate_actor() -> tuple[object, ...]:
     )
 
 
-class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
+class _FiscalCandidateSession:
     def __init__(
         self,
         owner: FiscalCandidatePreparation,
@@ -795,7 +800,7 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         )
         self._phase: Literal["new", "open", "completed", "failed"] = "new"
         self._scope, self._children = ExitStack(), ExitStack()
-        self._token: Token[FiscalCandidateOperation | None] | None = None
+        self._token: Token[_FiscalCandidateSession | None] | None = None
         self._result: CurrentFiscalCandidate | None = None
         self._materialization: _MaterializationRead | None = None
         self._resources: _ParserResourceOperation | None = None
@@ -838,52 +843,22 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         ):
             raise _invalid("candidate configured owner changed")
 
-    def __enter__(self) -> FiscalCandidateRead:
+    def _require_new(self) -> None:
         if self._phase != "new" or self._actor != _candidate_actor():
             raise _invalid("candidate observation cannot reopen or change execution")
+
+    def _open(self) -> None:
+        self._require_new()
         self._phase = "open"
         self._token = _CANDIDATE_OPERATION.set(self)
         owner = self._owner
-        try:
-            self._scope.enter_context(fiscal_closure_read_operation())
-            self._scope.enter_context(
-                metadata_operation_budget(
-                    partial(owner._budget, self._deadline_at), owner._expired
-                )
+        self._scope.enter_context(fiscal_closure_read_operation())
+        self._scope.enter_context(
+            metadata_operation_budget(
+                partial(owner._budget, self._deadline_at), owner._expired
             )
-            self._resources = self._scope.enter_context(self._resource_operation())
-            with (
-                self._resources.current_cut(terminal=False) as resource_completion,
-                owner.read_operation() as seal_read_operation,
-            ):
-                self._generation = owner.current_configuration_digest()
-                reader = FiscalArtifactRead(
-                    owner._read_artifacts, partial(owner._budget, self._deadline_at)
-                )
-                self._signed = owner._load(reader, self._reference)
-                owner._authority(self._signed, self._deadline_at)
-                self._materialization = self._children.enter_context(
-                    self._open_materialization(
-                        _TrustedCandidateCorrectness(self._signed, self)
-                    )
-                )
-                self._publication = ArtifactPublicationV1(
-                    artifact=reader.get(self._reference.artifact_id), wrote=False
-                )
-                self._current_in_scope(
-                    terminal=False,
-                    seal_read_operation=seal_read_operation,
-                    resource_completion=resource_completion,
-                )
-            return self
-        except BaseException as error:
-            self._phase = "failed"
-            self._cleanup(type(error), error, error.__traceback__)
-            if isinstance(error, ValueError):
-                raise _invalid(
-                    "candidate failed typed evidence verification"
-                ) from error
-            raise
+        )
+        self._resources = self._scope.enter_context(self._resource_operation())
 
     def _resource_operation(self) -> _ParserResourceOperation:
         return _CurrentParserResourceOperation(
@@ -898,13 +873,32 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         )
 
     def _current(self, *, terminal: bool) -> CurrentFiscalCandidate:
+        first = self._phase == "new"
+        if first:
+            self._open()
         self._require()
         if self._resources is None:
             raise _invalid("candidate observation has no resource owner")
+        owner = self._owner
         with (
             self._resources.current_cut(terminal=terminal) as resource_completion,
-            self._owner.read_operation() as seal_read_operation,
+            owner.read_operation() as seal_read_operation,
         ):
+            if first:
+                self._generation = owner.current_configuration_digest()
+                reader = FiscalArtifactRead(
+                    owner._read_artifacts, partial(owner._budget, self._deadline_at)
+                )
+                self._signed = owner._load(reader, self._reference)
+                owner._authority(self._signed, self._deadline_at)
+                self._materialization = self._children.enter_context(
+                    self._open_materialization(
+                        _TrustedCandidateCorrectness(self._signed, self)
+                    )
+                )
+                self._publication = ArtifactPublicationV1(
+                    artifact=reader.get(self._reference.artifact_id), wrote=False
+                )
             return self._current_in_scope(
                 terminal=terminal,
                 seal_read_operation=seal_read_operation,
@@ -944,15 +938,24 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             seal_read_operation=seal_read_operation,
         )
 
-    def current(self) -> CurrentFiscalCandidate:
+    def sample(self) -> CurrentFiscalCandidate:
+        if self._actor != _candidate_actor():
+            raise _invalid("candidate observation belongs to another execution")
         try:
             return deepcopy(self._current(terminal=False))
-        except ValueError as error:
-            self._phase = "failed"
-            raise _invalid("candidate failed typed evidence verification") from error
-        except BaseException:
-            self._phase = "failed"
+        except BaseException as error:
+            self.abort(error)
+            if isinstance(error, ValueError):
+                raise _invalid(
+                    "candidate failed typed evidence verification"
+                ) from error
             raise
+
+    def abort(self, error: BaseException) -> None:
+        if self._actor != _candidate_actor():
+            raise _invalid("candidate observation belongs to another execution")
+        self._phase = "failed"
+        self._cleanup(type(error), error, error.__traceback__)
 
     def _cleanup(
         self,
@@ -979,29 +982,23 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             self._phase = "failed"
             raise cleanup_error
 
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> Literal[False]:
+    def finish(self) -> CurrentFiscalCandidate:
+        if self._actor != _candidate_actor():
+            raise _invalid("candidate observation belongs to another execution")
         try:
-            if exc_type is None:
-                self._result = deepcopy(self._current(terminal=True))
-                self._phase = "completed"
+            self._require()
+            result = deepcopy(self._current(terminal=True))
+            self._cleanup(None, None, None)
         except BaseException as error:
-            self._phase = "failed"
-            self._cleanup(type(error), error, error.__traceback__)
+            self.abort(error)
             if isinstance(error, ValueError):
                 raise _invalid(
                     "candidate failed typed evidence verification"
                 ) from error
             raise
-        else:
-            if exc_type is not None:
-                self._phase = "failed"
-            self._cleanup(exc_type, exc, tb)
-        return False
+        self._result = result
+        self._phase = "completed"
+        return deepcopy(result)
 
     @property
     def completed(self) -> CurrentFiscalCandidate:
@@ -1010,7 +1007,7 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         return deepcopy(self._result)
 
 
-class _FiscalCandidateReplayOperation(FiscalCandidateOperation):
+class _FiscalCandidateReplaySession(_FiscalCandidateSession):
     def _resource_operation(self) -> _ParserResourceOperation:
         return _ParserResourceOperation(partial(self._owner._budget, self._deadline_at))
 
@@ -1026,3 +1023,48 @@ class _FiscalCandidateReplayOperation(FiscalCandidateOperation):
             publish=False,
             retained_mapping_refs=body.content.mapping_refs,
         )
+
+
+class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
+    def __init__(
+        self,
+        owner: FiscalCandidatePreparation,
+        reference: ArtifactRefV1,
+        deadline_at: datetime,
+    ) -> None:
+        self._session = _FiscalCandidateSession(owner, reference, deadline_at)
+
+    def __enter__(self) -> FiscalCandidateRead:
+        self._session._require_new()
+        self._session.sample()
+        return self
+
+    def current(self) -> CurrentFiscalCandidate:
+        self._session._require()
+        return self._session.sample()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> Literal[False]:
+        if exc is None:
+            self._session.finish()
+        else:
+            self._session.abort(exc)
+        return False
+
+    @property
+    def completed(self) -> CurrentFiscalCandidate:
+        return self._session.completed
+
+
+class _FiscalCandidateReplayOperation(FiscalCandidateOperation):
+    def __init__(
+        self,
+        owner: FiscalCandidatePreparation,
+        reference: ArtifactRefV1,
+        deadline_at: datetime,
+    ) -> None:
+        self._session = _FiscalCandidateReplaySession(owner, reference, deadline_at)

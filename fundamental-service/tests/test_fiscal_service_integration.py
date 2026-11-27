@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
-import json
-from pathlib import Path
-from datetime import UTC, datetime, timedelta
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
+import test_fiscal_display_admission as display_cases
+import test_fiscal_releases as release_cases
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from pydantic import ValidationError
-
 from fundamental_service.automatic_data_release import automatic_release_suite_digest
 from fundamental_service.data_releases import (
     ArtifactRefV1,
@@ -23,7 +23,7 @@ from fundamental_service.fiscal_candidate_contracts import (
     FiscalPrepareCandidateCommandV2,
 )
 from fundamental_service.fiscal_display_admission import (
-    FiscalDisplayOperation,
+    FiscalDisplayAdmission,
 )
 from fundamental_service.fiscal_display_runtime import build_fiscal_display_reader
 from fundamental_service.fiscal_preparation_runtime import (
@@ -46,15 +46,13 @@ from fundamental_service.fiscal_release_runtime import (
 from fundamental_service.fiscal_releases import FiscalReleaseService
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
-import test_fiscal_display_admission as display_cases
-import test_fiscal_releases as release_cases
-from test_fiscal_admission_authority import public_key, change_status
+from pydantic import ValidationError
+from test_fiscal_admission_authority import change_status, public_key
 from test_fiscal_candidate_preparation import (
     key_file,
     synthetic_retained_classifications,
 )
 from test_fiscal_projection_builder import _case, assert_frozen_candidate_projection
-
 
 environment = display_cases.environment
 protected_deployment_root = display_cases.protected_deployment_root
@@ -192,7 +190,7 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
                 current.reference, current.candidate.reference, deadline_at=deadline()
             )
     accreditation.write_bytes(original)
-    review = FiscalDisplayOperation.__enter__
+    review = FiscalDisplayAdmission.review_and_decide
 
     def display_runtime_last_cut(self, *args, **kwargs):
         result = review(self, *args, **kwargs)
@@ -200,7 +198,9 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
         return result
 
     with monkeypatch.context() as patch:
-        patch.setattr(FiscalDisplayOperation, "__enter__", display_runtime_last_cut)
+        patch.setattr(
+            FiscalDisplayAdmission, "review_and_decide", display_runtime_last_cut
+        )
         with pytest.raises(SnapshotError, match="configuration"):
             display.runtime.apply(display.order.order_id, deadline_at=deadline())
     accreditation.write_bytes(original)
@@ -399,6 +399,7 @@ def test_release_runner_publishes_for_trusted_group(environment, tmp_path, monke
     import stat
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
+
     from fundamental_service import app as app_module
     from fundamental_service import fiscal_release_runner as runner
 

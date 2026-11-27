@@ -4,11 +4,10 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-import pytest
-
 import fundamental_service.fiscal_candidate_preparation as preparation
 import fundamental_service.metadata as metadata_module
 import fundamental_service.parser_action_identity as resource_identity
+import pytest
 from fundamental_service.data_releases import ArtifactRefV1
 from fundamental_service.fiscal_admission_history import FiscalControlBindingV1
 from fundamental_service.metadata import PostgresArtifactStore
@@ -329,7 +328,7 @@ def test_candidate_cleanup_failure_without_primary_error_is_not_hidden(candidate
             case.state.cleanup_failure = True
     assert case.state.active is None
     assert preparation._CANDIDATE_OPERATION.get() is None
-    assert case.operation._phase == "failed"
+    assert case.operation._session._phase == "failed"
 
 
 class EmptyMetadata:
@@ -351,7 +350,7 @@ def test_candidate_borrowing_release_outer_scope_leaves_its_cut_to_owner(
     store = PostgresArtifactStore(EmptyMetadata(cuts), content, read_only=True)
     case.owner.read_operation = store.scoped_read_operation
     operation = preparation.FiscalCandidateOperation(
-        case.owner, case.operation._reference, case.deadline_at
+        case.owner, case.operation._session._reference, case.deadline_at
     )
     case.state.active = "release"
     with store.scoped_read_operation() as outer_cut:
@@ -412,3 +411,92 @@ def test_metadata_cleanup_resets_scope_and_preserves_primary_error(
     if primary:
         assert caught.value is failure
     assert metadata_module._SCOPED_ARTIFACT_READS.get() is None
+
+
+def test_closed_candidate_first_sample_opens_and_proves_in_one_cut(candidate_scope):
+    case = candidate_scope
+    session = case.owner._open_display_candidate(
+        case.operation._session._reference, deadline_at=case.deadline_at
+    )
+    assert case.trace == []
+    assert session.sample().content == "content"
+    assert case.state.scopes == 1
+    assert session.sample().content == "content"
+    assert session.finish().content == "content"
+    assert case.state.scopes == 3
+    assert case.trace.index((1, "materialization_open")) < case.trace.index(
+        (1, "materialization_current")
+    )
+    assert case.trace.index((3, "children_close")) < case.trace.index(
+        (3, "resources_finish")
+    )
+    assert preparation._CANDIDATE_OPERATION.get() is None
+    assert session.completed.content == "content"
+    with pytest.raises(SnapshotError, match="closed"):
+        session.sample()
+
+
+@pytest.mark.parametrize("consumption", ["decision", "terminal"])
+@pytest.mark.parametrize("changed", ["materialization", "history", "expire"])
+def test_closed_candidate_rechecks_dependencies_at_each_consumption(
+    candidate_scope, consumption, changed
+):
+    case = candidate_scope
+    session = case.owner._open_display_candidate(
+        case.operation._session._reference, deadline_at=case.deadline_at
+    )
+    session.sample()
+    if consumption == "terminal":
+        session.sample()
+    if changed == "expire":
+        case.state.expire = True
+    else:
+        case.state.failure = changed
+    with pytest.raises(SnapshotError):
+        session.finish() if consumption == "terminal" else session.sample()
+    assert preparation._CANDIDATE_OPERATION.get() is None
+    assert case.state.active is None
+    with pytest.raises(SnapshotError, match="did not complete"):
+        _ = session.completed
+
+
+def test_closed_candidate_cleanup_failure_prevents_completion(candidate_scope):
+    case = candidate_scope
+    session = case.owner._open_display_candidate(
+        case.operation._session._reference, deadline_at=case.deadline_at
+    )
+    session.sample()
+    case.state.cleanup_failure = True
+    with pytest.raises(RuntimeError, match="child cleanup"):
+        session.finish()
+    assert preparation._CANDIDATE_OPERATION.get() is None
+    with pytest.raises(SnapshotError, match="did not complete"):
+        _ = session.completed
+
+
+@pytest.mark.parametrize("method", ["sample", "finish"])
+def test_closed_candidate_foreign_actor_cannot_consume_or_close(
+    candidate_scope, monkeypatch, method
+):
+    case = candidate_scope
+    session = case.owner._open_display_candidate(
+        case.operation._session._reference, deadline_at=case.deadline_at
+    )
+    session.sample()
+    with monkeypatch.context() as patch:
+        patch.setattr(preparation, "_candidate_actor", lambda: ("foreign",))
+        with pytest.raises(SnapshotError, match="another execution"):
+            getattr(session, method)()
+    assert preparation._CANDIDATE_OPERATION.get() is session
+    assert session.finish().content == "content"
+    assert preparation._CANDIDATE_OPERATION.get() is None
+
+
+def test_borrowed_candidate_requires_entry_before_current(candidate_scope):
+    case = candidate_scope
+    with pytest.raises(SnapshotError, match="closed"):
+        case.operation.current()
+    assert case.trace == []
+    with case.operation as read:
+        assert read.current().content == "content"
+    assert case.operation.completed.content == "content"

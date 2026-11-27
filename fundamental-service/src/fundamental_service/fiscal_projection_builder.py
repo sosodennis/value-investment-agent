@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-import os
 import hashlib
+import os
 from asyncio import current_task
-from threading import get_ident
-from contextvars import ContextVar
-
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from threading import get_ident
 from typing import TYPE_CHECKING, Literal, Protocol
-from dataclasses import dataclass
 
 from pydantic import AwareDatetime, ConfigDict, Field
 
@@ -21,30 +20,31 @@ from .command_artifacts import EvidenceArtifactStore
 from .contracts import StrictModel
 from .data_releases import ArtifactRefV1
 from .fiscal_candidate_contracts import (
-    FiscalSourceDocumentObservation,
     ClassifiedSourceForCandidateV1,
+    CorrectnessOwner,
     FiscalCandidateClassificationBindingV1,
-    FiscalCandidateSourceUseV1,
-    FiscalSourceUseScopeV1,
     FiscalCandidateContentV2,
     FiscalCandidateSourceReplayRefV1,
+    FiscalCandidateSourceUseV1,
     FiscalOwnerCorrectnessV1,
-    FiscalPreparedCorrectnessV1,
-    CorrectnessOwner,
-    _TrustedCandidateCorrectness,
     FiscalPrepareCandidateCommandV2,
+    FiscalPreparedCorrectnessV1,
+    FiscalSourceDocumentObservation,
+    FiscalSourceUseScopeV1,
     VerifiedClassifiedCandidateSource,
-    VerifiedRawCandidateSource,
     VerifiedFiscalCandidateSource,
+    VerifiedRawCandidateSource,
     VerifiedRawSourceForCandidateV1,
+    _TrustedCandidateCorrectness,
 )
 from .fiscal_discovery import FiscalDiscovery, FiscalDiscoveryEvidenceV1
+from .fiscal_parser_evidence import fiscal_source_closure_contract_digest
 from .fiscal_source_closure import (
     FiscalArtifactRead,
     FiscalArtifactReadSet,
-    FiscalSourceContentReadSet,
     FiscalSourceClosure,
     FiscalSourceContentRead,
+    FiscalSourceContentReadSet,
     FiscalSourceRead,
     bound_fiscal_closure_value,
 )
@@ -71,7 +71,6 @@ from .fiscal_statement_mapping import (
     map_fiscal_primary_source,
 )
 from .fiscal_statement_policy import fiscal_statement_policy
-from .fiscal_parser_evidence import fiscal_source_closure_contract_digest
 from .fiscal_statement_projection import project_fiscal_statements
 from .fiscal_statement_registry import (
     Digest,
@@ -86,10 +85,10 @@ from .fiscal_statement_registry import (
 from .fiscal_validation_contracts import (
     FiscalOriginalValidationEvidenceV1,
     FiscalOriginalValidationRequestV1,
+    FiscalRetainedInputBindingV1,
     FiscalValidationCompleteRefusedV1,
     FiscalValidationIncompleteV1,
     FiscalValidationPinV1,
-    FiscalRetainedInputBindingV1,
     ResolvedFiscalValidationRequestV1,
 )
 from .replay import ArtifactRecordV1
@@ -98,9 +97,10 @@ from .snapshots import ContentAddressedStore, SnapshotError
 
 if TYPE_CHECKING:
     from .fiscal_candidate_preparation import (
-        FiscalCandidatePreparation,
-        FiscalCandidateOperation,
         CurrentFiscalCandidate,
+        FiscalCandidateOperation,
+        FiscalCandidatePreparation,
+        _FiscalCandidateSession,
     )
 from .statement_contracts import StatementScopeV1
 
@@ -1046,6 +1046,15 @@ class FiscalProjectionBuilder:
                 "candidate reader is not configured",
             )
         return self.preparation.open_candidate(reference, deadline_at=deadline_at)
+
+    def _open_display_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> _FiscalCandidateSession:
+        if self.preparation is None:
+            raise _invalid("candidate reader is not configured")
+        return self.preparation._open_display_candidate(
+            reference, deadline_at=deadline_at
+        )
 
     def replay_candidate(
         self, reference: ArtifactRefV1, *, deadline_at: datetime

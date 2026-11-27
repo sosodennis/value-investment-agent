@@ -892,3 +892,99 @@ def test_control_commit_before_seal_is_read_only_refusal_and_writer_exact_resume
     resumed = display.runtime.apply(display.order.order_id, deadline_at=deadline())
     assert not resumed.publication.wrote
     assert canonical_bytes(resumed.decision) == signed_bytes
+
+
+def test_closed_display_decision_rechecks_source_after_actual_review(
+    display, monkeypatch
+):
+    from fundamental_service.fiscal_display_admission import FiscalDisplayAdmission
+    from test_fiscal_admission_authority import change_status
+
+    inspect = FiscalDisplayAdmission._inspect
+    changed = False
+
+    def invalidate_after_review(owner, current, deadline_at):
+        nonlocal changed
+        result = inspect(owner, current, deadline_at)
+        change_status(
+            display.env,
+            current.content.source_uses[-1].scope.source_validation_ref.artifact_id,
+            "invalidated",
+        )
+        changed = True
+        return result
+
+    monkeypatch.setattr(FiscalDisplayAdmission, "_inspect", invalidate_after_review)
+    with pytest.raises(SnapshotError):
+        display.runtime.apply(display.order.order_id, deadline_at=deadline())
+    assert changed
+    with pytest.raises(SnapshotError) as absent:
+        display.env.store.get(
+            display.order.request.artifact_id("fiscal-display-decision-v2")
+        )
+    assert absent.value.code == "ARTIFACT_NOT_FOUND"
+
+
+def test_closed_display_terminal_rechecks_new_decision_body(display, monkeypatch):
+    from fundamental_service.fiscal_candidate_preparation import _FiscalCandidateSession
+
+    finish = _FiscalCandidateSession.finish
+    changed_path = None
+    original = None
+
+    def corrupt_after_candidate_terminal(session):
+        nonlocal changed_path, original
+        result = finish(session)
+        record = display.env.store.get(
+            display.order.request.artifact_id("fiscal-display-decision-v2")
+        )
+        changed_path = display.env.store._content._filesystem._path(
+            record.content_hash, record.media_type
+        )
+        original = changed_path.read_bytes()
+        changed_path.write_bytes(original + b" ")
+        return result
+
+    monkeypatch.setattr(
+        _FiscalCandidateSession, "finish", corrupt_after_candidate_terminal
+    )
+    try:
+        with pytest.raises(SnapshotError):
+            display.runtime.apply(display.order.order_id, deadline_at=deadline())
+        assert changed_path is not None
+    finally:
+        if changed_path is not None:
+            changed_path.write_bytes(original)
+
+
+@pytest.mark.parametrize("changed", ["generation", "order"])
+def test_closed_display_runtime_rechecks_after_completed_owner(
+    display, monkeypatch, changed
+):
+    from fundamental_service.fiscal_display_admission import FiscalDisplayAdmission
+
+    review = FiscalDisplayAdmission.review_and_decide
+    completed = False
+
+    def change_after_completion(owner, *args, **kwargs):
+        nonlocal completed
+        result = review(owner, *args, **kwargs)
+        completed = True
+        if changed == "generation":
+            monkeypatch.setattr(
+                display.runtime.candidates,
+                "current_configuration_digest",
+                lambda: "changed-after-completion",
+            )
+        else:
+            display.write(
+                display.order.model_copy(update={"deployment_digest": "f" * 64})
+            )
+        return result
+
+    monkeypatch.setattr(
+        FiscalDisplayAdmission, "review_and_decide", change_after_completion
+    )
+    with pytest.raises(SnapshotError):
+        display.runtime.apply(display.order.order_id, deadline_at=deadline())
+    assert completed

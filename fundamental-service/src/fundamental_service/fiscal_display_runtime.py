@@ -371,21 +371,20 @@ class FiscalDisplayRuntime:
                         ),
                         authorize=authorize,
                     )
-                    operation = owner.open_review_and_decide(
+                    result = owner.review_and_decide(
                         order.request,
                         expected_head=order.expected_head,
                         deadline_at=deadline_at,
                     )
-                    with operation:
-                        self._require(order, lease, deadline_at)
-                        if (
-                            self.candidates.current_configuration_digest()
-                            != candidate_generation
-                        ):
-                            raise _refused(
-                                "display candidate configuration changed before return"
-                            )
-                    return operation.completed
+                    self._require(order, lease, deadline_at)
+                    if (
+                        self.candidates.current_configuration_digest()
+                        != candidate_generation
+                    ):
+                        raise _refused(
+                            "display candidate configuration changed before return"
+                        )
+                    return result
                 finally:
                     self.metadata.release_ingestion_lock(lease)
             except ValueError as error:
