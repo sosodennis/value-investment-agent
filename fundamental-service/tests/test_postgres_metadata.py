@@ -1746,7 +1746,7 @@ def test_bounded_artifact_rechecks_actual_bytes_and_never_repairs_registration(
     content = PostgresContentStore(tmp_path / "content", metadata)
     artifacts = PostgresArtifactStore(metadata, content)
     raw = canonical_bytes({"retained": uuid4().hex})
-    record = artifacts.put_bytes_with_receipt(uuid4().hex, raw)
+    record = artifacts.put_bytes_with_receipt(uuid4().hex, raw).artifact
     readonly = artifacts.as_read_only()
     for store in (artifacts, readonly):
         assert store.read_bounded(record.artifact_id, maximum_bytes=len(raw)) == raw
@@ -1786,7 +1786,7 @@ def test_bounded_artifact_after_observes_original_pair_even_if_artifact_changes(
     content = PostgresContentStore(tmp_path / "content", metadata)
     artifacts = PostgresArtifactStore(metadata, content)
     raw = canonical_bytes({"before": uuid4().hex})
-    record = artifacts.put_bytes_with_receipt(uuid4().hex, raw)
+    record = artifacts.put_bytes_with_receipt(uuid4().hex, raw).artifact
     replacement = artifacts.put(uuid4().hex, {"after": uuid4().hex})
     read = content._filesystem.get_bounded
 
