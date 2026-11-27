@@ -19,8 +19,8 @@ from .arelle_parser import ArelleParserError
 from .contracts import StrictModel
 from .data_releases import ArtifactRefV1
 from .fiscal_candidate_contracts import (
-    FiscalPrepareCandidateCommandV1,
-    FiscalStatementCandidateV2,
+    FiscalPrepareCandidateCommandV2,
+    FiscalStatementCandidateV3,
 )
 from .fiscal_preparation_runtime import configured_fiscal_candidate_runtime
 from .fiscal_discovery import FiscalDiscoveryEvidenceV1, FiscalDiscoveryRequestV1
@@ -44,7 +44,7 @@ class _FiscalCommandOutput(StrictModel):
         FiscalDiscoveryEvidenceV1
         | FiscalOriginalValidationEvidenceV1
         | SignedFiscalDiagnosticFocusWitnessV1
-        | FiscalStatementCandidateV2
+        | FiscalStatementCandidateV3
     ) = Field(discriminator="protocol")
     publication: ArtifactPublicationV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
@@ -87,7 +87,7 @@ async def _run(
 
     lifecycle = (
         app.state.read_only_operator_lifespan
-        if args.command == "read-candidate"
+        if args.command in {"read-candidate", "replay-candidate"}
         else app.router.lifespan_context
     )
     async with lifecycle(app):
@@ -100,7 +100,11 @@ async def _run(
         with metadata_operation_budget(
             partial(fiscal_validation_budget, deadline_at), sec_deadline_exceeded
         ):
-            if args.command in {"prepare-candidate", "read-candidate"}:
+            if args.command in {
+                "prepare-candidate",
+                "read-candidate",
+                "replay-candidate",
+            }:
                 metadata = app.state.metadata_store
                 if metadata is None:
                     raise SnapshotError(
@@ -115,13 +119,18 @@ async def _run(
                 )
                 if args.command == "prepare-candidate":
                     result = builder.prepare(
-                        FiscalPrepareCandidateCommandV1.model_validate_json(
+                        FiscalPrepareCandidateCommandV2.model_validate_json(
                             _command_bytes(args.command_file, deadline_at)
                         ),
                         deadline_at=deadline_at,
                     )
                 else:
-                    result = builder.verify_candidate(
+                    reader = (
+                        builder.replay_candidate
+                        if args.command == "replay-candidate"
+                        else builder.verify_candidate
+                    )
+                    result = reader(
                         ArtifactRefV1.model_validate_json(
                             _command_bytes(args.candidate_ref_file, deadline_at)
                         ),
@@ -218,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
     candidate.add_argument("--command-file", type=Path, required=True)
     candidate_read = commands.add_parser("read-candidate")
     candidate_read.add_argument("--candidate-ref-file", type=Path, required=True)
+    candidate_replay = commands.add_parser("replay-candidate")
+    candidate_replay.add_argument("--candidate-ref-file", type=Path, required=True)
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[0-9a-f]{40}", args.source_revision):
         parser.error("--source-revision requires a lowercase Git revision")
@@ -232,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
             write_stdout(
                 (
                     canonical_bytes(result)
-                    if isinstance(result.evidence, FiscalStatementCandidateV2)
+                    if isinstance(result.evidence, FiscalStatementCandidateV3)
                     else canonical_bytes(result.model_dump(mode="json"))
                 )
                 + b"\n",

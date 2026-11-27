@@ -18,13 +18,13 @@ from fundamental_service.fiscal_admission_history import (
     ReadOnlyFiscalAdmissionHistory,
 )
 from fundamental_service.fiscal_display_runtime import build_fiscal_display_reader
-from fundamental_service.fiscal_release_contracts import FiscalPublishV1
+from fundamental_service.fiscal_release_contracts import FiscalPublishV2
 from fundamental_service.fiscal_releases import (
     FiscalReleaseReader,
     FiscalReleaseService,
     FiscalReleaseSigningJob,
 )
-from fundamental_service.fiscal_read_contracts import FiscalReadRequestV1
+from fundamental_service.fiscal_read_contracts import FiscalReadRequestV2
 from fundamental_service.fiscal_authority_contracts import (
     FiscalRevokeAuthorityCommandV1,
 )
@@ -114,6 +114,28 @@ def release(display):
     return display, current, service, reader
 
 
+def synthetic_canary_configuration(path, reader, monkeypatch):
+    from contextlib import contextmanager
+    from fundamental_service import fiscal_release_runtime
+
+    path.write_bytes(
+        canonical_bytes({"kind": "synthetic-full-replay-composition-test"})
+    )
+    path.chmod(0o600)
+
+    @contextmanager
+    def compose(selectors, *, deadline_at):
+        assert selectors.configuration_file == path
+        assert not hasattr(selectors, "private_key_file")
+        assert not hasattr(selectors, "signing")
+        assert datetime.now(UTC) < deadline_at
+        yield reader
+
+    # This adapter exercises protected order/signing sequencing, not production DB-role custody.
+    monkeypatch.setattr(fiscal_release_runtime, "_readonly_canary_reader", compose)
+    return path
+
+
 def test_registry_candidate_display_release_canary_activate_both_frequencies_and_revoke(
     release,
     tmp_path,
@@ -134,7 +156,7 @@ def test_registry_candidate_display_release_canary_activate_both_frequencies_and
         )
         return value
 
-    approved = FiscalPublishV1(
+    approved = FiscalPublishV2(
         candidate_ref=current.candidate.reference, decision_ref=current.reference
     )
     receipt = operation(
@@ -163,7 +185,7 @@ def test_registry_candidate_display_release_canary_activate_both_frequencies_and
         result = operation(
             "read-" + frequency,
             lambda limit: reader.read(
-                FiscalReadRequestV1(
+                FiscalReadRequestV2(
                     manifest_digest=receipt.manifest_digest,
                     scope=manifest.scope,
                     cutoff_at=manifest.cutoff_at,
@@ -210,7 +232,7 @@ def test_registry_candidate_display_release_canary_activate_both_frequencies_and
     display.registry.apply(revoke.order_id, deadline_at=deadline())
     with pytest.raises(SnapshotError):
         reader.read(
-            FiscalReadRequestV1(
+            FiscalReadRequestV2(
                 manifest_digest=receipt.manifest_digest,
                 scope=manifest.scope,
                 cutoff_at=manifest.cutoff_at,
@@ -237,7 +259,7 @@ def test_registry_candidate_display_release_canary_activate_both_frequencies_and
 def published(release):
     display, current, service, reader = release
     receipt = service.publish(
-        FiscalPublishV1(
+        FiscalPublishV2(
             candidate_ref=current.candidate.reference, decision_ref=current.reference
         ),
         deadline_at=deadline(),
@@ -287,7 +309,7 @@ def test_retry_canary_tamper_and_purpose_scope_boundaries(published, monkeypatch
     pair = display.env.metadata.get_data_release_verification(receipt.manifest_digest)
     manifest = display.env.metadata.get_data_release_manifest(receipt.manifest_digest)
     again = service.publish(
-        FiscalPublishV1(
+        FiscalPublishV2(
             candidate_ref=current.candidate.reference, decision_ref=current.reference
         ),
         deadline_at=deadline(),
@@ -306,14 +328,15 @@ def test_retry_canary_tamper_and_purpose_scope_boundaries(published, monkeypatch
     with pytest.raises(DataReleaseError, match="observation"):
         display.env.metadata.compare_and_swap_data_release(activation(receipt))
     with pytest.raises(DataReleaseError, match="signature"):
-        reader.canary(
-            manifest,
+        from fundamental_service.publication_codec import verify_fiscal_signature
+
+        verify_fiscal_signature(
             pair.signed.model_copy(update={"signature": "0" * 128}),
-            deadline_at=deadline(),
+            reader.trust_roots(),
         )
     with pytest.raises(SnapshotError):
         reader.read(
-            FiscalReadRequestV1(
+            FiscalReadRequestV2(
                 manifest_digest=receipt.manifest_digest,
                 scope=manifest.scope.model_copy(update={"security_id": "MSFT"}),
                 cutoff_at=manifest.cutoff_at,
@@ -349,7 +372,7 @@ def test_authenticated_http_typed_dag_and_conditional_read(published):
         auth_headers,
         make_internal_envelope,
     )
-    from fundamental_service.fiscal_read_contracts import FiscalReadResultV1
+    from fundamental_service.fiscal_read_contracts import FiscalReadResultV2
 
     display, _, _, reader, receipt = published
     manifest = display.env.metadata.get_data_release_manifest(receipt.manifest_digest)
@@ -361,7 +384,7 @@ def test_authenticated_http_typed_dag_and_conditional_read(published):
         fiscal_reader_factory=lambda: reader,
     )
     client = TestClient(app)
-    payload = FiscalReadRequestV1(
+    payload = FiscalReadRequestV2(
         manifest_digest=receipt.manifest_digest,
         scope=manifest.scope,
         cutoff_at=manifest.cutoff_at,
@@ -375,7 +398,7 @@ def test_authenticated_http_typed_dag_and_conditional_read(published):
     )
     assert response.status_code == 200, response.text
     assert response.headers["Cache-Control"] == "private, no-store"
-    result = FiscalReadResultV1.model_validate_json(
+    result = FiscalReadResultV2.model_validate_json(
         canonical_bytes(response.json()["result"])
     )
     assert len(result.rows) == 25
@@ -803,7 +826,7 @@ def test_select_only_fiscal_current_without_signing_keys(
                 seal_read_operation=store.seal_scoped_read_operation,
             )
             result = readonly.read(
-                FiscalReadRequestV1(
+                FiscalReadRequestV2(
                     manifest_digest=receipt.manifest_digest,
                     scope=manifest.scope,
                     cutoff_at=manifest.cutoff_at,
@@ -949,7 +972,7 @@ def test_actual_backup_restore_retains_pair_and_refuses_old_epoch(published, tmp
 
 
 def test_protected_workflow_publish_and_exact_order_refusal(
-    release, protected_deployment_root
+    release, protected_deployment_root, monkeypatch
 ):
     import os
     from fundamental_service.automatic_data_release import (
@@ -957,10 +980,10 @@ def test_protected_workflow_publish_and_exact_order_refusal(
     )
     from fundamental_service.fiscal_release_runtime import (
         FiscalReleaseRuntime,
-        FiscalReleaseInstallationV1,
+        FiscalReleaseInstallationV2,
         FiscalReleaseReadConfigurationV1,
-        FiscalReleaseOrderV1,
-        release_configuration_digest,
+        FiscalReleaseOrderV2,
+        release_workflow_configuration_digest,
     )
     from test_fiscal_candidate_preparation import key_file
 
@@ -991,7 +1014,7 @@ def test_protected_workflow_publish_and_exact_order_refusal(
         release_trust_roots_file=trust_file,
         declared_source_revision=display.runtime.installation.declared_source_revision,
     )
-    installation = FiscalReleaseInstallationV1(
+    installation = FiscalReleaseInstallationV2(
         audience="ephemeral-fiscal-release",
         reader=configuration,
         workload_uid=os.getuid(),
@@ -1002,17 +1025,20 @@ def test_protected_workflow_publish_and_exact_order_refusal(
         workflow_identity="ephemeral-fiscal-workflow",
         source_revision="b" * 40,
         verification_suite_digest=automatic_release_suite_digest(),
+        canary_configuration_file=synthetic_canary_configuration(
+            protected_deployment_root / "canary.json", reader, monkeypatch
+        ),
     )
     now = datetime.now(UTC)
-    order = FiscalReleaseOrderV1(
+    order = FiscalReleaseOrderV2(
         order_id="publish-one",
         audience=installation.audience,
         installation_digest=sha256_digest(installation.model_dump(mode="json")),
-        configuration_digest=release_configuration_digest(configuration),
+        configuration_digest=release_workflow_configuration_digest(installation),
         issuance=display.env.history.read_epoch(
             deadline_at=deadline()
         ).issuance_context,
-        approved=FiscalPublishV1(
+        approved=FiscalPublishV2(
             candidate_ref=current.candidate.reference, decision_ref=current.reference
         ),
         verification_run_id="ephemeral-installed-job",
@@ -1176,7 +1202,7 @@ def test_crash_retry_keeps_first_signed_bytes_and_unknown_outcome_refuses(
     release, monkeypatch, cut
 ):
     display, current, service, reader = release
-    approved = FiscalPublishV1(
+    approved = FiscalPublishV2(
         candidate_ref=current.candidate.reference, decision_ref=current.reference
     )
     original_put = display.env.store.put_with_receipt
@@ -1188,8 +1214,8 @@ def test_crash_retry_keeps_first_signed_bytes_and_unknown_outcome_refuses(
         nonlocal crashed
         result = original_put(identity, *args, **kwargs)
         prefix = {
-            "signed": "fiscal-release-signed-v1:",
-            "canary": "fiscal-release-canary-v1:",
+            "signed": "fiscal-release-signed-v2:",
+            "canary": "fiscal-release-canary-v2:",
         }.get(cut)
         if prefix is not None and identity.startswith(prefix) and not crashed:
             crashed = True
@@ -1201,7 +1227,7 @@ def test_crash_retry_keeps_first_signed_bytes_and_unknown_outcome_refuses(
         result = original_bytes(identity, *args, **kwargs)
         if (
             cut == "signing"
-            and identity.startswith("fiscal-release-signing-v1:")
+            and identity.startswith("fiscal-release-signing-v2:")
             and not crashed
         ):
             crashed = True
@@ -1230,7 +1256,7 @@ def test_crash_retry_keeps_first_signed_bytes_and_unknown_outcome_refuses(
         display.env.metadata, "publish_data_release_candidate", original_publish
     )
     observation = reader.observe(approved, deadline_at=deadline())
-    identity = "fiscal-release-signed-v1:" + observation.manifest.manifest_digest
+    identity = "fiscal-release-signed-v2:" + observation.manifest.manifest_digest
     if cut == "signing":
         with pytest.raises(SnapshotError, match="first live workflow"):
             service.publish(approved, deadline_at=deadline())

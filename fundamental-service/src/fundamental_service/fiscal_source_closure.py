@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, nullcontext, contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
@@ -19,6 +20,7 @@ from .fiscal_validation_contracts import (
     FiscalValidationMatchedV1,
     FiscalValidationOutcomeV1,
     FiscalValidationPinV1,
+    FiscalRetainedInputBindingV1,
     ResolvedFiscalValidationRequestV1,
     ValidatedFiscalOriginalV1,
 )
@@ -29,15 +31,35 @@ from .replay import (
 )
 from .sec_capture import sec_response_artifact_id
 from .sec_source import SecSourceError
-from .serialization import canonical_bytes
+from .serialization import canonical_bytes, sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
 
 
 class FiscalSourceValidationRead(Protocol):
     def check_current(self) -> None: ...
 
+    def retained_input_binding(
+        self, reference: ArtifactRefV1
+    ) -> FiscalRetainedInputBindingV1: ...
+
+    @property
+    def input_footprint(self) -> tuple[object, ...]: ...
+
+    @property
+    def content_readsets(self) -> tuple[FiscalSourceContentReadSet, ...]: ...
+
 
 class FiscalSourceValidationPort(Protocol):
+    def observe_current(
+        self,
+        request: ResolvedFiscalValidationRequestV1,
+        outcome: FiscalValidationOutcomeV1,
+        binding: FiscalRetainedInputBindingV1,
+        *,
+        artifacts: EvidenceArtifactReader,
+        deadline_at: datetime,
+    ) -> FiscalSourceValidationRead: ...
+
     def observe(
         self,
         request: ResolvedFiscalValidationRequestV1,
@@ -72,20 +94,119 @@ def _invalid(message: str) -> SnapshotError:
     return SnapshotError("FISCAL_VALIDATION_INVALID", message)
 
 
+class FiscalClosureReadBudget:
+    def __init__(self) -> None:
+        self._items: dict[tuple[object, ...], int] = {}
+
+    def remaining(self, key: tuple[object, ...]) -> int:
+        return 8 * 1024 * 1024 - sum(self._items.values()) + self._items.get(key, 0)
+
+    def consume(self, key: tuple[object, ...], length: int) -> None:
+        if (
+            length < 0
+            or key not in self._items
+            and len(self._items) >= 4096
+            or length > self.remaining(key)
+            or self._items.setdefault(key, length) != length
+        ):
+            raise _invalid("fiscal canonical closure exceeds its aggregate bound")
+
+    def replace_own_metadata(self, identity: str, record: ArtifactRecordV1) -> None:
+        key = ("metadata", identity)
+        length = len(canonical_bytes((identity, record)))
+        if length > self.remaining(key):
+            raise _invalid("own publication exceeds the aggregate closure bound")
+        self._items[key] = length
+
+
+_CLOSURE_BUDGET: ContextVar[FiscalClosureReadBudget | None] = ContextVar(
+    "fiscal_canonical_closure_budget", default=None
+)
+
+
+@contextmanager
+def fiscal_closure_read_operation() -> Iterator[None]:
+    parent = _CLOSURE_BUDGET.get()
+    token = _CLOSURE_BUDGET.set(parent or FiscalClosureReadBudget())
+    try:
+        yield
+    finally:
+        _CLOSURE_BUDGET.reset(token)
+
+
+def bound_fiscal_closure_value(identity: tuple[str, ...], value: object) -> None:
+    budget = _CLOSURE_BUDGET.get()
+    if budget is not None:
+        budget.consume(("canonical", *identity), len(canonical_bytes(value)))
+
+
+def read_fiscal_artifact_bytes(
+    artifacts: EvidenceArtifactStore, artifact_id: str
+) -> bytes:
+    budget = _CLOSURE_BUDGET.get()
+    if budget is None:
+        return artifacts.read(artifact_id)
+    key = ("body", artifact_id)
+    raw = artifacts.read_bounded(artifact_id, maximum_bytes=budget.remaining(key))
+    budget.consume(key, len(raw))
+    return raw
+
+
+@dataclass(frozen=True)
+class FiscalArtifactReadSet:
+    records: tuple[tuple[str, ArtifactRecordV1 | None], ...]
+    bodies: tuple[tuple[str, tuple[str, int]], ...]
+    source_contents: tuple[tuple[ArtifactRefV1, int], ...]
+
+
+@dataclass(frozen=True)
+class FiscalSourceContentReadSet:
+    store: ContentAddressedStore
+    contents: tuple[tuple[str, str, int], ...]
+
+    def __deepcopy__(self, memo: dict[int, object]) -> FiscalSourceContentReadSet:
+        return self
+
+    def check_current(self, check_deadline: Callable[[], object]) -> None:
+        for digest, media_type, length in self.contents:
+            check_deadline()
+            raw = self.store.get(digest, media_type=media_type)
+            if len(raw) != length or hashlib.sha256(raw).hexdigest() != digest:
+                raise _invalid("final retained source content differs")
+        check_deadline()
+
+
 class FiscalArtifactRead:
     def __init__(
-        self, artifacts: EvidenceArtifactStore, check_deadline: Callable[[], float]
+        self, artifacts: EvidenceArtifactStore, check_deadline: Callable[[], object]
     ) -> None:
         self._artifacts = artifacts
         self._check_deadline = check_deadline
         self._records: dict[str, ArtifactRecordV1 | None] = {}
         self._bodies: dict[str, tuple[str, int]] = {}
+        self._source_content_bodies: dict[str, tuple[ArtifactRefV1, int]] = {}
         self._parent: FiscalArtifactRead | None = None
 
     def for_consumer(self) -> FiscalArtifactRead:
         reader = FiscalArtifactRead(self._artifacts, self._check_deadline)
         reader._parent = self
         return reader
+
+    @property
+    def readset(self) -> FiscalArtifactReadSet:
+        return FiscalArtifactReadSet(
+            tuple(self._records.items()),
+            tuple(self._bodies.items()),
+            tuple(self._source_content_bodies.values()),
+        )
+
+    def enroll(self, readset: FiscalArtifactReadSet) -> None:
+        for identity, record in readset.records:
+            self.expect(identity, record)
+        for identity, body in readset.bodies:
+            self._expect_body(identity, body)
+        for reference, length in readset.source_contents:
+            self._expect_source_content(reference, length)
 
     def current(self, identity: str) -> ArtifactRecordV1 | None:
         self._check_deadline()
@@ -99,6 +220,11 @@ class FiscalArtifactRead:
         return record
 
     def expect(self, identity: str, record: ArtifactRecordV1 | None) -> None:
+        budget = _CLOSURE_BUDGET.get()
+        if budget is not None:
+            budget.consume(
+                ("metadata", identity), len(canonical_bytes((identity, record)))
+            )
         if self._records.setdefault(identity, record) != record:
             raise _invalid("fiscal validation artifact metadata changed")
         if self._parent is not None:
@@ -127,16 +253,88 @@ class FiscalArtifactRead:
 
     def read(self, artifact_id: str) -> bytes:
         record = self.get(artifact_id)
-        raw = self._artifacts.read(artifact_id)
+        raw = read_fiscal_artifact_bytes(self._artifacts, artifact_id)
         self._check_deadline()
         if hashlib.sha256(raw).hexdigest() != record.content_hash:
             raise _invalid("fiscal validation artifact bytes changed")
         self._expect_body(artifact_id, (record.content_hash, len(raw)))
         return raw
 
+    def observe_body(self, record: ArtifactRecordV1, raw: bytes) -> None:
+        if hashlib.sha256(raw).hexdigest() != record.content_hash:
+            raise _invalid("observed owning body differs from exact metadata")
+        self.expect(record.artifact_id, record)
+        self._expect_body(record.artifact_id, (record.content_hash, len(raw)))
+
+    def read_source_content(
+        self, reference: ArtifactRefV1, *, byte_length: int
+    ) -> bytes:
+        if reference.role != "fiscal-source-content-v1" or byte_length < 0:
+            raise _invalid("source content requires its exact typed origin")
+        require_retained_artifact(self, reference, dependency_hashes=())
+        raw = self._artifacts.read_bounded(
+            reference.artifact_id, maximum_bytes=byte_length
+        )
+        if (
+            len(raw) != byte_length
+            or hashlib.sha256(raw).hexdigest() != reference.content_hash
+        ):
+            raise _invalid("source content bytes differ from their retained origin")
+        self._expect_source_content(reference, byte_length)
+        self._check_deadline()
+        return raw
+
+    def _expect_source_content(
+        self, reference: ArtifactRefV1, byte_length: int
+    ) -> None:
+        expected = (reference, byte_length)
+        if (
+            self._source_content_bodies.setdefault(reference.artifact_id, expected)
+            != expected
+        ):
+            raise _invalid("source content origin changed during consumption")
+        if self._parent is not None:
+            self._parent._expect_source_content(reference, byte_length)
+
+    def accept_own_publication(
+        self, publication: ArtifactPublicationV1, raw: bytes
+    ) -> None:
+        identity = publication.artifact.artifact_id
+        if (
+            not publication.wrote
+            or identity not in self._records
+            or self._records[identity] is not None
+            or self.current(identity) != publication.artifact
+            or hashlib.sha256(raw).hexdigest() != publication.artifact.content_hash
+            or self._artifacts.read(identity) != raw
+        ):
+            raise _invalid(
+                "absence transition requires this invocation's exact own write"
+            )
+        del self._records[identity]
+        budget = _CLOSURE_BUDGET.get()
+        if budget is not None:
+            budget.replace_own_metadata(identity, publication.artifact)
+        self.expect(identity, publication.artifact)
+        self._expect_body(identity, (publication.artifact.content_hash, len(raw)))
+
+    @property
+    def input_footprint(self) -> tuple[object, ...]:
+        return (
+            tuple(sorted(self._records.items())),
+            tuple(sorted(self._bodies.items())),
+            tuple(sorted(self._source_content_bodies.items())),
+        )
+
+    @property
+    def input_footprint_digest(self) -> str:
+        return sha256_digest(self.input_footprint)
+
     def check_bodies(self) -> None:
         for identity in tuple(self._bodies):
             self.read(identity)
+        for reference, length in tuple(self._source_content_bodies.values()):
+            self.read_source_content(reference, byte_length=length)
         self.check_current()
 
     def check_current(self) -> None:
@@ -158,7 +356,7 @@ class FiscalSourceMetadataRead:
 
 class FiscalSourceContentRead:
     def __init__(
-        self, content: ContentAddressedStore, check_deadline: Callable[[], float]
+        self, content: ContentAddressedStore, check_deadline: Callable[[], object]
     ) -> None:
         self._content = content
         self._check_deadline = check_deadline
@@ -182,6 +380,17 @@ class FiscalSourceContentRead:
         for digest, media_type in tuple(self._consumed):
             self.get(digest, media_type=media_type)
 
+    @property
+    def input_footprint(self) -> tuple[tuple[str, str, int], ...]:
+        return tuple(
+            (digest, media, length)
+            for (digest, media), length in sorted(self._consumed.items())
+        )
+
+    @property
+    def readset(self) -> FiscalSourceContentReadSet:
+        return FiscalSourceContentReadSet(self._content, self.input_footprint)
+
 
 @dataclass(frozen=True)
 class FiscalSourceRead:
@@ -202,6 +411,23 @@ class FiscalSourceRead:
     def records(self) -> tuple[tuple[str, ArtifactRecordV1 | None], ...]:
         return self.reader.records
 
+    @property
+    def artifact_readset(self) -> FiscalArtifactReadSet:
+        return self.reader.readset
+
+    def retained_input_binding(
+        self, reference: ArtifactRefV1
+    ) -> FiscalRetainedInputBindingV1:
+        return self.validation.retained_input_binding(reference)
+
+    @property
+    def input_footprint(self) -> tuple[object, ...]:
+        return (self.reader.input_footprint, self.validation.input_footprint)
+
+    @property
+    def content_readsets(self) -> tuple[FiscalSourceContentReadSet, ...]:
+        return self.validation.content_readsets
+
     def check_current(self) -> None:
         with self.owner._operation(self.deadline_at):
             self._check_current()
@@ -221,6 +447,25 @@ class FiscalSourceRead:
             != self._evidence.request
         ):
             raise _invalid("fiscal source discovery changed during admission")
+        self.validation.check_current()
+        self.reader.check_bodies()
+        self.owner._before_deadline(self.deadline_at)
+
+
+@dataclass(frozen=True)
+class _PreparedFiscalSourceRead(FiscalSourceRead):
+    def _check_current(self) -> None:
+        self.owner._before_deadline(self.deadline_at)
+        if (
+            self.owner._configured_source() is not self.source_owner
+            or self.owner._artifacts is not self.artifacts
+            or self.owner._discovery is not self.discovery
+            or self.owner._resolve_current(
+                self._evidence.request.selection, self.reader, self.deadline_at
+            )
+            != self._evidence.request
+        ):
+            raise _invalid("current source owner or discovery changed")
         self.validation.check_current()
         self.reader.check_bodies()
         self.owner._before_deadline(self.deadline_at)
@@ -428,6 +673,88 @@ class FiscalSourceClosure:
                 raise _invalid(
                     "retained fiscal validation failed verification"
                 ) from error
+
+    def _observe_current(
+        self,
+        artifact_id: str,
+        binding: FiscalRetainedInputBindingV1,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalSourceRead:
+        with self._operation(deadline_at):
+            reader = FiscalArtifactRead(
+                self._artifacts, partial(self._before_deadline, deadline_at)
+            )
+            raw = reader.read(artifact_id)
+            evidence = FiscalOriginalValidationEvidenceV1.model_validate_json(raw)
+            if evidence.request != self._resolve_current(
+                evidence.request.selection, reader, deadline_at
+            ):
+                raise _invalid("current source no longer matches its discovery root")
+            record = reader.get(artifact_id)
+            if (
+                evidence.artifact_id != artifact_id
+                or record.dependency_hashes != evidence.dependencies
+                or record.media_type != "application/json"
+                or canonical_bytes(evidence.model_dump(mode="json")) != raw
+            ):
+                raise _invalid("current source canonical evidence differs")
+            self._verify_artifacts(evidence, reader)
+            source = self._configured_source()
+            validation = source.observe_current(
+                evidence.request,
+                evidence.outcome,
+                binding,
+                artifacts=reader,
+                deadline_at=deadline_at,
+            )
+            result = _PreparedFiscalSourceRead(
+                self,
+                source,
+                reader,
+                validation,
+                evidence,
+                deadline_at,
+                self._artifacts,
+                self._discovery,
+            )
+            result.check_current()
+            return result
+
+    def _resolve_current(
+        self,
+        request: FiscalOriginalValidationRequestV1,
+        reader: FiscalArtifactRead,
+        deadline_at: datetime,
+    ) -> ResolvedFiscalValidationRequestV1:
+        ref = request.discovery_ref
+        if ref.role != "fiscal-discovery" or ref.media_type != "application/json":
+            raise _invalid("current source discovery role differs")
+        require_retained_artifact(reader, ref)
+        discovery, records = self._discovery.read_current_with_metadata(
+            ref.artifact_id, deadline_at=deadline_at
+        )
+        for identity, record in records:
+            reader.expect(identity, record)
+        candidates = tuple(
+            item.filing
+            for item in discovery.selection.candidates
+            if item.filing is not None
+            and not item.issue_codes
+            and item.filing.accession_number == request.accession_number
+        )
+        if (
+            len(candidates) != 1
+            or discovery.request.declared_source_revision
+            != self._pin.declared_source_revision
+        ):
+            raise _invalid("current source discovery selection differs")
+        return ResolvedFiscalValidationRequestV1(
+            selection=request,
+            filing=candidates[0],
+            valuation_timestamp=discovery.request.valuation_timestamp,
+            pin=self._pin,
+        )
 
     def read(
         self, artifact_id: str, *, deadline_at: datetime

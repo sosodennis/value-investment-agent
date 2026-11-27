@@ -411,6 +411,29 @@ class ArtifactStore:
             )
         return payload
 
+    def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
+        record = self.get(artifact_id)
+        path = self._artifact_path(record.content_hash, record.media_type)
+        with path.open("rb") as source:
+            length = os.fstat(source.fileno()).st_size
+            if maximum_bytes < 0 or length > maximum_bytes:
+                raise SnapshotError(
+                    "FISCAL_CLOSURE_LIMIT", "artifact exceeds read bound"
+                )
+            payload = source.read(maximum_bytes + 1)
+        if (
+            len(payload) != length
+            or hashlib.sha256(payload).hexdigest() != record.content_hash
+        ):
+            raise SnapshotError(
+                "ARTIFACT_HASH_MISMATCH", "bounded artifact bytes differ"
+            )
+        if self.get(artifact_id) != record:
+            raise SnapshotError(
+                "ARTIFACT_EVIDENCE_CHANGED", "bounded artifact metadata changed"
+            )
+        return payload
+
     def has_content_hash(self, content_hash: str) -> bool:
         if len(content_hash) != 64:
             return False

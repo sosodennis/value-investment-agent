@@ -88,6 +88,46 @@ _MAX_SEC_XBRL_RESOURCE_BYTES = 12_000_000
 _MAX_SEC_XBRL_SELECTED_BYTES = 48_000_000
 
 
+def read_sec_xbrl_member(content: bytes, member_name: str) -> bytes:
+    """Read one retained parser member under the ingestion archive bounds."""
+    if (
+        len(content) > _MAX_SEC_XBRL_ARCHIVE_BYTES
+        or not member_name
+        or member_name.startswith("/")
+        or "\\" in member_name
+        or ".." in member_name.split("/")
+    ):
+        raise SnapshotError("SOURCE_PAYLOAD_INVALID", "invalid retained archive member")
+    with ZipFile(BytesIO(content)) as archive:
+        infos = archive.infolist()
+        if (
+            len(infos) > _MAX_SEC_XBRL_ARCHIVE_MEMBERS
+            or len({item.filename for item in infos}) != len(infos)
+            or sum(item.file_size for item in infos)
+            > _MAX_SEC_XBRL_ARCHIVE_UNCOMPRESSED_BYTES
+        ):
+            raise SnapshotError(
+                "INGESTION_BUDGET_EXCEEDED", "retained archive exceeds its bounds"
+            )
+        matches = tuple(item for item in infos if item.filename == member_name)
+        if len(matches) != 1:
+            raise SnapshotError(
+                "SOURCE_PAYLOAD_INVALID", "retained archive member is missing"
+            )
+        item = matches[0]
+        if item.flag_bits & 1 or item.file_size > _MAX_SEC_XBRL_PRIMARY_BYTES:
+            raise SnapshotError(
+                "INGESTION_BUDGET_EXCEEDED", "retained archive member exceeds its bound"
+            )
+        with archive.open(item) as source:
+            raw = source.read(_MAX_SEC_XBRL_PRIMARY_BYTES + 1)
+        if len(raw) != item.file_size:
+            raise SnapshotError(
+                "SOURCE_PAYLOAD_INVALID", "retained archive member size differs"
+            )
+        return raw
+
+
 def read_sec_xbrl_archive(
     content: bytes,
     *,
@@ -309,7 +349,8 @@ class SecIngestionService:
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
-        amendment_scope: str | None = None,
+        amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"]
+        | None = None,
         parser_delivery_revision: str | None = None,
         build_checks: ParserBuildChecks | None = None,
         retained_fiscal: RetainedFiscalValidation | None = None,
@@ -929,7 +970,8 @@ class SecIngestionService:
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
-        amendment_scope: str | None = None,
+        amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"]
+        | None = None,
         identity_basis: SecIdentityBasis = "current-sec-ticker-v1",
         identity_ticker: str | None = None,
         parser_delivery_revision: str | None = None,
@@ -1310,7 +1352,8 @@ class SecIngestionService:
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
-        amendment_scope: str | None = None,
+        amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"]
+        | None = None,
         accepted_at: datetime | None = None,
         deadline_at: datetime | None = None,
     ) -> SecIngestionResult:

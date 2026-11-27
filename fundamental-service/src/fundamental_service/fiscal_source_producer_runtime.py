@@ -65,6 +65,7 @@ from .fiscal_source_preparation import (
     fiscal_source_producer_executable_digest,
     producer_invalid,
     read_source_preparation,
+    read_source_content,
     read_producer_invocation,
     source_content_references,
 )
@@ -843,7 +844,7 @@ class _ProducerJob:
             self.runtime.artifacts, partial(_budget, self.deadline_at)
         )
         for content_ref in signed.preparation.source_content_refs:
-            read_retained_artifact(reader, content_ref)
+            read_source_content(reader, replay.evidence, content_ref)
         reader.check_current()
 
     def classify(self) -> FiscalClassificationPublicationV2 | ArtifactRefV1:

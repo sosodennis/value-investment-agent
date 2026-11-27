@@ -682,6 +682,12 @@ jobs:
           tests/agents/news/test_subgraph_entrypoint.py
           tests/agents/technical/test_subgraph_entrypoint.py
           tests/test_root_workflow_composition.py
+          tests/agents/fundamental/test_annual_statement_reader.py
+          tests/agents/fundamental/test_statement_reader_v2.py
+          tests/agents/fundamental/test_fundamental_service_client.py
+          tests/test_artifact_api_contract.py
+          tests/test_fiscal_artifact_current_read.py
+          tests/test_artifact_ownership_fitness.py
           -q
 
   notification-postgres-integration:
@@ -738,6 +744,11 @@ jobs:
           POSTGRES_DB: langgraph
         run: uv run pytest tests/agents/fundamental/test_valuation_revisions.py::test_real_repository_reads_direct_output_and_refuses_child_source -q
 
+      - name: Run fiscal reader auth and artifact PostgreSQL boundary
+        env:
+          CORE_STATEMENT_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/langgraph
+        run: uv run pytest tests/test_statement_reader_postgres.py -q
+
   frontend-lint-type-test:
     runs-on: ubuntu-latest
     defaults:
@@ -765,6 +776,9 @@ jobs:
 
       - name: Tests
         run: npm run test -- --run
+
+      - name: Build frontend production image
+        run: docker build --tag frontend-contract-packaging:${{ github.sha }} .
 
   contract-policy:
     runs-on: ubuntu-latest
@@ -833,6 +847,14 @@ jobs:
         working-directory: finance-agent-core
         run: uv sync --dev
 
+      - name: Setup Fundamental contract Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Fundamental contract dependencies
+        run: uv sync --frozen --project fundamental-service --python 3.12
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -843,10 +865,13 @@ jobs:
       - name: Regenerate contracts
         run: bash scripts/generate-contracts.sh
 
+      - name: Check standalone statement reader schemas in Core environment
+        run: uv run --frozen --project finance-agent-core python scripts/generate-statement-reader-schema.py --check
+
       - name: Ensure generated contracts are committed
         run: |
-          if [[ -n "$(git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/api-contract.ts)" ]]; then
+          if [[ -n "$(git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/statement-read-artifact.schema.v2.json frontend/src/types/generated/statement-catalog.schema.v2.json frontend/src/types/generated/api-contract.ts finance-agent-core/src/shared/artifacts/fiscal_statement_contracts.py)" ]]; then
             echo "Generated contract artifacts are out of sync. Run: bash scripts/generate-contracts.sh"
-            git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/api-contract.ts
+            git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/statement-read-artifact.schema.v2.json frontend/src/types/generated/statement-catalog.schema.v2.json frontend/src/types/generated/api-contract.ts finance-agent-core/src/shared/artifacts/fiscal_statement_contracts.py
             exit 1
           fi

@@ -42,8 +42,8 @@ from .publication_codec import (
 )
 from .data_releases import ArtifactRefV1, DataReleaseTrustRootsV1, DataReleaseError
 from .fiscal_release_contracts import (
-    FiscalReleaseManifestV1,
-    FiscalStoredVerificationV1,
+    FiscalReleaseManifestV2,
+    FiscalStoredVerificationV2,
 )
 from .fiscal_release_recovery import verify_retained_fiscal_publication
 
@@ -799,8 +799,8 @@ def _verify_rows(
         verification = release_verifications[digest]
         try:
             require_publication_pair(publication, verification)
-            if isinstance(publication, FiscalReleaseManifestV1) and isinstance(
-                verification, FiscalStoredVerificationV1
+            if isinstance(publication, FiscalReleaseManifestV2) and isinstance(
+                verification, FiscalStoredVerificationV2
             ):
                 roots = _RELEASE_TRUST_ROOTS.get()
                 if roots is None:

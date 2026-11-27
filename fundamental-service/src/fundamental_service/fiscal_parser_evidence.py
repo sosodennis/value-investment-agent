@@ -20,13 +20,207 @@ from .parser_action_identity import (
     ParserBuildChecks,
     parser_action_input,
     parser_action_resources,
+    parser_action_resource_descriptor,
 )
 from .serialization import canonical_bytes
+from .serialization import sha256_digest
+from .sec_capture import sec_response_artifact_id
+from .fiscal_validation_contracts import (
+    FiscalArchiveInputV1,
+    FiscalCapturedInputV1,
+    FiscalNormalizedInputV1,
+    FiscalRetainedContentV1,
+    FiscalRetainedInputBindingV1,
+    FiscalParserInputBindingV1,
+    FiscalStagedInputV1,
+    FiscalOriginalValidationEvidenceV1,
+    FiscalValidationIncompleteV1,
+    FiscalRetainedInputOriginV1,
+)
 from .snapshots import ContentAddressedStore, SnapshotError
 
 
 def _invalid(message: str) -> SnapshotError:
     return SnapshotError("FISCAL_PARSER_ACTION_INVALID", message)
+
+
+def fiscal_source_closure_contract_digest() -> str:
+    root = Path(__file__).parent
+    return sha256_digest(
+        tuple(
+            (name, hashlib.sha256((root / name).read_bytes()).hexdigest())
+            for name in (
+                "fiscal_parser_evidence.py",
+                "fiscal_source_validation.py",
+                "fiscal_validation_contracts.py",
+                "fiscal_source_closure.py",
+                "parser_action_contracts.py",
+                "parser_action_evidence.py",
+                "parser_action_identity.py",
+                "ingestion.py",
+            )
+        )
+    )
+
+
+def bind_fiscal_retained_inputs(
+    evidence: FiscalOriginalValidationEvidenceV1,
+    source_ref: ArtifactRefV1,
+    actions: RetainedFiscalActions,
+    content: ContentAddressedStore,
+    *,
+    actual_requests: tuple[ParserActionInputV3, ...],
+) -> FiscalRetainedInputBindingV1:
+    from .ingestion import read_sec_xbrl_member
+
+    outcome = evidence.outcome
+    if isinstance(outcome, FiscalValidationIncompleteV1):
+        raise _invalid("retained input binding requires complete validation")
+    integrity = outcome.integrity
+    archive_receipts = tuple(
+        item for item in outcome.responses if item.uri == integrity.archive_uri
+    )
+    primary_receipts = tuple(
+        item for item in outcome.responses if item.uri == integrity.primary_document_uri
+    )
+    if len(archive_receipts) != 1 or len(primary_receipts) != 1:
+        raise _invalid(
+            "retained parser binding requires exact primary and archive receipts"
+        )
+    archive_receipt, primary = archive_receipts[0], primary_receipts[0]
+    archive = content.get(
+        archive_receipt.content_hash, media_type=archive_receipt.media_type
+    )
+    if len(archive) != integrity.archive_size:
+        raise _invalid("retained archive length differs from source integrity")
+    archive_ref = ArtifactRefV1(
+        artifact_id=sec_response_artifact_id(
+            evidence.request.scope, archive_receipt.uri
+        ),
+        role="sec-response-receipt",
+        content_hash=sha256_digest(archive_receipt),
+        media_type="application/json",
+    )
+    inputs = []
+    retained_actions = tuple(
+        item for item in (actions.normalized, actions.archive) if item is not None
+    )
+    actual = {item.representation: item for item in actual_requests}
+    if len(actual) != len(actual_requests) or actual != {
+        item.request.representation: item.request for item in retained_actions
+    }:
+        raise _invalid("retained parser requests differ from actual staged consumption")
+    for action in retained_actions:
+        files = []
+        for name, digest in action.request.files:
+            origin: FiscalRetainedInputOriginV1
+            inline_normalized = tuple(
+                item
+                for item in integrity.inline_documents
+                if item.document.filename == name
+                and item.document.content_hash == digest
+            )
+            if (
+                action.request.representation == "normalized"
+                and (
+                    name == integrity.archive_member_name
+                    and digest == integrity.normalized_content_hash
+                    or len(inline_normalized) == 1
+                )
+            ) or (name == "input.ixds.json" and digest == integrity.parser_input_hash):
+                media = (
+                    "application/json"
+                    if name == "input.ixds.json"
+                    else next(
+                        (
+                            receipt.media_type
+                            for receipt in outcome.responses
+                            if receipt.uri.rsplit("/", 1)[-1] == name
+                        ),
+                        primary.media_type,
+                    )
+                )
+                raw = content.get(digest, media_type=media)
+                origin = FiscalNormalizedInputV1(
+                    integrity_role="parser_input"
+                    if name == "input.ixds.json"
+                    else "normalized_content",
+                    content=FiscalRetainedContentV1(
+                        digest=digest, media_type=media, byte_length=len(raw)
+                    ),
+                )
+            else:
+                captures = tuple(
+                    item
+                    for item in outcome.responses
+                    if item.uri.rsplit("/", 1)[-1] == name
+                    and item.content_hash == digest
+                )
+                if len(captures) == 1 and action.request.representation == "normalized":
+                    receipt = captures[0]
+                    raw = content.get(digest, media_type=receipt.media_type)
+                    origin = FiscalCapturedInputV1(
+                        receipt_ref=ArtifactRefV1(
+                            artifact_id=sec_response_artifact_id(
+                                evidence.request.scope, receipt.uri
+                            ),
+                            role="sec-response-receipt",
+                            content_hash=sha256_digest(receipt),
+                            media_type="application/json",
+                        ),
+                        content=FiscalRetainedContentV1(
+                            digest=digest,
+                            media_type=receipt.media_type,
+                            byte_length=len(raw),
+                        ),
+                    )
+                else:
+                    raw = read_sec_xbrl_member(archive, name)
+                    origin = FiscalArchiveInputV1(
+                        archive_receipt_ref=archive_ref,
+                        member_name=name,
+                        member_content=FiscalRetainedContentV1(
+                            digest=digest,
+                            media_type="application/octet-stream",
+                            byte_length=len(raw),
+                        ),
+                    )
+            if hashlib.sha256(raw).hexdigest() != digest:
+                raise _invalid("parser file cannot map to an exact retained origin")
+            files.append(FiscalStagedInputV1(relative_name=name, origin=origin))
+        result_refs = tuple(
+            ref for ref in action.refs if ref.role == "sec-parser-action-result-v2"
+        )
+        if len(result_refs) != 1 or action.request.entrypoint not in dict(
+            action.request.files
+        ):
+            raise _invalid("retained parser input action or entrypoint differs")
+        available = {item.content_hash for item in outcome.responses} | {
+            integrity.normalized_content_hash,
+            integrity.parser_input_hash,
+            integrity.archive_member_hash,
+            *(item.document.content_hash for item in integrity.inline_documents),
+            *(item.archive_member_hash for item in integrity.inline_documents),
+        }
+        if (
+            action.request.source_content_hash not in available
+            or not set(action.request.normalization_inputs) <= available
+        ):
+            raise _invalid(
+                "parser source or normalization input has no retained origin"
+            )
+        inputs.append(
+            FiscalParserInputBindingV1(
+                representation=action.request.representation,
+                action_result_ref=result_refs[0],
+                files=tuple(files),
+            )
+        )
+    return FiscalRetainedInputBindingV1(
+        source_validation_ref=source_ref,
+        source_contract_digest=fiscal_source_closure_contract_digest(),
+        inputs=tuple(inputs),
+    )
 
 
 def read_fiscal_rejection(
@@ -95,7 +289,7 @@ def _check_parser_runtime_current(
     profile: ArelleValidationProfileV1,
     taxonomy_cache_dir: Path,
     delivery_revision: str,
-) -> None:
+) -> tuple[object, ...]:
     if not observations:
         raise _invalid("retained source has no consumed parser runtime")
     profile_json = canonical_bytes(profile.model_dump(mode="json"))
@@ -116,11 +310,19 @@ def _check_parser_runtime_current(
             or build_checks.current() != observation.request.build
         ):
             raise _invalid("retained parser runtime changed during source admission")
+    return (
+        parser_action_resource_descriptor(
+            profile, taxonomy_cache_dir, build_checks
+        ).hex(),
+        resources.physical,
+        resources.logical,
+    )
 
 
 @dataclass
 class FiscalParserRuntimeRead:
     observations: list[ParserActionRuntimeObservation] = field(default_factory=list)
+    resources: tuple[object, ...] = ()
 
     def observe(
         self,
@@ -144,7 +346,7 @@ class FiscalParserRuntimeRead:
         taxonomy_cache_dir: Path,
         delivery_revision: str,
     ) -> None:
-        _check_parser_runtime_current(
+        self.resources = _check_parser_runtime_current(
             tuple(self.observations), profile, taxonomy_cache_dir, delivery_revision
         )
 

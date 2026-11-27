@@ -182,8 +182,8 @@ from ..conditional_reinvestment_release import (
 )
 
 
-from ..fiscal_read_contracts import FiscalReadRequestV1, FiscalReadResultV1
-from ..fiscal_release_contracts import ActiveFiscalReleaseV1, FiscalReleaseManifestV1
+from ..fiscal_read_contracts import FiscalReadRequestV2, FiscalReadResultV2
+from ..fiscal_release_contracts import ActiveFiscalReleaseV2, FiscalReleaseManifestV2
 from ..fiscal_releases import FiscalReleaseReader
 from ..publication_codec import ActivePublication, active_publication
 from collections.abc import Callable
@@ -807,7 +807,7 @@ class FundamentalApplication:
     def _active_release_response(
         active: ActivePublication,
     ) -> ActivePublication:
-        if isinstance(active, ActiveFiscalReleaseV1):
+        if isinstance(active, ActiveFiscalReleaseV2):
             return active
         try:
             return active.model_copy(
@@ -849,7 +849,7 @@ class FundamentalApplication:
             candidate = self.metadata_store.get_data_release_manifest(
                 command.manifest_digest
             )
-            if isinstance(candidate, FiscalReleaseManifestV1):
+            if isinstance(candidate, FiscalReleaseManifestV2):
                 if self.fiscal_reader_factory is None:
                     raise ServiceError(
                         "FISCAL_READING_UNAVAILABLE",
@@ -1368,8 +1368,8 @@ class FundamentalApplication:
             ) from error
 
     def read_fiscal_statements(
-        self, request: FiscalReadRequestV1, *, deadline_at: datetime
-    ) -> FiscalReadResultV1:
+        self, request: FiscalReadRequestV2, *, deadline_at: datetime
+    ) -> FiscalReadResultV2:
         if self.fiscal_reader_factory is None:
             raise ServiceError(
                 "FISCAL_READING_UNAVAILABLE",

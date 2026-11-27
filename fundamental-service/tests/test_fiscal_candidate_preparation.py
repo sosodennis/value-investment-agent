@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import serialization
 from pydantic import ValidationError
 
 from fundamental_service.fiscal_candidate_contracts import (
-    FiscalPrepareCandidateCommandV1,
+    FiscalPrepareCandidateCommandV2,
 )
 from fundamental_service.fiscal_preparation_runtime import (
     FiscalPreparationDeploymentV1,
@@ -74,7 +74,7 @@ def prepared_runtime(environment, tmp_path):
         None,
     )
     builder = build_fiscal_candidate_runtime(inputs, env.metadata, config, write=True)
-    command = FiscalPrepareCandidateCommandV1(
+    command = FiscalPrepareCandidateCommandV2(
         command_id="synthetic-candidate",
         discovery_ref=discovery_ref,
         security_id="AAPL",
@@ -181,7 +181,7 @@ def test_refs_only_candidate_command_rejects_financial_or_actor_input(prepared_r
         "formula",
     ):
         with pytest.raises(ValidationError):
-            FiscalPrepareCandidateCommandV1.model_validate(
+            FiscalPrepareCandidateCommandV2.model_validate(
                 {**command.model_dump(), key: "caller-claim"}
             )
 
@@ -219,9 +219,9 @@ def test_durable_crash_cuts_preserve_bytes_and_unknown_signing_refuses(
         nonlocal crashed
         result = put(identity, *args, **kwargs)
         prefix = {
-            "intent": "fiscal-candidate-intent-v1:",
-            "signing-intent": "fiscal-candidate-signing-intent-v1:",
-            "signed": "fiscal-statement-candidate-v2:",
+            "intent": "fiscal-candidate-intent-v2:",
+            "signing-intent": "fiscal-candidate-signing-intent-v2:",
+            "signed": "fiscal-statement-candidate-v3:",
         }.get(cut)
         if prefix and identity.startswith(prefix) and not crashed:
             crashed = True
@@ -373,6 +373,27 @@ def synthetic_retained_classifications(
 
             class Read:
                 @property
+                def artifact_readset(self):
+                    from fundamental_service.fiscal_source_closure import (
+                        FiscalArtifactReadSet,
+                    )
+
+                    raw = canonical_bytes(original)
+                    return FiscalArtifactReadSet(
+                        ((identity, env.store.get(identity)),),
+                        ((identity, (sha256_digest(original), len(raw))),),
+                        (),
+                    )
+
+                @property
+                def input_footprint(self):
+                    return (self.artifact_readset.records, self.artifact_readset.bodies)
+
+                @property
+                def content_readsets(self):
+                    return ()
+
+                @property
                 def witness(self):
                     return deepcopy(original)
 
@@ -385,6 +406,10 @@ def synthetic_retained_classifications(
                     assert datetime.now(UTC) < deadline_at
 
             return Read()
+
+        def _observe_current(self, identity, binding, *, deadline_at):
+            assert binding.source_validation_ref.artifact_id in sources
+            return self.observe(identity, deadline_at=deadline_at)
 
         def read(self, identity, *, deadline_at):
             value = witnesses[identity]
@@ -699,7 +724,7 @@ def test_mixed_source_factory_preserves_verified_classification_activities(
         accounting_accreditation=resolver.accounting_accreditation,
     )
     builder = build_fiscal_candidate_runtime(inputs, env.metadata, config, write=True)
-    command = FiscalPrepareCandidateCommandV1(
+    command = FiscalPrepareCandidateCommandV2(
         command_id="synthetic-mixed",
         discovery_ref=discovery_ref,
         security_id="MSFT",
@@ -837,7 +862,7 @@ def test_parent_metadata_budget_cancels_candidate_before_any_issuance(prepared_r
             builder.prepare(command, deadline_at=deadline())
     assert monotonic() - started < 3
     with pytest.raises(SnapshotError):
-        env.store.get(command.artifact_id("fiscal-statement-candidate-v2"))
+        env.store.get(command.artifact_id("fiscal-statement-candidate-v3"))
 
 
 def test_wrong_deployment_key_refuses_before_financial_work(
@@ -856,7 +881,7 @@ def test_wrong_deployment_key_refuses_before_financial_work(
         builder.prepare(command, deadline_at=deadline())
     assert failure.value.code == "FISCAL_CANDIDATE_INVALID"
     with pytest.raises(SnapshotError):
-        env.store.get(command.artifact_id("fiscal-candidate-signing-intent-v1"))
+        env.store.get(command.artifact_id("fiscal-candidate-signing-intent-v2"))
 
 
 def test_read_refuses_unsigned_opaque_or_source_only_envelope(prepared_runtime):
@@ -873,7 +898,7 @@ def test_read_refuses_unsigned_opaque_or_source_only_envelope(prepared_runtime):
         )
         with pytest.raises(SnapshotError):
             builder.verify_candidate(
-                reference(artifact.artifact, "fiscal-statement-candidate-v2"),
+                reference(artifact.artifact, "fiscal-statement-candidate-v3"),
                 deadline_at=deadline(),
             )
 
@@ -901,7 +926,7 @@ def test_even_correctly_signed_candidate_tampering_never_bypasses_reconstruction
     prepared_runtime, axis
 ):
     from fundamental_service.fiscal_candidate_contracts import (
-        FiscalStatementCandidateV2,
+        FiscalStatementCandidateV3,
     )
     from fundamental_service.serialization import sha256_digest
     from test_fiscal_admission_authority import reference
@@ -984,7 +1009,7 @@ def test_even_correctly_signed_candidate_tampering_never_bypasses_reconstruction
             "preparation": body.preparation.model_copy(update=execution_updates),
         }
     )
-    signed = FiscalStatementCandidateV2(
+    signed = FiscalStatementCandidateV3(
         body=body,
         signature=(
             "0" * 128
@@ -995,7 +1020,7 @@ def test_even_correctly_signed_candidate_tampering_never_bypasses_reconstruction
     record = env.store.put_with_receipt(signed.artifact_id, signed).artifact
     with pytest.raises(SnapshotError):
         builder.verify_candidate(
-            reference(record, "fiscal-statement-candidate-v2"), deadline_at=deadline()
+            reference(record, "fiscal-statement-candidate-v3"), deadline_at=deadline()
         )
     assert env.store.read(result.reference.artifact_id) == canonical_bytes(
         result.candidate
@@ -1019,7 +1044,7 @@ import sys
 from pathlib import Path
 from datetime import UTC, datetime, timedelta
 from fundamental_service.fiscal_preparation_runtime import FiscalPreparationDeploymentV1, FiscalPreparationInputs, build_fiscal_candidate_runtime
-from fundamental_service.fiscal_candidate_contracts import FiscalPrepareCandidateCommandV1
+from fundamental_service.fiscal_candidate_contracts import FiscalPrepareCandidateCommandV2
 from fundamental_service.metadata import PostgresMetadataStore, PostgresArtifactStore, PostgresContentStore
 from fundamental_service.snapshots import SnapshotError
 from test_fiscal_projection_builder import _case, assert_frozen_candidate_projection
@@ -1030,7 +1055,7 @@ try:
     source,_,_,_,_=_case(Path(sys.argv[3]),'aapl-historical',artifact_type=lambda _:store)
     inputs=FiscalPreparationInputs(store,source.content,source.discovery,source.sources,source.pin,None)
     builder=build_fiscal_candidate_runtime(inputs,metadata,FiscalPreparationDeploymentV1.model_validate_json(Path(sys.argv[4]).read_bytes()),write=True)
-    command=FiscalPrepareCandidateCommandV1.model_validate_json(Path(sys.argv[5]).read_bytes())
+    command=FiscalPrepareCandidateCommandV2.model_validate_json(Path(sys.argv[5]).read_bytes())
     result=builder.prepare(command,deadline_at=datetime.now(UTC)+timedelta(seconds=60))
     print(result.reference.model_dump_json())
 except SnapshotError as error:
@@ -1098,8 +1123,8 @@ def test_restored_candidate_orphan_keeps_issuance_and_fresh_local_command_really
             with pytest.raises(RuntimeError):
                 builder.prepare(command, deadline_at=deadline())
         ref = reference(
-            env.store.get(command.artifact_id("fiscal-statement-candidate-v2")),
-            "fiscal-statement-candidate-v2",
+            env.store.get(command.artifact_id("fiscal-statement-candidate-v3")),
+            "fiscal-statement-candidate-v3",
         )
     else:
         ref = builder.prepare(command, deadline_at=deadline()).reference
@@ -1189,7 +1214,7 @@ def test_fiscal_runner_prepare_and_exact_ref_read_use_real_factory_results(
     first = json.loads(capsys.readouterr().out)
     ref = reference(
         env.store.get(first["publication"]["artifact"]["artifact_id"]),
-        "fiscal-statement-candidate-v2",
+        "fiscal-statement-candidate-v3",
     )
     ref_path.write_bytes(canonical_bytes(ref))
     assert (
@@ -1246,7 +1271,7 @@ def test_current_apple_factory_preserves_all_frozen_cells(prepared_runtime, tmp_
         env.store, source.content, source.discovery, source.sources, source.pin, None
     )
     builder = build_fiscal_candidate_runtime(inputs, env.metadata, config, write=True)
-    command = FiscalPrepareCandidateCommandV1(
+    command = FiscalPrepareCandidateCommandV2(
         command_id="synthetic-current-apple",
         discovery_ref=discovery_ref,
         security_id="AAPL",
@@ -1337,7 +1362,7 @@ def test_complete_source_configuration_rotation_before_snapshot_refuses(
         accounting_accreditation=resolver.accounting_accreditation,
     )
     builder = build_fiscal_candidate_runtime(inputs, env.metadata, config, write=True)
-    command = FiscalPrepareCandidateCommandV1(
+    command = FiscalPrepareCandidateCommandV2(
         command_id="synthetic-whole-source-config",
         discovery_ref=discovery_ref,
         security_id="MSFT",

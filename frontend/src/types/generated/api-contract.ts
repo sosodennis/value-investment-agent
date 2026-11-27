@@ -251,6 +251,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fundamental/statements/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog */
+        get: operations["catalog_api_v1_fundamental_statements_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fundamental/statements/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read */
+        post: operations["read_api_v1_fundamental_statements_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/llm/provider-keys": {
         parameters: {
             query?: never;
@@ -1112,6 +1146,21 @@ export interface components {
             /** Total Alerts */
             total_alerts?: number | null;
         };
+        /** AmendedFiscalRevisionV1 */
+        AmendedFiscalRevisionV1: {
+            /** Amends Accession */
+            amends_accession?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "amendment";
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "unknown" | "comparable";
+        };
         /** AnalystPerspectiveEvidenceItemModel */
         AnalystPerspectiveEvidenceItemModel: {
             /** Label */
@@ -1164,6 +1213,15 @@ export interface components {
             what_it_means_now: string;
             /** Why It Matters Now */
             why_it_matters_now: string;
+        };
+        /** AnnualSavedReadV2 */
+        AnnualSavedReadV2: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "annual";
+            response: components["schemas"]["AnnualStatementsReadResponseV1"];
         };
         /** AnnualStatementArtifactResponse */
         AnnualStatementArtifactResponse: {
@@ -1282,6 +1340,17 @@ export interface components {
              * @constant
              */
             valuation_eligibility: "not_evaluated";
+        };
+        /** ArtifactRefV1 */
+        ArtifactRefV1: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Media Type */
+            media_type: string;
+            /** Role */
+            role: string;
         };
         /**
          * ArtifactReference
@@ -1950,6 +2019,7 @@ export interface components {
             replay_schema_version?: string | null;
             /** Sector */
             sector?: string | null;
+            statement_read?: components["schemas"]["StatementReadArtifactV3"] | null;
             /** Status */
             status?: "done" | null;
             /** Ticker */
@@ -1991,6 +2061,660 @@ export interface components {
             provision_for_loan_losses?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
+        };
+        /** FiscalBasisFilingV1 */
+        FiscalBasisFilingV1: {
+            /**
+             * Accepted At
+             * Format: date-time
+             */
+            accepted_at: string;
+            /** Accession Number */
+            accession_number: string;
+            /** Amends Accession */
+            amends_accession?: string | null;
+            /** Disclosure Refs */
+            disclosure_refs: components["schemas"]["ArtifactRefV1"][];
+            /** Primary Document Sha256 */
+            primary_document_sha256: string;
+            /** Supersedes Accession */
+            supersedes_accession?: string | null;
+        };
+        /** FiscalBasisObservationV1 */
+        FiscalBasisObservationV1: {
+            /** Observation Digest */
+            observation_digest: string;
+            /** Observation Id */
+            observation_id: string;
+        };
+        /** FiscalCandidateDecisionV1 */
+        FiscalCandidateDecisionV1: {
+            /** Observation Id */
+            observation_id: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "selected" | "superseded" | "equivalent_duplicate" | "rejected";
+            /** Reason */
+            reason: string;
+        };
+        /** FiscalCashContinuityV1 */
+        FiscalCashContinuityV1: {
+            /**
+             * Boundary Date
+             * Format: date
+             */
+            boundary_date: string;
+            /** Input Node Ids */
+            input_node_ids: string[];
+            /** Reason Code */
+            reason_code?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "consistent_at_reported_precision" | "conflict" | "unresolved_missing_inputs" | "unresolved_precision";
+            /** Window Id */
+            window_id: string;
+        };
+        /** FiscalComparativePairV1 */
+        FiscalComparativePairV1: {
+            /** Comparative Id */
+            comparative_id: string;
+            /** Original Id */
+            original_id: string;
+        };
+        /** FiscalDerivedCellV1 */
+        FiscalDerivedCellV1: {
+            /** Decimal */
+            decimal: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "derived";
+            /** Node Id */
+            node_id: string;
+        };
+        /** FiscalDisplayGraphV1 */
+        FiscalDisplayGraphV1: {
+            /** Cash Continuities */
+            cash_continuities: components["schemas"]["FiscalCashContinuityV1"][];
+            /** Nodes */
+            nodes: components["schemas"]["FiscalValueNodeV1"][];
+            /** Observations */
+            observations: components["schemas"]["FiscalObservationV1"][];
+            /** Reconciliations */
+            reconciliations: components["schemas"]["FiscalReconciliationV1"][];
+            /** Source Uses */
+            source_uses: components["schemas"]["FiscalSourceInspectionV1"][];
+        };
+        /** FiscalDisplayRowV1 */
+        FiscalDisplayRowV1: {
+            /** Cells */
+            cells: (components["schemas"]["FiscalReportedCellV1"] | components["schemas"]["FiscalDerivedCellV1"] | components["schemas"]["FiscalMissingCellV1"])[];
+            row: components["schemas"]["FiscalRowPolicyV1"];
+        };
+        /** FiscalDurationPeriodV1 */
+        FiscalDurationPeriodV1: {
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /**
+             * Fiscal Period
+             * @enum {string}
+             */
+            fiscal_period: "Q1" | "Q2" | "Q3" | "FY" | "TTM";
+            /** Fiscal Year */
+            fiscal_year: number;
+            /**
+             * Fiscal Year Start
+             * Format: date
+             */
+            fiscal_year_start: string;
+            /** Inclusive Days */
+            inclusive_days: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "duration";
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+        };
+        /** FiscalInputEdgeV1 */
+        FiscalInputEdgeV1: {
+            /**
+             * Coefficient
+             * @enum {integer}
+             */
+            coefficient: -1 | 1;
+            /** Input Id */
+            input_id: string;
+        };
+        /** FiscalInstantPeriodV1 */
+        FiscalInstantPeriodV1: {
+            /**
+             * Fiscal Period
+             * @enum {string}
+             */
+            fiscal_period: "Q1" | "Q2" | "Q3" | "FY" | "TTM";
+            /** Fiscal Year */
+            fiscal_year: number;
+            /**
+             * Instant
+             * Format: date
+             */
+            instant: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "instant";
+        };
+        /** FiscalMissingCellV1 */
+        FiscalMissingCellV1: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "conflict" | "unavailable";
+            /** Node Id */
+            node_id: string;
+            /** Reason Code */
+            reason_code: string;
+        };
+        /** FiscalObservationV1 */
+        FiscalObservationV1: {
+            /**
+             * Accepted At
+             * Format: date-time
+             */
+            accepted_at: string;
+            /** Accession Number */
+            accession_number: string;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            basis: components["schemas"]["FiscalReportingBasisV1"];
+            /** Concept */
+            concept: string;
+            /** Decimals */
+            decimals?: number | "INF" | null;
+            /**
+             * Filing Date
+             * Format: date
+             */
+            filing_date: string;
+            /**
+             * Filing Revision
+             * @default {
+             *       "kind": "original"
+             *     }
+             */
+            filing_revision: components["schemas"]["OriginalFiscalRevisionV1"] | components["schemas"]["AmendedFiscalRevisionV1"];
+            /**
+             * Form
+             * @enum {string}
+             */
+            form: "10-K" | "10-Q" | "10-K/A" | "10-Q/A";
+            /** Issuer Id */
+            issuer_id: string;
+            /** Mapping Digest */
+            mapping_digest: string;
+            /** Namespace Uri */
+            namespace_uri: string;
+            /** Observation Id */
+            observation_id: string;
+            /** Parser Action Digest */
+            parser_action_digest: string;
+            /** Period */
+            period: components["schemas"]["ReportedQuarterV1"] | components["schemas"]["ReportedYtdV1"] | components["schemas"]["ReportedFiscalYearV1"] | components["schemas"]["ReportedInstantV1"] | components["schemas"]["UnsupportedDurationV1"];
+            /** @default verified */
+            quality: components["schemas"]["QualityStatus"];
+            /** Raw Text */
+            raw_text: string;
+            /**
+             * Report Date
+             * Format: date
+             */
+            report_date: string;
+            /** Row Id */
+            row_id: string;
+            /** Scale */
+            scale?: number | null;
+            /** Sign */
+            sign?: ("+" | "-") | null;
+            /** Source Artifact Id */
+            source_artifact_id: string;
+            /** Source Binding Digest */
+            source_binding_digest: string;
+            /** Source Fact Key */
+            source_fact_key: string;
+            source_locator: components["schemas"]["FiscalSourceLocatorV1"];
+            /**
+             * Statement
+             * @enum {string}
+             */
+            statement: "income_statement" | "balance_sheet" | "cash_flow";
+            /** Value */
+            value: string | null;
+        };
+        /** FiscalPeriodTargetV1 */
+        FiscalPeriodTargetV1: {
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Period */
+            period: components["schemas"]["FiscalDurationPeriodV1"] | components["schemas"]["FiscalInstantPeriodV1"];
+            /** Period Id */
+            period_id: string;
+            /** Source Binding Digest */
+            source_binding_digest: string;
+        };
+        /** FiscalPrecisionIntervalV1 */
+        FiscalPrecisionIntervalV1: {
+            /** Lower */
+            lower: string;
+            /**
+             * Lower Inclusive
+             * @default true
+             */
+            lower_inclusive: boolean;
+            /** Upper */
+            upper: string;
+            /**
+             * Upper Inclusive
+             * @default true
+             */
+            upper_inclusive: boolean;
+        };
+        /** FiscalPublishV2 */
+        FiscalPublishV2: {
+            candidate_ref: components["schemas"]["ArtifactRefV1"];
+            decision_ref: components["schemas"]["ArtifactRefV1"];
+        };
+        /** FiscalQuarterColumnsV1 */
+        FiscalQuarterColumnsV1: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            frequency: "quarter";
+            /** Periods */
+            periods: components["schemas"]["FiscalPeriodTargetV1"][];
+        };
+        /** FiscalReadBindingV2 */
+        FiscalReadBindingV2: {
+            approved: components["schemas"]["FiscalPublishV2"];
+            /** Columns */
+            columns: components["schemas"]["FiscalQuarterColumnsV1"] | components["schemas"]["FiscalTtmColumnsV1"];
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Manifest Digest */
+            manifest_digest: string;
+            /** Projection Digest */
+            projection_digest: string;
+            scope: components["schemas"]["StatementScopeV1"];
+            /** Selected Period Set Digest */
+            selected_period_set_digest: string;
+        };
+        /** FiscalReadRequestV2 */
+        FiscalReadRequestV2: {
+            /**
+             * Contract Version
+             * @default fundamental.fiscal-statements.v2
+             * @constant
+             */
+            contract_version: "fundamental.fiscal-statements.v2";
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "quarter" | "ttm";
+            /** Manifest Digest */
+            manifest_digest: string;
+            scope: components["schemas"]["StatementScopeV1"];
+        };
+        /** FiscalReadResultV2 */
+        FiscalReadResultV2: {
+            binding: components["schemas"]["FiscalReadBindingV2"];
+            /**
+             * Contract Version
+             * @default fundamental.fiscal-statements.v2
+             * @constant
+             */
+            contract_version: "fundamental.fiscal-statements.v2";
+            evidence: components["schemas"]["FiscalDisplayGraphV1"];
+            /** Rows */
+            rows: components["schemas"]["FiscalDisplayRowV1"][];
+            /** Supported History Threshold */
+            supported_history_threshold?: null;
+            /**
+             * Valuation Eligibility
+             * @default not_evaluated
+             * @constant
+             */
+            valuation_eligibility: "not_evaluated";
+        };
+        /** FiscalReconciliationV1 */
+        FiscalReconciliationV1: {
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "quarter" | "ttm";
+            /** Input Node Ids */
+            input_node_ids: string[];
+            /** Period Id */
+            period_id: string;
+            precision_interval: components["schemas"]["FiscalPrecisionIntervalV1"] | null;
+            /** Reason Code */
+            reason_code?: string | null;
+            /** Residual */
+            residual: string | null;
+            /**
+             * Rule
+             * @enum {string}
+             */
+            rule: "opening_plus_change_equals_closing" | "flows_plus_fx_equals_change";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "consistent_at_reported_precision" | "conflict" | "unresolved_missing_inputs" | "unresolved_precision";
+        };
+        /** FiscalReportedCellV1 */
+        FiscalReportedCellV1: {
+            /** Decimal */
+            decimal: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "reported";
+            /** Node Id */
+            node_id: string;
+            /** Source Observation Ids */
+            source_observation_ids: string[];
+        };
+        /** FiscalReportingBasisV1 */
+        FiscalReportingBasisV1: {
+            /**
+             * Accounting Scope
+             * @default consolidated_us_gaap
+             */
+            accounting_scope: string;
+            /** Cash Basis */
+            cash_basis?: string | null;
+            /** Consolidation Scope */
+            consolidation_scope: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Dimensions
+             * @default []
+             */
+            dimensions: [
+                string,
+                string
+            ][];
+            /** Entity Scope */
+            entity_scope: string;
+            /** Issuer Id */
+            issuer_id: string;
+            /** Revision Basis Id */
+            revision_basis_id?: string | null;
+            /** Security Id */
+            security_id: string | null;
+            /** Security Scope */
+            security_scope: string;
+            /** Unit */
+            unit: string;
+        };
+        /** FiscalRevisionBasisProofV1 */
+        FiscalRevisionBasisProofV1: {
+            /**
+             * Comparative Pairs
+             * @default []
+             */
+            comparative_pairs: components["schemas"]["FiscalComparativePairV1"][];
+            /**
+             * Component Period Digests
+             * @default []
+             */
+            component_period_digests: string[];
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Filings */
+            filings: components["schemas"]["FiscalBasisFilingV1"][];
+            /**
+             * Intermediate Published Revisions
+             * @default []
+             */
+            intermediate_published_revisions: string[];
+            /** Observations */
+            observations: components["schemas"]["FiscalBasisObservationV1"][];
+            period: components["schemas"]["FiscalDurationPeriodV1"];
+            /**
+             * Protocol
+             * @default fundamental.fiscal-revision-basis.v1
+             * @constant
+             */
+            protocol: "fundamental.fiscal-revision-basis.v1";
+            /**
+             * Public Available At
+             * Format: date-time
+             */
+            public_available_at: string;
+            review_evidence_ref: components["schemas"]["ArtifactRefV1"];
+            /**
+             * Revision Bridges
+             * @default []
+             */
+            revision_bridges: components["schemas"]["FiscalRevisionBridgeV1"][];
+            /** Row Id */
+            row_id: string;
+            /** Source Revision */
+            source_revision: string;
+        };
+        /** FiscalRevisionBridgeV1 */
+        FiscalRevisionBridgeV1: {
+            /** Disclosure Refs */
+            disclosure_refs: components["schemas"]["ArtifactRefV1"][];
+            /** Observations */
+            observations: components["schemas"]["FiscalBasisObservationV1"][];
+        };
+        /** FiscalRowPolicyV1 */
+        FiscalRowPolicyV1: {
+            /**
+             * Aggregation
+             * @enum {string}
+             */
+            aggregation: "additive_flow" | "instant" | "cash_opening" | "cash_closing";
+            /** Label */
+            label: string;
+            /**
+             * Row Id
+             * @enum {string}
+             */
+            row_id: "revenue" | "cost_of_revenue" | "gross_profit" | "operating_income" | "income_before_tax" | "income_tax_expense" | "net_income" | "cash_and_equivalents" | "operating_current_receivables" | "inventory" | "current_assets" | "property_plant_and_equipment" | "total_assets" | "operating_current_payables" | "current_liabilities" | "total_liabilities" | "total_equity" | "liabilities_and_equity" | "operating_cash_flow" | "investing_cash_flow" | "financing_cash_flow" | "effect_of_exchange_rates_on_cash" | "net_change_in_cash" | "cash_flow_beginning_balance" | "cash_flow_ending_balance";
+            /**
+             * Statement
+             * @enum {string}
+             */
+            statement: "income_statement" | "balance_sheet" | "cash_flow";
+        };
+        /** FiscalSavedReadV3 */
+        FiscalSavedReadV3: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "fiscal";
+            request: components["schemas"]["FiscalReadRequestV2"];
+            result: components["schemas"]["FiscalReadResultV2"];
+            /** Result Digest */
+            result_digest: string;
+        };
+        /** FiscalSourceDocumentV1 */
+        FiscalSourceDocumentV1: {
+            /** Accession Number */
+            accession_number: string;
+            /** Archive Member Sha256 */
+            archive_member_sha256: string;
+            /** Issuer Id */
+            issuer_id: string;
+            /** Primary Document Sha256 */
+            primary_document_sha256: string;
+            /** Primary Document Url */
+            primary_document_url: string;
+        };
+        /** FiscalSourceInspectionV1 */
+        FiscalSourceInspectionV1: {
+            /** Classification Refs */
+            classification_refs: components["schemas"]["ArtifactRefV1"][];
+            mapping_approval_ref: components["schemas"]["ArtifactRefV1"];
+            mapping_ref: components["schemas"]["ArtifactRefV1"];
+            /** Parser Action Refs */
+            parser_action_refs: components["schemas"]["ArtifactRefV1"][];
+            /** Raw Report Digest */
+            raw_report_digest: string;
+            /** Source Binding Digest */
+            source_binding_digest: string;
+            source_document: components["schemas"]["FiscalSourceDocumentV1"];
+            source_validation_ref: components["schemas"]["ArtifactRefV1"];
+            /**
+             * Validation Kind
+             * @enum {string}
+             */
+            validation_kind: "complete_matched" | "complete_refused";
+            witness_ref: components["schemas"]["ArtifactRefV1"] | null;
+        };
+        /** FiscalSourceLocatorV1 */
+        FiscalSourceLocatorV1: {
+            /** Context Id */
+            context_id: string;
+            /** Fact Index */
+            fact_index: number;
+            /** Primary Document Sha256 */
+            primary_document_sha256: string;
+            /** Row Index */
+            row_index?: number | null;
+            /** Table Index */
+            table_index?: number | null;
+        };
+        /** FiscalTtmColumnsV1 */
+        FiscalTtmColumnsV1: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            frequency: "ttm";
+            /** Windows */
+            windows: components["schemas"]["FiscalTtmWindowV1"][];
+        };
+        /** FiscalTtmWindowV1 */
+        FiscalTtmWindowV1: {
+            /** Quarters */
+            quarters: components["schemas"]["FiscalPeriodTargetV1"][];
+            /** Source Binding Digest */
+            source_binding_digest: string;
+            /** Window Id */
+            window_id: string;
+        };
+        /** FiscalValueNodeV1 */
+        FiscalValueNodeV1: {
+            /**
+             * Availability
+             * @enum {string}
+             */
+            availability: "reported" | "derived" | "unavailable" | "conflict";
+            /** Available At */
+            available_at?: string | null;
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: components["schemas"]["FiscalCandidateDecisionV1"][];
+            /** Executable Digest */
+            executable_digest: string;
+            /** Formula */
+            formula?: string | null;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "quarter" | "ttm";
+            /**
+             * Input Edges
+             * @default []
+             */
+            input_edges: components["schemas"]["FiscalInputEdgeV1"][];
+            /** Node Id */
+            node_id: string;
+            /** Period */
+            period: components["schemas"]["FiscalDurationPeriodV1"] | components["schemas"]["FiscalInstantPeriodV1"];
+            /** Policy Id */
+            policy_id: string;
+            precision_interval?: components["schemas"]["FiscalPrecisionIntervalV1"] | null;
+            quality: components["schemas"]["QualityStatus"];
+            /** Reason Code */
+            reason_code?: string | null;
+            reporting_basis?: components["schemas"]["FiscalReportingBasisV1"] | null;
+            revision_basis_proof?: components["schemas"]["FiscalRevisionBasisProofV1"] | null;
+            /** Row Id */
+            row_id: string;
+            /** Source Binding Digest */
+            source_binding_digest: string;
+            /**
+             * Source Observation Ids
+             * @default []
+             */
+            source_observation_ids: string[];
+            /**
+             * Statement
+             * @enum {string}
+             */
+            statement: "income_statement" | "balance_sheet" | "cash_flow";
+            /** Value */
+            value: string | null;
+            /**
+             * Verification Edges
+             * @default []
+             */
+            verification_edges: components["schemas"]["FiscalInputEdgeV1"][];
+            /**
+             * Verification Node Ids
+             * @default []
+             */
+            verification_node_ids: string[];
+            /**
+             * Verification Observation Ids
+             * @default []
+             */
+            verification_observation_ids: string[];
         };
         /** ForwardEvidenceResearchRequest */
         ForwardEvidenceResearchRequest: {
@@ -4085,6 +4809,14 @@ export interface components {
              */
             status: "active" | "suspended" | "removed";
         };
+        /** OriginalFiscalRevisionV1 */
+        OriginalFiscalRevisionV1: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "original";
+        };
         /** PriceSeriesArtifactData */
         PriceSeriesArtifactData: {
             /** Price Series */
@@ -4320,6 +5052,11 @@ export interface components {
             /** Provider */
             provider: string;
         };
+        /**
+         * QualityStatus
+         * @enum {string}
+         */
+        QualityStatus: "verified" | "provisional" | "degraded" | "unsupported" | "abstain" | "error";
         /** QualitySummaryModel */
         QualitySummaryModel: {
             /** Alert Quality Gate Counts */
@@ -4474,6 +5211,43 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** ReportedFiscalYearV1 */
+        ReportedFiscalYearV1: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "reported_fiscal_year";
+            period: components["schemas"]["FiscalDurationPeriodV1"];
+        };
+        /** ReportedInstantV1 */
+        ReportedInstantV1: {
+            /**
+             * Instant
+             * Format: date
+             */
+            instant: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "reported_instant";
+        };
+        /** ReportedQuarterV1 */
+        ReportedQuarterV1: {
+            /**
+             * Applicability
+             * @default quarter
+             * @enum {string}
+             */
+            applicability: "quarter" | "quarter_and_ytd";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "reported_quarter";
+            period: components["schemas"]["FiscalDurationPeriodV1"];
+        };
         /** ReportedStatementCellV1 */
         ReportedStatementCellV1: {
             /** Candidate Fact Ids */
@@ -4525,6 +5299,15 @@ export interface components {
              * @enum {string}
              */
             status: "reported";
+        };
+        /** ReportedYtdV1 */
+        ReportedYtdV1: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "reported_ytd";
+            period: components["schemas"]["FiscalDurationPeriodV1"];
         };
         /** ResumeRequest */
         ResumeRequest: {
@@ -4717,6 +5500,25 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** StatementArtifactResponseV2 */
+        StatementArtifactResponseV2: {
+            /**
+             * Contract Version
+             * @default workspace.statement-reader.v2
+             * @constant
+             */
+            contract_version: "workspace.statement-reader.v2";
+            /** Edition Id */
+            edition_id: string;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "annual" | "quarter" | "ttm";
+            reference: components["schemas"]["ArtifactReference"];
+            /** Thread Id */
+            thread_id: string;
+        };
         /** StatementAvailableSourceV1 */
         StatementAvailableSourceV1: {
             /** Accession Number */
@@ -4739,6 +5541,17 @@ export interface components {
              * Format: date
              */
             report_period_end: string;
+        };
+        /** StatementCatalogV2 */
+        StatementCatalogV2: {
+            /**
+             * Contract Version
+             * @default workspace.statement-reader.v2
+             * @constant
+             */
+            contract_version: "workspace.statement-reader.v2";
+            /** Entries */
+            entries: components["schemas"]["StatementEditionV2"][];
         };
         /** StatementColumnV1 */
         StatementColumnV1: {
@@ -4792,6 +5605,62 @@ export interface components {
             statement: "income_statement" | "balance_sheet" | "cash_flow";
             /** Unavailable Row Ids */
             unavailable_row_ids: ("revenue" | "cost_of_revenue" | "gross_profit" | "operating_income" | "income_before_tax" | "income_tax_expense" | "net_income" | "cash_and_equivalents" | "operating_current_receivables" | "inventory" | "current_assets" | "property_plant_and_equipment" | "total_assets" | "operating_current_payables" | "current_liabilities" | "total_liabilities" | "total_equity" | "liabilities_and_equity" | "operating_cash_flow" | "investing_cash_flow" | "financing_cash_flow" | "effect_of_exchange_rates_on_cash" | "net_change_in_cash" | "cash_flow_beginning_balance" | "cash_flow_ending_balance")[];
+        };
+        /** StatementEditionV2 */
+        StatementEditionV2: {
+            /** Annual Manifest Digest */
+            annual_manifest_digest: string;
+            /** Company Name */
+            company_name: string;
+            /**
+             * Cutoff At
+             * Format: date-time
+             */
+            cutoff_at: string;
+            /** Edition Id */
+            edition_id: string;
+            /** Fiscal Manifest Digest */
+            fiscal_manifest_digest: string;
+            /**
+             * Frequencies
+             * @default [
+             *       "annual",
+             *       "quarter",
+             *       "ttm"
+             *     ]
+             */
+            frequencies: [
+                "annual",
+                "quarter",
+                "ttm"
+            ];
+            /** Label */
+            label: string;
+            scope: components["schemas"]["StatementScopeV1"];
+            /** Ticker */
+            ticker: string;
+        };
+        /** StatementExistingThreadIntentV2 */
+        StatementExistingThreadIntentV2: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "workspace.statement-reader.v2";
+            /** Edition Id */
+            edition_id: string;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "annual" | "quarter" | "ttm";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "existing_thread";
+            /** Thread Id */
+            thread_id: string;
         };
         /** StatementFactEvidenceV1 */
         StatementFactEvidenceV1: {
@@ -4856,6 +5725,31 @@ export interface components {
              * @enum {string}
              */
             status: "approved" | "provisional" | "ambiguous" | "rejected";
+        };
+        /** StatementNewThreadIntentV2 */
+        StatementNewThreadIntentV2: {
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "workspace.statement-reader.v2";
+            /**
+             * Creation Id
+             * Format: uuid
+             */
+            creation_id: string;
+            /** Edition Id */
+            edition_id: string;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "annual" | "quarter" | "ttm";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "new_thread";
         };
         /** StatementNumericFactV1 */
         StatementNumericFactV1: {
@@ -5004,6 +5898,18 @@ export interface components {
             /** Supported History Threshold */
             supported_history_threshold?: null;
         };
+        /** StatementReadArtifactV3 */
+        StatementReadArtifactV3: {
+            /**
+             * Contract Version
+             * @default workspace.statement-read.v3
+             * @constant
+             */
+            contract_version: "workspace.statement-read.v3";
+            edition: components["schemas"]["StatementEditionV2"];
+            /** Read */
+            read: components["schemas"]["AnnualSavedReadV2"] | components["schemas"]["FiscalSavedReadV3"];
+        };
         /** StatementReconciliationV1 */
         StatementReconciliationV1: {
             /** Check Id */
@@ -5074,6 +5980,28 @@ export interface components {
             /** Cells */
             cells: (components["schemas"]["ReportedStatementCellV1"] | components["schemas"]["UnavailableStatementCellV1"])[];
             definition: components["schemas"]["StatementRowDefinitionV1"];
+        };
+        /** StatementSavedArtifactIntentV2 */
+        StatementSavedArtifactIntentV2: {
+            /** Artifact Id */
+            artifact_id: string;
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "workspace.statement-reader.v2";
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "annual" | "quarter" | "ttm";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "saved_artifact";
+            /** Thread Id */
+            thread_id: string;
         };
         /** StatementScopeV1 */
         StatementScopeV1: {
@@ -6529,6 +7457,26 @@ export interface components {
             reported_period_end: string;
             source_outcome_ref: components["schemas"]["StatementArtifactRefV1"];
         };
+        /** UnsupportedDurationV1 */
+        UnsupportedDurationV1: {
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unsupported_duration";
+            /** Reason */
+            reason: string;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -7313,6 +8261,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_api_v1_fundamental_statements_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementCatalogV2"];
+                };
+            };
+        };
+    };
+    read_api_v1_fundamental_statements_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatementExistingThreadIntentV2"] | components["schemas"]["StatementNewThreadIntentV2"] | components["schemas"]["StatementSavedArtifactIntentV2"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementArtifactResponseV2"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
+                };
+            };
+            /** @description Request Timeout */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualStatementReadErrorResponse"];
                 };
             };
         };

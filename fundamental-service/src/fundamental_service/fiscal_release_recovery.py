@@ -5,14 +5,14 @@ from collections.abc import Callable
 import hashlib
 
 from .data_releases import ArtifactRefV1, DataReleaseTrustRootsV1
-from .fiscal_candidate_contracts import FiscalStatementCandidateV2
-from .fiscal_display_contracts import SignedFiscalDisplayDecisionV1
+from .fiscal_candidate_contracts import FiscalStatementCandidateV3
+from .fiscal_display_contracts import SignedFiscalDisplayDecisionV2
 from .fiscal_release_contracts import (
-    FiscalReleaseCanaryV1,
-    FiscalReleaseChecksV1,
-    FiscalReleaseEnvelopeV1,
-    FiscalReleaseManifestV1,
-    FiscalStoredVerificationV1,
+    FiscalReleaseCanaryV2,
+    FiscalReleaseChecksV2,
+    FiscalReleaseEnvelopeV2,
+    FiscalReleaseManifestV2,
+    FiscalStoredVerificationV2,
     fiscal_manifest,
 )
 from .publication_codec import verify_publication_pair
@@ -20,18 +20,18 @@ from .serialization import canonical_bytes, sha256_digest
 
 
 def verify_retained_fiscal_publication(
-    manifest: FiscalReleaseManifestV1,
-    verification: FiscalStoredVerificationV1,
+    manifest: FiscalReleaseManifestV2,
+    verification: FiscalStoredVerificationV2,
     roots: DataReleaseTrustRootsV1,
     read: Callable[[ArtifactRefV1], bytes],
 ) -> None:
     verify_publication_pair(manifest, verification, roots)
     envelope_raw = read(manifest.envelope_ref)
-    envelope = FiscalReleaseEnvelopeV1.model_validate_json(envelope_raw)
+    envelope = FiscalReleaseEnvelopeV2.model_validate_json(envelope_raw)
     checks_raw = read(verification.signed.checked_ref)
-    checks = FiscalReleaseChecksV1.model_validate_json(checks_raw)
+    checks = FiscalReleaseChecksV2.model_validate_json(checks_raw)
     report_raw = read(verification.canary_ref)
-    report = FiscalReleaseCanaryV1.model_validate_json(report_raw)
+    report = FiscalReleaseCanaryV2.model_validate_json(report_raw)
     if (
         canonical_bytes(envelope) != envelope_raw
         or envelope.artifact_id != manifest.envelope_ref.artifact_id
@@ -42,7 +42,11 @@ def verify_retained_fiscal_publication(
         or canonical_bytes(report) != report_raw
         or report.artifact_id != verification.canary_ref.artifact_id
         or report.manifest_digest != manifest.manifest_digest
-        or report.verification_digest != verification.verification_digest
+        or report.candidate_correctness_digest
+        != verification.signed.candidate_correctness_digest
+        or report.replay_contract_digest != verification.signed.replay_contract_digest
+        or report.replay_executable_digest
+        != verification.signed.replay_executable_digest
         or report.checked_ref != verification.signed.checked_ref
     ):
         raise ValueError("retained fiscal publication evidence differs")
@@ -54,10 +58,10 @@ def verify_retained_fiscal_publication(
     ):
         read(reference)
 
-    candidate = FiscalStatementCandidateV2.model_validate_json(
+    candidate = FiscalStatementCandidateV3.model_validate_json(
         read(envelope.approved.candidate_ref)
     )
-    decision = SignedFiscalDisplayDecisionV1.model_validate_json(
+    decision = SignedFiscalDisplayDecisionV2.model_validate_json(
         read(envelope.approved.decision_ref)
     )
     content = candidate.body.content
@@ -66,6 +70,8 @@ def verify_retained_fiscal_publication(
         or decision.body.review.reviewed.content != content
         or envelope.candidate_content_digest != content.content_digest
         or envelope.projection_ref != content.projection_ref
+        or sha256_digest(candidate.body.correctness)
+        != report.candidate_correctness_digest
     ):
         raise ValueError(
             "retained fiscal candidate, display decision or projection binding differs"
@@ -83,15 +89,15 @@ def verify_retained_fiscal_publication(
             "retained fiscal release identity differs from its owning inputs"
         )
     signed_ref = ArtifactRefV1(
-        role="fiscal-release-signed-v1",
-        artifact_id="fiscal-release-signed-v1:" + manifest.manifest_digest,
+        role="fiscal-release-signed-v2",
+        artifact_id="fiscal-release-signed-v2:" + manifest.manifest_digest,
         content_hash=sha256_digest(verification.signed),
         media_type="application/json",
     )
     marker_bytes = verification.signed.signing_bytes()
     marker_ref = ArtifactRefV1(
-        role="fiscal-release-signing-v1",
-        artifact_id="fiscal-release-signing-v1:" + manifest.manifest_digest,
+        role="fiscal-release-signing-v2",
+        artifact_id="fiscal-release-signing-v2:" + manifest.manifest_digest,
         content_hash=hashlib.sha256(marker_bytes).hexdigest(),
         media_type="application/json",
     )

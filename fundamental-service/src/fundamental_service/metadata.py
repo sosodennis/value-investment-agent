@@ -48,7 +48,7 @@ from .publication_codec import (
     decode_release_verification,
     verify_publication_pair,
 )
-from .fiscal_release_contracts import FiscalReleaseManifestV1
+from .fiscal_release_contracts import FiscalReleaseManifestV2
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -327,6 +327,77 @@ class PostgresMetadataStore:
 
     def start_read_only(self) -> None:
         self._start(self._inspect_schema)
+
+    def require_fiscal_readonly_role(self, expected_role: str) -> None:
+        async def require(connection: AsyncConnection) -> None:
+            users = (
+                await connection.execute(text("SELECT current_user,session_user"))
+            ).one()
+            if tuple(users) != (expected_role, expected_role):
+                raise SnapshotError(
+                    "FISCAL_CANARY_ROLE_INVALID", "canary database workload differs"
+                )
+            unsafe: bool = (
+                await connection.execute(
+                    text("""
+                WITH reachable AS (
+                    SELECT role.oid,role.rolname,role.rolsuper,role.rolcreaterole,
+                        role.rolcreatedb,role.rolreplication,role.rolbypassrls
+                    FROM pg_roles role
+                    WHERE pg_has_role(current_user,role.oid,'SET')
+                )
+                SELECT EXISTS (
+                    SELECT 1 FROM reachable role
+                    WHERE role.rolsuper OR role.rolcreaterole OR role.rolcreatedb
+                        OR role.rolreplication OR role.rolbypassrls
+                        OR EXISTS (
+                            SELECT 1 FROM pg_class relation JOIN pg_namespace namespace
+                                ON namespace.oid=relation.relnamespace
+                            WHERE namespace.nspname IN ('fundamental','fundamental_recovery')
+                                AND (relation.relowner=role.oid
+                                    OR relation.relkind IN ('r','p','v','m','f')
+                                        AND has_table_privilege(role.oid,relation.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                                    OR relation.relkind='S'
+                                        AND has_sequence_privilege(role.oid,relation.oid,'USAGE,UPDATE'))
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM pg_namespace namespace
+                            WHERE namespace.nspname IN ('fundamental','fundamental_recovery')
+                                AND has_schema_privilege(role.oid,namespace.oid,'CREATE')
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM pg_proc procedure JOIN pg_namespace namespace
+                                ON namespace.oid=procedure.pronamespace
+                            WHERE namespace.nspname IN ('fundamental','fundamental_recovery')
+                                AND procedure.prosecdef AND procedure.prorettype <> 'trigger'::regtype
+                                AND procedure.proname NOT IN (
+                                    'fiscal_history_origin_id','fiscal_history_local_ready','fiscal_recovery_match'
+                                )
+                                AND has_function_privilege(role.oid,procedure.oid,'EXECUTE')
+                        )
+                )
+                OR EXISTS (
+                    SELECT 1 FROM pg_auth_members membership
+                    WHERE membership.admin_option AND pg_has_role(current_user,membership.member,'USAGE')
+                        AND EXISTS (
+                            SELECT 1 FROM pg_class relation JOIN pg_namespace namespace
+                                ON namespace.oid=relation.relnamespace
+                            WHERE namespace.nspname IN ('fundamental','fundamental_recovery')
+                                AND (relation.relowner=membership.roleid
+                                    OR relation.relkind IN ('r','p','v','m','f')
+                                        AND has_table_privilege(membership.roleid,relation.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
+                        )
+                )
+            """)
+                )
+            ).scalar_one()
+            if unsafe:
+                raise SnapshotError(
+                    "FISCAL_CANARY_ROLE_INVALID",
+                    "canary requires an independent SELECT-only service role",
+                )
+
+        self.run_fiscal_admission_history(require)
 
     def _start(self, operation: Callable[[], Coroutine[object, object, None]]) -> None:
         try:
@@ -1003,7 +1074,7 @@ class PostgresMetadataStore:
                 "data release trust roots are required to publish a candidate",
             )
         verify_publication_pair(manifest, verification, self._data_release_trust_roots)
-        if isinstance(manifest, FiscalReleaseManifestV1) != (
+        if isinstance(manifest, FiscalReleaseManifestV2) != (
             fiscal_observation is not None
         ):
             raise DataReleaseError(
@@ -1327,7 +1398,7 @@ class PostgresMetadataStore:
             candidate_manifest = decode_release_manifest(
                 canonical_bytes(candidate["payload"])
             )
-            if isinstance(candidate_manifest, FiscalReleaseManifestV1) != (
+            if isinstance(candidate_manifest, FiscalReleaseManifestV2) != (
                 fiscal_observation is not None
             ):
                 raise DataReleaseError(
@@ -2238,6 +2309,29 @@ class PostgresContentStore:
         _check_metadata_budget()
         return content
 
+    def get_bounded(
+        self, content_hash: str, *, media_type: str, maximum_bytes: int
+    ) -> bytes:
+        _check_metadata_budget()
+        length = self._metadata.content_byte_length(content_hash, media_type=media_type)
+        if maximum_bytes < 0 or length > maximum_bytes:
+            raise SnapshotError(
+                "FISCAL_CLOSURE_LIMIT", "registered content exceeds read bound"
+            )
+        content = self._filesystem.get_bounded(
+            content_hash, media_type=media_type, maximum_bytes=maximum_bytes
+        )
+        if (
+            len(content) != length
+            or self._metadata.content_byte_length(content_hash, media_type=media_type)
+            != length
+        ):
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH", "bounded content registration differs"
+            )
+        _check_metadata_budget()
+        return content
+
 
 class PostgresSnapshotRepository(SnapshotRepository):
     def __init__(self, metadata: PostgresMetadataStore) -> None:
@@ -2457,6 +2551,22 @@ class PostgresArtifactStore:
         record = self.get(artifact_id)
         return self._content.get(record.content_hash, media_type=record.media_type)
 
+    def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
+        scoped = self._scoped_reads()
+        if scoped is not None:
+            return scoped.reader.read_bounded(artifact_id, maximum_bytes=maximum_bytes)
+        record = self.get(artifact_id)
+        raw = self._content.get_bounded(
+            record.content_hash,
+            media_type=record.media_type,
+            maximum_bytes=maximum_bytes,
+        )
+        if self.get(artifact_id) != record:
+            raise DataReleaseError(
+                "ARTIFACT_EVIDENCE_CHANGED", "bounded artifact metadata changed"
+            )
+        return raw
+
     @contextmanager
     def retained_read_operation(
         self,
@@ -2642,6 +2752,27 @@ class _RetainedPostgresArtifactReads:
                 "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
             )
         return entry
+
+    def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
+        entry = self._entry(artifact_id)
+        if entry.byte_length is None:
+            raise SnapshotError(
+                "CONTENT_REGISTRATION_UNAVAILABLE",
+                "bounded artifact verification requires retained registration",
+            )
+        if maximum_bytes < 0 or entry.byte_length > maximum_bytes:
+            raise SnapshotError("FISCAL_CLOSURE_LIMIT", "artifact exceeds read bound")
+        record = entry.record()
+        raw = self._artifacts._content.get_bounded(
+            record.content_hash,
+            media_type=record.media_type,
+            maximum_bytes=maximum_bytes,
+        )
+        if len(raw) != entry.byte_length or self._entry(artifact_id) != entry:
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH", "bounded artifact registration changed"
+            )
+        return raw
 
     def read(self, artifact_id: str) -> bytes:
         entry = self._entry(artifact_id)

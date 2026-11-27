@@ -39,16 +39,22 @@ from .fiscal_admission_history import (
 from .fiscal_authority_contracts import CurrentFiscalAuthorityV1
 from .fiscal_candidate_contracts import (
     FiscalSourceDocumentObservation,
-    FiscalCandidateBodyV2,
-    FiscalCandidateContentV1,
-    FiscalCandidatePreparationExecutionV1,
-    FiscalPrepareCandidateCommandV1,
-    FiscalStatementCandidateV2,
+    FiscalCandidateBodyV3,
+    FiscalCandidateContentV2,
+    FiscalCandidatePreparationExecutionV2,
+    FiscalPrepareCandidateCommandV2,
+    FiscalStatementCandidateV3,
+    _TrustedCandidateCorrectness,
     VerifiedFiscalActivity,
     VerifiedClassifiedCandidateSource,
     VerifiedFiscalCandidateSource,
 )
-from .fiscal_source_closure import FiscalArtifactRead
+from .fiscal_source_closure import (
+    FiscalArtifactRead,
+    FiscalArtifactReadSet,
+    FiscalSourceContentReadSet,
+    fiscal_closure_read_operation,
+)
 from .fiscal_statement_contracts import FiscalProjectionResultV1
 from .fiscal_statement_mapping import (
     fiscal_display_profile_digest,
@@ -74,9 +80,9 @@ if TYPE_CHECKING:
         _MaterializationRead,
     )
 
-_ROLE = "fiscal-statement-candidate-v2"
-_INTENT = "fiscal-candidate-intent-v1"
-_SIGNING = "fiscal-candidate-signing-intent-v1"
+_ROLE = "fiscal-statement-candidate-v3"
+_INTENT = "fiscal-candidate-intent-v2"
+_SIGNING = "fiscal-candidate-signing-intent-v2"
 
 
 def fiscal_preparation_executable_digest() -> str:
@@ -96,12 +102,12 @@ def fiscal_preparation_executable_digest() -> str:
     )
 
 
-class FiscalCandidateIntentV1(StrictModel):
+class FiscalCandidateIntentV2(StrictModel):
     model_config = ConfigDict(frozen=True)
-    protocol: Literal["fundamental.fiscal-candidate-intent.v1"] = (
-        "fundamental.fiscal-candidate-intent.v1"
+    protocol: Literal["fundamental.fiscal-candidate-intent.v2"] = (
+        "fundamental.fiscal-candidate-intent.v2"
     )
-    command: FiscalPrepareCandidateCommandV1
+    command: FiscalPrepareCandidateCommandV2
     authority_id: str
     materialization: FiscalValidationPinV1
     mapping_policy_digest: str
@@ -111,19 +117,19 @@ class FiscalCandidateIntentV1(StrictModel):
     preparation_executable_digest: str
 
 
-class FiscalCandidateSigningIntentV1(StrictModel):
+class FiscalCandidateSigningIntentV2(StrictModel):
     model_config = ConfigDict(frozen=True)
-    protocol: Literal["fundamental.fiscal-candidate-signing-intent.v1"] = (
-        "fundamental.fiscal-candidate-signing-intent.v1"
+    protocol: Literal["fundamental.fiscal-candidate-signing-intent.v2"] = (
+        "fundamental.fiscal-candidate-signing-intent.v2"
     )
     intent_ref: ArtifactRefV1
-    body: FiscalCandidateBodyV2
+    body: FiscalCandidateBodyV3
 
 
 @dataclass(frozen=True)
 class CurrentFiscalCandidate:
     reference: ArtifactRefV1
-    candidate: FiscalStatementCandidateV2
+    candidate: FiscalStatementCandidateV3
     projection: FiscalProjectionResultV1
     preparation: VerifiedFiscalActivity
     source_evidence: tuple[VerifiedFiscalCandidateSource, ...]
@@ -132,9 +138,11 @@ class CurrentFiscalCandidate:
     history_heads: tuple[FiscalHistoryHeadV1, ...]
     observed_at: datetime
     source_documents: tuple[FiscalSourceDocumentObservation, ...]
+    artifact_readset: FiscalArtifactReadSet
+    content_readsets: tuple[FiscalSourceContentReadSet, ...]
 
     @property
-    def content(self) -> FiscalCandidateContentV1:
+    def content(self) -> FiscalCandidateContentV2:
         return self.candidate.body.content
 
 
@@ -196,9 +204,9 @@ class FiscalCandidatePreparation:
         return (deadline_at - now).total_seconds()
 
     def _intent(
-        self, builder: FiscalProjectionBuilder, command: FiscalPrepareCandidateCommandV1
-    ) -> FiscalCandidateIntentV1:
-        return FiscalCandidateIntentV1(
+        self, builder: FiscalProjectionBuilder, command: FiscalPrepareCandidateCommandV2
+    ) -> FiscalCandidateIntentV2:
+        return FiscalCandidateIntentV2(
             command=command,
             authority_id=self.authority_id,
             materialization=builder.pin,
@@ -222,9 +230,9 @@ class FiscalCandidatePreparation:
 
     def _load(
         self, reader: FiscalArtifactRead, reference: ArtifactRefV1
-    ) -> FiscalStatementCandidateV2:
+    ) -> FiscalStatementCandidateV3:
         raw = read_retained_artifact(reader, reference)
-        signed = FiscalStatementCandidateV2.model_validate_json(raw)
+        signed = FiscalStatementCandidateV3.model_validate_json(raw)
         if (
             reference.role != _ROLE
             or reference.artifact_id != signed.artifact_id
@@ -234,17 +242,25 @@ class FiscalCandidatePreparation:
         return signed
 
     def _authority(
-        self, signed: FiscalStatementCandidateV2, deadline_at: datetime
+        self,
+        signed: FiscalStatementCandidateV3,
+        deadline_at: datetime,
+        consumed_by: FiscalArtifactRead | None = None,
     ) -> CurrentFiscalAuthorityV1:
         body, execution = signed.body, signed.body.preparation
         authority = self.authorities.read_current(
             execution.authority_id,
             expected_role="source_preparer",
             deadline_at=deadline_at,
+            consumed_by=consumed_by,
         )
         identity = authority.grant.identity
         if (
-            execution.preparation_executable_digest
+            signed.body.correctness.closure_contract_digest
+            != self._builder.closure_contract_digest()
+            or execution.closure_contract_digest
+            != self._builder.closure_contract_digest()
+            or execution.preparation_executable_digest
             != fiscal_preparation_executable_digest()
             or execution.authority_id != self.authority_id
             or execution.grant_ref != authority.grant_ref
@@ -271,7 +287,7 @@ class FiscalCandidatePreparation:
 
     @staticmethod
     def _dependencies(
-        intent: FiscalCandidateIntentV1, marker: FiscalCandidateSigningIntentV1
+        intent: FiscalCandidateIntentV2, marker: FiscalCandidateSigningIntentV2
     ) -> tuple[str, ...]:
         body = marker.body
         return tuple(
@@ -289,7 +305,7 @@ class FiscalCandidatePreparation:
     def _finish(
         self,
         builder: FiscalProjectionBuilder,
-        signed: FiscalStatementCandidateV2,
+        signed: FiscalStatementCandidateV3,
         publication: ArtifactPublicationV1,
         materialized: FiscalCandidateMaterialization,
         *,
@@ -299,14 +315,19 @@ class FiscalCandidatePreparation:
         terminal: bool,
     ) -> CurrentFiscalCandidate:
         budget = partial(self._budget, deadline_at)
+        if signed.body.correctness != materialized.correctness:
+            raise _invalid(
+                "candidate correctness differs from actual current owner closure"
+            )
         reader = FiscalArtifactRead(self._read_artifacts, budget)
+        reader.enroll(materialized.artifact_readset)
         for record in materialized.consumed_metadata:
             reader.expect(record.artifact_id, record)
         reference = _ref(publication.artifact, _ROLE)
         if self._load(reader, reference) != signed:
             raise _invalid("candidate changed before completion")
         intent = self._intent(builder, signed.body.command)
-        marker = FiscalCandidateSigningIntentV1(
+        marker = FiscalCandidateSigningIntentV2(
             intent_ref=_ref(
                 reader.get(signed.body.command.artifact_id(_INTENT)), _INTENT
             ),
@@ -321,7 +342,7 @@ class FiscalCandidatePreparation:
                 )
         if publication.artifact.dependency_hashes != self._dependencies(intent, marker):
             raise _invalid("candidate dependency metadata differs")
-        authority = self._authority(signed, deadline_at)
+        authority = self._authority(signed, deadline_at, reader)
         heads = {head.stream_id: head for head in authority.history_heads}
         expiries = [signed.body.command.expires_at, authority.grant.valid_until]
         for proof in materialized.source_evidence:
@@ -367,17 +388,21 @@ class FiscalCandidatePreparation:
             raise _invalid("candidate has no exact selected preparation control")
         control.require_current_epoch(control.entries)
         heads.update({head.stream_id: head for head in control.heads})
-        records = tuple(record for _, record in reader.records if record is not None)
         if terminal:
             resources.finish()
+        for readset in materialized.content_readsets:
+            readset.check_current(budget)
+        reader.check_bodies()
         reader.check_current()
-        final_authority = self._authority(signed, deadline_at)
+        final_authority = self._authority(signed, deadline_at, reader)
         if (
             final_authority.grant_ref != authority.grant_ref
             or final_authority.grant != authority.grant
             or final_authority.history_heads != authority.history_heads
         ):
             raise _invalid("candidate grant changed before whole observation")
+        reader.check_bodies()
+        records = tuple(record for _, record in reader.records if record is not None)
         observed = self.history.finish_observation(
             records, tuple(heads.values()), epoch, deadline_at=deadline_at
         )
@@ -420,6 +445,8 @@ class FiscalCandidatePreparation:
             observed.heads,
             now,
             materialized.source_documents,
+            reader.readset,
+            materialized.content_readsets,
         )
 
     def open_candidate(
@@ -435,8 +462,16 @@ class FiscalCandidatePreparation:
             pass
         return operation.completed
 
+    def replay_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> CurrentFiscalCandidate:
+        operation = _FiscalCandidateReplayOperation(self, reference, deadline_at)
+        with operation:
+            pass
+        return operation.completed
+
     def prepare(
-        self, command: FiscalPrepareCandidateCommandV1, *, deadline_at: datetime
+        self, command: FiscalPrepareCandidateCommandV2, *, deadline_at: datetime
     ) -> CurrentFiscalCandidate:
         with metadata_operation_budget(
             partial(self._budget, deadline_at), self._expired
@@ -447,10 +482,11 @@ class FiscalCandidatePreparation:
                         "FISCAL_CANDIDATE_PREPARATION_UNCONFIGURED",
                         "candidate write capability is not configured",
                     )
-                command = FiscalPrepareCandidateCommandV1.model_validate_json(
+                command = FiscalPrepareCandidateCommandV2.model_validate_json(
                     canonical_bytes(command)
                 )
                 with (
+                    fiscal_closure_read_operation(),
                     self._capture_lock(
                         sha256_digest(("fiscal-candidate", command.command_id)),
                         deadline_at,
@@ -477,7 +513,7 @@ class FiscalCandidatePreparation:
     def _prepare_locked(
         self,
         builder: FiscalProjectionBuilder,
-        command: FiscalPrepareCandidateCommandV1,
+        command: FiscalPrepareCandidateCommandV2,
         deadline_at: datetime,
         *,
         resources: _ParserResourceOperation,
@@ -490,6 +526,7 @@ class FiscalCandidatePreparation:
         reader = FiscalArtifactRead(self._read_artifacts, budget)
         intent = self._intent(builder, command)
         previous = reader.current(command.artifact_id(_INTENT))
+        reader.expect(command.artifact_id(_INTENT), previous)
         if previous is not None and reader.read(
             previous.artifact_id
         ) != canonical_bytes(intent):
@@ -503,8 +540,13 @@ class FiscalCandidatePreparation:
             (command.discovery_ref.content_hash,),
             budget,
         )
+        if previous is None:
+            reader.accept_own_publication(intent_publication, canonical_bytes(intent))
         existing = reader.current(command.artifact_id(_ROLE))
         marker = reader.current(command.artifact_id(_SIGNING))
+        reader.expect(command.artifact_id(_ROLE), existing)
+        reader.expect(command.artifact_id(_SIGNING), marker)
+        materialization: _MaterializationRead
         if existing is not None:
             signed = self._load(reader, _ref(existing, _ROLE))
             if signed.body.command != command:
@@ -514,13 +556,9 @@ class FiscalCandidatePreparation:
                 )
             self._authority(signed, deadline_at)
             materialization = materializations.enter_context(
-                builder._open_materialization(
-                    signed.body.content.discovery_ref,
-                    security_id=signed.body.command.security_id,
-                    classification_bindings=signed.body.command.classification_bindings,
+                builder._open_current_materialization(
+                    _TrustedCandidateCorrectness(signed, materializations),
                     deadline_at=deadline_at,
-                    publish=False,
-                    retained_mapping_refs=signed.body.content.mapping_refs,
                 )
             )
             materialized = materialization.current()
@@ -568,6 +606,22 @@ class FiscalCandidatePreparation:
                 )
             )
             materialized = materialization.current()
+            derived = materializations.enter_context(
+                builder._derive_current_materialization(
+                    materialized.content, deadline_at=deadline_at
+                )
+            )
+            independently_read = derived.current()
+            if (
+                independently_read.content != materialized.content
+                or independently_read.projection != materialized.projection
+                or independently_read.correctness != materialized.correctness
+            ):
+                raise _invalid(
+                    "full actual consumption differs from independently derived typed closure"
+                )
+            materialization = derived
+            materialized = independently_read
             completed_at = self._now()
             current = self.authorities.read_current(
                 self.authority_id,
@@ -595,10 +649,11 @@ class FiscalCandidatePreparation:
             for record in materialized.consumed_metadata:
                 reader.expect(record.artifact_id, record)
             reader.check_current()
-            body = FiscalCandidateBodyV2(
+            body = FiscalCandidateBodyV3(
                 command=command,
                 content=materialized.content,
-                preparation=FiscalCandidatePreparationExecutionV1(
+                correctness=materialized.correctness,
+                preparation=FiscalCandidatePreparationExecutionV2(
                     authority_id=self.authority_id,
                     grant_ref=authority.grant_ref,
                     principal_id=identity.principal_id,
@@ -607,6 +662,8 @@ class FiscalCandidatePreparation:
                     issuance=issuance,
                     command_digest=command.command_digest,
                     content_digest=materialized.content.content_digest,
+                    correctness_digest=sha256_digest(materialized.correctness),
+                    closure_contract_digest=materialized.correctness.closure_contract_digest,
                     preparation_executable_digest=fiscal_preparation_executable_digest(),
                     started_at=started_at,
                     completed_at=completed_at,
@@ -614,7 +671,7 @@ class FiscalCandidatePreparation:
                 issuance=issuance,
                 signed_at=self._now(),
             )
-            signing = FiscalCandidateSigningIntentV1(
+            signing = FiscalCandidateSigningIntentV2(
                 intent_ref=_ref(intent_publication.artifact, _INTENT), body=body
             )
             signing_publication = self._retain(
@@ -628,14 +685,16 @@ class FiscalCandidatePreparation:
                     "FISCAL_CANDIDATE_SIGNING_OUTCOME_UNAVAILABLE",
                     "only the first live invocation may sign its frozen body",
                 )
+            reader.accept_own_publication(signing_publication, canonical_bytes(signing))
             budget()
-            signed = FiscalStatementCandidateV2(
+            signed = FiscalStatementCandidateV3(
                 body=body, signature=key.sign(canonical_bytes(body)).hex()
             )
             budget()
             publication = self._retain(
                 signed.artifact_id, signed, self._dependencies(intent, signing), budget
             )
+            reader.accept_own_publication(publication, canonical_bytes(signed))
             self._authority(signed, deadline_at)
         epoch = self.history.read_epoch(deadline_at=deadline_at)
         epoch.require_current_issuance(signed.body.issuance)
@@ -724,7 +783,7 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         self._result: CurrentFiscalCandidate | None = None
         self._materialization: _MaterializationRead | None = None
         self._resources: _ParserResourceOperation | None = None
-        self._signed: FiscalStatementCandidateV2 | None = None
+        self._signed: FiscalStatementCandidateV3 | None = None
         self._publication: ArtifactPublicationV1 | None = None
         self._generation = ""
         self._actor = _candidate_actor()
@@ -768,6 +827,7 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         self._token = _CANDIDATE_OPERATION.set(self)
         owner = self._owner
         try:
+            self._scope.enter_context(fiscal_closure_read_operation())
             self._scope.enter_context(
                 metadata_operation_budget(
                     partial(owner._budget, self._deadline_at), owner._expired
@@ -782,15 +842,9 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             )
             self._signed = owner._load(reader, self._reference)
             owner._authority(self._signed, self._deadline_at)
-            body = self._signed.body
             self._materialization = self._children.enter_context(
-                owner._builder._open_materialization(
-                    body.content.discovery_ref,
-                    security_id=body.command.security_id,
-                    classification_bindings=body.command.classification_bindings,
-                    deadline_at=self._deadline_at,
-                    publish=False,
-                    retained_mapping_refs=body.content.mapping_refs,
+                self._open_materialization(
+                    _TrustedCandidateCorrectness(self._signed, self)
                 )
             )
             self._publication = ArtifactPublicationV1(
@@ -806,6 +860,13 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
                     "candidate failed typed evidence verification"
                 ) from error
             raise
+
+    def _open_materialization(
+        self, trusted: _TrustedCandidateCorrectness
+    ) -> AbstractContextManager[_MaterializationRead]:
+        return self._owner._builder._open_current_materialization(
+            trusted, deadline_at=self._deadline_at
+        )
 
     def _current(self, *, terminal: bool) -> CurrentFiscalCandidate:
         self._require()
@@ -890,3 +951,18 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         if self._phase != "completed" or self._result is None:
             raise _invalid("candidate observation did not complete")
         return deepcopy(self._result)
+
+
+class _FiscalCandidateReplayOperation(FiscalCandidateOperation):
+    def _open_materialization(
+        self, trusted: _TrustedCandidateCorrectness
+    ) -> AbstractContextManager[_MaterializationRead]:
+        body = trusted.candidate.body
+        return self._owner._builder._open_materialization(
+            body.content.discovery_ref,
+            security_id=body.command.security_id,
+            classification_bindings=body.command.classification_bindings,
+            deadline_at=self._deadline_at,
+            publish=False,
+            retained_mapping_refs=body.content.mapping_refs,
+        )

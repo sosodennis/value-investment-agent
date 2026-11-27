@@ -6,7 +6,11 @@ import re
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Literal
+from collections.abc import Iterator
+from contextlib import contextmanager
+from functools import partial
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -29,19 +33,50 @@ from .fiscal_display_admission import FiscalCandidateReaderPort
 from .fiscal_display_runtime import build_fiscal_display_reader
 from .fiscal_preparation_runtime import (
     FiscalPreparationDeploymentV1,
+    FiscalPreparationInputs,
+    build_fiscal_candidate_runtime,
     configured_fiscal_candidate_runtime,
 )
-from .fiscal_release_contracts import FiscalPublishV1, FiscalReleaseCandidateReceiptV1
+from .fiscal_release_contracts import (
+    FiscalPublishV2,
+    FiscalReleaseCandidateReceiptV2,
+    FiscalReleaseManifestV2,
+)
+from .data_releases import ArtifactRefV1
 from .fiscal_releases import (
     FiscalReleaseReader,
     FiscalReleaseService,
     FiscalReleaseSigningJob,
+    _CompletedFiscalReplay,
 )
 from .history_recovery_contracts import FiscalIssuanceContextV1
-from .metadata import PostgresArtifactStore, PostgresMetadataStore
+from .metadata import (
+    PostgresArtifactStore,
+    PostgresMetadataStore,
+    PostgresContentStore,
+    PostgresSnapshotRepository,
+    PostgresCanonicalFactRepository,
+    metadata_operation_budget,
+)
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
-from .source_acquisition import SecAcquisitionUseCase
+from .source_acquisition import SecAcquisitionUseCase, SecAcquisitionSettings
+from .sec_source import (
+    SecEdgarSourceAdapter,
+    SecRequestPolicy,
+    SecSourceError,
+    _SecResponse,
+)
+from .ingestion import SecIngestionService
+from .fiscal_classification_source import FiscalClassificationSourceResolver
+from .fiscal_focus_witness import (
+    FiscalDiagnosticFocusWitnessOwner,
+    FiscalFocusValidatorAuthorityV1,
+)
+from .fiscal_source_validation import resolve_fiscal_validation_profile
+from .fiscal_source_producer_runtime import public_accounting_accreditation_provider
+from .fiscal_validation_contracts import FiscalValidationPinV1
+from .arelle_parser import ParserResourcePolicy
 
 
 class FiscalReleaseReadConfigurationV1(ReleaseModel):
@@ -57,9 +92,9 @@ class FiscalReleaseReadConfigurationV1(ReleaseModel):
     focus_authority_file: Path | None = None
 
 
-class FiscalReleaseInstallationV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-release-installation.v1"] = (
-        "fundamental.fiscal-release-installation.v1"
+class FiscalReleaseInstallationV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-release-installation.v2"] = (
+        "fundamental.fiscal-release-installation.v2"
     )
     audience: str = Field(min_length=1)
     reader: FiscalReleaseReadConfigurationV1
@@ -71,18 +106,32 @@ class FiscalReleaseInstallationV1(ReleaseModel):
     workflow_identity: str = Field(min_length=1)
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     verification_suite_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    canary_configuration_file: Path
 
 
-class FiscalReleaseOrderV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-release-order.v1"] = (
-        "fundamental.fiscal-release-order.v1"
+class FiscalCanaryConfigurationV1(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-readonly-canary-configuration.v1"] = (
+        "fundamental.fiscal-readonly-canary-configuration.v1"
+    )
+    database_url_file: Path
+    database_role: str = Field(pattern=r"^[a-z_][a-z0-9_]{0,62}$")
+    content_root: Path
+    source_settings: SecAcquisitionSettings
+    sec_request_policy: SecRequestPolicy
+    resource_policy: ParserResourcePolicy
+    accounting_accreditation_file: Path | None = None
+
+
+class FiscalReleaseOrderV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-release-order.v2"] = (
+        "fundamental.fiscal-release-order.v2"
     )
     order_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
     audience: str
     installation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     configuration_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     issuance: FiscalIssuanceContextV1
-    approved: FiscalPublishV1
+    approved: FiscalPublishV2
     verification_run_id: str = Field(min_length=1)
     operation: Literal["publish", "activate"] = "publish"
     activation: DataReleaseActivationCommandV1 | None = None
@@ -90,7 +139,7 @@ class FiscalReleaseOrderV1(ReleaseModel):
     valid_until: AwareDatetime
 
     @model_validator(mode="after")
-    def exact_operation(self) -> FiscalReleaseOrderV1:
+    def exact_operation(self) -> FiscalReleaseOrderV2:
         if (self.operation == "activate") != (
             self.activation is not None
         ) or self.valid_from >= self.valid_until:
@@ -164,6 +213,222 @@ def release_configuration_digest(config: FiscalReleaseReadConfigurationV1) -> st
             ),
         )
     )
+
+
+def _canary_configuration_digest(
+    reader: FiscalReleaseReadConfigurationV1, configuration_file: Path
+) -> str:
+    return sha256_digest(
+        (
+            release_configuration_digest(reader),
+            hashlib.sha256(
+                protected_release_file(configuration_file, owner=reader.deployment_uid)
+            ).hexdigest(),
+        )
+    )
+
+
+def release_workflow_configuration_digest(
+    installation: FiscalReleaseInstallationV2,
+) -> str:
+    return _canary_configuration_digest(
+        installation.reader, installation.canary_configuration_file
+    )
+
+
+@dataclass(frozen=True)
+class _FiscalReadonlyCanary:
+    reader: FiscalReleaseReadConfigurationV1
+    configuration_file: Path
+    credential_owner: int
+    writer_role: str
+
+    def _replay_candidate_canary(
+        self,
+        manifest: FiscalReleaseManifestV2,
+        checks_ref: ArtifactRefV1,
+        *,
+        deadline_at: datetime,
+    ) -> _CompletedFiscalReplay:
+        with _readonly_canary_reader(self, deadline_at=deadline_at) as reader:
+            completed = reader._replay_candidate_canary(
+                manifest, checks_ref, deadline_at=deadline_at
+            )
+        return completed
+
+
+class _RetainedCanaryAdapter(SecEdgarSourceAdapter):
+    def _request(
+        self, uri: str, *, deadline_at: datetime | None = None
+    ) -> _SecResponse:
+        raise SecSourceError(
+            "SEC_CAPTURE_MISSING",
+            "readonly fiscal canary requires retained source closure",
+        )
+
+
+@contextmanager
+def _readonly_canary_reader(
+    installation: _FiscalReadonlyCanary, *, deadline_at: datetime
+) -> Iterator[FiscalReleaseReader]:
+    def budget() -> float:
+        remaining = (deadline_at - datetime.now(UTC)).total_seconds()
+        if remaining <= 0:
+            raise SnapshotError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "readonly fiscal canary deadline expired",
+                retryable=True,
+            )
+        return remaining
+
+    budget()
+    owner = installation.reader.deployment_uid
+    raw = protected_release_file(installation.configuration_file, owner=owner)
+    config = FiscalCanaryConfigurationV1.model_validate_json(raw)
+    if (
+        canonical_bytes(config.model_dump(mode="json")) != raw
+        or config.database_role == installation.writer_role
+    ):
+        raise ValueError("canary requires its own canonical SELECT-only configuration")
+    secret = protected_release_file(
+        config.database_url_file, owner=installation.credential_owner, private=True
+    )
+    database_url = secret.decode("utf-8").strip()
+    if not database_url or "\n" in database_url or "\r" in database_url:
+        raise ValueError("canary database credential is unavailable")
+    metadata = PostgresMetadataStore(database_url, auto_migrate=False)
+    try:
+        with metadata_operation_budget(
+            budget,
+            lambda: SnapshotError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "readonly fiscal canary deadline expired",
+                retryable=True,
+            ),
+        ):
+            metadata.start_read_only()
+            metadata.require_fiscal_readonly_role(config.database_role)
+            content = PostgresContentStore(
+                config.content_root, metadata, read_only=True
+            )
+            artifacts = PostgresArtifactStore(metadata, content, read_only=True)
+            adapter = _RetainedCanaryAdapter(config.sec_request_policy)
+            ingestion = SecIngestionService(
+                source_adapter=adapter,
+                content_store=content,
+                snapshot_repository=PostgresSnapshotRepository(metadata),
+                audit_store=artifacts,
+                fact_repository=PostgresCanonicalFactRepository(metadata),
+            )
+            acquisition = SecAcquisitionUseCase(
+                adapter=adapter,
+                ingestion=ingestion,
+                metadata=metadata,
+                content_store=content,
+                settings=config.source_settings,
+                authorized_organizations=frozenset(),
+                capture_store=artifacts,
+            )
+            discovery = acquisition.fiscal_discovery()
+            sources = acquisition.fiscal_source_closure(
+                declared_source_revision=installation.reader.declared_source_revision
+            )
+
+            def generation() -> str:
+                budget()
+                if (
+                    protected_release_file(installation.configuration_file, owner=owner)
+                    != raw
+                    or protected_release_file(
+                        config.database_url_file,
+                        owner=installation.credential_owner,
+                        private=True,
+                    )
+                    != secret
+                ):
+                    raise ValueError("readonly fiscal canary configuration changed")
+                metadata.require_fiscal_readonly_role(config.database_role)
+                return _canary_configuration_digest(
+                    installation.reader, installation.configuration_file
+                )
+
+            def focus_authority() -> FiscalFocusValidatorAuthorityV1:
+                if installation.reader.focus_authority_file is None:
+                    raise ValueError(
+                        "classified canary source requires its focus authority"
+                    )
+                return FiscalFocusValidatorAuthorityV1.model_validate_json(
+                    protected_release_file(
+                        installation.reader.focus_authority_file, owner=owner
+                    )
+                )
+
+            witnesses = FiscalDiagnosticFocusWitnessOwner(
+                closure=sources,
+                artifacts=artifacts,
+                content=content,
+                taxonomy_cache_dir=config.source_settings.taxonomy_cache_dir,
+                authority=focus_authority,
+                private_key=None,
+                profile_resolver=partial(
+                    resolve_fiscal_validation_profile, acquisition
+                ),
+                resource_policy=config.resource_policy.validate(),
+            )
+            resolver = FiscalClassificationSourceResolver(
+                sources=sources,
+                discovery=discovery,
+                witnesses=witnesses,
+                content=content,
+            )
+
+            def unavailable_accreditation() -> ArtifactRefV1:
+                raise SnapshotError(
+                    "FISCAL_CANARY_CONFIGURATION_INVALID",
+                    "classified canary source requires its public accreditation selector",
+                )
+
+            inputs = FiscalPreparationInputs(
+                artifacts,
+                content,
+                discovery,
+                sources,
+                FiscalValidationPinV1(
+                    declared_source_revision=installation.reader.declared_source_revision,
+                    taxonomy_manifest_id=config.source_settings.taxonomy_manifest_id,
+                ),
+                resolver,
+                generation,
+                public_accounting_accreditation_provider(
+                    config.accounting_accreditation_file, owner=owner
+                )
+                if config.accounting_accreditation_file is not None
+                else unavailable_accreditation,
+            )
+            candidates = build_fiscal_candidate_runtime(
+                inputs,
+                metadata,
+                FiscalPreparationDeploymentV1(
+                    authority_deployment_file=installation.reader.deployment_file,
+                    candidate_authority_id=installation.reader.candidate_authority_id,
+                    mapping_trust_roots_file=installation.reader.mapping_trust_roots_file,
+                ),
+                write=False,
+            )
+            reader = build_fiscal_release_reader(
+                candidates=candidates,
+                artifacts=artifacts,
+                metadata=metadata,
+                configuration=installation.reader,
+            )
+            original_generation = reader.configuration_digest
+            reader.configuration_digest = lambda: sha256_digest(
+                (generation(), original_generation())
+            )
+            yield reader
+            generation()
+    finally:
+        metadata.close()
 
 
 def build_fiscal_release_reader(
@@ -260,7 +525,7 @@ class FiscalReleaseRuntime:
     def __init__(
         self,
         *,
-        installation: FiscalReleaseInstallationV1,
+        installation: FiscalReleaseInstallationV2,
         candidates: FiscalCandidateReaderPort,
         artifacts: PostgresArtifactStore,
         metadata: PostgresMetadataStore,
@@ -276,7 +541,7 @@ class FiscalReleaseRuntime:
 
     def apply(
         self, order_id: str, *, deadline_at: datetime
-    ) -> FiscalReleaseCandidateReceiptV1 | ActiveDataReleaseV1:
+    ) -> FiscalReleaseCandidateReceiptV2 | ActiveDataReleaseV1:
         installation = self.installation
         if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", order_id) is None:
             raise ValueError("release order identity is invalid")
@@ -284,7 +549,7 @@ class FiscalReleaseRuntime:
         raw = protected_release_file(
             order_path, owner=installation.reader.deployment_uid
         )
-        order = FiscalReleaseOrderV1.model_validate_json(raw)
+        order = FiscalReleaseOrderV2.model_validate_json(raw)
         if canonical_bytes(order) != raw or order.order_id != order_id:
             raise ValueError("release order canonical identity differs")
         history = PostgresFiscalAdmissionHistory(self.metadata)
@@ -301,7 +566,7 @@ class FiscalReleaseRuntime:
             candidate_generation = self.candidates.current_configuration_digest()
 
             def authorize(
-                approved: FiscalPublishV1, deadline: datetime
+                approved: FiscalPublishV2, deadline: datetime
             ) -> Ed25519PrivateKey:
                 now = datetime.now(UTC)
                 if (
@@ -319,7 +584,7 @@ class FiscalReleaseRuntime:
                     or order.installation_digest
                     != sha256_digest(installation.model_dump(mode="json"))
                     or order.configuration_digest
-                    != release_configuration_digest(installation.reader)
+                    != release_workflow_configuration_digest(installation)
                 ):
                     raise ValueError(
                         "fiscal release installed workload or order binding differs"
@@ -410,7 +675,12 @@ class FiscalReleaseRuntime:
             reader = make_reader()
             service = FiscalReleaseService(
                 reader=reader,
-                canary=make_reader(),
+                canary=_FiscalReadonlyCanary(
+                    installation.reader,
+                    installation.canary_configuration_file,
+                    installation.workload_uid,
+                    installation.database_role,
+                ),
                 artifacts=self.artifacts,
                 history=history,
                 publications=self.metadata,
@@ -423,7 +693,7 @@ class FiscalReleaseRuntime:
                     authorize,
                 ),
             )
-            result: FiscalReleaseCandidateReceiptV1 | ActiveDataReleaseV1
+            result: FiscalReleaseCandidateReceiptV2 | ActiveDataReleaseV1
             if order.activation is not None:
                 result = service.activate(order.activation, deadline_at=deadline_at)
                 authorize(order.approved, deadline_at)

@@ -135,6 +135,27 @@ class FilesystemContentStore:
         assert_published_access(path, self._publication_access)
         return content
 
+    def get_bounded(
+        self, content_hash: str, *, media_type: str, maximum_bytes: int
+    ) -> bytes:
+        path = self._path(content_hash, media_type)
+        with path.open("rb") as source:
+            length = os.fstat(source.fileno()).st_size
+            if maximum_bytes < 0 or length > maximum_bytes:
+                raise SnapshotError(
+                    "FISCAL_CLOSURE_LIMIT", "content exceeds read bound"
+                )
+            content = source.read(maximum_bytes + 1)
+        if (
+            len(content) != length
+            or hashlib.sha256(content).hexdigest() != content_hash
+        ):
+            raise SnapshotError("SOURCE_HASH_MISMATCH", "bounded content bytes differ")
+        assert_published_access(self.root, self._publication_access)
+        assert_published_access(path.parent, self._publication_access)
+        assert_published_access(path, self._publication_access)
+        return content
+
 
 class SnapshotRepository(Protocol):
     def publish(self, snapshot: SourceSnapshotV1) -> None: ...

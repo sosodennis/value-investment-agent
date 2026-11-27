@@ -17,41 +17,41 @@ def require_fiscal_ref(ref: ArtifactRefV1, role: str) -> None:
         raise ValueError("fiscal release requires its exact JSON artifact role")
 
 
-class FiscalPublishV1(ReleaseModel):
+class FiscalPublishV2(ReleaseModel):
     candidate_ref: ArtifactRefV1
     decision_ref: ArtifactRefV1
 
     @model_validator(mode="after")
-    def exact_refs(self) -> FiscalPublishV1:
-        require_fiscal_ref(self.candidate_ref, "fiscal-statement-candidate-v2")
-        require_fiscal_ref(self.decision_ref, "fiscal-display-decision-v1")
+    def exact_refs(self) -> FiscalPublishV2:
+        require_fiscal_ref(self.candidate_ref, "fiscal-statement-candidate-v3")
+        require_fiscal_ref(self.decision_ref, "fiscal-display-decision-v2")
         return self
 
 
-class FiscalReleaseEnvelopeV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-release-envelope.v1"] = (
-        "fundamental.fiscal-release-envelope.v1"
+class FiscalReleaseEnvelopeV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-release-envelope.v2"] = (
+        "fundamental.fiscal-release-envelope.v2"
     )
-    approved: FiscalPublishV1
+    approved: FiscalPublishV2
     candidate_content_digest: Digest
     projection_ref: ArtifactRefV1
 
     @model_validator(mode="after")
-    def exact_projection(self) -> FiscalReleaseEnvelopeV1:
+    def exact_projection(self) -> FiscalReleaseEnvelopeV2:
         require_fiscal_ref(self.projection_ref, "fiscal-statement-projection-v1")
         return self
 
     @property
     def artifact_id(self) -> str:
-        return "fiscal-release-envelope-v1:" + sha256_digest(self)
+        return "fiscal-release-envelope-v2:" + sha256_digest(self)
 
 
-class FiscalReleaseManifestV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-release-manifest.v1"] = (
-        "fundamental.fiscal-release-manifest.v1"
+class FiscalReleaseManifestV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-release-manifest.v2"] = (
+        "fundamental.fiscal-release-manifest.v2"
     )
-    profile_id: str = Field(pattern=r"^fiscal-statements-v1:[0-9a-f]{64}$")
-    release_id: str = Field(pattern=r"^fiscal-release-v1:[0-9a-f]{64}$")
+    profile_id: str = Field(pattern=r"^fiscal-statements-v2:[0-9a-f]{64}$")
+    release_id: str = Field(pattern=r"^fiscal-release-v2:[0-9a-f]{64}$")
     created_at: AwareDatetime
     scope: StatementScopeV1
     cutoff_at: AwareDatetime
@@ -59,8 +59,8 @@ class FiscalReleaseManifestV1(ReleaseModel):
     manifest_digest: Digest
 
     @model_validator(mode="after")
-    def identity(self) -> FiscalReleaseManifestV1:
-        require_fiscal_ref(self.envelope_ref, "fiscal-release-envelope-v1")
+    def identity(self) -> FiscalReleaseManifestV2:
+        require_fiscal_ref(self.envelope_ref, "fiscal-release-envelope-v2")
         if (
             sha256_digest(self.model_dump(exclude={"manifest_digest"}))
             != self.manifest_digest
@@ -71,9 +71,9 @@ class FiscalReleaseManifestV1(ReleaseModel):
         return self
 
 
-class FiscalReleaseChecksV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-release-checks.v1"] = (
-        "fundamental.fiscal-release-checks.v1"
+class FiscalReleaseChecksV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-release-checks.v2"] = (
+        "fundamental.fiscal-release-checks.v2"
     )
     manifest_digest: Digest
     candidate_content_digest: Digest
@@ -87,15 +87,19 @@ class FiscalReleaseChecksV1(ReleaseModel):
 
     @property
     def artifact_id(self) -> str:
-        return "fiscal-release-checks-v1:" + sha256_digest(self)
+        return "fiscal-release-checks-v2:" + sha256_digest(self)
 
 
-class FiscalReleaseVerificationV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-release-verification.v1"] = (
-        "fundamental.fiscal-release-verification.v1"
+class FiscalReleaseVerificationV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-release-verification.v2"] = (
+        "fundamental.fiscal-release-verification.v2"
     )
     manifest_digest: Digest
     checked_ref: ArtifactRefV1
+    canary_ref: ArtifactRefV1
+    candidate_correctness_digest: Digest
+    replay_contract_digest: Digest
+    replay_executable_digest: Digest
     verification_suite_digest: Digest
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     verification_run_id: str = Field(min_length=1)
@@ -105,8 +109,9 @@ class FiscalReleaseVerificationV1(ReleaseModel):
     signature: str = Field(pattern=r"^[0-9a-f]{128}$")
 
     @model_validator(mode="after")
-    def identity(self) -> FiscalReleaseVerificationV1:
-        require_fiscal_ref(self.checked_ref, "fiscal-release-checks-v1")
+    def identity(self) -> FiscalReleaseVerificationV2:
+        require_fiscal_ref(self.checked_ref, "fiscal-release-checks-v2")
+        require_fiscal_ref(self.canary_ref, "fiscal-release-canary-v2")
         if (
             sha256_digest(self.model_dump(exclude={"verification_digest", "signature"}))
             != self.verification_digest
@@ -120,34 +125,39 @@ class FiscalReleaseVerificationV1(ReleaseModel):
         return canonical_bytes(self.model_dump(exclude={"signature"}))
 
 
-class FiscalReleaseCanaryV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-release-canary.v1"] = (
-        "fundamental.fiscal-release-canary.v1"
+class FiscalReleaseCanaryV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-release-canary.v2"] = (
+        "fundamental.fiscal-release-canary.v2"
     )
     manifest_digest: Digest
-    verification_digest: Digest
     checked_ref: ArtifactRefV1
+    candidate_correctness_digest: Digest
+    replay_contract_digest: Digest
+    replay_executable_digest: Digest
+    replay_result_digest: Digest
 
     @model_validator(mode="after")
-    def exact_checks(self) -> FiscalReleaseCanaryV1:
-        require_fiscal_ref(self.checked_ref, "fiscal-release-checks-v1")
+    def exact_checks(self) -> FiscalReleaseCanaryV2:
+        require_fiscal_ref(self.checked_ref, "fiscal-release-checks-v2")
         return self
 
     @property
     def artifact_id(self) -> str:
-        return "fiscal-release-canary-v1:" + sha256_digest(self)
+        return "fiscal-release-canary-v2:" + sha256_digest(self)
 
 
-class FiscalStoredVerificationV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-stored-verification.v1"] = (
-        "fundamental.fiscal-stored-verification.v1"
+class FiscalStoredVerificationV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-stored-verification.v2"] = (
+        "fundamental.fiscal-stored-verification.v2"
     )
-    signed: FiscalReleaseVerificationV1
+    signed: FiscalReleaseVerificationV2
     canary_ref: ArtifactRefV1
 
     @model_validator(mode="after")
-    def exact_canary(self) -> FiscalStoredVerificationV1:
-        require_fiscal_ref(self.canary_ref, "fiscal-release-canary-v1")
+    def exact_canary(self) -> FiscalStoredVerificationV2:
+        require_fiscal_ref(self.canary_ref, "fiscal-release-canary-v2")
+        if self.canary_ref != self.signed.canary_ref:
+            raise ValueError("stored canary differs from the workflow-signed canary")
         return self
 
     @property
@@ -159,9 +169,9 @@ class FiscalStoredVerificationV1(ReleaseModel):
         return self.signed.manifest_digest
 
 
-class FiscalReleaseCandidateReceiptV1(ReleaseModel):
-    protocol: Literal["fundamental.fiscal-release-candidate-receipt.v1"] = (
-        "fundamental.fiscal-release-candidate-receipt.v1"
+class FiscalReleaseCandidateReceiptV2(ReleaseModel):
+    protocol: Literal["fundamental.fiscal-release-candidate-receipt.v2"] = (
+        "fundamental.fiscal-release-candidate-receipt.v2"
     )
     profile_id: str
     release_id: str
@@ -172,12 +182,12 @@ class FiscalReleaseCandidateReceiptV1(ReleaseModel):
     wrote: bool
 
 
-class ActiveFiscalReleaseV1(ReleaseModel):
+class ActiveFiscalReleaseV2(ReleaseModel):
     active: ActiveDataReleaseV1
-    manifest: FiscalReleaseManifestV1
+    manifest: FiscalReleaseManifestV2
 
     @model_validator(mode="after")
-    def exact_pointer(self) -> ActiveFiscalReleaseV1:
+    def exact_pointer(self) -> ActiveFiscalReleaseV2:
         if (self.active.profile_id, self.active.manifest_digest) != (
             self.manifest.profile_id,
             self.manifest.manifest_digest,
@@ -187,27 +197,27 @@ class ActiveFiscalReleaseV1(ReleaseModel):
 
 
 def fiscal_manifest(
-    envelope: FiscalReleaseEnvelopeV1,
+    envelope: FiscalReleaseEnvelopeV2,
     envelope_ref: ArtifactRefV1,
     *,
     scope: StatementScopeV1,
     cutoff_at: datetime,
     display_profile_digest: str,
     created_at: datetime,
-) -> FiscalReleaseManifestV1:
+) -> FiscalReleaseManifestV2:
     fields = dict(
-        protocol="fundamental.fiscal-release-manifest.v1",
-        profile_id="fiscal-statements-v1:"
+        protocol="fundamental.fiscal-release-manifest.v2",
+        profile_id="fiscal-statements-v2:"
         + sha256_digest(
             (scope, cutoff_at, display_profile_digest, "quarter-and-ttm-v1")
         ),
-        release_id="fiscal-release-v1:"
-        + sha256_digest(("fiscal-release-identity-v1", envelope)),
+        release_id="fiscal-release-v2:"
+        + sha256_digest(("fiscal-release-identity-v2", envelope)),
         created_at=created_at,
         scope=scope,
         cutoff_at=cutoff_at,
         envelope_ref=envelope_ref,
     )
-    return FiscalReleaseManifestV1.model_validate(
+    return FiscalReleaseManifestV2.model_validate(
         {**fields, "manifest_digest": sha256_digest(fields)}
     )

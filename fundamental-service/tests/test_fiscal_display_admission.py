@@ -17,12 +17,12 @@ from fundamental_service.fiscal_authority_contracts import (
     FiscalRevokeAuthorityCommandV1,
 )
 from fundamental_service.fiscal_candidate_contracts import (
-    FiscalPrepareCandidateCommandV1,
+    FiscalPrepareCandidateCommandV2,
 )
 from fundamental_service.fiscal_display_admission import (
     fiscal_display_executable_digest,
 )
-from fundamental_service.fiscal_display_contracts import FiscalDisplayRequestV1
+from fundamental_service.fiscal_display_contracts import FiscalDisplayRequestV2
 from fundamental_service.fiscal_display_runtime import (
     FiscalDisplayInstallationV1,
     FiscalDisplayOrderV1,
@@ -221,7 +221,7 @@ def display(environment, tmp_path, protected_deployment_root):
     )
     builder = build_fiscal_candidate_runtime(inputs, env.metadata, config, write=True)
     candidate = builder.prepare(
-        FiscalPrepareCandidateCommandV1(
+        FiscalPrepareCandidateCommandV2(
             command_id="display-test-candidate",
             discovery_ref=discovery_ref,
             security_id="AAPL",
@@ -265,7 +265,7 @@ def display(environment, tmp_path, protected_deployment_root):
         artifacts=env.store,
         metadata=env.metadata,
     )
-    request = FiscalDisplayRequestV1(
+    request = FiscalDisplayRequestV2(
         command_id="display-one",
         authority_id=identity.authority_id,
         candidate_ref=candidate.reference,
@@ -373,7 +373,7 @@ def test_refs_only_scope_and_changed_command_refuse(display):
         "content",
     ):
         with pytest.raises(ValidationError):
-            FiscalDisplayRequestV1.model_validate(
+            FiscalDisplayRequestV2.model_validate(
                 {**display.order.request.model_dump(), key: "caller-claim"}
             )
     first = display.runtime.apply(display.order.order_id, deadline_at=deadline())
@@ -411,9 +411,9 @@ def test_durable_cuts_retry_exact_bytes_and_unknown_sign_refuses(
         nonlocal crashed
         result = put(identity, *args, **kwargs)
         prefix = {
-            "review": "fiscal-display-review-v1:",
-            "signing": "fiscal-display-signing-v1:",
-            "signed": "fiscal-display-decision-v1:",
+            "review": "fiscal-display-review-v2:",
+            "signing": "fiscal-display-signing-v2:",
+            "signed": "fiscal-display-decision-v2:",
         }.get(cut)
         if prefix and identity.startswith(prefix) and not crashed:
             crashed = True
@@ -445,7 +445,7 @@ def test_durable_cuts_retry_exact_bytes_and_unknown_sign_refuses(
     monkeypatch.setattr(display.env.store, "put_with_receipt", put)
     monkeypatch.setattr(display.runtime.history, "checkpoint", checkpoint)
     monkeypatch.setattr(display.runtime.history, "append_once", append)
-    identity = display.order.request.artifact_id("fiscal-display-decision-v1")
+    identity = display.order.request.artifact_id("fiscal-display-decision-v2")
     original = (
         display.env.store.read(identity)
         if cut in {"signed", "checkpoint", "control"}
@@ -540,7 +540,7 @@ def test_review_checks_known_semantic_contracts_and_all_actor_activities(display
     )
     from fundamental_service.fiscal_display_admission import FiscalDisplayAdmission
     from fundamental_service.fiscal_display_contracts import (
-        FiscalDisplayReviewExecutionV1,
+        FiscalDisplayReviewExecutionV2,
     )
     from fundamental_service.fiscal_statement_contracts import FiscalInputEdgeV1
 
@@ -580,7 +580,7 @@ def test_review_checks_known_semantic_contracts_and_all_actor_activities(display
         with pytest.raises(SnapshotError):
             reader._inspect(replace(candidate, projection=projection), deadline())
     now = datetime.now(UTC)
-    actor = FiscalDisplayReviewExecutionV1(
+    actor = FiscalDisplayReviewExecutionV2(
         authority_id="display",
         grant_ref=candidate.preparation.grant_ref,
         principal_id="machine:independent",
@@ -635,7 +635,7 @@ def test_protected_order_binding_refuses_before_review(display, field, value):
     with pytest.raises(SnapshotError):
         display.runtime.apply(changed.order_id, deadline_at=deadline())
     with pytest.raises(SnapshotError) as missing:
-        display.env.store.get(changed.request.artifact_id("fiscal-display-review-v1"))
+        display.env.store.get(changed.request.artifact_id("fiscal-display-review-v2"))
     assert missing.value.code == "ARTIFACT_NOT_FOUND"
 
 
@@ -783,7 +783,7 @@ def test_old_signed_orphan_order_refuses_after_actual_restore(
 
     def stop_after_signed(identity, *args, **kwargs):
         result = put(identity, *args, **kwargs)
-        if identity.startswith("fiscal-display-decision-v1:"):
+        if identity.startswith("fiscal-display-decision-v2:"):
             raise RuntimeError("retained signed orphan before control")
         return result
 
@@ -792,7 +792,7 @@ def test_old_signed_orphan_order_refuses_after_actual_restore(
         display.runtime.apply(display.order.order_id, deadline_at=deadline())
     monkeypatch.setattr(display.env.store, "put_with_receipt", put)
     old_bytes = display.env.store.read(
-        display.order.request.artifact_id("fiscal-display-decision-v1")
+        display.order.request.artifact_id("fiscal-display-decision-v2")
     )
     receipt = asyncio.run(
         export_backup(
@@ -831,7 +831,7 @@ def test_old_signed_orphan_order_refuses_after_actual_restore(
                 runtime.apply(display.order.order_id, deadline_at=deadline())
             assert (
                 store.read(
-                    display.order.request.artifact_id("fiscal-display-decision-v1")
+                    display.order.request.artifact_id("fiscal-display-decision-v2")
                 )
                 == old_bytes
             )
@@ -847,7 +847,7 @@ def test_wrong_control_head_refuses_before_review(display):
     with pytest.raises(SnapshotError, match="head"):
         display.runtime.apply(changed.order_id, deadline_at=deadline())
     with pytest.raises(SnapshotError) as missing:
-        display.env.store.get(changed.request.artifact_id("fiscal-display-review-v1"))
+        display.env.store.get(changed.request.artifact_id("fiscal-display-review-v2"))
     assert missing.value.code == "ARTIFACT_NOT_FOUND"
 
 
@@ -874,9 +874,9 @@ def test_control_commit_before_seal_is_read_only_refusal_and_writer_exact_resume
     with pytest.raises(RuntimeError):
         display.runtime.apply(display.order.order_id, deadline_at=deadline())
     assert stopped
-    identity = display.order.request.artifact_id("fiscal-display-decision-v1")
+    identity = display.order.request.artifact_id("fiscal-display-decision-v2")
     record = display.env.store.get(identity)
-    ref = reference(record, "fiscal-display-decision-v1")
+    ref = reference(record, "fiscal-display-decision-v2")
     signed_bytes = display.env.store.read(identity)
     reader = build_fiscal_display_reader(
         candidates=display.runtime.candidates,

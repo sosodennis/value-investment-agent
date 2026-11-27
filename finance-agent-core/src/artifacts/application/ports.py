@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from contextlib import AbstractAsyncContextManager
+from datetime import datetime
 from typing import Protocol
 
 from src.artifacts.domain.envelope import ArtifactPayload
 from src.artifacts.domain.record import ArtifactRecord
+from src.shared.artifacts.statement_read_artifact import FiscalSavedReadV3
+from src.shared.internal_services import InternalPrincipal
 
 
 class ArtifactRepositoryPort(Protocol):
@@ -51,3 +55,25 @@ class ArtifactStoragePort(Protocol):
     async def get_artifact_data(
         self, artifact_id: str, expected_kind: str | None = None
     ) -> ArtifactPayload | None: ...
+
+
+class ArtifactCurrentReadFailure(RuntimeError):
+    def __init__(self, code: str, *, retryable: bool, status_code: int) -> None:
+        super().__init__(code)
+        self.code = code
+        self.retryable = retryable
+        self.status_code = status_code
+
+
+class FiscalArtifactCurrentReadPort(Protocol):
+    async def check_current(
+        self,
+        artifact: FiscalSavedReadV3,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> None: ...
+
+
+FiscalCurrentReadContext = AbstractAsyncContextManager[FiscalArtifactCurrentReadPort]

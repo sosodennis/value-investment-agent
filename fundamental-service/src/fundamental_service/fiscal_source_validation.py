@@ -29,8 +29,13 @@ from .fiscal_parser_evidence import (
     RetainedFiscalValidation,
     read_fiscal_parser_actions,
     read_fiscal_rejection,
+    bind_fiscal_retained_inputs,
 )
-from .fiscal_source_closure import FiscalSourceContentRead, FiscalSourceValidationRead
+from .fiscal_source_closure import (
+    FiscalSourceContentRead,
+    FiscalSourceValidationRead,
+    FiscalSourceContentReadSet,
+)
 from .fiscal_source_contracts import FiscalOriginalSourceV1, evaluate_fiscal_issuer
 from .fiscal_validation_contracts import (
     FiscalValidationCompleteRefusedV1,
@@ -39,6 +44,8 @@ from .fiscal_validation_contracts import (
     FiscalValidationOutcomeV1,
     FiscalValidationPinV1,
     FiscalValidationRuntimeV1,
+    FiscalRetainedInputBindingV1,
+    FiscalOriginalValidationEvidenceV1,
     ResolvedFiscalValidationRequestV1,
 )
 from .ingestion import read_sec_xbrl_archive
@@ -114,6 +121,12 @@ class _FiscalEvidencePublications:
     def read(self, artifact_id: str) -> bytes:
         self.budget()
         raw = self.store.read(artifact_id)
+        self.budget()
+        return raw
+
+    def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
+        self.budget()
+        raw = self.store.read_bounded(artifact_id, maximum_bytes=maximum_bytes)
         self.budget()
         return raw
 
@@ -557,6 +570,8 @@ class SecFiscalSourceValidation:
             content,
             runtime,
             deadline_at,
+            outcome,
+            artifacts,
         )
         try:
             replayed = self._collect(
@@ -580,6 +595,107 @@ class SecFiscalSourceValidation:
         observation.check_current()
         return observation
 
+    def observe_current(
+        self,
+        request: ResolvedFiscalValidationRequestV1,
+        outcome: FiscalValidationOutcomeV1,
+        binding: FiscalRetainedInputBindingV1,
+        *,
+        artifacts: EvidenceArtifactReader,
+        deadline_at: datetime,
+    ) -> FiscalSourceValidationRead:
+        if isinstance(outcome, FiscalValidationIncompleteV1):
+            raise SnapshotError(
+                "FISCAL_VALIDATION_INVALID",
+                "current source requires complete validation",
+            )
+        owner, filing = self.acquisition, request.filing
+        if (
+            filing.accepted_at > request.valuation_timestamp
+            or filing.filing_date > request.valuation_timestamp.date()
+            or filing.filing_date.year not in owner.settings.supported_filing_years
+            or filing.form not in owner.settings.supported_filing_forms
+            or not filing.is_xbrl
+            or filing.is_amendment
+        ):
+            raise SnapshotError(
+                "FISCAL_FILING_NOT_ELIGIBLE",
+                "current filing is unsupported or unavailable at cutoff",
+            )
+        content = FiscalSourceContentRead(
+            owner.content_store, partial(fiscal_validation_budget, deadline_at)
+        )
+        runtime = FiscalParserRuntimeRead()
+        profile = resolve_fiscal_validation_profile(
+            owner, outcome.runtime.dqc_namespace
+        )
+        actions = read_fiscal_parser_actions(
+            outcome.integrity.validation_evidence,
+            relation=outcome.integrity.integrity_relation,
+            artifacts=artifacts,
+            build_checks=ParserBuildChecks(),
+            delivery_revision=outcome.runtime.delivery_revision,
+        )
+        for action in (actions.normalized, actions.archive):
+            if action is not None:
+                runtime.observe(
+                    action.request,
+                    profile,
+                    owner.settings.taxonomy_cache_dir,
+                    outcome.runtime.delivery_revision,
+                )
+        for receipt in outcome.responses:
+            content.get(receipt.content_hash, media_type=receipt.media_type)
+        primary = next(
+            item
+            for item in outcome.responses
+            if item.uri == outcome.integrity.primary_document_uri
+        )
+        for digest in {
+            outcome.integrity.normalized_content_hash,
+            outcome.integrity.archive_member_hash,
+        }:
+            content.get(digest, media_type=primary.media_type)
+        if outcome.integrity.inline_documents:
+            content.get(
+                outcome.integrity.parser_input_hash, media_type="application/json"
+            )
+        if (
+            isinstance(outcome, FiscalValidationCompleteRefusedV1)
+            and outcome.rejection_ref is not None
+        ):
+            read_fiscal_rejection(
+                outcome.rejection_ref.artifact_id, artifacts=artifacts
+            )
+        expected = bind_fiscal_retained_inputs(
+            FiscalOriginalValidationEvidenceV1(request=request, outcome=outcome),
+            binding.source_validation_ref,
+            actions,
+            content,
+            actual_requests=tuple(
+                item.request
+                for item in (actions.normalized, actions.archive)
+                if item is not None
+            ),
+        )
+        if binding != expected:
+            raise SnapshotError(
+                "FISCAL_VALIDATION_INVALID",
+                "retained input origins differ from the exact current source closure",
+            )
+        observation = _FiscalValidationRead(
+            self,
+            request,
+            outcome.runtime,
+            content,
+            runtime,
+            deadline_at,
+            outcome,
+            artifacts,
+        )
+        observation.check_current()
+        return observation
+
 
 class _FiscalValidationRead:
     def __init__(
@@ -590,6 +706,8 @@ class _FiscalValidationRead:
         content: FiscalSourceContentRead,
         parser: FiscalParserRuntimeRead,
         deadline_at: datetime,
+        outcome: FiscalValidationMatchedV1 | FiscalValidationCompleteRefusedV1,
+        artifacts: EvidenceArtifactReader,
     ) -> None:
         self._owner = owner
         self._request = request
@@ -597,12 +715,64 @@ class _FiscalValidationRead:
         self._content = content
         self._parser = parser
         self._deadline_at = deadline_at
+        self._outcome = outcome
+        self._artifacts = artifacts
         self._acquisition = owner.acquisition
         self._settings = deepcopy(owner.acquisition.settings)
         self._store = owner.store
         self._content_store = owner.acquisition.content_store
         self._adapter = owner.acquisition.adapter
         self._ingestion = owner.acquisition.ingestion
+
+    def retained_input_binding(
+        self, reference: ArtifactRefV1
+    ) -> FiscalRetainedInputBindingV1:
+        self.check_current()
+        actions = read_fiscal_parser_actions(
+            self._outcome.integrity.validation_evidence,
+            relation=self._outcome.integrity.integrity_relation,
+            artifacts=self._artifacts,
+            build_checks=ParserBuildChecks(),
+            delivery_revision=self._runtime.delivery_revision,
+        )
+        return bind_fiscal_retained_inputs(
+            FiscalOriginalValidationEvidenceV1(
+                request=self._request, outcome=self._outcome
+            ),
+            reference,
+            actions,
+            self._content,
+            actual_requests=tuple(
+                item.request
+                for item in sorted(
+                    self._parser.observations,
+                    key=lambda item: item.request.representation,
+                )
+            ),
+        )
+
+    @property
+    def input_footprint(self) -> tuple[object, ...]:
+        return (
+            self._content.input_footprint,
+            self._parser.resources,
+            tuple(
+                (
+                    item.request,
+                    item.profile_json.hex(),
+                    str(item.taxonomy_cache_dir),
+                    item.delivery_revision,
+                )
+                for item in sorted(
+                    self._parser.observations,
+                    key=lambda item: item.request.representation,
+                )
+            ),
+        )
+
+    @property
+    def content_readsets(self) -> tuple[FiscalSourceContentReadSet, ...]:
+        return (self._content.readset,)
 
     def check_current(self) -> None:
         fiscal_validation_budget(self._deadline_at)

@@ -75,6 +75,7 @@ import {
 } from './technical';
 import { isRecord } from '../preview';
 import { parseFundamentalServiceArtifact } from './fundamental-service-facts';
+import { parseStatementRead } from './statement-read';
 
 const toRecord = (value: unknown, context: string): Record<string, unknown> => {
     if (!isRecord(value) || Array.isArray(value)) {
@@ -3464,6 +3465,18 @@ export const parseFundamentalArtifact = (
     const record = toRecord(value, context);
     if (record.status !== 'done') {
         throw new TypeError(`${context}.status must be done.`);
+    }
+    if (record.statement_read !== undefined && record.statement_read !== null) {
+        const saved = parseStatementRead(record.statement_read, `${context}.statement_read`);
+        if (record.model_type !== 'statement_read' || record.fundamental_service != null || record.annual_statements != null
+            || (record.financial_reports !== undefined && (!Array.isArray(record.financial_reports) || record.financial_reports.length !== 0))) {
+            throw new TypeError(`${context} must contain a standalone statement read.`);
+        }
+        return {
+            status: 'done', model_type: 'statement_read', ticker: saved.edition.ticker,
+            company_name: saved.edition.company_name, sector: 'Unknown', industry: 'Unknown', reasoning: '',
+            financial_reports: [], statement_read: saved,
+        };
     }
     const serviceProjection = record.fundamental_service === undefined || record.fundamental_service === null
         ? undefined

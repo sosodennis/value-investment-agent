@@ -1,0 +1,211 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from pydantic import ValidationError
+
+from fundamental_service.data_releases import ArtifactRefV1
+from fundamental_service.fiscal_candidate_contracts import (
+    FiscalPrepareCandidateCommandV2,
+    FiscalPreparedCorrectnessV1,
+)
+from fundamental_service.fiscal_source_closure import (
+    FiscalArtifactRead,
+    FiscalClosureReadBudget,
+    fiscal_closure_read_operation,
+)
+from fundamental_service.fiscal_validation_contracts import FiscalRetainedInputBindingV1
+from fundamental_service.replay import ArtifactStore
+from fundamental_service.serialization import canonical_bytes, sha256_digest
+from fundamental_service.snapshots import SnapshotError
+
+
+def reference(role="fiscal-discovery"):
+    return ArtifactRefV1(
+        artifact_id="fixture:" + role,
+        role=role,
+        content_hash="1" * 64,
+        media_type="application/json",
+    )
+
+
+def test_command_v2_has_a_distinct_locator_from_the_retained_v1_identity():
+    command = FiscalPrepareCandidateCommandV2(
+        command_id="same-human-command",
+        discovery_ref=reference(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    assert command.locator_digest != sha256_digest(
+        ("fundamental.prepare-fiscal-candidate.v1", command.command_id)
+    )
+    assert (
+        command.artifact_id("fiscal-statement-candidate-v3")
+        != "fiscal-statement-candidate-v2:" + command.locator_digest
+    )
+    with pytest.raises(ValidationError):
+        FiscalPrepareCandidateCommandV2.model_validate(
+            command.model_dump()
+            | {"protocol": "fundamental.prepare-fiscal-candidate.v1"}
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing_origin", "unknown_origin", "missing_basis_source"]
+)
+def test_retained_input_contract_refuses_incomplete_or_unknown_origins(mutation):
+    origin = {
+        "kind": "normalized",
+        "integrity_role": "normalized_content",
+        "content": {"digest": "2" * 64, "media_type": "text/html", "byte_length": 10},
+    }
+    staged = {"relative_name": "filing.htm", "origin": origin}
+    payload = {
+        "source_validation_ref": reference("fiscal-original-validation").model_dump(),
+        "source_contract_digest": "3" * 64,
+        "inputs": [
+            {
+                "representation": "normalized",
+                "action_result_ref": reference(
+                    "sec-parser-action-result-v2"
+                ).model_dump(),
+                "files": [staged],
+            }
+        ],
+    }
+    if mutation == "missing_origin":
+        del staged["origin"]
+    elif mutation == "unknown_origin":
+        origin["kind"] = "unclassified_transform"
+    else:
+        del payload["source_validation_ref"]
+    with pytest.raises(ValidationError):
+        FiscalRetainedInputBindingV1.model_validate(payload)
+
+
+def test_correctness_refuses_unknown_owner_and_duplicate_owner_use_path():
+    owner = {
+        "owner": "mapping",
+        "use_path": "source/0",
+        "root_ref": reference().model_dump(),
+        "contract_digest": "a" * 64,
+        "executable_digest": "b" * 64,
+        "policy_digest": "c" * 64,
+        "input_footprint_digest": "d" * 64,
+    }
+    payload = {
+        "candidate_content_digest": "e" * 64,
+        "closure_contract_digest": "f" * 64,
+        "owners": [owner, owner],
+    }
+    with pytest.raises(ValidationError):
+        FiscalPreparedCorrectnessV1.model_validate(payload)
+    with pytest.raises(ValidationError):
+        FiscalPreparedCorrectnessV1.model_validate(
+            payload | {"owners": [owner | {"owner": "unowned"}]}
+        )
+
+
+def test_bounded_artifact_read_checks_full_bytes_and_refuses_overflow(tmp_path):
+    store = ArtifactStore(tmp_path)
+    payload = b'{"exact":"bytes"}'
+    store.put_bytes_with_receipt("fixture", payload, media_type="application/json")
+    assert store.read_bounded("fixture", maximum_bytes=len(payload)) == payload
+    with pytest.raises(SnapshotError, match="bound"):
+        store.read_bounded("fixture", maximum_bytes=len(payload) - 1)
+    record = store.get("fixture")
+    store._artifact_path(record.content_hash, record.media_type).write_bytes(
+        b"x" * len(payload)
+    )
+    with pytest.raises(SnapshotError, match="differ"):
+        store.read_bounded("fixture", maximum_bytes=len(payload))
+
+
+def test_absence_can_only_transition_through_this_invocations_actual_own_receipt(
+    tmp_path,
+):
+    store = ArtifactStore(tmp_path)
+    reader = FiscalArtifactRead(store, lambda: 1.0)
+    reader.expect("owned", reader.current("owned"))
+    own = store.put_with_receipt("owned", {"value": 1})
+    reader.accept_own_publication(own, canonical_bytes({"value": 1}))
+    reader.check_bodies()
+    assert reader.input_footprint_digest
+    foreign = FiscalArtifactRead(store, lambda: 1.0)
+    foreign.expect("foreign", None)
+    store.put_with_receipt("foreign", {"value": 2})
+    duplicate = store.put_with_receipt("foreign", {"value": 2})
+    with pytest.raises(SnapshotError, match="own write"):
+        foreign.accept_own_publication(duplicate, canonical_bytes({"value": 2}))
+    with pytest.raises(SnapshotError, match="metadata changed"):
+        foreign.check_current()
+
+
+def test_nested_canonical_reads_share_the_aggregate_bound(tmp_path):
+    store = ArtifactStore(tmp_path)
+    store.put_bytes_with_receipt(
+        "one", b"x" * (5 * 1024 * 1024), media_type="application/json"
+    )
+    store.put_bytes_with_receipt(
+        "two", b"y" * (4 * 1024 * 1024), media_type="application/json"
+    )
+    with fiscal_closure_read_operation():
+        reader = FiscalArtifactRead(store, lambda: 1.0)
+        assert len(reader.read("one")) == 5 * 1024 * 1024
+        with fiscal_closure_read_operation():
+            with pytest.raises(SnapshotError, match="bound"):
+                reader.for_consumer().read("two")
+
+
+def test_aggregate_entry_limit_includes_each_distinct_owner_footprint():
+    budget = FiscalClosureReadBudget()
+    for index in range(4096):
+        budget.consume(("owner", str(index)), 0)
+    with pytest.raises(SnapshotError, match="bound"):
+        budget.consume(("owner", "extra"), 0)
+
+
+@pytest.mark.parametrize("length", [None, 100])
+def test_registered_bounded_content_refuses_before_reading_bytes_and_never_repairs(
+    tmp_path, length
+):
+    from fundamental_service.metadata import PostgresContentStore
+
+    class Metadata:
+        def content_byte_length(self, digest, *, media_type):
+            if length is None:
+                raise SnapshotError(
+                    "CONTENT_REGISTRATION_UNAVAILABLE", "registration missing"
+                )
+            return length
+
+        def register_content(self, *args, **kwargs):
+            raise AssertionError("bounded read must not repair registration")
+
+    class Filesystem:
+        def get_bounded(self, *args, **kwargs):
+            raise AssertionError("rejected registration must not read bytes")
+
+    root = tmp_path / "content"
+    root.mkdir()
+    store = PostgresContentStore(root, Metadata(), read_only=True)
+    store._filesystem_view = Filesystem()
+    with pytest.raises(SnapshotError):
+        store.get_bounded("a" * 64, media_type="application/json", maximum_bytes=10)
+
+
+def test_readonly_canary_refuses_missing_configuration_and_retained_network_gaps():
+    from fundamental_service.fiscal_release_runtime import (
+        FiscalCanaryConfigurationV1,
+        _RetainedCanaryAdapter,
+    )
+    from fundamental_service.sec_source import SecRequestPolicy, SecSourceError
+
+    with pytest.raises(ValidationError):
+        FiscalCanaryConfigurationV1.model_validate({"database_role": "reader"})
+    adapter = _RetainedCanaryAdapter(
+        SecRequestPolicy(user_agent="contract-test test@example.test")
+    )
+    with pytest.raises(SecSourceError, match="retained source closure"):
+        adapter._request(
+            "https://www.sec.gov/Archives/edgar/data/1/source.htm",
+            deadline_at=datetime.now(UTC) + timedelta(seconds=5),
+        )

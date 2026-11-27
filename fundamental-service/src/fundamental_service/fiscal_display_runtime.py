@@ -25,7 +25,7 @@ from .fiscal_admission_history import (
 from .fiscal_authority_contracts import FiscalAuthorityDeploymentV1
 from .fiscal_candidate_contracts import (
     ClassifiedSourceForCandidateV1,
-    FiscalStatementCandidateV2,
+    FiscalStatementCandidateV3,
 )
 from .fiscal_display_admission import (
     FiscalCandidateReaderPort,
@@ -34,8 +34,8 @@ from .fiscal_display_admission import (
 )
 from .fiscal_display_contracts import (
     CurrentFiscalDisplay,
-    FiscalDisplayRequestV1,
-    SignedFiscalDisplayDecisionV1,
+    FiscalDisplayRequestV2,
+    SignedFiscalDisplayDecisionV2,
 )
 from .history_recovery_contracts import FiscalIssuanceContextV1
 from .metadata import (
@@ -103,7 +103,7 @@ class FiscalDisplayOrderV1(StrictModel):
     deployment_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     executable_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     issuance: FiscalIssuanceContextV1
-    request: FiscalDisplayRequestV1
+    request: FiscalDisplayRequestV2
     expected_head: FiscalHistoryHeadV1 | None
     valid_from: AwareDatetime
     valid_until: AwareDatetime
@@ -278,7 +278,7 @@ class FiscalDisplayRuntime:
         ):
             raise _refused("display decision was revoked, superseded or imported")
         raw = self._read_artifacts.read(latest.body.payload_ref.artifact_id)
-        signed = SignedFiscalDisplayDecisionV1.model_validate_json(raw)
+        signed = SignedFiscalDisplayDecisionV2.model_validate_json(raw)
         if signed.body.command.request != order.request:
             raise SnapshotError(
                 "FISCAL_DISPLAY_COMMAND_REUSED", "display command identity is immutable"
@@ -287,7 +287,7 @@ class FiscalDisplayRuntime:
             canonical_bytes(signed) != raw
             or hashlib.sha256(raw).hexdigest() != latest.body.payload_ref.content_hash
             or signed.artifact_id
-            != order.request.artifact_id("fiscal-display-decision-v1")
+            != order.request.artifact_id("fiscal-display-decision-v2")
             or latest.body.command_digest != signed.body.command.command_digest
             or order.expected_head is not None
             and order.expected_head != control.heads[0]
@@ -323,7 +323,7 @@ class FiscalDisplayRuntime:
                     )
 
                     def authorize(
-                        request: FiscalDisplayRequestV1, deadline: datetime
+                        request: FiscalDisplayRequestV2, deadline: datetime
                     ) -> Ed25519PrivateKey:
                         self._require(order, lease, deadline)
                         if request != order.request:
@@ -418,7 +418,7 @@ def require_candidate_configuration(installation: FiscalDisplayInstallationV1) -
 
 
 def _candidate_configuration_generation(
-    request: FiscalDisplayRequestV1,
+    request: FiscalDisplayRequestV2,
     *,
     artifacts: PostgresArtifactStore,
     deployment_uid: int,
@@ -429,7 +429,7 @@ def _candidate_configuration_generation(
     raw = artifacts.read(request.candidate_ref.artifact_id)
     if hashlib.sha256(raw).hexdigest() != request.candidate_ref.content_hash:
         raise _refused("display fixed candidate hash changed")
-    candidate = FiscalStatementCandidateV2.model_validate_json(raw)
+    candidate = FiscalStatementCandidateV3.model_validate_json(raw)
     mapping = _protected(mapping_trust_roots_file, owner=deployment_uid)
     focus = None
     if any(

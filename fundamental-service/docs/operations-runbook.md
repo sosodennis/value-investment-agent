@@ -1028,7 +1028,7 @@ python -m fundamental_service.fiscal_source_runner \
 - `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE` 保留 fiscal mapping evaluator 的當前公鑰與 `fiscal_mapping_policy_digest()`。
 - 寫入 process 另掛載 `FUNDAMENTAL_FISCAL_CANDIDATE_PRIVATE_KEY_FILE` 與 `FUNDAMENTAL_FISCAL_MAPPING_PRIVATE_KEY_FILE`。使用各自對應的 Ed25519 PKCS8 PEM。私鑰檔須由該 process 的 OS user 擁有，權限為 `600` 或更窄。部署檔須是非 symlink 的一般檔案，大小不超過 1 MiB。
 
-`command.json` 必須符合 `FiscalPrepareCandidateCommandV1`。必要欄位為 `command_id`、完整 `discovery_ref` 與含時區的絕對 `expires_at`。`security_id` 是可選 selector。`classification_bindings` 按 `source_validation_ref.artifact_id` 排序，每個 raw-refused source 提供一組 exact source、witness 與 classification refs。不得提供財務 rows、公式、期間 labels 或簽署者身分。
+`command.json` 必須符合 `FiscalPrepareCandidateCommandV2`。必要欄位為 `command_id`、完整 `discovery_ref` 與含時區的絕對 `expires_at`。`security_id` 是可選 selector。`classification_bindings` 按 `source_validation_ref.artifact_id` 排序，每個 raw-refused source 提供一組 exact source、witness 與 classification refs。不得提供財務 rows、公式、期間 labels 或簽署者身分。
 
 ```sh
 python -m fundamental_service.fiscal_source_runner \
@@ -1036,9 +1036,9 @@ python -m fundamental_service.fiscal_source_runner \
   prepare-candidate --command-file command.json
 ```
 
-輸出 `evidence` 為 `FiscalStatementCandidateV2`。其 signed body 包含唯一 `FiscalCandidateContentV1`、原 discovery 與 validation pin、全部 source uses、mapping approvals、projection、period 與 row lineage、實際 machine execution 及 issuance context。Preparation executable digest 與原 source revision 分開保留。Job ID 由部署能力產生，真正的信任根是 deployment grant、key custody 與固定 builder 程式。
+輸出 `evidence` 為 `FiscalStatementCandidateV3`。其 signed body 包含唯一 `FiscalCandidateContentV2`、原 discovery 與 validation pin、全部 source uses、mapping approvals、projection、period 與 row lineage、實際 machine execution 及 issuance context。Preparation executable digest 與原 source revision 分開保留。Job ID 由部署能力產生，真正的信任根是 deployment grant、key custody 與固定 builder 程式。
 
-從 `publication.artifact` 保留完整 ref，指定 role `fiscal-statement-candidate-v2`，寫入 `candidate-ref.json`。Ref 同時包含 stable artifact ID、content hash 與 media type。
+從 `publication.artifact` 保留完整 ref，指定 role `fiscal-statement-candidate-v3`，寫入 `candidate-ref.json`。Ref 同時包含 stable artifact ID、content hash 與 media type。
 
 ```sh
 python -m fundamental_service.fiscal_source_runner \
@@ -1058,7 +1058,7 @@ Group publication 的新 content root 與 hash directory 由 publisher 擁有，
 
 既存 private content 只能由部署 owner 依本次明列的 exact registered inventory 一次安裝。先核每筆 hash、length、regular file、publisher owner 與 root confinement，再只調整列明 bytes 和必要 root/hash directories 的 GID 與上述 mode。保留 bytes、mtime、metadata refs 與原授權期限，記錄 inventory digest 及前後 bytes digest。不要遞迴掃 root bulk chmod，也不要在每次 CLI 後修復。安裝中斷時依同一 inventory 重試；尚未安裝的內容繼續具名拒絕。舊 grant 自然到期仍須拒絕 current，新 current 正控使用真正 fresh order，不修改舊 signed bytes 或時間。
 
-讀取 process 只需要 public deployment、mapping trust 與適用的 focus authority。它不載入 candidate、mapping 或 focus 私鑰，且沒有 history append、checkpoint 或 seal 能力。它從原 discovery 重建完整內容，再於一個有界 PostgreSQL snapshot 核對全部 metadata、storage、heads、sealed entries 與 current epoch。Source、classification、witness、grant、build、policy、expiry 或任何 binding 改變均拒絕。Raw parser action refs 保留原 owner 驗證的 evidence，不會創造未參與的 preparer、focus validator 或 classifier。
+讀取 process 只需要 public deployment、mapping trust 與適用的 focus authority。它不載入 candidate、mapping 或 focus 私鑰，且沒有 history append、checkpoint 或 seal 能力。它驗證 signed V3 correctness，沿各原 owner 的 typed roots 重導完整 current closure，讀取全部 bytes、retained origin、registration、resources、當前 authority/provider 與 policy，再於一個有界 PostgreSQL snapshot 核對全部 metadata、storage、heads、sealed entries 與 current epoch。純會計與 projection 正確性由同版本的完整 preparation 承擔，不把簽章當成當前權限。Source、classification、witness、grant、build、policy、expiry 或任何 binding 改變均拒絕。Raw parser action refs 保留原 owner 驗證的 evidence，不會創造未參與的 preparer、focus validator 或 classifier。
 
 相同 command 重試保留首次 signed bytes、execution、expiry 與 source identity。變更 command scope、pins 或 expiry 必須使用新 command ID。若 `FISCAL_CANDIDATE_SIGNING_OUTCOME_UNAVAILABLE` 表示 signing intent 已留存而沒有可證明的 durable signature，該 command 不再重簽。用新 command ID 執行真實新工作。已留存 signed bytes 的同代重試可續做缺少的 publication history；純讀不補寫。Restore 後舊 candidate 或 signed orphan 保留原 issuance，不能靠新 append 取得 current。新的本代 command 需要真正本代 invocation 與有效 grants。
 
@@ -1069,3 +1069,16 @@ Fiscal display 與 release 的 current 起末觀測會沿 candidate reader 的�
 Typed fiscal read 的每筆 `evidence.source_uses` 含 `source_document`：`issuer_id`、`accession_number`、`primary_document_url`、`primary_document_sha256` 與 `archive_member_sha256`。HTTP 原件 hash 保留 URL bytes 的身分；archive member hash 保留 mapping locator 的身分，兩者沿原 normalized relation 驗證，不假設相等。Candidate owner 在當次完整 source closure 與 mapping 後產生 immutable document observation，沿原 current finish 傳給 release。Release reader 核對 exact source-validation ref、source binding 與同一最後整體 read set，直接投影已驗證的 SEC 原件 claim；不使用跨請求快取。下游可連結該原件並顯示 locator，不自行推算 URL，也不公開 raw SEC body 或 accounting policy capsule。Observation 的來源 artifact、binding、issuer、accession 與原件 hash 必須符合該 inspection。
 
 更改 producer persistence closure 或 release source 後，重新產生正式 build 身分、accreditation、installed orders 與 release trust bindings。保留舊簽章和舊 source revision；不得用新 digest 重新標記舊證據。本地 retained-adapter / UUID PostgreSQL 測試不替代正式 SEC materialization、installed custody、cohort 或產品驗收。
+
+
+## V3 candidate 與 V2 fiscal release 的 correctness/current 邊界
+
+新的 prepare command 使用 `fundamental.prepare-fiscal-candidate.v2`，locator、intent、signing marker 與 candidate role 一起換代。`FiscalCandidateContentV2` 固定每個 source 的 retained-input binding、無條件 basis review，以及真正交給 projector 的完整 `projection_input_ref`。Full preparation 的 source/parser、mapping、classification/accounting 與 basis/projection owners 會記錄實際消費，與另一條 typed current traversal 逐 owner/use path 比較。缺 origin、basis/input root、非首來源、版本、角色或任何 consumed edge 均拒絕新 proof。
+
+公開 `read-candidate` 完成全部 current owners 與最後 readset/history/epoch/expiry/resource terminal 才成功。它保留 mutable resources 的 fresh full bytes、32 keys/2 MiB、單一 deadline 與 caller/task/context 邊界。`replay-candidate` 是明名的完整離線重播入口，仍真執行 retained ingestion、會計、mapping、basis、Decimal/期間/PIT/TTM。舊 WIP 必須用其原 executable/contract 重播，不能換標 V3 或用舊來源冒新 materialization。
+
+Release installation/order 使用 V2。Installation 必須指定受保護的 `canary_configuration_file`。該檔為 `FiscalCanaryConfigurationV1`，固定獨立 `database_url_file`、預期 `database_role`、唯讀 `content_root`、完整 source settings、SEC request policy、parser resource policy 與適用的公開 accreditation selector。Credential 原文只在受保護檔案，不放 JSON 報告或 issue。缺設定不降回 writer DB。Canary 自建 metadata/content/source/candidate/witness/classification/display readers，沒有 signing job 或 key capability，來源只允許 retained bytes，缺少來源就拒絕，不擷取外網。角色核對 current/session user、可切換及繼承的 service write privileges、schema/sequence 與相關 security-definer surface；唯讀 wrapper 或 transaction flag 不代替真正 SELECT-only role。部署與正式窗口仍須實驗此角色與唯讀 content mount。
+
+發布固定按 initial current、retain proposed envelope/checks、獨立 full readonly canary、成功 terminal、retain deterministic report、durable signing marker、workflow 簽 canary/checks/manifest/correctness/replay versions、fresh final current、原 same-transaction publication 順序執行。Canary report 不反綁尚未存在的 signature。Marker 已寫但 signature outcome 不確定時拒絕重簽。Activation 保留獨立 pre-CAS、terminal/seal、same-tx CAS、post-CAS 及 pointer wait 後的期限與 epoch 檢查。
+
+Authenticated fiscal read 使用 `fundamental.fiscal-statements.v2`；saved workspace payload 使用 `workspace.statement-read.v3`。數值、Decimal、期間、DAG、missing 與年度契約不改。GET 固定一個 manifest，真 current 驗證 signed canary/proof，source-document/graph/rows 均在最後完整 readset 內投影，不重算財務。`FiscalReleaseReader.replay_canary` 才是正式完整重播入口。V1 retained fixture/origin 保原 bytes；V2 contract-migration fixture 另檔明標 synthetic，不代表正式 V2 materialization 或 commissioning。

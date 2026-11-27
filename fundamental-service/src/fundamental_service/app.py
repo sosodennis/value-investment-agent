@@ -51,7 +51,7 @@ from .contracts import (
 from pydantic import TypeAdapter
 from .serialization import canonical_bytes
 
-from .fiscal_read_contracts import FiscalReadRequestV1, FiscalReadResultV1
+from .fiscal_read_contracts import FiscalReadRequestV2, FiscalReadResultV2
 from .fiscal_releases import FiscalReleaseReader
 from .fiscal_release_runtime import configured_fiscal_release_reader
 from .publication_codec import ActivePublication
@@ -700,7 +700,7 @@ def create_app(
 
     @app.get(
         "/v1/data/fiscal-statements",
-        response_model=TypedFundamentalResponseEnvelopeV1[FiscalReadResultV1],
+        response_model=TypedFundamentalResponseEnvelopeV1[FiscalReadResultV2],
         openapi_extra={
             "requestBody": {
                 "required": True,
@@ -715,7 +715,7 @@ def create_app(
         },
     )
     async def get_fiscal_statements(request: Request) -> JSONResponse:
-        value = decode_input(request, FiscalReadRequestV1)
+        value = decode_input(request, FiscalReadRequestV2)
         result = await run_valuation_operation(
             request,
             application.read_fiscal_statements,
@@ -1310,7 +1310,7 @@ def create_app(
             ),
             (
                 "FundamentalFiscalStatementsRequestEnvelopeV1",
-                TypedFundamentalRequestEnvelopeV1[FiscalReadRequestV1],
+                TypedFundamentalRequestEnvelopeV1[FiscalReadRequestV2],
             ),
             (
                 "FundamentalAnnualStatementsRequestEnvelopeV1",

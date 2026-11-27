@@ -4,7 +4,12 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from src.artifacts.application.ports import ArtifactStoragePort
+from src.artifacts.application.ports import (
+    ArtifactCurrentReadFailure,
+    ArtifactStoragePort,
+    FiscalArtifactCurrentReadPort,
+    FiscalCurrentReadContext,
+)
 from src.artifacts.application.service import ArtifactService
 from src.artifacts.application.typed_artifact_port import (
     TypedArtifactPort,
@@ -112,6 +117,9 @@ __all__ = [
     "ArtifactReferencePayload",
     "ArtifactService",
     "ArtifactStoragePort",
+    "ArtifactCurrentReadFailure",
+    "FiscalArtifactCurrentReadPort",
+    "FiscalCurrentReadContext",
     "OUTPUT_KIND_DEBATE",
     "OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH",
     "OUTPUT_KIND_FUNDAMENTAL_ANALYSIS",

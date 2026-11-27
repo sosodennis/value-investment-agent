@@ -167,6 +167,14 @@ class RetainedDiscoveryAdapter:
         assert artifact_id == self.discovery.artifact_id
         return self.discovery
 
+    def read_current(self, artifact_id, *, deadline_at):
+        return self.read(artifact_id, deadline_at=deadline_at)
+
+    def read_current_with_metadata(self, artifact_id, *, deadline_at):
+        return self.read(artifact_id, deadline_at=deadline_at), (
+            (artifact_id, self.store.get(artifact_id)),
+        )
+
     def read_for_validation(self, artifact_id, accession, *, deadline_at):
         assert artifact_id == self.discovery.artifact_id
         assert accession == self.evidence.request.filing.accession_number
@@ -199,6 +207,21 @@ class RetainedSECAdapter:
         self.verify(request, outcome, artifacts=artifacts, deadline_at=deadline_at)
 
         class Read:
+            @property
+            def content_readsets(self):
+                return ()
+
+            @property
+            def input_footprint(self):
+                return (canonical_bytes(owner.evidence.model_dump(mode="json")).hex(),)
+
+            def retained_input_binding(self, reference):
+                from test_fiscal_projection_builder import (
+                    synthetic_retained_input_binding,
+                )
+
+                return synthetic_retained_input_binding(owner.evidence, reference)
+
             def check_current(self):
                 owner.verify(
                     request, outcome, artifacts=artifacts, deadline_at=deadline_at
@@ -206,6 +229,13 @@ class RetainedSECAdapter:
                 assert datetime.now(UTC) < deadline_at
 
         return Read()
+
+    def observe_current(self, request, outcome, binding, *, artifacts, deadline_at):
+        observed = self.observe(
+            request, outcome, artifacts=artifacts, deadline_at=deadline_at
+        )
+        assert observed.retained_input_binding(binding.source_validation_ref) == binding
+        return observed
 
 
 class RetainedFocusAdapter:
@@ -220,6 +250,27 @@ class RetainedFocusAdapter:
 
         class Read:
             @property
+            def artifact_readset(self):
+                from fundamental_service.fiscal_source_closure import (
+                    FiscalArtifactReadSet,
+                )
+
+                raw = canonical_bytes(original)
+                return FiscalArtifactReadSet(
+                    ((artifact_id, owner.artifacts.get(artifact_id)),),
+                    ((artifact_id, (sha256_digest(original), len(raw))),),
+                    (),
+                )
+
+            @property
+            def input_footprint(self):
+                return (self.artifact_readset.records, self.artifact_readset.bodies)
+
+            @property
+            def content_readsets(self):
+                return ()
+
+            @property
             def witness(self):
                 return deepcopy(original)
 
@@ -232,6 +283,13 @@ class RetainedFocusAdapter:
                 assert datetime.now(UTC) < deadline_at
 
         return Read()
+
+    def _observe_current(self, artifact_id, binding, *, deadline_at):
+        assert (
+            binding.source_validation_ref
+            == self.source.witness.witness.source_validation_ref
+        )
+        return self.observe(artifact_id, deadline_at=deadline_at)
 
     def read(self, artifact_id, *, deadline_at):
         witness = self.source.witness

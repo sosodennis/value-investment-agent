@@ -326,3 +326,36 @@ def read_accounting_record(
     return TypeAdapter(AccountingReplayRecordV3).validate_json(
         raw, strict=True, context={"check_deadline": check_deadline}
     )
+
+
+class _PreparedAccountingRecordV3(_FrozenRecord):
+    protocol: Literal["fundamental.fiscal-accounting-replay.v3"]
+    inputs: _OriginalBytes
+    result: AccountingVerdict
+
+
+def read_prepared_accounting_record(
+    raw: bytes,
+    source: FiscalClassificationSource,
+    *,
+    check_deadline: Callable[[], float],
+) -> _PreparedAccountingRecordV3:
+    check_deadline()
+    _budget(len(raw) <= _POLICY.max_outer, "Accounting record exceeds its byte limit")
+    _json(raw, check_deadline, outer=True)
+    record = _PreparedAccountingRecordV3.model_validate_json(raw, strict=True)
+    expected = _OriginalBytes(
+        validation_json_b64=base64.b64encode(
+            canonical_bytes(source.evidence.model_dump(mode="json"))
+        ).decode("ascii"),
+        witness_json_b64=base64.b64encode(canonical_bytes(source.witness)).decode(
+            "ascii"
+        ),
+        scope_json_b64=base64.b64encode(canonical_bytes(source.scope)).decode("ascii"),
+        archive_zip_b64=base64.b64encode(source.archive).decode("ascii"),
+    )
+    if record.inputs != expected or canonical_bytes(record) != raw:
+        raise ValueError("Prepared accounting inputs differ from current source bytes")
+    _load_resources()
+    check_deadline()
+    return record

@@ -46,12 +46,15 @@ from .fiscal_parser_evidence import (
 )
 from .fiscal_source_closure import (
     FiscalArtifactRead,
+    FiscalArtifactReadSet,
+    FiscalSourceContentReadSet,
     FiscalSourceClosure,
     FiscalSourceContentRead,
     FiscalSourceRead,
 )
 from .fiscal_source_contracts import FiscalFilingV1
 from .fiscal_validation_contracts import (
+    FiscalRetainedInputBindingV1,
     FiscalOriginalValidationEvidenceV1,
     FiscalValidationCompleteRefusedV1,
     FiscalValidationRuntimeV1,
@@ -441,8 +444,7 @@ class FiscalDiagnosticFocusWitnessOwner:
             source_ref = witness.witness.source_validation_ref
             self._source_ref(source_ref, reader)
             source = closure.observe(source_ref.artifact_id, deadline_at=deadline_at)
-            for identity, record in source.records:
-                reader.expect(identity, record)
+            reader.enroll(source.artifact_readset)
             evidence = source.evidence
             outcome = self._require_refused_focus_source(evidence, source_ref)
             actions = read_fiscal_parser_actions(
@@ -466,6 +468,110 @@ class FiscalDiagnosticFocusWitnessOwner:
                     source_ref,
                     self._source_binding(evidence, source_ref, outcome, actions),
                 )
+            self._check_current(reader, authority, outcome.runtime, deadline_at)
+            self._check_envelope_current(witness, authority)
+            return FiscalFocusWitnessRead(
+                self,
+                reader,
+                source,
+                content,
+                runtime,
+                witness,
+                authority.model_copy(deep=True),
+                deadline_at,
+                artifacts,
+                closure,
+                content_store,
+            )
+
+    def _observe_current(
+        self,
+        artifact_id: str,
+        binding: FiscalRetainedInputBindingV1,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalFocusWitnessRead:
+        with metadata_operation_budget(
+            partial(self._check_deadline, deadline_at), self._deadline_error
+        ):
+            artifacts, closure, content_store = (
+                self._artifacts,
+                self._closure,
+                self._content,
+            )
+            reader = FiscalArtifactRead(
+                artifacts, partial(self._check_deadline, deadline_at)
+            )
+            authority = self._current_authority()
+            witness = self._read_envelope(artifact_id, authority, reader)
+            source_ref = witness.witness.source_validation_ref
+            self._source_ref(source_ref, reader)
+            source = closure._observe_current(
+                source_ref.artifact_id, binding, deadline_at=deadline_at
+            )
+            reader.enroll(source.artifact_readset)
+            evidence = source.evidence
+            outcome = self._require_refused_focus_source(evidence, source_ref)
+            actions = read_fiscal_parser_actions(
+                outcome.integrity.validation_evidence,
+                relation=outcome.integrity.integrity_relation,
+                artifacts=reader,
+                build_checks=ParserBuildChecks(),
+                delivery_revision=outcome.runtime.delivery_revision,
+            )
+            content = FiscalSourceContentRead(
+                content_store, partial(self._check_deadline, deadline_at)
+            )
+            runtime = FiscalParserRuntimeRead()
+            profile = self._runtime_profile(outcome)
+            content.get(
+                outcome.integrity.archive_hash,
+                media_type=next(
+                    item.media_type
+                    for item in outcome.responses
+                    if item.uri == outcome.integrity.archive_uri
+                ),
+            )
+            primary_media = next(
+                item.media_type
+                for item in outcome.responses
+                if item.uri == outcome.integrity.primary_document_uri
+            )
+            for action in (actions.normalized, actions.archive):
+                if action is None:
+                    continue
+                runtime.observe(
+                    action.request,
+                    profile,
+                    self._taxonomy_cache_dir,
+                    outcome.runtime.delivery_revision,
+                )
+                if outcome.integrity.inline_documents:
+                    for inline in outcome.integrity.inline_documents:
+                        digest = (
+                            inline.document.content_hash
+                            if action.request.representation == "normalized"
+                            else inline.archive_member_hash
+                        )
+                        media = next(
+                            item.media_type
+                            for item in outcome.responses
+                            if item.uri.rsplit("/", 1)[-1] == inline.document.filename
+                        )
+                        content.get(digest, media_type=media)
+                else:
+                    digest = (
+                        outcome.integrity.normalized_content_hash
+                        if action.request.representation == "normalized"
+                        else outcome.integrity.archive_member_hash
+                    )
+                    content.get(digest, media_type=primary_media)
+            self._verify_current_binding(
+                witness,
+                evidence,
+                source_ref,
+                self._source_binding(evidence, source_ref, outcome, actions),
+            )
             self._check_current(reader, authority, outcome.runtime, deadline_at)
             self._check_envelope_current(witness, authority)
             return FiscalFocusWitnessRead(
@@ -1094,6 +1200,34 @@ class FiscalFocusWitnessRead:
     @property
     def records(self) -> tuple[tuple[str, ArtifactRecordV1 | None], ...]:
         return self.reader.records
+
+    @property
+    def artifact_readset(self) -> FiscalArtifactReadSet:
+        return self.reader.readset
+
+    @property
+    def content_readsets(self) -> tuple[FiscalSourceContentReadSet, ...]:
+        return (self.content.readset, *self.source.content_readsets)
+
+    @property
+    def input_footprint(self) -> tuple[object, ...]:
+        return (
+            self.reader.input_footprint,
+            self.content.input_footprint,
+            self.runtime.resources,
+            tuple(
+                (
+                    item.request,
+                    item.profile_json.hex(),
+                    str(item.taxonomy_cache_dir),
+                    item.delivery_revision,
+                )
+                for item in sorted(
+                    self.runtime.observations,
+                    key=lambda item: item.request.representation,
+                )
+            ),
+        )
 
     def check_current(self) -> None:
         with metadata_operation_budget(

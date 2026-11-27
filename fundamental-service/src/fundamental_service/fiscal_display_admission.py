@@ -39,13 +39,13 @@ from .fiscal_candidate_preparation import (
 )
 from .fiscal_display_contracts import (
     CurrentFiscalDisplay,
-    FiscalDecideDisplayCommandV1,
-    FiscalDisplayDecisionBodyV1,
-    FiscalDisplayRequestV1,
-    FiscalDisplayReviewExecutionV1,
-    FiscalDisplayReviewScopeV1,
-    FiscalDisplayReviewV1,
-    SignedFiscalDisplayDecisionV1,
+    FiscalDecideDisplayCommandV2,
+    FiscalDisplayDecisionBodyV2,
+    FiscalDisplayRequestV2,
+    FiscalDisplayReviewExecutionV2,
+    FiscalDisplayReviewScopeV2,
+    FiscalDisplayReviewV2,
+    SignedFiscalDisplayDecisionV2,
 )
 from .fiscal_source_closure import FiscalArtifactRead
 from .fiscal_statement_policy import FiscalRowPolicyV1, fiscal_statement_policy
@@ -58,14 +58,18 @@ from .replay import (
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 
-_REVIEW = "fiscal-display-review-v1"
-_DECISION = "fiscal-display-decision-v1"
-_INTENT = "fiscal-display-intent-v1"
-_SIGNING = "fiscal-display-signing-v1"
+_REVIEW = "fiscal-display-review-v2"
+_DECISION = "fiscal-display-decision-v2"
+_INTENT = "fiscal-display-intent-v2"
+_SIGNING = "fiscal-display-signing-v2"
 
 
 class FiscalCandidateReaderPort(Protocol):
     def current_configuration_digest(self) -> str: ...
+
+    def replay_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> CurrentFiscalCandidate: ...
 
     def open_candidate(
         self, reference: ArtifactRefV1, *, deadline_at: datetime
@@ -112,6 +116,11 @@ def _ref(record: ArtifactRecordV1, role: str) -> ArtifactRefV1:
 
 
 class FiscalDisplayAdmission:
+    def replay_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> CurrentFiscalCandidate:
+        return self.candidates.replay_candidate(reference, deadline_at=deadline_at)
+
     def __init__(
         self,
         *,
@@ -120,8 +129,8 @@ class FiscalDisplayAdmission:
         read_artifacts: EvidenceArtifactStore,
         history: FiscalAdmissionHistoryReaderPort,
         authorities: FiscalAuthorityOwner,
-        configuration_digest: Callable[[FiscalDisplayRequestV1], str],
-        authorize: Callable[[FiscalDisplayRequestV1, datetime], Ed25519PrivateKey]
+        configuration_digest: Callable[[FiscalDisplayRequestV2], str],
+        authorize: Callable[[FiscalDisplayRequestV2, datetime], Ed25519PrivateKey]
         | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
@@ -157,12 +166,16 @@ class FiscalDisplayAdmission:
         return (deadline_at - now).total_seconds()
 
     def _authority(
-        self, request: FiscalDisplayRequestV1, deadline_at: datetime
+        self,
+        request: FiscalDisplayRequestV2,
+        deadline_at: datetime,
+        consumed_by: FiscalArtifactRead | None = None,
     ) -> CurrentFiscalAuthorityV1:
         authority = self.authorities.read_current(
             request.authority_id,
             expected_role="release_approver",
             deadline_at=deadline_at,
+            consumed_by=consumed_by,
         )
         if authority.grant.identity.principal_kind != "machine":
             raise _invalid(
@@ -172,7 +185,7 @@ class FiscalDisplayAdmission:
 
     @staticmethod
     def _independent(
-        candidate: CurrentFiscalCandidate, execution: FiscalDisplayReviewExecutionV1
+        candidate: CurrentFiscalCandidate, execution: FiscalDisplayReviewExecutionV2
     ) -> None:
         activities = [candidate.preparation]
         for source in candidate.source_evidence:
@@ -190,7 +203,7 @@ class FiscalDisplayAdmission:
 
     def _inspect(
         self, candidate: CurrentFiscalCandidate, deadline_at: datetime
-    ) -> FiscalDisplayReviewScopeV1:
+    ) -> FiscalDisplayReviewScopeV2:
         projection, content = candidate.projection, candidate.content
         policy = fiscal_statement_policy()
         rows: dict[str, FiscalRowPolicyV1] = {row.row_id: row for row in policy.rows}
@@ -340,7 +353,7 @@ class FiscalDisplayAdmission:
                 or tuple(edge.coefficient for edge in node.input_edges) != (1, -1)
             ):
                 raise _invalid("display quarter difference has wrong ordered operands")
-        return FiscalDisplayReviewScopeV1(
+        return FiscalDisplayReviewScopeV2(
             candidate_ref=candidate.reference,
             candidate_digest=candidate.candidate.candidate_digest,
             content=content,
@@ -358,9 +371,9 @@ class FiscalDisplayAdmission:
 
     def _load_review(
         self, reader: FiscalArtifactRead, ref: ArtifactRefV1
-    ) -> FiscalDisplayReviewV1:
+    ) -> FiscalDisplayReviewV2:
         raw = read_retained_artifact(reader, ref)
-        review = FiscalDisplayReviewV1.model_validate_json(raw)
+        review = FiscalDisplayReviewV2.model_validate_json(raw)
         if (
             ref.role != _REVIEW
             or ref.artifact_id != review.request.artifact_id(_REVIEW)
@@ -371,9 +384,9 @@ class FiscalDisplayAdmission:
 
     def _load(
         self, reader: FiscalArtifactRead, ref: ArtifactRefV1
-    ) -> SignedFiscalDisplayDecisionV1:
+    ) -> SignedFiscalDisplayDecisionV2:
         raw = read_retained_artifact(reader, ref)
-        decision = SignedFiscalDisplayDecisionV1.model_validate_json(raw)
+        decision = SignedFiscalDisplayDecisionV2.model_validate_json(raw)
         if (
             ref.role != _DECISION
             or ref.artifact_id != decision.artifact_id
@@ -384,7 +397,7 @@ class FiscalDisplayAdmission:
 
     def _verify_review(
         self,
-        body: FiscalDisplayDecisionBodyV1,
+        body: FiscalDisplayDecisionBodyV2,
         candidate: CurrentFiscalCandidate,
         authority: CurrentFiscalAuthorityV1,
         deadline_at: datetime,
@@ -413,7 +426,7 @@ class FiscalDisplayAdmission:
 
     def _verify(
         self,
-        decision: SignedFiscalDisplayDecisionV1,
+        decision: SignedFiscalDisplayDecisionV2,
         candidate: CurrentFiscalCandidate,
         authority: CurrentFiscalAuthorityV1,
         deadline_at: datetime,
@@ -430,7 +443,7 @@ class FiscalDisplayAdmission:
 
     def _finish(
         self,
-        decision: SignedFiscalDisplayDecisionV1,
+        decision: SignedFiscalDisplayDecisionV2,
         publication: ArtifactPublicationV1,
         *,
         deadline_at: datetime,
@@ -438,11 +451,12 @@ class FiscalDisplayAdmission:
         candidate: CurrentFiscalCandidate,
     ) -> CurrentFiscalDisplay:
         request = decision.body.command.request
-        authority = self._authority(request, deadline_at)
-        self._verify(decision, candidate, authority, deadline_at)
         reader = FiscalArtifactRead(
             self._read_artifacts, partial(self._budget, deadline_at)
         )
+        authority = self._authority(request, deadline_at, reader)
+        self._verify(decision, candidate, authority, deadline_at)
+        reader.enroll(candidate.artifact_readset)
         for record in candidate.consumed_metadata:
             reader.expect(record.artifact_id, record)
         ref = _ref(publication.artifact, _DECISION)
@@ -506,18 +520,23 @@ class FiscalDisplayAdmission:
         epoch.require_current_activity(
             execution.started_at, execution.completed_at, decision.body.signed_at
         )
-        records = tuple(record for _, record in reader.records if record is not None)
-        reader.check_current()
-        observed = self.history.finish_observation(
-            records, tuple(heads.values()), epoch, deadline_at=deadline_at
-        )
-        final_authority = self._authority(request, deadline_at)
+        final_authority = self._authority(request, deadline_at, reader)
         if self._configuration_digest(request) != configuration or (
             final_authority.grant_ref,
             final_authority.grant,
             final_authority.history_heads,
         ) != (authority.grant_ref, authority.grant, authority.history_heads):
             raise _invalid("display configuration or grant changed before return")
+        for readset in candidate.content_readsets:
+            readset.check_current(partial(self._budget, deadline_at))
+        reader.check_bodies()
+        records = tuple(record for _, record in reader.records if record is not None)
+        reader.check_current()
+        observed = self.history.finish_observation(
+            records, tuple(heads.values()), epoch, deadline_at=deadline_at
+        )
+        if self._configuration_digest(request) != configuration:
+            raise _invalid("display configuration changed after whole observation")
         expiries = [
             request.expires_at,
             authority.grant.valid_until,
@@ -550,7 +569,15 @@ class FiscalDisplayAdmission:
             raise _invalid("display executable or policy changed before return")
         self._budget(deadline_at)
         return CurrentFiscalDisplay(
-            ref, decision, candidate, publication, records, observed.heads, now
+            ref,
+            decision,
+            candidate,
+            publication,
+            records,
+            observed.heads,
+            now,
+            reader.readset,
+            candidate.content_readsets,
         )
 
     def open_current(
@@ -578,7 +605,7 @@ class FiscalDisplayAdmission:
 
     def open_review_and_decide(
         self,
-        request: FiscalDisplayRequestV1,
+        request: FiscalDisplayRequestV2,
         *,
         expected_head: FiscalHistoryHeadV1 | None,
         deadline_at: datetime,
@@ -589,7 +616,7 @@ class FiscalDisplayAdmission:
 
     def review_and_decide(
         self,
-        request: FiscalDisplayRequestV1,
+        request: FiscalDisplayRequestV2,
         *,
         expected_head: FiscalHistoryHeadV1 | None,
         deadline_at: datetime,
@@ -605,8 +632,8 @@ class FiscalDisplayAdmission:
     def _operate(
         self,
         value: tuple[ArtifactRefV1, ArtifactRefV1]
-        | FiscalDisplayRequestV1
-        | FiscalDecideDisplayCommandV1,
+        | FiscalDisplayRequestV2
+        | FiscalDecideDisplayCommandV2,
         deadline_at: datetime,
         expected_head: FiscalHistoryHeadV1 | None,
     ) -> Iterator[FiscalDisplayRead]:
@@ -628,17 +655,17 @@ class FiscalDisplayAdmission:
                         )
                 else:
                     value = (
-                        FiscalDecideDisplayCommandV1.model_validate_json(
+                        FiscalDecideDisplayCommandV2.model_validate_json(
                             canonical_bytes(value)
                         )
-                        if isinstance(value, FiscalDecideDisplayCommandV1)
-                        else FiscalDisplayRequestV1.model_validate_json(
+                        if isinstance(value, FiscalDecideDisplayCommandV2)
+                        else FiscalDisplayRequestV2.model_validate_json(
                             canonical_bytes(value)
                         )
                     )
                     request = (
                         value.request
-                        if isinstance(value, FiscalDecideDisplayCommandV1)
+                        if isinstance(value, FiscalDecideDisplayCommandV2)
                         else value
                     )
                 operation = self.candidates.open_candidate(
@@ -656,7 +683,7 @@ class FiscalDisplayAdmission:
                             configuration,
                             deadline_at,
                         )
-                    elif isinstance(value, FiscalDecideDisplayCommandV1):
+                    elif isinstance(value, FiscalDecideDisplayCommandV2):
                         read = self._decide_release(
                             value,
                             candidate=candidate,
@@ -683,7 +710,7 @@ class FiscalDisplayAdmission:
 
     def _review_and_decide(
         self,
-        request: FiscalDisplayRequestV1,
+        request: FiscalDisplayRequestV2,
         *,
         candidate: FiscalCandidateRead,
         expected_head: FiscalHistoryHeadV1 | None,
@@ -697,7 +724,7 @@ class FiscalDisplayAdmission:
                     self.history, FiscalAdmissionHistoryPort
                 ):
                     raise _invalid("display writer is not configured")
-                request = FiscalDisplayRequestV1.model_validate_json(
+                request = FiscalDisplayRequestV2.model_validate_json(
                     canonical_bytes(request)
                 )
                 self._authorize(request, deadline_at)
@@ -725,10 +752,10 @@ class FiscalDisplayAdmission:
                     current = candidate.current()
                     reviewed = self._inspect(current, deadline_at)
                     identity = authority.grant.identity
-                    review = FiscalDisplayReviewV1(
+                    review = FiscalDisplayReviewV2(
                         request=request,
                         reviewed=reviewed,
-                        execution=FiscalDisplayReviewExecutionV1(
+                        execution=FiscalDisplayReviewExecutionV2(
                             authority_id=identity.authority_id,
                             grant_ref=authority.grant_ref,
                             principal_id=identity.principal_id,
@@ -755,7 +782,7 @@ class FiscalDisplayAdmission:
                         publication_budget=partial(self._budget, deadline_at),
                     ).artifact
                 return self._decide_release(
-                    FiscalDecideDisplayCommandV1(
+                    FiscalDecideDisplayCommandV2(
                         request=request, release_review_ref=_ref(review_record, _REVIEW)
                     ),
                     candidate=candidate,
@@ -769,7 +796,7 @@ class FiscalDisplayAdmission:
 
     def decide_release(
         self,
-        command: FiscalDecideDisplayCommandV1,
+        command: FiscalDecideDisplayCommandV2,
         *,
         expected_head: FiscalHistoryHeadV1 | None,
         deadline_at: datetime,
@@ -783,7 +810,7 @@ class FiscalDisplayAdmission:
 
     def _decide_release(
         self,
-        command: FiscalDecideDisplayCommandV1,
+        command: FiscalDecideDisplayCommandV2,
         *,
         candidate: FiscalCandidateRead,
         expected_head: FiscalHistoryHeadV1 | None,
@@ -811,7 +838,7 @@ class FiscalDisplayAdmission:
                     "FISCAL_DISPLAY_SIGNING_OUTCOME_UNAVAILABLE",
                     "signing began without a durable exact outcome",
                 )
-            body = FiscalDisplayDecisionBodyV1(
+            body = FiscalDisplayDecisionBodyV2(
                 command=command, review=review, signed_at=self._now()
             )
             if key.public_key().public_bytes_raw() != base64.b64decode(
@@ -830,7 +857,7 @@ class FiscalDisplayAdmission:
                     "only first live invocation may sign frozen body",
                 )
             key = self._authorize(request, deadline_at)
-            signed = SignedFiscalDisplayDecisionV1(
+            signed = SignedFiscalDisplayDecisionV2(
                 body=body, signature=key.sign(canonical_bytes(body)).hex()
             )
             publication = self.artifacts.put_with_receipt(
@@ -890,7 +917,7 @@ class FiscalDisplayRead:
         self,
         owner: FiscalDisplayAdmission,
         candidate: FiscalCandidateRead,
-        signed: SignedFiscalDisplayDecisionV1,
+        signed: SignedFiscalDisplayDecisionV2,
         publication: ArtifactPublicationV1,
         configuration: str,
         deadline_at: datetime,
@@ -953,8 +980,8 @@ class FiscalDisplayOperation(AbstractContextManager[FiscalDisplayRead]):
         self,
         owner: FiscalDisplayAdmission,
         value: tuple[ArtifactRefV1, ArtifactRefV1]
-        | FiscalDisplayRequestV1
-        | FiscalDecideDisplayCommandV1,
+        | FiscalDisplayRequestV2
+        | FiscalDecideDisplayCommandV2,
         deadline_at: datetime,
         *,
         expected_head: FiscalHistoryHeadV1 | None = None,

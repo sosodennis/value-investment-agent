@@ -7,7 +7,10 @@ from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
+
+if TYPE_CHECKING:
+    from .fiscal_source_closure import FiscalArtifactReadSet, FiscalSourceContentReadSet
 
 from pydantic import AwareDatetime, Field, field_validator, model_validator
 
@@ -409,6 +412,9 @@ class _VerifiedDiscovery:
     evidence: FiscalDiscoveryEvidenceV1
     records: tuple[tuple[str, ArtifactRecordV1 | None], ...]
     target: FiscalSelectionV1 | None
+    input_footprint: tuple[object, ...]
+    artifact_readset: FiscalArtifactReadSet
+    content_readsets: tuple[FiscalSourceContentReadSet, ...]
 
 
 class FiscalDiscovery:
@@ -612,6 +618,107 @@ class FiscalDiscovery:
                 )
             return self._read(artifact_id, record, check_deadline).evidence
 
+    def read_with_inputs(
+        self, artifact_id: str, *, deadline_at: datetime
+    ) -> _VerifiedDiscovery:
+        with self._operation(deadline_at):
+            check = partial(self._before_deadline, deadline_at)
+            record = self._current_record(artifact_id, check)
+            if record is None:
+                raise SnapshotError(
+                    "ARTIFACT_NOT_FOUND", "fiscal discovery is unavailable"
+                )
+            return self._read(artifact_id, record, check)
+
+    def read_current_inputs(
+        self, artifact_id: str, *, deadline_at: datetime
+    ) -> _VerifiedDiscovery:
+        from .fiscal_source_closure import FiscalArtifactRead, FiscalSourceContentRead
+
+        with self._operation(deadline_at):
+            check = partial(self._before_deadline, deadline_at)
+            reader = FiscalArtifactRead(self._artifacts, check)
+            content = FiscalSourceContentRead(self._content, check)
+            raw = reader.read(artifact_id)
+            evidence = FiscalDiscoveryEvidenceV1.model_validate_json(raw)
+            record = reader.get(artifact_id)
+            if (
+                evidence.artifact_id != artifact_id
+                or canonical_bytes(evidence) != raw
+                or record.media_type != "application/json"
+                or record.dependency_hashes != evidence.dependencies
+            ):
+                raise SnapshotError(
+                    "FISCAL_DISCOVERY_INVALID", "current discovery identity differs"
+                )
+            request_id = f"fiscal-discovery-request:{evidence.request.digest}"
+            request_record = reader.get(request_id)
+            if (
+                request_record.content_hash != evidence.request.digest
+                or request_record.media_type != "application/json"
+                or request_record.dependency_hashes
+                or reader.read(request_id) != canonical_bytes(evidence.request)
+            ):
+                raise SnapshotError(
+                    "FISCAL_DISCOVERY_INVALID", "current discovery request differs"
+                )
+            adapter = RetainedSecSourceAdapter(
+                self._provider,
+                scope=SecFiscalSubmissionsCaptureScopeV1(
+                    cik=evidence.request.cik,
+                    valuation_timestamp=evidence.request.valuation_timestamp,
+                ),
+                receipts=self._artifacts,
+                content=content,
+                capture_lock=self._capture_lock,
+                check_deadline=check,
+                replay_reader=reader,
+            )
+            for source in evidence.sources:
+                uri = self._uri(source.filename)
+                if source.receipt is None:
+                    if not evidence.is_retry_attempt:
+                        identity = sec_response_artifact_id(adapter.scope, uri)
+                        missing = reader.current(identity)
+                        reader.expect(identity, missing)
+                        if missing is not None:
+                            raise SnapshotError(
+                                "FISCAL_DISCOVERY_INVALID",
+                                "current discovery omitted a retained receipt",
+                            )
+                    continue
+                retained = adapter.read_retained_response_with_record(uri)
+                if retained is None or retained[0] != source.receipt:
+                    raise SnapshotError(
+                        "FISCAL_DISCOVERY_INVALID",
+                        "current discovery source receipt differs",
+                    )
+                reader.expect(retained[1].artifact_id, retained[1])
+            reader.check_bodies()
+            content.check_current()
+            check()
+            return _VerifiedDiscovery(
+                evidence,
+                reader.records,
+                None,
+                (reader.input_footprint, content.input_footprint),
+                reader.readset,
+                (content.readset,),
+            )
+
+    def read_current_with_metadata(
+        self, artifact_id: str, *, deadline_at: datetime
+    ) -> tuple[
+        FiscalDiscoveryEvidenceV1, tuple[tuple[str, ArtifactRecordV1 | None], ...]
+    ]:
+        current = self.read_current_inputs(artifact_id, deadline_at=deadline_at)
+        return current.evidence, current.records
+
+    def read_current(
+        self, artifact_id: str, *, deadline_at: datetime
+    ) -> FiscalDiscoveryEvidenceV1:
+        return self.read_current_inputs(artifact_id, deadline_at=deadline_at).evidence
+
     def read_for_validation(
         self, artifact_id: str, accession_number: str, *, deadline_at: datetime
     ) -> tuple[
@@ -648,9 +755,14 @@ class FiscalDiscovery:
         *,
         target_accession: str | None = None,
     ) -> _VerifiedDiscovery:
+        from .fiscal_source_closure import FiscalArtifactRead, FiscalSourceContentRead
+
+        reader = FiscalArtifactRead(self._artifacts, check_deadline)
+        content = FiscalSourceContentRead(self._content, check_deadline)
+        reader.expect(artifact_id, record)
         try:
             check_deadline()
-            raw = self._artifacts.read(artifact_id)
+            raw = reader.read(artifact_id)
             check_deadline()
             evidence = FiscalDiscoveryEvidenceV1.model_validate_json(raw)
             if (
@@ -676,11 +788,23 @@ class FiscalDiscovery:
                 or request_record.dependency_hashes
             ):
                 raise ValueError("fiscal discovery request evidence changed")
-            request_bytes = self._artifacts.read(request_id)
+            reader.expect(request_id, request_record)
+            request_bytes = reader.read(request_id)
             check_deadline()
             if request_bytes != canonical_bytes(evidence.request):
                 raise ValueError("fiscal discovery request bytes changed")
-            adapter = self._adapter(evidence.request, check_deadline)
+            adapter = RetainedSecSourceAdapter(
+                self._provider,
+                scope=SecFiscalSubmissionsCaptureScopeV1(
+                    cik=evidence.request.cik,
+                    valuation_timestamp=evidence.request.valuation_timestamp,
+                ),
+                receipts=self._artifacts,
+                content=content,
+                capture_lock=self._capture_lock,
+                check_deadline=check_deadline,
+                replay_reader=reader,
+            )
             records: dict[str, ArtifactRecordV1 | None] = {
                 artifact_id: record,
                 request_id: request_record,
@@ -696,6 +820,7 @@ class FiscalDiscovery:
                                 "fiscal discovery omitted a retained receipt"
                             )
                         records[key] = None
+                        reader.expect(key, None)
                     pages.append(_CapturedPage(source))
                     continue
                 retained = adapter.read_retained_response_with_record(uri)
@@ -726,7 +851,14 @@ class FiscalDiscovery:
                 "FISCAL_DISCOVERY_INVALID",
                 "retained fiscal discovery failed verification",
             ) from error
-        return _VerifiedDiscovery(evidence, tuple(records.items()), target)
+        return _VerifiedDiscovery(
+            evidence,
+            tuple(records.items()),
+            target,
+            (reader.input_footprint, content.input_footprint),
+            reader.readset,
+            (content.readset,),
+        )
 
     def _completed(
         self,

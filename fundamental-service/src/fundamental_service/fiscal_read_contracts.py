@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import AwareDatetime, Field, model_validator
 
 from .data_releases import ArtifactRefV1, ReleaseModel
-from .fiscal_release_contracts import Digest, FiscalPublishV1
+from .fiscal_release_contracts import Digest, FiscalPublishV2
 from .fiscal_statement_contracts import (
     FiscalCashContinuityV1,
     FiscalObservationV1,
@@ -19,9 +19,9 @@ from .serialization import sha256_digest
 from .statement_contracts import StatementScopeV1
 
 
-class FiscalReadRequestV1(ReleaseModel):
-    contract_version: Literal["fundamental.fiscal-statements.v1"] = (
-        "fundamental.fiscal-statements.v1"
+class FiscalReadRequestV2(ReleaseModel):
+    contract_version: Literal["fundamental.fiscal-statements.v2"] = (
+        "fundamental.fiscal-statements.v2"
     )
     manifest_digest: Digest
     scope: StatementScopeV1
@@ -44,9 +44,9 @@ FiscalColumnsV1 = Annotated[
 ]
 
 
-class FiscalReadBindingV1(ReleaseModel):
+class FiscalReadBindingV2(ReleaseModel):
     manifest_digest: Digest
-    approved: FiscalPublishV1
+    approved: FiscalPublishV2
     projection_digest: Digest
     scope: StatementScopeV1
     cutoff_at: AwareDatetime
@@ -54,7 +54,7 @@ class FiscalReadBindingV1(ReleaseModel):
     selected_period_set_digest: Digest
 
     @model_validator(mode="after")
-    def exact_period_set(self) -> FiscalReadBindingV1:
+    def exact_period_set(self) -> FiscalReadBindingV2:
         if self.selected_period_set_digest != sha256_digest(self.columns):
             raise ValueError("fiscal read selected period set differs")
         return self
@@ -119,18 +119,18 @@ class FiscalDisplayGraphV1(ReleaseModel):
     cash_continuities: tuple[FiscalCashContinuityV1, ...]
 
 
-class FiscalReadResultV1(ReleaseModel):
-    contract_version: Literal["fundamental.fiscal-statements.v1"] = (
-        "fundamental.fiscal-statements.v1"
+class FiscalReadResultV2(ReleaseModel):
+    contract_version: Literal["fundamental.fiscal-statements.v2"] = (
+        "fundamental.fiscal-statements.v2"
     )
-    binding: FiscalReadBindingV1
+    binding: FiscalReadBindingV2
     rows: tuple[FiscalDisplayRowV1, ...]
     evidence: FiscalDisplayGraphV1
     supported_history_threshold: None = None
     valuation_eligibility: Literal["not_evaluated"] = "not_evaluated"
 
     @model_validator(mode="after")
-    def exact_graph_and_cells(self) -> FiscalReadResultV1:
+    def exact_graph_and_cells(self) -> FiscalReadResultV2:
         nodes = {node.node_id: node for node in self.evidence.nodes}
         observations = {
             item.observation_id: item for item in self.evidence.observations

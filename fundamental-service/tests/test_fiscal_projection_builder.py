@@ -51,12 +51,92 @@ RETAINED_REVISION = "293c068cc8cca6a4329b13a21f88ce93c1b47326"
 
 
 class SyntheticDiscoveryPort:
-    def __init__(self, evidence):
-        self.evidence = evidence
+    def __init__(self, evidence, artifacts):
+        self.evidence, self.artifacts = evidence, artifacts
 
     def read(self, identity, *, deadline_at):
         assert identity == self.evidence.artifact_id
         return self.evidence
+
+    def read_with_inputs(self, identity, *, deadline_at):
+        from types import SimpleNamespace
+
+        evidence = self.read(identity, deadline_at=deadline_at)
+        record = self.artifacts.get(identity)
+        if record.status != "valid":
+            raise SnapshotError(
+                "SYNTHETIC_DISCOVERY_REFUSED", "synthetic discovery is revoked"
+            )
+        from fundamental_service.fiscal_source_closure import FiscalArtifactReadSet
+
+        raw = canonical_bytes(evidence)
+        return SimpleNamespace(
+            evidence=evidence,
+            records=((identity, record),),
+            input_footprint=(canonical_bytes(evidence).hex(), record),
+            artifact_readset=FiscalArtifactReadSet(
+                ((identity, record),),
+                ((identity, (sha256_digest(evidence), len(raw))),),
+                (),
+            ),
+            content_readsets=(),
+        )
+
+    read_current_inputs = read_with_inputs
+
+    def read_current(self, identity, *, deadline_at):
+        return self.read_current_inputs(identity, deadline_at=deadline_at).evidence
+
+    def read_current_with_metadata(self, identity, *, deadline_at):
+        value = self.read_current_inputs(identity, deadline_at=deadline_at)
+        return value.evidence, value.records
+
+
+def synthetic_retained_input_binding(evidence, reference):
+    from fundamental_service.fiscal_parser_evidence import (
+        fiscal_source_closure_contract_digest,
+    )
+    from fundamental_service.fiscal_validation_contracts import (
+        FiscalRetainedInputBindingV1,
+        FiscalParserInputBindingV1,
+        FiscalStagedInputV1,
+        FiscalNormalizedInputV1,
+        FiscalRetainedContentV1,
+    )
+
+    # This adapter assumes source preparation. Real origin traversal is tested at its source owner.
+    outcome = evidence.outcome
+    primary = next(
+        item
+        for item in outcome.responses
+        if item.uri == outcome.integrity.primary_document_uri
+    )
+    action = next(
+        ref for ref in outcome.action_refs if ref.role == "sec-parser-action-result-v2"
+    )
+    return FiscalRetainedInputBindingV1(
+        source_validation_ref=reference,
+        source_contract_digest=fiscal_source_closure_contract_digest(),
+        inputs=(
+            FiscalParserInputBindingV1(
+                representation="normalized",
+                action_result_ref=action,
+                files=(
+                    FiscalStagedInputV1(
+                        relative_name=outcome.integrity.archive_member_name,
+                        origin=FiscalNormalizedInputV1(
+                            integrity_role="normalized_content",
+                            content=FiscalRetainedContentV1(
+                                digest=outcome.integrity.normalized_content_hash,
+                                media_type=primary.media_type,
+                                byte_length=outcome.integrity.normalized_content_size,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
 
 
 class SyntheticRetainedSourcePort:
@@ -88,6 +168,44 @@ class SyntheticRetainedSourcePort:
             def records(self):
                 return original.records
 
+            @property
+            def artifact_readset(self):
+                from fundamental_service.fiscal_source_closure import (
+                    FiscalArtifactReadSet,
+                )
+
+                raw = canonical_bytes(original.evidence.model_dump(mode="json"))
+                return FiscalArtifactReadSet(
+                    original.records,
+                    (
+                        (
+                            identity,
+                            (
+                                sha256_digest(
+                                    original.evidence.model_dump(mode="json")
+                                ),
+                                len(raw),
+                            ),
+                        ),
+                    ),
+                    (),
+                )
+
+            @property
+            def content_readsets(self):
+                return ()
+
+            @property
+            def input_footprint(self):
+                return (
+                    original.records,
+                    canonical_bytes(original.evidence.model_dump(mode="json")).hex(),
+                )
+
+            def retained_input_binding(self, reference):
+                self.check_current()
+                return synthetic_retained_input_binding(original.evidence, reference)
+
             def check_current(self):
                 assert (
                     owner.read_with_metadata(identity, deadline_at=deadline_at)
@@ -98,6 +216,11 @@ class SyntheticRetainedSourcePort:
                 assert datetime.now(UTC) < deadline_at
 
         return Read()
+
+    def _observe_current(self, identity, binding, *, deadline_at):
+        observed = self.observe(identity, deadline_at=deadline_at)
+        assert observed.retained_input_binding(binding.source_validation_ref) == binding
+        return observed
 
 
 class SyntheticClassificationPort:
@@ -112,12 +235,42 @@ class SyntheticClassificationPort:
         owner = self
 
         class Read:
+            @property
+            def artifact_readset(self):
+                from fundamental_service.fiscal_source_closure import (
+                    FiscalArtifactReadSet,
+                )
+
+                return FiscalArtifactReadSet((), (), ())
+
+            @property
+            def content_readsets(self):
+                return ()
+
+            @property
+            def correctness_inputs(self):
+                return tuple(
+                    (owner, root, (scope, classification_refs))
+                    for owner, root in (
+                        ("witness", scope.witness_ref),
+                        ("classification_resolver", scope.source_validation_ref),
+                        ("classification", classification_refs[0]),
+                        ("accounting", classification_refs[0]),
+                    )
+                )
+
             def current(self):
                 return owner.require_candidate_source(
                     scope, classification_refs, deadline_at=deadline_at
                 )
 
         yield Read()
+
+    def _open_current_source(self, scope, classification_refs, binding, *, deadline_at):
+        assert binding.source_validation_ref == scope.source_validation_ref
+        return self.open_candidate_source(
+            scope, classification_refs, deadline_at=deadline_at
+        )
 
     def require_candidate_source(self, scope, classification_refs, *, deadline_at):
         binding = self.bindings[scope.source_validation_ref.artifact_id]
@@ -266,7 +419,7 @@ def _case(
         SyntheticClassificationPort(tuple(bindings)) if classifications else None
     )
     builder = FiscalProjectionBuilder(
-        discovery=SyntheticDiscoveryPort(discovery),
+        discovery=SyntheticDiscoveryPort(discovery, read_artifacts),
         sources=source_port,
         artifacts=artifacts,
         read_artifacts=read_artifacts,

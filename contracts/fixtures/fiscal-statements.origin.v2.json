@@ -1,0 +1,29 @@
+{
+  "kind": "synthetic_contract_migration",
+  "target_contract": "fundamental.fiscal-statements.v2",
+  "source_origin_file": "fiscal-statements.origin.v1.json",
+  "source_origin_sha256": "6c7948fa340e48d96df2e2dfdc58cafccb980f3afed570b85926ee6a887d8636",
+  "limitations": "Adapted transport payload only. This is not a V2 Service response, signed release, or formal SEC commissioning. All financial values, periods, DAG, source references and missing states are copied unchanged from the retained V1 transport fixture.",
+  "responses": {
+    "quarter": {
+      "file": "fiscal-statements-quarter.v2.json.gz",
+      "sha256": "562b60fa36525a68b5e5bb0641a0f097bbdc38401f092ac2a0e31a963e83599e",
+      "gzip_sha256": "8f5fc63a3e7562efe2b62d8a283a8a960c712477e8db815484648295970043e2",
+      "bytes": 1671411,
+      "cells": 200,
+      "source_file": "fiscal-statements-quarter.v1.json.gz",
+      "source_sha256": "16a57d05658bf602d06938362ce89c378634ed16acae0000a413687da7c1a314",
+      "source_gzip_sha256": "8ad7aaad667486ab3f305342c249d313290ee8479d21e684bae940b84f2a608f"
+    },
+    "ttm": {
+      "file": "fiscal-statements-ttm.v2.json.gz",
+      "sha256": "eec6005f3aeb8902d0e37de787f35a8ebff64b3c820745c9a1c4f145d8044fe1",
+      "gzip_sha256": "a325a3aa4eb3636bfd6acca815d8ce90339f9d23dceb03c76020fe9618e130c9",
+      "bytes": 2242782,
+      "cells": 125,
+      "source_file": "fiscal-statements-ttm.v1.json.gz",
+      "source_sha256": "90bbe2db504c661ffd6b7b515210e4060747e5d8007a2bfb704b84a4f91ca345",
+      "source_gzip_sha256": "9c21c05bab9cf79d3e09a3c8c43a971dd28c130bcf5c94f733d130c913a1a6c4"
+    }
+  }
+}

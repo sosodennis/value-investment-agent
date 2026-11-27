@@ -1,0 +1,25 @@
+{
+  "contract_version": "fundamental.fiscal-statements.fixture-origin.v1",
+  "scope": "true Apple retained-adapter and UUID PostgreSQL current-read response; not formal SEC commissioning or installed approval",
+  "source_dto_sha256": "0ed4d52258837d5c2be521b3fd888eb1b49bbfe4c8e24da0b6bbab45ffe7116d",
+  "responses": {
+    "quarter": {
+      "file": "fiscal-statements-quarter.v1.json.gz",
+      "sha256": "16a57d05658bf602d06938362ce89c378634ed16acae0000a413687da7c1a314",
+      "bytes": 1671353,
+      "gzip_sha256": "8ad7aaad667486ab3f305342c249d313290ee8479d21e684bae940b84f2a608f",
+      "gzip_bytes": 123935,
+      "rows": 25,
+      "cells": 200
+    },
+    "ttm": {
+      "file": "fiscal-statements-ttm.v1.json.gz",
+      "sha256": "90bbe2db504c661ffd6b7b515210e4060747e5d8007a2bfb704b84a4f91ca345",
+      "bytes": 2242724,
+      "gzip_sha256": "9c21c05bab9cf79d3e09a3c8c43a971dd28c130bcf5c94f733d130c913a1a6c4",
+      "gzip_bytes": 161788,
+      "rows": 25,
+      "cells": 125
+    }
+  }
+}

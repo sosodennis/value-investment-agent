@@ -12,6 +12,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .command_artifacts import EvidenceArtifactStore
+from .fiscal_source_closure import FiscalArtifactRead, read_fiscal_artifact_bytes
 from .data_releases import ArtifactRefV1
 from .fiscal_admission_history import (
     FiscalAdmissionHistoryPort,
@@ -104,11 +105,13 @@ class _AuthorityRead:
         budget: Callable[[], float],
         *,
         historical: bool = False,
+        consumed_by: FiscalArtifactRead | None = None,
     ) -> None:
         self._artifacts = artifacts
         self._budget = budget
         self.historical = historical
         self.records: dict[str, ArtifactRecordV1] = {}
+        self._consumed_by = consumed_by
         self.visible_after: datetime | None = None
 
     def get(self, identity: str) -> ArtifactRecordV1:
@@ -124,6 +127,8 @@ class _AuthorityRead:
         previous = self.records.setdefault(identity, record)
         if record != previous:
             raise _invalid("authority evidence metadata changed")
+        if self._consumed_by is not None:
+            self._consumed_by.expect(identity, record)
         return record
 
     def read(self, ref: ArtifactRefV1) -> bytes:
@@ -133,10 +138,12 @@ class _AuthorityRead:
             or record.media_type != ref.media_type
         ):
             raise _invalid("authority evidence reference differs")
-        raw = self._artifacts.read(ref.artifact_id)
+        raw = read_fiscal_artifact_bytes(self._artifacts, ref.artifact_id)
         self._budget()
         if hashlib.sha256(raw).hexdigest() != ref.content_hash:
             raise _invalid("authority evidence bytes differ")
+        if self._consumed_by is not None:
+            self._consumed_by.observe_body(record, raw)
         return raw
 
     def expect(self, ref: ArtifactRefV1, value: object) -> None:
@@ -449,6 +456,7 @@ class FiscalAuthorityOwner:
             self._artifacts,
             partial(self._budget, deadline_at),
             historical=reader.historical,
+            consumed_by=reader._consumed_by,
         )
         stream = self._stream(authority_id)
         control = history.read((stream,), deadline_at=deadline_at)
@@ -591,6 +599,7 @@ class FiscalAuthorityOwner:
         *,
         expected_role: FiscalAuthorityRole,
         deadline_at: datetime,
+        consumed_by: FiscalArtifactRead | None = None,
     ) -> CurrentFiscalAuthorityV1:
         """Return current authority only after source, head, root and expiry checks."""
         with metadata_operation_budget(
@@ -598,7 +607,11 @@ class FiscalAuthorityOwner:
         ):
             self._budget(deadline_at)
             configuration = self._configured()
-            reader = _AuthorityRead(self._artifacts, partial(self._budget, deadline_at))
+            reader = _AuthorityRead(
+                self._artifacts,
+                partial(self._budget, deadline_at),
+                consumed_by=consumed_by,
+            )
             state = self._state(authority_id, configuration, reader, deadline_at)
             target = self._target(configuration, authority_id)
             if (

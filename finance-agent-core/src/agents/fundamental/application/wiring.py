@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
+from fastapi import APIRouter
+
 from src.agents.fundamental.application.workflow_orchestrator.factory import (
     FundamentalWorkflowRunner,
     build_fundamental_orchestrator,
@@ -15,7 +19,11 @@ from src.agents.fundamental.infrastructure import (
 from src.agents.fundamental.infrastructure.valuation_revision_source_reader import (
     ArtifactFundamentalRevisionSourceReader,
 )
-from src.artifacts.public import build_default_artifact_service
+from src.artifacts.public import (
+    FiscalArtifactCurrentReadPort,
+    FiscalCurrentReadContext,
+    build_default_artifact_service,
+)
 from src.auth.entrypoint import get_ownership_service
 from src.llm_provider.entrypoint import get_default_model_route, get_llm_provider
 from src.search import get_search_client
@@ -117,3 +125,51 @@ async def _claim_scoped_thread(
         resource_id=thread_id,
         organization_id=organization_id,
     )
+
+
+def build_default_statement_router() -> APIRouter:
+    from contextlib import asynccontextmanager
+
+    from src.agents.fundamental.application.statement_reader import (
+        StatementReaderService,
+    )
+    from src.agents.fundamental.composition.statement_routes import (
+        build_statement_router,
+    )
+    from src.agents.fundamental.infrastructure.statement_reader_config import (
+        load_statement_reader_editions,
+    )
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[StatementReaderService]:
+        client = HttpFundamentalServiceClient()
+        try:
+            yield StatementReaderService(
+                client=client,
+                artifacts=build_default_artifact_service(),
+                editions=load_statement_reader_editions(),
+                owns_thread=_owns_scoped_thread,
+                claim_thread=_claim_scoped_thread,
+            )
+        finally:
+            await client.aclose()
+
+    return build_statement_router(factory)
+
+
+def build_default_fiscal_artifact_current_reader() -> FiscalCurrentReadContext:
+    from contextlib import asynccontextmanager
+
+    from src.agents.fundamental.application.statement_reader import (
+        FiscalArtifactCurrentReader,
+    )
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[FiscalArtifactCurrentReadPort]:
+        client = HttpFundamentalServiceClient()
+        try:
+            yield FiscalArtifactCurrentReader(client)
+        finally:
+            await client.aclose()
+
+    return factory()

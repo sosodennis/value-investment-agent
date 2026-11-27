@@ -15,7 +15,11 @@ from .fiscal_classification_contracts import (
 )
 from .fiscal_classification_source import FiscalClassificationSource
 from .fiscal_source_accounting_policy import source_accounting_policy_identity
-from .fiscal_source_accounting_policy_contracts import read_accounting_record
+from .fiscal_source_accounting_policy_contracts import (
+    read_accounting_record,
+    read_prepared_accounting_record,
+)
+from .fiscal_source_accounting_policy import AccountingSupport, AccountingVerdict
 from .fiscal_source_closure import FiscalArtifactRead
 from .fiscal_source_producer_contracts import (
     FiscalAccountingAccreditationV1,
@@ -110,6 +114,46 @@ def source_content_references(
     )
 
 
+def read_source_content(
+    reader: FiscalArtifactRead,
+    evidence: FiscalOriginalValidationEvidenceV1,
+    reference: ArtifactRefV1,
+) -> bytes:
+    outcome = evidence.outcome
+    if not isinstance(
+        outcome, FiscalValidationCompleteRefusedV1
+    ) or reference not in source_content_references(evidence):
+        raise producer_invalid(
+            "source content is outside the exact producer source closure"
+        )
+    lengths = {
+        (receipt.content_hash, receipt.media_type): receipt.received_size
+        for receipt in outcome.responses
+    }
+    primary = next(
+        receipt
+        for receipt in outcome.responses
+        if receipt.uri == outcome.integrity.primary_document_uri
+    )
+    for digest, length in (
+        (
+            outcome.integrity.normalized_content_hash,
+            outcome.integrity.normalized_content_size,
+        ),
+        (
+            outcome.integrity.parser_input_hash,
+            outcome.integrity.normalized_content_size,
+        ),
+        (outcome.integrity.archive_member_hash, outcome.integrity.archive_member_size),
+    ):
+        key = (digest, primary.media_type)
+        if lengths.setdefault(key, length) != length:
+            raise producer_invalid("source content has conflicting typed lengths")
+    return reader.read_source_content(
+        reference, byte_length=lengths[(reference.content_hash, reference.media_type)]
+    )
+
+
 def _body(reader: FiscalArtifactRead, ref: ArtifactRefV1, role: str) -> bytes:
     if ref.role != role or ref.media_type != "application/json":
         raise producer_invalid("producer evidence role or media differs")
@@ -161,8 +205,6 @@ def read_source_preparation(
         or execution.source_validation_ref not in preparation.consumed_refs
     ):
         raise producer_invalid("preparation does not bind its actual source invocation")
-    for dependency in preparation.consumed_refs:
-        read_retained_artifact(reader, dependency)
     source_raw = read_retained_artifact(reader, execution.source_validation_ref)
     if hashlib.sha256(source_raw).hexdigest() != execution.source_binding_digest:
         raise producer_invalid(
@@ -176,8 +218,13 @@ def read_source_preparation(
         raise producer_invalid(
             "preparation source content differs from exact source closure"
         )
+    for dependency in preparation.consumed_refs:
+        if dependency in preparation.source_content_refs:
+            read_source_content(reader, evidence, dependency)
+        else:
+            read_retained_artifact(reader, dependency)
     for content_ref in preparation.source_content_refs:
-        read_retained_artifact(reader, content_ref)
+        read_source_content(reader, evidence, content_ref)
     return signed
 
 
@@ -220,7 +267,7 @@ class FiscalSourceProducerEvidenceVerifier:
         check_deadline()
         return accreditation
 
-    def verify(
+    def _verify(
         self,
         command: FiscalRecordClassificationCommandV2,
         source: FiscalClassificationSource,
@@ -231,6 +278,10 @@ class FiscalSourceProducerEvidenceVerifier:
         reader: FiscalArtifactRead,
         check_deadline: Callable[[], float],
         now: datetime,
+        read_result: Callable[
+            [bytes, FiscalClassificationSource, Callable[[], float]],
+            tuple[AccountingVerdict, FiscalSourceAccountingReviewV1 | None],
+        ],
     ) -> tuple[FiscalClassifierReviewExecutionV1, FiscalSourcePreparationExecutionV1]:
         check_deadline()
         expected = self.accreditation()
@@ -258,7 +309,8 @@ class FiscalSourceProducerEvidenceVerifier:
         )
         if (
             len(archive_refs) != 1
-            or read_retained_artifact(reader, archive_refs[0]) != source.archive
+            or read_source_content(reader, source.evidence, archive_refs[0])
+            != source.archive
         ):
             raise producer_invalid(
                 "preparation archive content differs from current source"
@@ -293,14 +345,14 @@ class FiscalSourceProducerEvidenceVerifier:
         basis_raw = _body(
             reader, proof.accounting_basis_ref, "fiscal-accounting-replay-v3"
         )
-        record = read_accounting_record(basis_raw, check_deadline=check_deadline)
+        result, reproduced_review = read_result(basis_raw, source, check_deadline)
         if (
-            record.review() != review
-            or record.result.policy != accreditation.policy
-            or record.result.source_evidence_sha256
+            reproduced_review != review
+            or result.policy != accreditation.policy
+            or result.source_evidence_sha256
             != sha256_digest(source.evidence.model_dump(mode="json"))
-            or record.result.witness_sha256 != sha256_digest(source.witness)
-            or record.result.scope_sha256 != source.scope.scope_digest
+            or result.witness_sha256 != sha256_digest(source.witness)
+            or result.scope_sha256 != source.scope.scope_digest
         ):
             raise producer_invalid(
                 "accounting decision basis differs from current source review"
@@ -311,3 +363,68 @@ class FiscalSourceProducerEvidenceVerifier:
             )
         check_deadline()
         return execution, prep.execution
+
+    def verify(
+        self,
+        command: FiscalRecordClassificationCommandV2,
+        source: FiscalClassificationSource,
+        review: FiscalSourceAccountingReviewV1,
+        proof: FiscalClassifierReviewExecutionV2,
+        preparation: SignedFiscalSourcePreparationExecutionV2,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        now: datetime,
+    ) -> tuple[FiscalClassifierReviewExecutionV1, FiscalSourcePreparationExecutionV1]:
+        def read_result(
+            raw: bytes, source: FiscalClassificationSource, check: Callable[[], float]
+        ) -> tuple[AccountingVerdict, FiscalSourceAccountingReviewV1 | None]:
+            record = read_accounting_record(raw, check_deadline=check)
+            return record.result, record.review()
+
+        return self._verify(
+            command,
+            source,
+            review,
+            proof,
+            preparation,
+            reader=reader,
+            check_deadline=check_deadline,
+            now=now,
+            read_result=read_result,
+        )
+
+    def verify_current(
+        self,
+        command: FiscalRecordClassificationCommandV2,
+        source: FiscalClassificationSource,
+        review: FiscalSourceAccountingReviewV1,
+        proof: FiscalClassifierReviewExecutionV2,
+        preparation: SignedFiscalSourcePreparationExecutionV2,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        now: datetime,
+    ) -> tuple[FiscalClassifierReviewExecutionV1, FiscalSourcePreparationExecutionV1]:
+        def read_result(
+            raw: bytes, source: FiscalClassificationSource, check: Callable[[], float]
+        ) -> tuple[AccountingVerdict, FiscalSourceAccountingReviewV1 | None]:
+            record = read_prepared_accounting_record(raw, source, check_deadline=check)
+            reproduced = (
+                record.result._review(source.scope)
+                if isinstance(record.result, AccountingSupport)
+                else None
+            )
+            return record.result, reproduced
+
+        return self._verify(
+            command,
+            source,
+            review,
+            proof,
+            preparation,
+            reader=reader,
+            check_deadline=check_deadline,
+            now=now,
+            read_result=read_result,
+        )

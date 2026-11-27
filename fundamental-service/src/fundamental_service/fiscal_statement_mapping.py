@@ -253,8 +253,22 @@ def map_fiscal_primary_source(
     security_id: str | None,
     policy_digest: str,
     check_deadline: Callable[[], float],
+    consume_inputs: Callable[[tuple[object, ...]], None] | None = None,
 ) -> FiscalStatementMappingBatchV1:
     check_deadline()
+    if consume_inputs is not None:
+        consume_inputs(
+            (
+                source_ref,
+                sha256_digest(evidence.model_dump(mode="json")),
+                hashlib.sha256(archive).hexdigest(),
+                len(archive),
+                reviewed,
+                target_periods,
+                security_id,
+                policy_digest,
+            )
+        )
     outcome = evidence.outcome
     if isinstance(outcome, FiscalValidationIncompleteV1):
         raise _invalid("incomplete validation cannot supply fiscal mapping inputs")

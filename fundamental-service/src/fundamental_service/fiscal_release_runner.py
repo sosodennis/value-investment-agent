@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from .content_publication import configured_content_publication_access
 from .fiscal_preparation_runtime import configured_fiscal_candidate_runtime
 from .fiscal_release_runtime import (
-    FiscalReleaseInstallationV1,
+    FiscalReleaseInstallationV2,
     FiscalReleaseRuntime,
     protected_release_file,
 )
@@ -28,7 +28,7 @@ _INSTALLATION = Path("/etc/fundamental/fiscal-release/installation.json")
 
 async def _run(order_id: str, deadline_at: datetime) -> bytes:
     raw = protected_release_file(_INSTALLATION, owner=0)
-    installation = FiscalReleaseInstallationV1.model_validate_json(raw)
+    installation = FiscalReleaseInstallationV2.model_validate_json(raw)
     if canonical_bytes(installation.model_dump(mode="json")) != raw:
         raise ValueError("fiscal release installation is not canonical")
     package_root = Path(__file__).resolve().parents[2]

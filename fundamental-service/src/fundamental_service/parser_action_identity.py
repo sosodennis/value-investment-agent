@@ -738,6 +738,19 @@ def parser_action_resources(
     )
 
 
+def parser_action_resource_descriptor(
+    profile: ArelleValidationProfileV1,
+    taxonomy_cache_dir: Path,
+    checks: ParserBuildChecks,
+) -> bytes:
+    return _resource_descriptor(
+        profile,
+        taxonomy_cache_dir,
+        build=canonical_bytes(checks.current()),
+        configuration=checks._configuration,
+    ).encoded()
+
+
 def parser_action_input(
     path: Path,
     *,

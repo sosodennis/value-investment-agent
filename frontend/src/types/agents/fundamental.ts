@@ -1,5 +1,6 @@
 import type { AnnualStatements } from './annual-statements';
 import type { FundamentalServiceArtifact } from './fundamental-service-facts';
+import type { components } from '@/types/generated/api-contract';
 
 export interface Provenance {
     concept?: string;
@@ -139,6 +140,7 @@ export interface FundamentalAnalysisSuccess {
     financial_reports: FinancialReport[];
     fundamental_service?: FundamentalServiceArtifact;
     annual_statements?: AnnualStatements;
+    statement_read?: components['schemas']['StatementReadArtifactV3'];
     forward_signals?: ForwardSignal[];
     valuation_diagnostics?: FundamentalValuationDiagnostics;
     status: 'done';

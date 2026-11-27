@@ -36,8 +36,10 @@ from .fiscal_candidate_contracts import (
     VerifiedClassifiedCandidateSource,
     VerifiedFiscalActivity,
     FiscalSourceUseScopeV1,
+    CorrectnessOwner,
 )
 from .fiscal_classification_contracts import (
+    FiscalSourcePreparationExecutionV1,
     FiscalClassificationPublicationV1,
     FiscalClassifierActorV1,
     FiscalClassifierReviewExecutionV1,
@@ -55,7 +57,12 @@ from .fiscal_classification_source import (
     FiscalClassificationSourcePort,
     FiscalClassificationSourceReadPort,
 )
-from .fiscal_source_closure import FiscalArtifactRead
+from .fiscal_source_closure import (
+    FiscalArtifactRead,
+    FiscalArtifactReadSet,
+    FiscalSourceContentReadSet,
+)
+from .fiscal_validation_contracts import FiscalRetainedInputBindingV1
 from .metadata import metadata_operation_budget
 from .replay import (
     ArtifactPublicationDeadlineExceeded,
@@ -147,6 +154,7 @@ class _AdmissionSourceRead:
 class _ClassificationRead:
     def __init__(self, reader: FiscalArtifactRead) -> None:
         self.reader = reader
+        self.pure_reader = reader.for_consumer()
         self.heads: dict[str, FiscalHistoryHeadV1] = {}
         self.visible_after: datetime | None = None
         self.authorities: dict[str, CurrentFiscalAuthorityV1] = {}
@@ -154,6 +162,56 @@ class _ClassificationRead:
         self.activities: tuple[VerifiedFiscalActivity, ...] = ()
         self.accreditation: ArtifactRefV1 | None = None
         self.source_admission: _AdmissionSourceRead | None = None
+
+    def verify_review(
+        self,
+        source: FiscalClassificationSource,
+        review: FiscalSourceAccountingReviewV1,
+        check_deadline: Callable[[], float],
+    ) -> None:
+        verify_fiscal_source_review(source, review, check_deadline=check_deadline)
+
+    def observe_source(
+        self,
+        owner: FiscalClassificationSourcePort,
+        command: ClassificationCommand,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        deadline_at: datetime,
+    ) -> FiscalClassificationSourceReadPort:
+        return owner.observe(
+            command.source_validation_ref,
+            command.witness_ref,
+            command.security_id,
+            reader=reader,
+            check_deadline=check_deadline,
+            deadline_at=deadline_at,
+        )
+
+    def verify_producer(
+        self,
+        owner: FiscalSourceProducerEvidenceVerifier,
+        command: FiscalRecordClassificationCommandV2,
+        source: FiscalClassificationSource,
+        review: FiscalSourceAccountingReviewV1,
+        proof: FiscalClassifierReviewExecutionV2,
+        preparation: SignedFiscalSourcePreparationExecutionV2,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        now: datetime,
+    ) -> tuple[FiscalClassifierReviewExecutionV1, FiscalSourcePreparationExecutionV1]:
+        return owner.verify(
+            command,
+            source,
+            review,
+            proof,
+            preparation,
+            reader=reader,
+            check_deadline=check_deadline,
+            now=now,
+        )
 
     def observe(self, history: FiscalHistoryReadV1) -> None:
         if self.epoch is not None and self.epoch != history.epoch:
@@ -176,6 +234,71 @@ class _ClassificationRead:
 _CLASSIFICATION_READS: ContextVar[tuple[object, ...]] = ContextVar(
     "fiscal_classification_reads", default=()
 )
+
+
+class _PreparedClassificationRead(_ClassificationRead):
+    def __init__(
+        self,
+        reader: FiscalArtifactRead,
+        scope: FiscalSourceUseScopeV1,
+        binding: FiscalRetainedInputBindingV1,
+    ) -> None:
+        super().__init__(reader)
+        self.scope, self.binding = scope, binding
+
+    def verify_review(
+        self,
+        source: FiscalClassificationSource,
+        review: FiscalSourceAccountingReviewV1,
+        check_deadline: Callable[[], float],
+    ) -> None:
+        check_deadline()
+        if review.scope != self.scope or source.scope != self.scope:
+            raise _invalid(
+                "current accounting review differs from trusted source scope"
+            )
+
+    def observe_source(
+        self,
+        owner: FiscalClassificationSourcePort,
+        command: ClassificationCommand,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        deadline_at: datetime,
+    ) -> FiscalClassificationSourceReadPort:
+        return owner._observe_current(
+            self.scope,
+            self.binding,
+            command.security_id,
+            reader=reader,
+            check_deadline=check_deadline,
+            deadline_at=deadline_at,
+        )
+
+    def verify_producer(
+        self,
+        owner: FiscalSourceProducerEvidenceVerifier,
+        command: FiscalRecordClassificationCommandV2,
+        source: FiscalClassificationSource,
+        review: FiscalSourceAccountingReviewV1,
+        proof: FiscalClassifierReviewExecutionV2,
+        preparation: SignedFiscalSourcePreparationExecutionV2,
+        *,
+        reader: FiscalArtifactRead,
+        check_deadline: Callable[[], float],
+        now: datetime,
+    ) -> tuple[FiscalClassifierReviewExecutionV1, FiscalSourcePreparationExecutionV1]:
+        return owner.verify_current(
+            command,
+            source,
+            review,
+            proof,
+            preparation,
+            reader=reader,
+            check_deadline=check_deadline,
+            now=now,
+        )
 
 
 def _classification_actor() -> tuple[object, ...]:
@@ -227,6 +350,40 @@ class FiscalClassifiedSourceRead:
     def close(self) -> None:
         self._closed = True
         self._state.source_admission = None
+
+    @property
+    def artifact_readset(self) -> FiscalArtifactReadSet:
+        return self._state.reader.readset
+
+    @property
+    def content_readsets(self) -> tuple[FiscalSourceContentReadSet, ...]:
+        admission = self._state.source_admission
+        if admission is None or admission.derivation is None:
+            raise _invalid("classification has no actual source readset")
+        return admission.derivation.content_readsets
+
+    @property
+    def correctness_inputs(
+        self,
+    ) -> tuple[tuple[CorrectnessOwner, ArtifactRefV1, tuple[object, ...]], ...]:
+        admission = self._state.source_admission
+        if admission is None or admission.derivation is None:
+            raise _invalid("classification correctness has no actual source consumer")
+        signed, source = self._signed, admission.derivation
+        return (
+            ("witness", signed.command.witness_ref, source.witness_input_footprint),
+            (
+                "classification_resolver",
+                signed.command.source_validation_ref,
+                source.input_footprint,
+            ),
+            ("classification", self._refs[0], self._state.pure_reader.input_footprint),
+            (
+                "accounting",
+                signed.command.review_ref,
+                self._state.pure_reader.input_footprint,
+            ),
+        )
 
     def current(self) -> VerifiedClassifiedCandidateSource:
         if self._closed:
@@ -361,11 +518,17 @@ class FiscalSourceClassificationOwner:
     ) -> CurrentFiscalAuthorityV1:
         if role == "classifier":
             current = self.authorities.read_current(
-                identity, expected_role="classifier", deadline_at=deadline_at
+                identity,
+                expected_role="classifier",
+                deadline_at=deadline_at,
+                consumed_by=state.reader,
             )
         else:
             current = self.authorities.read_current(
-                identity, expected_role="source_preparer", deadline_at=deadline_at
+                identity,
+                expected_role="source_preparer",
+                deadline_at=deadline_at,
+                consumed_by=state.reader,
             )
         previous = state.authorities.setdefault(identity, current)
         if (
@@ -421,10 +584,9 @@ class FiscalSourceClassificationOwner:
             if admission.derivation is None:
                 admission.inputs = inputs
                 admission.owner = self.sources
-                admission.derivation = self.sources.observe(
-                    command.source_validation_ref,
-                    command.witness_ref,
-                    command.security_id,
+                admission.derivation = state.observe_source(
+                    self.sources,
+                    command,
                     reader=state.reader,
                     check_deadline=partial(self._budget, admission.deadline_at),
                     deadline_at=admission.deadline_at,
@@ -446,7 +608,7 @@ class FiscalSourceClassificationOwner:
     def _json(ref: ArtifactRefV1, role: str, state: _ClassificationRead) -> bytes:
         if ref.role != role or ref.media_type != "application/json":
             raise _invalid("classification evidence reference has a different role")
-        return read_retained_artifact(state.reader, ref)
+        return read_retained_artifact(state.pure_reader, ref)
 
     def _review(
         self,
@@ -461,9 +623,7 @@ class FiscalSourceClassificationOwner:
         review = FiscalSourceAccountingReviewV1.model_validate_json(raw)
         if canonical_bytes(review) != raw:
             raise _invalid("review bytes are not canonical")
-        verify_fiscal_source_review(
-            source, review, check_deadline=partial(self._budget, deadline_at)
-        )
+        state.verify_review(source, review, partial(self._budget, deadline_at))
         return review
 
     def _execution(
@@ -525,15 +685,16 @@ class FiscalSourceClassificationOwner:
                     "V2 classification requires trusted producer policy verification"
                 )
             signed_preparation_v2 = read_source_preparation(
-                state.reader, command.preparer_execution_ref
+                state.pure_reader, command.preparer_execution_ref
             )
-            execution, preparation = self.producer_evidence.verify(
+            execution, preparation = state.verify_producer(
+                self.producer_evidence,
                 command,
                 source,
                 review,
                 proof,
                 signed_preparation_v2,
-                reader=state.reader,
+                reader=state.pure_reader,
                 check_deadline=partial(self._budget, deadline_at),
                 now=self._now(),
             )
@@ -837,6 +998,7 @@ class FiscalSourceClassificationOwner:
                 identity,
                 expected_role=previous.grant.identity.role,
                 deadline_at=deadline_at,
+                consumed_by=state.reader,
             )
             if (
                 current.grant_ref != previous.grant_ref
@@ -1111,6 +1273,57 @@ class FiscalSourceClassificationOwner:
                     FiscalArtifactRead(
                         self.artifacts, partial(self._budget, deadline_at)
                     )
+                )
+                ref = classification_refs[0]
+                state.source_admission = _AdmissionSourceRead(deadline_at)
+                signed = self._load(ref, state, deadline_at)
+                if signed.review.scope != scope:
+                    raise _invalid(
+                        "classification does not authorize the exact candidate source scope"
+                    )
+                self._history_state(signed, ref, state, deadline_at)
+                read = FiscalClassifiedSourceRead(
+                    self, scope, classification_refs, signed, state, deadline_at, actor
+                )
+                token = _CLASSIFICATION_READS.set((*_CLASSIFICATION_READS.get(), read))
+                try:
+                    yield read
+                finally:
+                    _CLASSIFICATION_READS.reset(token)
+            except (ValueError, DataReleaseError) as error:
+                raise _invalid(
+                    "classification failed typed evidence verification"
+                ) from error
+            finally:
+                if read is not None:
+                    read.close()
+
+    @contextmanager
+    def _open_current_source(
+        self,
+        scope: FiscalSourceUseScopeV1,
+        classification_refs: tuple[ArtifactRefV1, ...],
+        binding: FiscalRetainedInputBindingV1,
+        *,
+        deadline_at: datetime,
+    ) -> Iterator[FiscalClassifiedSourceRead]:
+        actor = _classification_actor()
+        with metadata_operation_budget(
+            partial(self._budget, deadline_at), self._expired
+        ):
+            read: FiscalClassifiedSourceRead | None = None
+            try:
+                self._budget(deadline_at)
+                if len(classification_refs) != 1:
+                    raise _invalid(
+                        "this profile requires one exact source classification"
+                    )
+                state = _PreparedClassificationRead(
+                    FiscalArtifactRead(
+                        self.artifacts, partial(self._budget, deadline_at)
+                    ),
+                    scope,
+                    binding,
                 )
                 ref = classification_refs[0]
                 state.source_admission = _AdmissionSourceRead(deadline_at)

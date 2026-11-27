@@ -20,7 +20,7 @@ from fundamental_service.data_releases import (
     DataReleaseVerifierV1,
 )
 from fundamental_service.fiscal_candidate_contracts import (
-    FiscalPrepareCandidateCommandV1,
+    FiscalPrepareCandidateCommandV2,
 )
 from fundamental_service.fiscal_display_admission import (
     FiscalDisplayOperation,
@@ -31,17 +31,17 @@ from fundamental_service.fiscal_preparation_runtime import (
     build_fiscal_candidate_runtime,
 )
 from fundamental_service.fiscal_read_contracts import (
-    FiscalReadRequestV1,
-    FiscalReadResultV1,
+    FiscalReadRequestV2,
+    FiscalReadResultV2,
 )
-from fundamental_service.fiscal_release_contracts import FiscalPublishV1
+from fundamental_service.fiscal_release_contracts import FiscalPublishV2
 from fundamental_service.fiscal_release_runtime import (
-    FiscalReleaseInstallationV1,
-    FiscalReleaseOrderV1,
+    FiscalReleaseInstallationV2,
+    FiscalReleaseOrderV2,
     FiscalReleaseReadConfigurationV1,
     FiscalReleaseRuntime,
     build_fiscal_release_reader,
-    release_configuration_digest,
+    release_workflow_configuration_digest,
 )
 from fundamental_service.fiscal_releases import FiscalReleaseService
 from fundamental_service.serialization import canonical_bytes, sha256_digest
@@ -98,7 +98,7 @@ def classified_display(display, tmp_path, protected_deployment_root, monkeypatch
             inputs, env.metadata, config, write=True
         )
         candidate = writer.prepare(
-            FiscalPrepareCandidateCommandV1(
+            FiscalPrepareCandidateCommandV2(
                 command_id="classified-service-integration",
                 discovery_ref=discovery_ref,
                 security_id="MSFT",
@@ -233,7 +233,7 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
         metadata=env.metadata,
         configuration=configuration,
     )
-    approved = FiscalPublishV1(
+    approved = FiscalPublishV2(
         candidate_ref=current.candidate.reference, decision_ref=current.reference
     )
     reader.observe(approved, deadline_at=deadline())
@@ -251,7 +251,7 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
     accreditation.write_bytes(original)
     orders = protected_deployment_root / "release-orders"
     orders.mkdir(mode=0o700)
-    installed = FiscalReleaseInstallationV1(
+    installed = FiscalReleaseInstallationV2(
         audience="integration-release",
         reader=configuration,
         workload_uid=os.getuid(),
@@ -262,13 +262,16 @@ def test_real_provider_rotation_refuses_display_and_release_final_exits(
         workflow_identity="integration-fiscal-workflow",
         source_revision="b" * 40,
         verification_suite_digest=automatic_release_suite_digest(),
+        canary_configuration_file=release_cases.synthetic_canary_configuration(
+            protected_deployment_root / "canary.json", reader, monkeypatch
+        ),
     )
     now = datetime.now(UTC)
-    order = FiscalReleaseOrderV1(
+    order = FiscalReleaseOrderV2(
         order_id="publish-integration",
         audience=installed.audience,
         installation_digest=sha256_digest(installed.model_dump(mode="json")),
-        configuration_digest=release_configuration_digest(configuration),
+        configuration_digest=release_workflow_configuration_digest(installed),
         issuance=env.history.read_epoch(deadline_at=deadline()).issuance_context,
         approved=approved,
         verification_run_id="integration-run",
@@ -307,7 +310,7 @@ def test_typed_source_documents_match_exact_evidence_and_final_readset(
 ):
     display, _, _, reader, receipt = published
     manifest = display.env.metadata.get_data_release_manifest(receipt.manifest_digest)
-    request = FiscalReadRequestV1(
+    request = FiscalReadRequestV2(
         manifest_digest=receipt.manifest_digest,
         scope=manifest.scope,
         cutoff_at=manifest.cutoff_at,
@@ -323,7 +326,7 @@ def test_typed_source_documents_match_exact_evidence_and_final_readset(
         )
         (root / "apple-ttm-response.json").write_bytes(canonical_bytes(ttm))
         (root / "fiscal-read-result-schema.json").write_bytes(
-            canonical_bytes(FiscalReadResultV1.model_json_schema())
+            canonical_bytes(FiscalReadResultV2.model_json_schema())
         )
     for source in result.evidence.source_uses:
         raw = json.loads(
@@ -357,7 +360,7 @@ def test_typed_source_documents_match_exact_evidence_and_final_readset(
             }
         )
         with pytest.raises(ValidationError, match="source differs"):
-            FiscalReadResultV1.model_validate(
+            FiscalReadResultV2.model_validate(
                 {**result.model_dump(), "evidence": evidence.model_dump()}
             )
     locator = observed.source_locator.model_copy(
@@ -372,7 +375,7 @@ def test_typed_source_documents_match_exact_evidence_and_final_readset(
         }
     )
     with pytest.raises(ValidationError, match="source differs"):
-        FiscalReadResultV1.model_validate(
+        FiscalReadResultV2.model_validate(
             {**result.model_dump(), "evidence": evidence.model_dump()}
         )
     load = reader._source_document
@@ -410,7 +413,7 @@ def test_release_runner_publishes_for_trusted_group(environment, tmp_path, monke
         release_trust_roots_file=data_root / "release.json",
         declared_source_revision="test-constructor",
     )
-    installation = FiscalReleaseInstallationV1(
+    installation = FiscalReleaseInstallationV2(
         audience="constructor-test",
         reader=configuration,
         workload_uid=os.getuid(),
@@ -421,6 +424,7 @@ def test_release_runner_publishes_for_trusted_group(environment, tmp_path, monke
         workflow_identity="constructor-test",
         source_revision="b" * 40,
         verification_suite_digest="a" * 64,
+        canary_configuration_file=data_root / "canary.json",
     )
 
     @asynccontextmanager

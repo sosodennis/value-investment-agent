@@ -1,0 +1,164 @@
+{
+  "$defs": {
+    "StatementEditionV2": {
+      "additionalProperties": false,
+      "properties": {
+        "annual_manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Annual Manifest Digest",
+          "type": "string"
+        },
+        "company_name": {
+          "minLength": 1,
+          "title": "Company Name",
+          "type": "string"
+        },
+        "cutoff_at": {
+          "format": "date-time",
+          "title": "Cutoff At",
+          "type": "string"
+        },
+        "edition_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Edition Id",
+          "type": "string"
+        },
+        "fiscal_manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fiscal Manifest Digest",
+          "type": "string"
+        },
+        "frequencies": {
+          "default": [
+            "annual",
+            "quarter",
+            "ttm"
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "const": "annual",
+              "type": "string"
+            },
+            {
+              "const": "quarter",
+              "type": "string"
+            },
+            {
+              "const": "ttm",
+              "type": "string"
+            }
+          ],
+          "title": "Frequencies",
+          "type": "array"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/StatementScopeV1"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[A-Z0-9.-]+$",
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "edition_id",
+        "label",
+        "ticker",
+        "company_name",
+        "scope",
+        "cutoff_at",
+        "annual_manifest_digest",
+        "fiscal_manifest_digest",
+        "frequencies"
+      ],
+      "title": "StatementEditionV2",
+      "type": "object"
+    },
+    "StatementScopeV1": {
+      "additionalProperties": false,
+      "properties": {
+        "consolidation_scope": {
+          "const": "consolidated",
+          "default": "consolidated",
+          "title": "Consolidation Scope",
+          "type": "string"
+        },
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "entity_scope": {
+          "title": "Entity Scope",
+          "type": "string"
+        },
+        "issuer_id": {
+          "minLength": 1,
+          "title": "Issuer Id",
+          "type": "string"
+        },
+        "security_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Security Id"
+        },
+        "security_scope": {
+          "title": "Security Scope",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issuer_id",
+        "security_id",
+        "security_scope",
+        "entity_scope",
+        "currency",
+        "unit",
+        "consolidation_scope"
+      ],
+      "title": "StatementScopeV1",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "workspace.statement-reader.v2",
+      "default": "workspace.statement-reader.v2",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/StatementEditionV2"
+      },
+      "title": "Entries",
+      "type": "array"
+    }
+  },
+  "required": [
+    "contract_version",
+    "entries"
+  ],
+  "title": "StatementCatalogV2",
+  "type": "object"
+}

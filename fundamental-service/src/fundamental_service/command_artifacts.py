@@ -19,6 +19,8 @@ class EvidenceArtifactStore(Protocol):
 
     def read(self, artifact_id: str) -> bytes: ...
 
+    def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes: ...
+
     def put_with_receipt(
         self,
         artifact_id: str,

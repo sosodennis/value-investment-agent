@@ -130,11 +130,16 @@ class FiscalCandidateClassificationBindingV1(StrictModel):
     classification_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
 
 
-class FiscalCandidateContentV1(StrictModel):
+class FiscalCandidateSourceReplayRefV1(StrictModel):
+    source_validation_ref: ArtifactRefV1
+    input_binding_ref: ArtifactRefV1
+
+
+class FiscalCandidateContentV2(StrictModel):
     model_config = ConfigDict(frozen=True)
 
-    protocol: Literal["fundamental.fiscal-candidate-content.v1"] = (
-        "fundamental.fiscal-candidate-content.v1"
+    protocol: Literal["fundamental.fiscal-candidate-content.v2"] = (
+        "fundamental.fiscal-candidate-content.v2"
     )
     discovery_ref: ArtifactRefV1
     materialization: FiscalValidationPinV1
@@ -143,15 +148,34 @@ class FiscalCandidateContentV1(StrictModel):
     source_uses: tuple[FiscalCandidateSourceUseV1, ...] = Field(min_length=1)
     mapping_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
     projection_ref: ArtifactRefV1
+    projection_input_ref: ArtifactRefV1
     period_set_digest: Digest
     row_lineage_digest: Digest
     source_set_digest: Digest
     projection_policy_digest: Digest
     executable_digest: Digest
+    basis_review_ref: ArtifactRefV1
+    source_replay_refs: tuple[FiscalCandidateSourceReplayRefV1, ...] = Field(
+        min_length=1
+    )
 
     @model_validator(mode="after")
-    def exact_source_set(self) -> FiscalCandidateContentV1:
+    def exact_source_set(self) -> FiscalCandidateContentV2:
         scopes = tuple(item.scope for item in self.source_uses)
+        if (
+            self.basis_review_ref.role != "fiscal-basis-review-v1"
+            or self.projection_input_ref.role != "fiscal-statement-projection-input-v1"
+            or self.projection_input_ref.media_type != "application/json"
+            or self.basis_review_ref.media_type != "application/json"
+            or tuple(item.source_validation_ref for item in self.source_replay_refs)
+            != tuple(item.source_validation_ref for item in scopes)
+            or any(
+                item.input_binding_ref.role != "fiscal-retained-input-binding-v1"
+                or item.input_binding_ref.media_type != "application/json"
+                for item in self.source_replay_refs
+            )
+        ):
+            raise ValueError("candidate requires exact source replay and basis roots")
         if len({item.scope_digest for item in scopes}) != len(scopes):
             raise ValueError("candidate source uses must be unique")
         if any(
@@ -187,6 +211,9 @@ class FiscalCandidateContentV1(StrictModel):
         hashes = {
             self.discovery_ref.content_hash,
             self.projection_ref.content_hash,
+            self.projection_input_ref.content_hash,
+            self.basis_review_ref.content_hash,
+            *(item.input_binding_ref.content_hash for item in self.source_replay_refs),
             self.source_set_digest,
             *(ref.content_hash for ref in self.mapping_refs),
         }
@@ -200,11 +227,11 @@ class FiscalCandidateContentV1(StrictModel):
         return tuple(sorted(hashes))
 
 
-class FiscalPrepareCandidateCommandV1(StrictModel):
+class FiscalPrepareCandidateCommandV2(StrictModel):
     model_config = ConfigDict(frozen=True)
 
-    protocol: Literal["fundamental.prepare-fiscal-candidate.v1"] = (
-        "fundamental.prepare-fiscal-candidate.v1"
+    protocol: Literal["fundamental.prepare-fiscal-candidate.v2"] = (
+        "fundamental.prepare-fiscal-candidate.v2"
     )
     command_id: str = Field(min_length=1, max_length=256)
     discovery_ref: ArtifactRefV1
@@ -213,7 +240,7 @@ class FiscalPrepareCandidateCommandV1(StrictModel):
     expires_at: AwareDatetime
 
     @model_validator(mode="after")
-    def exact_bindings(self) -> FiscalPrepareCandidateCommandV1:
+    def exact_bindings(self) -> FiscalPrepareCandidateCommandV2:
         if (
             self.discovery_ref.role != "fiscal-discovery"
             or self.discovery_ref.media_type != "application/json"
@@ -245,7 +272,7 @@ class FiscalPrepareCandidateCommandV1(StrictModel):
         return role + ":" + self.locator_digest
 
 
-class FiscalCandidatePreparationExecutionV1(StrictModel):
+class FiscalCandidatePreparationExecutionV2(StrictModel):
     model_config = ConfigDict(frozen=True)
 
     authority_id: str = Field(min_length=1, max_length=256)
@@ -257,36 +284,82 @@ class FiscalCandidatePreparationExecutionV1(StrictModel):
     issuance: FiscalIssuanceContextV1
     command_digest: Digest
     content_digest: Digest
+    correctness_digest: Digest
+    closure_contract_digest: Digest
     preparation_executable_digest: Digest
     started_at: AwareDatetime
     completed_at: AwareDatetime
 
     @model_validator(mode="after")
-    def ordered_execution(self) -> FiscalCandidatePreparationExecutionV1:
+    def ordered_execution(self) -> FiscalCandidatePreparationExecutionV2:
         if self.completed_at < self.started_at:
             raise ValueError("candidate execution clock reversed")
         return self
 
 
-class FiscalCandidateBodyV2(StrictModel):
+CorrectnessOwner = Literal[
+    "discovery",
+    "source_ingestion",
+    "parser_binding",
+    "witness",
+    "classification_resolver",
+    "classification",
+    "accounting",
+    "mapping",
+    "basis_projection",
+]
+
+
+class FiscalOwnerCorrectnessV1(StrictModel):
+    owner: CorrectnessOwner
+    use_path: str = Field(min_length=1, max_length=1024)
+    root_ref: ArtifactRefV1
+    contract_digest: Digest
+    executable_digest: Digest
+    policy_digest: Digest
+    input_footprint_digest: Digest
+
+
+class FiscalPreparedCorrectnessV1(StrictModel):
+    protocol: Literal["fundamental.fiscal-prepared-correctness.v1"] = (
+        "fundamental.fiscal-prepared-correctness.v1"
+    )
+    candidate_content_digest: Digest
+    closure_contract_digest: Digest
+    owners: tuple[FiscalOwnerCorrectnessV1, ...] = Field(min_length=1, max_length=4096)
+
+    @model_validator(mode="after")
+    def unique_owners(self) -> FiscalPreparedCorrectnessV1:
+        keys = tuple((item.owner, item.use_path) for item in self.owners)
+        if len(set(keys)) != len(keys):
+            raise ValueError("correctness owners and use paths must be unique")
+        return self
+
+
+class FiscalCandidateBodyV3(StrictModel):
     model_config = ConfigDict(frozen=True)
 
-    protocol: Literal["fundamental.fiscal-candidate-body.v2"] = (
-        "fundamental.fiscal-candidate-body.v2"
+    protocol: Literal["fundamental.fiscal-candidate-body.v3"] = (
+        "fundamental.fiscal-candidate-body.v3"
     )
-    command: FiscalPrepareCandidateCommandV1
-    content: FiscalCandidateContentV1
-    preparation: FiscalCandidatePreparationExecutionV1
+    command: FiscalPrepareCandidateCommandV2
+    content: FiscalCandidateContentV2
+    preparation: FiscalCandidatePreparationExecutionV2
+    correctness: FiscalPreparedCorrectnessV1
     issuance: FiscalIssuanceContextV1
     signed_at: AwareDatetime
 
     @model_validator(mode="after")
-    def exact_execution(self) -> FiscalCandidateBodyV2:
+    def exact_execution(self) -> FiscalCandidateBodyV3:
         if (
             self.command.discovery_ref != self.content.discovery_ref
             or self.command.security_id != self.content.scope.security_id
             or self.preparation.command_digest != self.command.command_digest
             or self.preparation.content_digest != self.content.content_digest
+            or self.correctness.candidate_content_digest != self.content.content_digest
+            or self.preparation.correctness_digest != sha256_digest(self.correctness)
+            or self.preparation.closure_contract_digest
+            != self.correctness.closure_contract_digest
             or self.preparation.issuance != self.issuance
             or not self.preparation.completed_at
             <= self.signed_at
@@ -296,13 +369,13 @@ class FiscalCandidateBodyV2(StrictModel):
         return self
 
 
-class FiscalStatementCandidateV2(StrictModel):
+class FiscalStatementCandidateV3(StrictModel):
     model_config = ConfigDict(frozen=True)
 
-    protocol: Literal["fundamental.fiscal-statement-candidate.v2"] = (
-        "fundamental.fiscal-statement-candidate.v2"
+    protocol: Literal["fundamental.fiscal-statement-candidate.v3"] = (
+        "fundamental.fiscal-statement-candidate.v3"
     )
-    body: FiscalCandidateBodyV2
+    body: FiscalCandidateBodyV3
     signature: str = Field(pattern=r"^[0-9a-f]{128}$")
 
     def signing_bytes(self) -> bytes:
@@ -314,7 +387,13 @@ class FiscalStatementCandidateV2(StrictModel):
 
     @property
     def artifact_id(self) -> str:
-        return self.body.command.artifact_id("fiscal-statement-candidate-v2")
+        return self.body.command.artifact_id("fiscal-statement-candidate-v3")
+
+
+@dataclass(frozen=True)
+class _TrustedCandidateCorrectness:
+    candidate: FiscalStatementCandidateV3
+    operation_identity: object
 
 
 @dataclass(frozen=True)

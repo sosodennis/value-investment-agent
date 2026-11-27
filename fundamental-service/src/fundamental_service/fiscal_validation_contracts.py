@@ -27,6 +27,72 @@ class _FiscalValidationModel(StrictModel):
     model_config = ConfigDict(frozen=True)
 
 
+class FiscalRetainedContentV1(_FiscalValidationModel):
+    digest: Digest
+    media_type: str = Field(min_length=1)
+    byte_length: int = Field(ge=0)
+
+
+class FiscalCapturedInputV1(_FiscalValidationModel):
+    kind: Literal["captured"] = "captured"
+    receipt_ref: ArtifactRefV1
+    content: FiscalRetainedContentV1
+
+
+class FiscalArchiveInputV1(_FiscalValidationModel):
+    kind: Literal["archive_member"] = "archive_member"
+    archive_receipt_ref: ArtifactRefV1
+    member_name: str = Field(min_length=1)
+    member_content: FiscalRetainedContentV1
+
+
+class FiscalNormalizedInputV1(_FiscalValidationModel):
+    kind: Literal["normalized"] = "normalized"
+    integrity_role: Literal["normalized_content", "parser_input"]
+    content: FiscalRetainedContentV1
+
+
+FiscalRetainedInputOriginV1 = Annotated[
+    FiscalCapturedInputV1 | FiscalArchiveInputV1 | FiscalNormalizedInputV1,
+    Field(discriminator="kind"),
+]
+
+
+class FiscalStagedInputV1(_FiscalValidationModel):
+    relative_name: str = Field(min_length=1)
+    origin: FiscalRetainedInputOriginV1
+
+
+class FiscalParserInputBindingV1(_FiscalValidationModel):
+    representation: Literal["normalized", "archive"]
+    action_result_ref: ArtifactRefV1
+    files: tuple[FiscalStagedInputV1, ...] = Field(min_length=1, max_length=4096)
+
+
+class FiscalRetainedInputBindingV1(_FiscalValidationModel):
+    protocol: Literal["fundamental.fiscal-retained-input-binding.v1"] = (
+        "fundamental.fiscal-retained-input-binding.v1"
+    )
+    source_validation_ref: ArtifactRefV1
+    source_contract_digest: Digest
+    inputs: tuple[FiscalParserInputBindingV1, ...] = Field(min_length=1, max_length=2)
+
+    @model_validator(mode="after")
+    def exact_representations(self) -> FiscalRetainedInputBindingV1:
+        representations = tuple(item.representation for item in self.inputs)
+        if (
+            len(set(representations)) != len(representations)
+            or self.source_validation_ref.role != "fiscal-original-validation"
+            or any(
+                item.action_result_ref.role != "sec-parser-action-result-v2"
+                or len({file.relative_name for file in item.files}) != len(item.files)
+                for item in self.inputs
+            )
+        ):
+            raise ValueError("retained input binding roles or representations differ")
+        return self
+
+
 class FiscalValidationPinV1(_FiscalValidationModel):
     declared_source_revision: Revision
     taxonomy_manifest_id: str = Field(min_length=1)

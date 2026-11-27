@@ -1,0 +1,4994 @@
+{
+  "$defs": {
+    "AmendedFiscalRevisionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "amends_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amends Accession"
+        },
+        "kind": {
+          "const": "amendment",
+          "default": "amendment",
+          "title": "Kind",
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "unknown",
+            "comparable"
+          ],
+          "title": "Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "scope",
+        "amends_accession"
+      ],
+      "title": "AmendedFiscalRevisionV1",
+      "type": "object"
+    },
+    "AnnualSavedReadV2": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "annual",
+          "default": "annual",
+          "title": "Kind",
+          "type": "string"
+        },
+        "response": {
+          "$ref": "#/$defs/AnnualStatementsReadResponseV1"
+        }
+      },
+      "required": [
+        "kind",
+        "response"
+      ],
+      "title": "AnnualSavedReadV2",
+      "type": "object"
+    },
+    "AnnualStatementsReadResponseV1": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "fundamental.annual-statements.v1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "data_release_manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Data Release Manifest Digest",
+          "type": "string"
+        },
+        "statements": {
+          "$ref": "#/$defs/AnnualStatementsV1"
+        }
+      },
+      "required": [
+        "contract_version",
+        "data_release_manifest_digest",
+        "statements"
+      ],
+      "title": "AnnualStatementsReadResponseV1",
+      "type": "object"
+    },
+    "AnnualStatementsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_evidence": {
+          "items": {
+            "$ref": "#/$defs/StatementFactEvidenceV1"
+          },
+          "title": "Candidate Evidence",
+          "type": "array"
+        },
+        "comparability": {
+          "items": {
+            "$ref": "#/$defs/StatementComparabilityV1"
+          },
+          "title": "Comparability",
+          "type": "array"
+        },
+        "contract_version": {
+          "const": "fundamental.annual-statements.v1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "coverage": {
+          "items": {
+            "$ref": "#/$defs/StatementCoverageV1"
+          },
+          "title": "Coverage",
+          "type": "array"
+        },
+        "cutoff_at": {
+          "format": "date-time",
+          "title": "Cutoff At",
+          "type": "string"
+        },
+        "input_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Digest",
+          "type": "string"
+        },
+        "profile": {
+          "$ref": "#/$defs/StatementProfileV1"
+        },
+        "quality_status": {
+          "enum": [
+            "verified",
+            "provisional",
+            "degraded",
+            "unsupported",
+            "abstain",
+            "error"
+          ],
+          "title": "Quality Status",
+          "type": "string"
+        },
+        "reconciliations": {
+          "items": {
+            "$ref": "#/$defs/StatementReconciliationV1"
+          },
+          "title": "Reconciliations",
+          "type": "array"
+        },
+        "scope": {
+          "$ref": "#/$defs/StatementScopeV1"
+        },
+        "source_outcomes": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/$defs/StatementAvailableSourceV1",
+                "unavailable": "#/$defs/StatementUnavailableSourceV1"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/StatementAvailableSourceV1"
+              },
+              {
+                "$ref": "#/$defs/StatementUnavailableSourceV1"
+              }
+            ]
+          },
+          "title": "Source Outcomes",
+          "type": "array"
+        },
+        "statement_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Statement Id",
+          "type": "string"
+        },
+        "tables": {
+          "items": {
+            "$ref": "#/$defs/StatementTableV1"
+          },
+          "title": "Tables",
+          "type": "array"
+        },
+        "valuation_eligibility": {
+          "const": "not_evaluated",
+          "default": "not_evaluated",
+          "title": "Valuation Eligibility",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract_version",
+        "statement_id",
+        "input_digest",
+        "scope",
+        "cutoff_at",
+        "profile",
+        "tables",
+        "source_outcomes",
+        "candidate_evidence",
+        "coverage",
+        "comparability",
+        "reconciliations",
+        "quality_status",
+        "valuation_eligibility"
+      ],
+      "title": "AnnualStatementsV1",
+      "type": "object"
+    },
+    "ArtifactRefV1": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "minLength": 1,
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "media_type": {
+          "minLength": 1,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "content_hash",
+        "media_type",
+        "role"
+      ],
+      "title": "ArtifactRefV1",
+      "type": "object"
+    },
+    "DurationStatementPeriodV1": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "duration",
+          "default": "duration",
+          "title": "Kind",
+          "type": "string"
+        },
+        "period_end": {
+          "format": "date",
+          "title": "Period End",
+          "type": "string"
+        },
+        "period_start": {
+          "format": "date",
+          "title": "Period Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "period_start",
+        "period_end"
+      ],
+      "title": "DurationStatementPeriodV1",
+      "type": "object"
+    },
+    "FiscalBasisFilingV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_at": {
+          "format": "date-time",
+          "title": "Accepted At",
+          "type": "string"
+        },
+        "accession_number": {
+          "title": "Accession Number",
+          "type": "string"
+        },
+        "amends_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amends Accession"
+        },
+        "disclosure_refs": {
+          "items": {
+            "$ref": "#/$defs/ArtifactRefV1"
+          },
+          "minItems": 1,
+          "title": "Disclosure Refs",
+          "type": "array"
+        },
+        "primary_document_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Primary Document Sha256",
+          "type": "string"
+        },
+        "supersedes_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes Accession"
+        }
+      },
+      "required": [
+        "accession_number",
+        "primary_document_sha256",
+        "accepted_at",
+        "disclosure_refs",
+        "amends_accession",
+        "supersedes_accession"
+      ],
+      "title": "FiscalBasisFilingV1",
+      "type": "object"
+    },
+    "FiscalBasisObservationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "observation_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Observation Digest",
+          "type": "string"
+        },
+        "observation_id": {
+          "title": "Observation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "observation_id",
+        "observation_digest"
+      ],
+      "title": "FiscalBasisObservationV1",
+      "type": "object"
+    },
+    "FiscalCandidateDecisionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "observation_id": {
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "selected",
+            "superseded",
+            "equivalent_duplicate",
+            "rejected"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "observation_id",
+        "outcome",
+        "reason"
+      ],
+      "title": "FiscalCandidateDecisionV1",
+      "type": "object"
+    },
+    "FiscalCashContinuityV1": {
+      "additionalProperties": false,
+      "properties": {
+        "boundary_date": {
+          "format": "date",
+          "title": "Boundary Date",
+          "type": "string"
+        },
+        "input_node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input Node Ids",
+          "type": "array"
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason Code"
+        },
+        "status": {
+          "enum": [
+            "consistent_at_reported_precision",
+            "conflict",
+            "unresolved_missing_inputs",
+            "unresolved_precision"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "window_id": {
+          "title": "Window Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "window_id",
+        "boundary_date",
+        "status",
+        "input_node_ids",
+        "reason_code"
+      ],
+      "title": "FiscalCashContinuityV1",
+      "type": "object"
+    },
+    "FiscalComparativePairV1": {
+      "additionalProperties": false,
+      "properties": {
+        "comparative_id": {
+          "title": "Comparative Id",
+          "type": "string"
+        },
+        "original_id": {
+          "title": "Original Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "original_id",
+        "comparative_id"
+      ],
+      "title": "FiscalComparativePairV1",
+      "type": "object"
+    },
+    "FiscalDerivedCellV1": {
+      "additionalProperties": false,
+      "properties": {
+        "decimal": {
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "title": "Decimal",
+          "type": "string"
+        },
+        "kind": {
+          "const": "derived",
+          "default": "derived",
+          "title": "Kind",
+          "type": "string"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "node_id",
+        "decimal"
+      ],
+      "title": "FiscalDerivedCellV1",
+      "type": "object"
+    },
+    "FiscalDisplayGraphV1": {
+      "additionalProperties": false,
+      "properties": {
+        "cash_continuities": {
+          "items": {
+            "$ref": "#/$defs/FiscalCashContinuityV1"
+          },
+          "title": "Cash Continuities",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/FiscalValueNodeV1"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "observations": {
+          "items": {
+            "$ref": "#/$defs/FiscalObservationV1"
+          },
+          "title": "Observations",
+          "type": "array"
+        },
+        "reconciliations": {
+          "items": {
+            "$ref": "#/$defs/FiscalReconciliationV1"
+          },
+          "title": "Reconciliations",
+          "type": "array"
+        },
+        "source_uses": {
+          "items": {
+            "$ref": "#/$defs/FiscalSourceInspectionV1"
+          },
+          "title": "Source Uses",
+          "type": "array"
+        }
+      },
+      "required": [
+        "nodes",
+        "observations",
+        "source_uses",
+        "reconciliations",
+        "cash_continuities"
+      ],
+      "title": "FiscalDisplayGraphV1",
+      "type": "object"
+    },
+    "FiscalDisplayRowV1": {
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "conflict": "#/$defs/FiscalMissingCellV1",
+                "derived": "#/$defs/FiscalDerivedCellV1",
+                "reported": "#/$defs/FiscalReportedCellV1",
+                "unavailable": "#/$defs/FiscalMissingCellV1"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/FiscalReportedCellV1"
+              },
+              {
+                "$ref": "#/$defs/FiscalDerivedCellV1"
+              },
+              {
+                "$ref": "#/$defs/FiscalMissingCellV1"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Cells",
+          "type": "array"
+        },
+        "row": {
+          "$ref": "#/$defs/FiscalRowPolicyV1"
+        }
+      },
+      "required": [
+        "row",
+        "cells"
+      ],
+      "title": "FiscalDisplayRowV1",
+      "type": "object"
+    },
+    "FiscalDurationPeriodV1": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "format": "date",
+          "title": "End",
+          "type": "string"
+        },
+        "fiscal_period": {
+          "enum": [
+            "Q1",
+            "Q2",
+            "Q3",
+            "FY",
+            "TTM"
+          ],
+          "title": "Fiscal Period",
+          "type": "string"
+        },
+        "fiscal_year": {
+          "title": "Fiscal Year",
+          "type": "integer"
+        },
+        "fiscal_year_start": {
+          "format": "date",
+          "title": "Fiscal Year Start",
+          "type": "string"
+        },
+        "inclusive_days": {
+          "exclusiveMinimum": 0,
+          "title": "Inclusive Days",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "duration",
+          "default": "duration",
+          "title": "Kind",
+          "type": "string"
+        },
+        "start": {
+          "format": "date",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "start",
+        "end",
+        "fiscal_year_start",
+        "fiscal_year",
+        "fiscal_period",
+        "inclusive_days"
+      ],
+      "title": "FiscalDurationPeriodV1",
+      "type": "object"
+    },
+    "FiscalInputEdgeV1": {
+      "additionalProperties": false,
+      "properties": {
+        "coefficient": {
+          "enum": [
+            -1,
+            1
+          ],
+          "title": "Coefficient",
+          "type": "integer"
+        },
+        "input_id": {
+          "title": "Input Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_id",
+        "coefficient"
+      ],
+      "title": "FiscalInputEdgeV1",
+      "type": "object"
+    },
+    "FiscalInstantPeriodV1": {
+      "additionalProperties": false,
+      "properties": {
+        "fiscal_period": {
+          "enum": [
+            "Q1",
+            "Q2",
+            "Q3",
+            "FY",
+            "TTM"
+          ],
+          "title": "Fiscal Period",
+          "type": "string"
+        },
+        "fiscal_year": {
+          "title": "Fiscal Year",
+          "type": "integer"
+        },
+        "instant": {
+          "format": "date",
+          "title": "Instant",
+          "type": "string"
+        },
+        "kind": {
+          "const": "instant",
+          "default": "instant",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "instant",
+        "fiscal_year",
+        "fiscal_period"
+      ],
+      "title": "FiscalInstantPeriodV1",
+      "type": "object"
+    },
+    "FiscalMissingCellV1": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "unavailable",
+            "conflict"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "reason_code": {
+          "title": "Reason Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "node_id",
+        "reason_code"
+      ],
+      "title": "FiscalMissingCellV1",
+      "type": "object"
+    },
+    "FiscalObservationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_at": {
+          "format": "date-time",
+          "title": "Accepted At",
+          "type": "string"
+        },
+        "accession_number": {
+          "title": "Accession Number",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "basis": {
+          "$ref": "#/$defs/FiscalReportingBasisV1"
+        },
+        "concept": {
+          "title": "Concept",
+          "type": "string"
+        },
+        "decimals": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "const": "INF",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decimals"
+        },
+        "filing_date": {
+          "format": "date",
+          "title": "Filing Date",
+          "type": "string"
+        },
+        "filing_revision": {
+          "default": {
+            "kind": "original"
+          },
+          "discriminator": {
+            "mapping": {
+              "amendment": "#/$defs/AmendedFiscalRevisionV1",
+              "original": "#/$defs/OriginalFiscalRevisionV1"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/OriginalFiscalRevisionV1"
+            },
+            {
+              "$ref": "#/$defs/AmendedFiscalRevisionV1"
+            }
+          ],
+          "title": "Filing Revision"
+        },
+        "form": {
+          "enum": [
+            "10-K",
+            "10-Q",
+            "10-K/A",
+            "10-Q/A"
+          ],
+          "title": "Form",
+          "type": "string"
+        },
+        "issuer_id": {
+          "title": "Issuer Id",
+          "type": "string"
+        },
+        "mapping_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Mapping Digest",
+          "type": "string"
+        },
+        "namespace_uri": {
+          "title": "Namespace Uri",
+          "type": "string"
+        },
+        "observation_id": {
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "parser_action_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Parser Action Digest",
+          "type": "string"
+        },
+        "period": {
+          "discriminator": {
+            "mapping": {
+              "reported_fiscal_year": "#/$defs/ReportedFiscalYearV1",
+              "reported_instant": "#/$defs/ReportedInstantV1",
+              "reported_quarter": "#/$defs/ReportedQuarterV1",
+              "reported_ytd": "#/$defs/ReportedYtdV1",
+              "unsupported_duration": "#/$defs/UnsupportedDurationV1"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ReportedQuarterV1"
+            },
+            {
+              "$ref": "#/$defs/ReportedYtdV1"
+            },
+            {
+              "$ref": "#/$defs/ReportedFiscalYearV1"
+            },
+            {
+              "$ref": "#/$defs/ReportedInstantV1"
+            },
+            {
+              "$ref": "#/$defs/UnsupportedDurationV1"
+            }
+          ],
+          "title": "Period"
+        },
+        "quality": {
+          "$ref": "#/$defs/QualityStatus",
+          "default": "verified"
+        },
+        "raw_text": {
+          "title": "Raw Text",
+          "type": "string"
+        },
+        "report_date": {
+          "format": "date",
+          "title": "Report Date",
+          "type": "string"
+        },
+        "row_id": {
+          "title": "Row Id",
+          "type": "string"
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scale"
+        },
+        "sign": {
+          "anyOf": [
+            {
+              "enum": [
+                "+",
+                "-"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sign"
+        },
+        "source_artifact_id": {
+          "title": "Source Artifact Id",
+          "type": "string"
+        },
+        "source_binding_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Binding Digest",
+          "type": "string"
+        },
+        "source_fact_key": {
+          "title": "Source Fact Key",
+          "type": "string"
+        },
+        "source_locator": {
+          "$ref": "#/$defs/FiscalSourceLocatorV1"
+        },
+        "statement": {
+          "enum": [
+            "income_statement",
+            "balance_sheet",
+            "cash_flow"
+          ],
+          "title": "Statement",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "observation_id",
+        "row_id",
+        "statement",
+        "source_artifact_id",
+        "accession_number",
+        "form",
+        "filing_revision",
+        "issuer_id",
+        "accepted_at",
+        "available_at",
+        "filing_date",
+        "report_date",
+        "period",
+        "basis",
+        "source_locator",
+        "concept",
+        "namespace_uri",
+        "source_fact_key",
+        "raw_text",
+        "value",
+        "scale",
+        "sign",
+        "decimals",
+        "quality",
+        "source_binding_digest",
+        "parser_action_digest",
+        "mapping_digest"
+      ],
+      "title": "FiscalObservationV1",
+      "type": "object"
+    },
+    "FiscalPeriodTargetV1": {
+      "additionalProperties": false,
+      "properties": {
+        "cutoff_at": {
+          "format": "date-time",
+          "title": "Cutoff At",
+          "type": "string"
+        },
+        "period": {
+          "discriminator": {
+            "mapping": {
+              "duration": "#/$defs/FiscalDurationPeriodV1",
+              "instant": "#/$defs/FiscalInstantPeriodV1"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FiscalDurationPeriodV1"
+            },
+            {
+              "$ref": "#/$defs/FiscalInstantPeriodV1"
+            }
+          ],
+          "title": "Period"
+        },
+        "period_id": {
+          "title": "Period Id",
+          "type": "string"
+        },
+        "source_binding_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Binding Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "period_id",
+        "period",
+        "cutoff_at",
+        "source_binding_digest"
+      ],
+      "title": "FiscalPeriodTargetV1",
+      "type": "object"
+    },
+    "FiscalPrecisionIntervalV1": {
+      "additionalProperties": false,
+      "properties": {
+        "lower": {
+          "title": "Lower",
+          "type": "string"
+        },
+        "lower_inclusive": {
+          "default": true,
+          "title": "Lower Inclusive",
+          "type": "boolean"
+        },
+        "upper": {
+          "title": "Upper",
+          "type": "string"
+        },
+        "upper_inclusive": {
+          "default": true,
+          "title": "Upper Inclusive",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "lower",
+        "upper",
+        "lower_inclusive",
+        "upper_inclusive"
+      ],
+      "title": "FiscalPrecisionIntervalV1",
+      "type": "object"
+    },
+    "FiscalPublishV2": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_ref": {
+          "$ref": "#/$defs/ArtifactRefV1"
+        },
+        "decision_ref": {
+          "$ref": "#/$defs/ArtifactRefV1"
+        }
+      },
+      "required": [
+        "candidate_ref",
+        "decision_ref"
+      ],
+      "title": "FiscalPublishV2",
+      "type": "object"
+    },
+    "FiscalQuarterColumnsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "frequency": {
+          "const": "quarter",
+          "default": "quarter",
+          "title": "Frequency",
+          "type": "string"
+        },
+        "periods": {
+          "items": {
+            "$ref": "#/$defs/FiscalPeriodTargetV1"
+          },
+          "minItems": 1,
+          "title": "Periods",
+          "type": "array"
+        }
+      },
+      "required": [
+        "frequency",
+        "periods"
+      ],
+      "title": "FiscalQuarterColumnsV1",
+      "type": "object"
+    },
+    "FiscalReadBindingV2": {
+      "additionalProperties": false,
+      "properties": {
+        "approved": {
+          "$ref": "#/$defs/FiscalPublishV2"
+        },
+        "columns": {
+          "discriminator": {
+            "mapping": {
+              "quarter": "#/$defs/FiscalQuarterColumnsV1",
+              "ttm": "#/$defs/FiscalTtmColumnsV1"
+            },
+            "propertyName": "frequency"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FiscalQuarterColumnsV1"
+            },
+            {
+              "$ref": "#/$defs/FiscalTtmColumnsV1"
+            }
+          ],
+          "title": "Columns"
+        },
+        "cutoff_at": {
+          "format": "date-time",
+          "title": "Cutoff At",
+          "type": "string"
+        },
+        "manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Digest",
+          "type": "string"
+        },
+        "projection_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Projection Digest",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/StatementScopeV1"
+        },
+        "selected_period_set_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Selected Period Set Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest_digest",
+        "approved",
+        "projection_digest",
+        "scope",
+        "cutoff_at",
+        "columns",
+        "selected_period_set_digest"
+      ],
+      "title": "FiscalReadBindingV2",
+      "type": "object"
+    },
+    "FiscalReadRequestV2": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "fundamental.fiscal-statements.v2",
+          "default": "fundamental.fiscal-statements.v2",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "cutoff_at": {
+          "format": "date-time",
+          "title": "Cutoff At",
+          "type": "string"
+        },
+        "frequency": {
+          "enum": [
+            "quarter",
+            "ttm"
+          ],
+          "title": "Frequency",
+          "type": "string"
+        },
+        "manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Digest",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/StatementScopeV1"
+        }
+      },
+      "required": [
+        "contract_version",
+        "manifest_digest",
+        "scope",
+        "cutoff_at",
+        "frequency"
+      ],
+      "title": "FiscalReadRequestV2",
+      "type": "object"
+    },
+    "FiscalReadResultV2": {
+      "additionalProperties": false,
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/FiscalReadBindingV2"
+        },
+        "contract_version": {
+          "const": "fundamental.fiscal-statements.v2",
+          "default": "fundamental.fiscal-statements.v2",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/FiscalDisplayGraphV1"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/FiscalDisplayRowV1"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "supported_history_threshold": {
+          "default": null,
+          "title": "Supported History Threshold",
+          "type": "null"
+        },
+        "valuation_eligibility": {
+          "const": "not_evaluated",
+          "default": "not_evaluated",
+          "title": "Valuation Eligibility",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract_version",
+        "binding",
+        "rows",
+        "evidence",
+        "supported_history_threshold",
+        "valuation_eligibility"
+      ],
+      "title": "FiscalReadResultV2",
+      "type": "object"
+    },
+    "FiscalReconciliationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "frequency": {
+          "enum": [
+            "quarter",
+            "ttm"
+          ],
+          "title": "Frequency",
+          "type": "string"
+        },
+        "input_node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input Node Ids",
+          "type": "array"
+        },
+        "period_id": {
+          "title": "Period Id",
+          "type": "string"
+        },
+        "precision_interval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FiscalPrecisionIntervalV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason Code"
+        },
+        "residual": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Residual"
+        },
+        "rule": {
+          "enum": [
+            "opening_plus_change_equals_closing",
+            "flows_plus_fx_equals_change"
+          ],
+          "title": "Rule",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "consistent_at_reported_precision",
+            "conflict",
+            "unresolved_missing_inputs",
+            "unresolved_precision"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "period_id",
+        "frequency",
+        "rule",
+        "status",
+        "input_node_ids",
+        "residual",
+        "precision_interval",
+        "reason_code"
+      ],
+      "title": "FiscalReconciliationV1",
+      "type": "object"
+    },
+    "FiscalReportedCellV1": {
+      "additionalProperties": false,
+      "properties": {
+        "decimal": {
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "title": "Decimal",
+          "type": "string"
+        },
+        "kind": {
+          "const": "reported",
+          "default": "reported",
+          "title": "Kind",
+          "type": "string"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "source_observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Observation Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "node_id",
+        "decimal",
+        "source_observation_ids"
+      ],
+      "title": "FiscalReportedCellV1",
+      "type": "object"
+    },
+    "FiscalReportingBasisV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accounting_scope": {
+          "default": "consolidated_us_gaap",
+          "title": "Accounting Scope",
+          "type": "string"
+        },
+        "cash_basis": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cash Basis"
+        },
+        "consolidation_scope": {
+          "title": "Consolidation Scope",
+          "type": "string"
+        },
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "dimensions": {
+          "default": [],
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "entity_scope": {
+          "title": "Entity Scope",
+          "type": "string"
+        },
+        "issuer_id": {
+          "title": "Issuer Id",
+          "type": "string"
+        },
+        "revision_basis_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision Basis Id"
+        },
+        "security_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Security Id"
+        },
+        "security_scope": {
+          "title": "Security Scope",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issuer_id",
+        "security_id",
+        "security_scope",
+        "entity_scope",
+        "currency",
+        "unit",
+        "consolidation_scope",
+        "dimensions",
+        "cash_basis",
+        "accounting_scope",
+        "revision_basis_id"
+      ],
+      "title": "FiscalReportingBasisV1",
+      "type": "object"
+    },
+    "FiscalRevisionBasisProofV1": {
+      "additionalProperties": false,
+      "properties": {
+        "comparative_pairs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FiscalComparativePairV1"
+          },
+          "title": "Comparative Pairs",
+          "type": "array"
+        },
+        "component_period_digests": {
+          "default": [],
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "title": "Component Period Digests",
+          "type": "array"
+        },
+        "cutoff_at": {
+          "format": "date-time",
+          "title": "Cutoff At",
+          "type": "string"
+        },
+        "filings": {
+          "items": {
+            "$ref": "#/$defs/FiscalBasisFilingV1"
+          },
+          "minItems": 1,
+          "title": "Filings",
+          "type": "array"
+        },
+        "intermediate_published_revisions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Intermediate Published Revisions",
+          "type": "array"
+        },
+        "observations": {
+          "items": {
+            "$ref": "#/$defs/FiscalBasisObservationV1"
+          },
+          "minItems": 1,
+          "title": "Observations",
+          "type": "array"
+        },
+        "period": {
+          "$ref": "#/$defs/FiscalDurationPeriodV1"
+        },
+        "protocol": {
+          "const": "fundamental.fiscal-revision-basis.v1",
+          "default": "fundamental.fiscal-revision-basis.v1",
+          "title": "Protocol",
+          "type": "string"
+        },
+        "public_available_at": {
+          "format": "date-time",
+          "title": "Public Available At",
+          "type": "string"
+        },
+        "review_evidence_ref": {
+          "$ref": "#/$defs/ArtifactRefV1"
+        },
+        "revision_bridges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FiscalRevisionBridgeV1"
+          },
+          "title": "Revision Bridges",
+          "type": "array"
+        },
+        "row_id": {
+          "title": "Row Id",
+          "type": "string"
+        },
+        "source_revision": {
+          "title": "Source Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol",
+        "row_id",
+        "period",
+        "observations",
+        "filings",
+        "comparative_pairs",
+        "revision_bridges",
+        "intermediate_published_revisions",
+        "component_period_digests",
+        "source_revision",
+        "cutoff_at",
+        "public_available_at",
+        "review_evidence_ref"
+      ],
+      "title": "FiscalRevisionBasisProofV1",
+      "type": "object"
+    },
+    "FiscalRevisionBridgeV1": {
+      "additionalProperties": false,
+      "properties": {
+        "disclosure_refs": {
+          "items": {
+            "$ref": "#/$defs/ArtifactRefV1"
+          },
+          "minItems": 1,
+          "title": "Disclosure Refs",
+          "type": "array"
+        },
+        "observations": {
+          "items": {
+            "$ref": "#/$defs/FiscalBasisObservationV1"
+          },
+          "minItems": 2,
+          "title": "Observations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "observations",
+        "disclosure_refs"
+      ],
+      "title": "FiscalRevisionBridgeV1",
+      "type": "object"
+    },
+    "FiscalRowPolicyV1": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregation": {
+          "enum": [
+            "additive_flow",
+            "instant",
+            "cash_opening",
+            "cash_closing"
+          ],
+          "title": "Aggregation",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "row_id": {
+          "enum": [
+            "revenue",
+            "cost_of_revenue",
+            "gross_profit",
+            "operating_income",
+            "income_before_tax",
+            "income_tax_expense",
+            "net_income",
+            "cash_and_equivalents",
+            "operating_current_receivables",
+            "inventory",
+            "current_assets",
+            "property_plant_and_equipment",
+            "total_assets",
+            "operating_current_payables",
+            "current_liabilities",
+            "total_liabilities",
+            "total_equity",
+            "liabilities_and_equity",
+            "operating_cash_flow",
+            "investing_cash_flow",
+            "financing_cash_flow",
+            "effect_of_exchange_rates_on_cash",
+            "net_change_in_cash",
+            "cash_flow_beginning_balance",
+            "cash_flow_ending_balance"
+          ],
+          "title": "Row Id",
+          "type": "string"
+        },
+        "statement": {
+          "enum": [
+            "income_statement",
+            "balance_sheet",
+            "cash_flow"
+          ],
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row_id",
+        "statement",
+        "label",
+        "aggregation"
+      ],
+      "title": "FiscalRowPolicyV1",
+      "type": "object"
+    },
+    "FiscalSavedReadV3": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "fiscal",
+          "default": "fiscal",
+          "title": "Kind",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/FiscalReadRequestV2"
+        },
+        "result": {
+          "$ref": "#/$defs/FiscalReadResultV2"
+        },
+        "result_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Result Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "request",
+        "result",
+        "result_digest"
+      ],
+      "title": "FiscalSavedReadV3",
+      "type": "object"
+    },
+    "FiscalSourceDocumentV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accession_number": {
+          "pattern": "^[0-9]{10}-[0-9]{2}-[0-9]{6}$",
+          "title": "Accession Number",
+          "type": "string"
+        },
+        "archive_member_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Archive Member Sha256",
+          "type": "string"
+        },
+        "issuer_id": {
+          "pattern": "^[0-9]{10}$",
+          "title": "Issuer Id",
+          "type": "string"
+        },
+        "primary_document_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Primary Document Sha256",
+          "type": "string"
+        },
+        "primary_document_url": {
+          "minLength": 1,
+          "title": "Primary Document Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issuer_id",
+        "accession_number",
+        "primary_document_url",
+        "primary_document_sha256",
+        "archive_member_sha256"
+      ],
+      "title": "FiscalSourceDocumentV1",
+      "type": "object"
+    },
+    "FiscalSourceInspectionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "classification_refs": {
+          "items": {
+            "$ref": "#/$defs/ArtifactRefV1"
+          },
+          "title": "Classification Refs",
+          "type": "array"
+        },
+        "mapping_approval_ref": {
+          "$ref": "#/$defs/ArtifactRefV1"
+        },
+        "mapping_ref": {
+          "$ref": "#/$defs/ArtifactRefV1"
+        },
+        "parser_action_refs": {
+          "items": {
+            "$ref": "#/$defs/ArtifactRefV1"
+          },
+          "title": "Parser Action Refs",
+          "type": "array"
+        },
+        "raw_report_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Raw Report Digest",
+          "type": "string"
+        },
+        "source_binding_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Binding Digest",
+          "type": "string"
+        },
+        "source_document": {
+          "$ref": "#/$defs/FiscalSourceDocumentV1"
+        },
+        "source_validation_ref": {
+          "$ref": "#/$defs/ArtifactRefV1"
+        },
+        "validation_kind": {
+          "enum": [
+            "complete_matched",
+            "complete_refused"
+          ],
+          "title": "Validation Kind",
+          "type": "string"
+        },
+        "witness_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRefV1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source_validation_ref",
+        "source_document",
+        "validation_kind",
+        "source_binding_digest",
+        "raw_report_digest",
+        "parser_action_refs",
+        "witness_ref",
+        "classification_refs",
+        "mapping_ref",
+        "mapping_approval_ref"
+      ],
+      "title": "FiscalSourceInspectionV1",
+      "type": "object"
+    },
+    "FiscalSourceLocatorV1": {
+      "additionalProperties": false,
+      "properties": {
+        "context_id": {
+          "title": "Context Id",
+          "type": "string"
+        },
+        "fact_index": {
+          "minimum": 0,
+          "title": "Fact Index",
+          "type": "integer"
+        },
+        "primary_document_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Primary Document Sha256",
+          "type": "string"
+        },
+        "row_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Index"
+        },
+        "table_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Table Index"
+        }
+      },
+      "required": [
+        "primary_document_sha256",
+        "context_id",
+        "fact_index",
+        "table_index",
+        "row_index"
+      ],
+      "title": "FiscalSourceLocatorV1",
+      "type": "object"
+    },
+    "FiscalTtmColumnsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "frequency": {
+          "const": "ttm",
+          "default": "ttm",
+          "title": "Frequency",
+          "type": "string"
+        },
+        "windows": {
+          "items": {
+            "$ref": "#/$defs/FiscalTtmWindowV1"
+          },
+          "minItems": 1,
+          "title": "Windows",
+          "type": "array"
+        }
+      },
+      "required": [
+        "frequency",
+        "windows"
+      ],
+      "title": "FiscalTtmColumnsV1",
+      "type": "object"
+    },
+    "FiscalTtmWindowV1": {
+      "additionalProperties": false,
+      "properties": {
+        "quarters": {
+          "items": {
+            "$ref": "#/$defs/FiscalPeriodTargetV1"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Quarters",
+          "type": "array"
+        },
+        "source_binding_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Binding Digest",
+          "type": "string"
+        },
+        "window_id": {
+          "title": "Window Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "window_id",
+        "quarters",
+        "source_binding_digest"
+      ],
+      "title": "FiscalTtmWindowV1",
+      "type": "object"
+    },
+    "FiscalValueNodeV1": {
+      "additionalProperties": false,
+      "properties": {
+        "availability": {
+          "enum": [
+            "reported",
+            "derived",
+            "unavailable",
+            "conflict"
+          ],
+          "title": "Availability",
+          "type": "string"
+        },
+        "available_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Available At"
+        },
+        "candidates": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FiscalCandidateDecisionV1"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "executable_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Executable Digest",
+          "type": "string"
+        },
+        "formula": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Formula"
+        },
+        "frequency": {
+          "enum": [
+            "quarter",
+            "ttm"
+          ],
+          "title": "Frequency",
+          "type": "string"
+        },
+        "input_edges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FiscalInputEdgeV1"
+          },
+          "title": "Input Edges",
+          "type": "array"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "period": {
+          "discriminator": {
+            "mapping": {
+              "duration": "#/$defs/FiscalDurationPeriodV1",
+              "instant": "#/$defs/FiscalInstantPeriodV1"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FiscalDurationPeriodV1"
+            },
+            {
+              "$ref": "#/$defs/FiscalInstantPeriodV1"
+            }
+          ],
+          "title": "Period"
+        },
+        "policy_id": {
+          "title": "Policy Id",
+          "type": "string"
+        },
+        "precision_interval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FiscalPrecisionIntervalV1"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "quality": {
+          "$ref": "#/$defs/QualityStatus"
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason Code"
+        },
+        "reporting_basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FiscalReportingBasisV1"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "revision_basis_proof": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FiscalRevisionBasisProofV1"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "row_id": {
+          "title": "Row Id",
+          "type": "string"
+        },
+        "source_binding_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Binding Digest",
+          "type": "string"
+        },
+        "source_observation_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Observation Ids",
+          "type": "array"
+        },
+        "statement": {
+          "enum": [
+            "income_statement",
+            "balance_sheet",
+            "cash_flow"
+          ],
+          "title": "Statement",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        },
+        "verification_edges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FiscalInputEdgeV1"
+          },
+          "title": "Verification Edges",
+          "type": "array"
+        },
+        "verification_node_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Verification Node Ids",
+          "type": "array"
+        },
+        "verification_observation_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Verification Observation Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "node_id",
+        "row_id",
+        "statement",
+        "frequency",
+        "period",
+        "availability",
+        "value",
+        "source_observation_ids",
+        "verification_observation_ids",
+        "verification_node_ids",
+        "formula",
+        "policy_id",
+        "executable_digest",
+        "input_edges",
+        "verification_edges",
+        "source_binding_digest",
+        "reporting_basis",
+        "revision_basis_proof",
+        "quality",
+        "available_at",
+        "precision_interval",
+        "reason_code",
+        "candidates"
+      ],
+      "title": "FiscalValueNodeV1",
+      "type": "object"
+    },
+    "FundamentalCandidateRejectionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "reason"
+      ],
+      "title": "FundamentalCandidateRejectionV1",
+      "type": "object"
+    },
+    "FundamentalCanonicalFactV1": {
+      "additionalProperties": false,
+      "description": "Typed fact projection; no browser or Agent-side SEC fallback is implied.",
+      "properties": {
+        "accession_number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accession Number"
+        },
+        "accounting_evidence": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accounting Evidence"
+        },
+        "amendment_scope": {
+          "anyOf": [
+            {
+              "enum": [
+                "valuation_relevant",
+                "unrelated",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amendment Scope"
+        },
+        "amends_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amends Accession"
+        },
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "concept": {
+          "minLength": 1,
+          "title": "Concept",
+          "type": "string"
+        },
+        "context": {
+          "$ref": "#/$defs/FundamentalXbrlContextV1"
+        },
+        "contract_version": {
+          "const": "fundamental.v1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "decimals": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decimals"
+        },
+        "fact_id": {
+          "minLength": 1,
+          "title": "Fact Id",
+          "type": "string"
+        },
+        "filed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filed At"
+        },
+        "filing_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filing Version"
+        },
+        "instant": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instant"
+        },
+        "is_amendment": {
+          "default": false,
+          "title": "Is Amendment",
+          "type": "boolean"
+        },
+        "issue_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Issue Codes",
+          "type": "array"
+        },
+        "issuer_id": {
+          "minLength": 1,
+          "title": "Issuer Id",
+          "type": "string"
+        },
+        "mapping_confidence": {
+          "anyOf": [
+            {
+              "enum": [
+                "high",
+                "medium",
+                "low",
+                "unresolved"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mapping Confidence"
+        },
+        "mapping_decision_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mapping Decision Id"
+        },
+        "normalized_field": {
+          "minLength": 1,
+          "title": "Normalized Field",
+          "type": "string"
+        },
+        "period_end": {
+          "format": "date",
+          "title": "Period End",
+          "type": "string"
+        },
+        "period_start": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Period Start"
+        },
+        "point_in_time_policy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Point In Time Policy"
+        },
+        "quality": {
+          "enum": [
+            "verified",
+            "provisional",
+            "degraded",
+            "unsupported",
+            "abstain",
+            "error"
+          ],
+          "title": "Quality",
+          "type": "string"
+        },
+        "rejected_candidate_reasons": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FundamentalCandidateRejectionV1"
+          },
+          "title": "Rejected Candidate Reasons",
+          "type": "array"
+        },
+        "rejected_candidates": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Rejected Candidates",
+          "type": "array"
+        },
+        "scale": {
+          "title": "Scale",
+          "type": "integer"
+        },
+        "security_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Security Id"
+        },
+        "security_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Security Scope"
+        },
+        "selection_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selection Reason"
+        },
+        "source": {
+          "$ref": "#/$defs/FundamentalSourceProvenanceV1"
+        },
+        "supersedes_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes Accession"
+        },
+        "taxonomy_version": {
+          "minLength": 1,
+          "title": "Taxonomy Version",
+          "type": "string"
+        },
+        "unit": {
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FundamentalMissingValueV1"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "contract_version",
+        "fact_id",
+        "issuer_id",
+        "security_id",
+        "concept",
+        "normalized_field",
+        "value",
+        "unit",
+        "scale",
+        "currency",
+        "period_start",
+        "period_end",
+        "instant",
+        "context",
+        "security_scope",
+        "as_of",
+        "available_at",
+        "filed_at",
+        "captured_at",
+        "accession_number",
+        "filing_version",
+        "is_amendment",
+        "amends_accession",
+        "supersedes_accession",
+        "amendment_scope",
+        "decimals",
+        "taxonomy_version",
+        "source",
+        "quality",
+        "issue_codes",
+        "mapping_decision_id",
+        "mapping_confidence",
+        "rejected_candidates",
+        "rejected_candidate_reasons",
+        "point_in_time_policy",
+        "selection_reason"
+      ],
+      "title": "FundamentalCanonicalFactV1",
+      "type": "object"
+    },
+    "FundamentalDimensionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "member": {
+          "minLength": 1,
+          "title": "Member",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "member"
+      ],
+      "title": "FundamentalDimensionV1",
+      "type": "object"
+    },
+    "FundamentalMissingValueV1": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "missing",
+            "not_applicable",
+            "unsupported",
+            "unresolved"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "reason"
+      ],
+      "title": "FundamentalMissingValueV1",
+      "type": "object"
+    },
+    "FundamentalSourceProvenanceV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accession_number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accession Number"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "filed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filed At"
+        },
+        "parser_version": {
+          "minLength": 1,
+          "title": "Parser Version",
+          "type": "string"
+        },
+        "source_role": {
+          "enum": [
+            "filing",
+            "company_facts",
+            "taxonomy",
+            "acquisition",
+            "macro",
+            "market",
+            "reference"
+          ],
+          "title": "Source Role",
+          "type": "string"
+        },
+        "source_url": {
+          "minLength": 1,
+          "title": "Source Url",
+          "type": "string"
+        },
+        "taxonomy_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Taxonomy Version"
+        },
+        "terms_reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Terms Reference"
+        }
+      },
+      "required": [
+        "source_url",
+        "content_hash",
+        "source_role",
+        "captured_at",
+        "available_at",
+        "filed_at",
+        "accession_number",
+        "parser_version",
+        "taxonomy_version",
+        "terms_reference"
+      ],
+      "title": "FundamentalSourceProvenanceV1",
+      "type": "object"
+    },
+    "FundamentalXbrlContextV1": {
+      "additionalProperties": false,
+      "properties": {
+        "concept_qname": {
+          "minLength": 1,
+          "title": "Concept Qname",
+          "type": "string"
+        },
+        "consolidation_scope": {
+          "minLength": 1,
+          "title": "Consolidation Scope",
+          "type": "string"
+        },
+        "context_id": {
+          "minLength": 1,
+          "title": "Context Id",
+          "type": "string"
+        },
+        "dimensions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FundamentalDimensionV1"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "end_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Date"
+        },
+        "entity_scope": {
+          "minLength": 1,
+          "title": "Entity Scope",
+          "type": "string"
+        },
+        "instant": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instant"
+        },
+        "measure": {
+          "minLength": 1,
+          "title": "Measure",
+          "type": "string"
+        },
+        "period_type": {
+          "enum": [
+            "instant",
+            "duration"
+          ],
+          "title": "Period Type",
+          "type": "string"
+        },
+        "start_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Date"
+        },
+        "unit_qname": {
+          "minLength": 1,
+          "title": "Unit Qname",
+          "type": "string"
+        }
+      },
+      "required": [
+        "concept_qname",
+        "period_type",
+        "start_date",
+        "end_date",
+        "instant",
+        "unit_qname",
+        "measure",
+        "dimensions",
+        "entity_scope",
+        "consolidation_scope",
+        "context_id"
+      ],
+      "title": "FundamentalXbrlContextV1",
+      "type": "object"
+    },
+    "InstantStatementPeriodV1": {
+      "additionalProperties": false,
+      "properties": {
+        "instant": {
+          "format": "date",
+          "title": "Instant",
+          "type": "string"
+        },
+        "kind": {
+          "const": "instant",
+          "default": "instant",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "instant"
+      ],
+      "title": "InstantStatementPeriodV1",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "OriginalFiscalRevisionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "original",
+          "default": "original",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "OriginalFiscalRevisionV1",
+      "type": "object"
+    },
+    "QualityStatus": {
+      "enum": [
+        "verified",
+        "provisional",
+        "degraded",
+        "unsupported",
+        "abstain",
+        "error"
+      ],
+      "title": "QualityStatus",
+      "type": "string"
+    },
+    "ReportedFiscalYearV1": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "reported_fiscal_year",
+          "default": "reported_fiscal_year",
+          "title": "Kind",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/FiscalDurationPeriodV1"
+        }
+      },
+      "required": [
+        "kind",
+        "period"
+      ],
+      "title": "ReportedFiscalYearV1",
+      "type": "object"
+    },
+    "ReportedInstantV1": {
+      "additionalProperties": false,
+      "properties": {
+        "instant": {
+          "format": "date",
+          "title": "Instant",
+          "type": "string"
+        },
+        "kind": {
+          "const": "reported_instant",
+          "default": "reported_instant",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "instant"
+      ],
+      "title": "ReportedInstantV1",
+      "type": "object"
+    },
+    "ReportedQuarterV1": {
+      "additionalProperties": false,
+      "properties": {
+        "applicability": {
+          "default": "quarter",
+          "enum": [
+            "quarter",
+            "quarter_and_ytd"
+          ],
+          "title": "Applicability",
+          "type": "string"
+        },
+        "kind": {
+          "const": "reported_quarter",
+          "default": "reported_quarter",
+          "title": "Kind",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/FiscalDurationPeriodV1"
+        }
+      },
+      "required": [
+        "kind",
+        "period",
+        "applicability"
+      ],
+      "title": "ReportedQuarterV1",
+      "type": "object"
+    },
+    "ReportedStatementCellV1": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_fact_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Candidate Fact Ids",
+          "type": "array"
+        },
+        "cash_basis": {
+          "anyOf": [
+            {
+              "enum": [
+                "cash_and_equivalents",
+                "cash_equivalents_and_restricted_cash"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cash Basis"
+        },
+        "cell_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Cell Id",
+          "type": "string"
+        },
+        "fact": {
+          "$ref": "#/$defs/StatementNumericFactV1"
+        },
+        "mapping_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Mapping Digest",
+          "type": "string"
+        },
+        "mapping_evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/StatementArtifactRefV1"
+          },
+          "title": "Mapping Evidence Refs",
+          "type": "array"
+        },
+        "period_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Period Id",
+          "type": "string"
+        },
+        "quality_status": {
+          "default": "verified",
+          "enum": [
+            "verified",
+            "provisional",
+            "degraded",
+            "unsupported",
+            "abstain",
+            "error"
+          ],
+          "title": "Quality Status",
+          "type": "string"
+        },
+        "rejected_candidates": {
+          "items": {
+            "$ref": "#/$defs/FundamentalCandidateRejectionV1"
+          },
+          "title": "Rejected Candidates",
+          "type": "array"
+        },
+        "row_id": {
+          "enum": [
+            "revenue",
+            "cost_of_revenue",
+            "gross_profit",
+            "operating_income",
+            "income_before_tax",
+            "income_tax_expense",
+            "net_income",
+            "cash_and_equivalents",
+            "operating_current_receivables",
+            "inventory",
+            "current_assets",
+            "property_plant_and_equipment",
+            "total_assets",
+            "operating_current_payables",
+            "current_liabilities",
+            "total_liabilities",
+            "total_equity",
+            "liabilities_and_equity",
+            "operating_cash_flow",
+            "investing_cash_flow",
+            "financing_cash_flow",
+            "effect_of_exchange_rates_on_cash",
+            "net_change_in_cash",
+            "cash_flow_beginning_balance",
+            "cash_flow_ending_balance"
+          ],
+          "title": "Row Id",
+          "type": "string"
+        },
+        "selected_version_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Selected Version Id",
+          "type": "string"
+        },
+        "selection_kind": {
+          "enum": [
+            "original",
+            "amended",
+            "later_comparative"
+          ],
+          "title": "Selection Kind",
+          "type": "string"
+        },
+        "selection_reason": {
+          "title": "Selection Reason",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "snapshot_manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Snapshot Manifest Digest",
+          "type": "string"
+        },
+        "source_report_period_end": {
+          "format": "date",
+          "title": "Source Report Period End",
+          "type": "string"
+        },
+        "status": {
+          "const": "reported",
+          "default": "reported",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "cell_id",
+        "row_id",
+        "period_id",
+        "selected_version_id",
+        "fact",
+        "snapshot_id",
+        "snapshot_manifest_digest",
+        "mapping_digest",
+        "mapping_evidence_refs",
+        "cash_basis",
+        "selection_reason",
+        "selection_kind",
+        "source_report_period_end",
+        "candidate_fact_ids",
+        "rejected_candidates",
+        "quality_status"
+      ],
+      "title": "ReportedStatementCellV1",
+      "type": "object"
+    },
+    "ReportedYtdV1": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "reported_ytd",
+          "default": "reported_ytd",
+          "title": "Kind",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/FiscalDurationPeriodV1"
+        }
+      },
+      "required": [
+        "kind",
+        "period"
+      ],
+      "title": "ReportedYtdV1",
+      "type": "object"
+    },
+    "StatementArtifactRefV1": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "minLength": 1,
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "media_type": {
+          "minLength": 1,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "content_hash",
+        "media_type",
+        "role"
+      ],
+      "title": "StatementArtifactRefV1",
+      "type": "object"
+    },
+    "StatementAvailableSourceV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accession_number": {
+          "title": "Accession Number",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "fact_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fact Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "available",
+          "default": "available",
+          "title": "Kind",
+          "type": "string"
+        },
+        "outcome_ref": {
+          "$ref": "#/$defs/StatementArtifactRefV1"
+        },
+        "report_period_end": {
+          "format": "date",
+          "title": "Report Period End",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "accession_number",
+        "available_at",
+        "report_period_end",
+        "outcome_ref",
+        "fact_ids"
+      ],
+      "title": "StatementAvailableSourceV1",
+      "type": "object"
+    },
+    "StatementColumnV1": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar": {
+          "enum": [
+            "52_week",
+            "53_week",
+            "calendar_year",
+            "other",
+            "unresolved"
+          ],
+          "title": "Calendar",
+          "type": "string"
+        },
+        "duration_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Duration Days"
+        },
+        "fiscal_label": {
+          "title": "Fiscal Label",
+          "type": "string"
+        },
+        "period": {
+          "discriminator": {
+            "mapping": {
+              "duration": "#/$defs/DurationStatementPeriodV1",
+              "instant": "#/$defs/InstantStatementPeriodV1",
+              "unresolved": "#/$defs/UnresolvedStatementPeriodV1"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DurationStatementPeriodV1"
+            },
+            {
+              "$ref": "#/$defs/InstantStatementPeriodV1"
+            },
+            {
+              "$ref": "#/$defs/UnresolvedStatementPeriodV1"
+            }
+          ],
+          "title": "Period"
+        },
+        "period_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Period Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "period_id",
+        "fiscal_label",
+        "period",
+        "duration_days",
+        "calendar"
+      ],
+      "title": "StatementColumnV1",
+      "type": "object"
+    },
+    "StatementComparabilityV1": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_row_ids": {
+          "default": [],
+          "items": {
+            "enum": [
+              "revenue",
+              "cost_of_revenue",
+              "gross_profit",
+              "operating_income",
+              "income_before_tax",
+              "income_tax_expense",
+              "net_income",
+              "cash_and_equivalents",
+              "operating_current_receivables",
+              "inventory",
+              "current_assets",
+              "property_plant_and_equipment",
+              "total_assets",
+              "operating_current_payables",
+              "current_liabilities",
+              "total_liabilities",
+              "total_equity",
+              "liabilities_and_equity",
+              "operating_cash_flow",
+              "investing_cash_flow",
+              "financing_cash_flow",
+              "effect_of_exchange_rates_on_cash",
+              "net_change_in_cash",
+              "cash_flow_beginning_balance",
+              "cash_flow_ending_balance"
+            ],
+            "type": "string"
+          },
+          "title": "Affected Row Ids",
+          "type": "array"
+        },
+        "earlier_period_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Earlier Period Id",
+          "type": "string"
+        },
+        "issue_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issue Codes",
+          "type": "array"
+        },
+        "later_period_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Later Period Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "comparable",
+            "limited",
+            "not_comparable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "earlier_period_id",
+        "later_period_id",
+        "status",
+        "issue_codes",
+        "affected_row_ids"
+      ],
+      "title": "StatementComparabilityV1",
+      "type": "object"
+    },
+    "StatementCoverageV1": {
+      "additionalProperties": false,
+      "properties": {
+        "declared_rows": {
+          "title": "Declared Rows",
+          "type": "integer"
+        },
+        "fiscal_label": {
+          "title": "Fiscal Label",
+          "type": "string"
+        },
+        "period_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Period Id",
+          "type": "string"
+        },
+        "reported_rows": {
+          "title": "Reported Rows",
+          "type": "integer"
+        },
+        "statement": {
+          "enum": [
+            "income_statement",
+            "balance_sheet",
+            "cash_flow"
+          ],
+          "title": "Statement",
+          "type": "string"
+        },
+        "unavailable_row_ids": {
+          "items": {
+            "enum": [
+              "revenue",
+              "cost_of_revenue",
+              "gross_profit",
+              "operating_income",
+              "income_before_tax",
+              "income_tax_expense",
+              "net_income",
+              "cash_and_equivalents",
+              "operating_current_receivables",
+              "inventory",
+              "current_assets",
+              "property_plant_and_equipment",
+              "total_assets",
+              "operating_current_payables",
+              "current_liabilities",
+              "total_liabilities",
+              "total_equity",
+              "liabilities_and_equity",
+              "operating_cash_flow",
+              "investing_cash_flow",
+              "financing_cash_flow",
+              "effect_of_exchange_rates_on_cash",
+              "net_change_in_cash",
+              "cash_flow_beginning_balance",
+              "cash_flow_ending_balance"
+            ],
+            "type": "string"
+          },
+          "title": "Unavailable Row Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "period_id",
+        "statement",
+        "fiscal_label",
+        "reported_rows",
+        "declared_rows",
+        "unavailable_row_ids"
+      ],
+      "title": "StatementCoverageV1",
+      "type": "object"
+    },
+    "StatementEditionV2": {
+      "additionalProperties": false,
+      "properties": {
+        "annual_manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Annual Manifest Digest",
+          "type": "string"
+        },
+        "company_name": {
+          "minLength": 1,
+          "title": "Company Name",
+          "type": "string"
+        },
+        "cutoff_at": {
+          "format": "date-time",
+          "title": "Cutoff At",
+          "type": "string"
+        },
+        "edition_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Edition Id",
+          "type": "string"
+        },
+        "fiscal_manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fiscal Manifest Digest",
+          "type": "string"
+        },
+        "frequencies": {
+          "default": [
+            "annual",
+            "quarter",
+            "ttm"
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "const": "annual",
+              "type": "string"
+            },
+            {
+              "const": "quarter",
+              "type": "string"
+            },
+            {
+              "const": "ttm",
+              "type": "string"
+            }
+          ],
+          "title": "Frequencies",
+          "type": "array"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/StatementScopeV1"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[A-Z0-9.-]+$",
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "edition_id",
+        "label",
+        "ticker",
+        "company_name",
+        "scope",
+        "cutoff_at",
+        "annual_manifest_digest",
+        "fiscal_manifest_digest",
+        "frequencies"
+      ],
+      "title": "StatementEditionV2",
+      "type": "object"
+    },
+    "StatementFactEvidenceV1": {
+      "additionalProperties": false,
+      "properties": {
+        "cash_basis": {
+          "anyOf": [
+            {
+              "enum": [
+                "cash_and_equivalents",
+                "cash_equivalents_and_restricted_cash"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cash Basis"
+        },
+        "fact": {
+          "$ref": "#/$defs/FundamentalCanonicalFactV1"
+        },
+        "mapping": {
+          "$ref": "#/$defs/StatementMappingV1"
+        },
+        "mapping_evidence_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/StatementArtifactRefV1"
+          },
+          "title": "Mapping Evidence Refs",
+          "type": "array"
+        },
+        "snapshot_id": {
+          "minLength": 1,
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "snapshot_manifest_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Snapshot Manifest Digest",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/StatementSourceRecordV1"
+        }
+      },
+      "required": [
+        "fact",
+        "mapping",
+        "source",
+        "snapshot_id",
+        "snapshot_manifest_digest",
+        "mapping_evidence_refs",
+        "cash_basis"
+      ],
+      "title": "StatementFactEvidenceV1",
+      "type": "object"
+    },
+    "StatementMappingV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accounting_rules": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accounting Rules"
+        },
+        "anchor_concept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor Concept"
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "unresolved"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "contract_version": {
+          "const": "fundamental.v1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "decision_id": {
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "mapping_version": {
+          "title": "Mapping Version",
+          "type": "string"
+        },
+        "normalized_field": {
+          "title": "Normalized Field",
+          "type": "string"
+        },
+        "observation_scope": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observation Scope"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer"
+        },
+        "security_scope": {
+          "anyOf": [
+            {
+              "const": "issuer",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Security Scope"
+        },
+        "source_concept": {
+          "title": "Source Concept",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "approved",
+            "provisional",
+            "ambiguous",
+            "rejected"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract_version",
+        "decision_id",
+        "source_concept",
+        "normalized_field",
+        "mapping_version",
+        "anchor_concept",
+        "confidence",
+        "evidence_refs",
+        "reviewer",
+        "reviewed_at",
+        "status"
+      ],
+      "title": "StatementMappingV1",
+      "type": "object"
+    },
+    "StatementNumericFactV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accession_number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accession Number"
+        },
+        "accounting_evidence": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accounting Evidence"
+        },
+        "amendment_scope": {
+          "anyOf": [
+            {
+              "enum": [
+                "valuation_relevant",
+                "unrelated",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amendment Scope"
+        },
+        "amends_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amends Accession"
+        },
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "concept": {
+          "minLength": 1,
+          "title": "Concept",
+          "type": "string"
+        },
+        "context": {
+          "$ref": "#/$defs/FundamentalXbrlContextV1"
+        },
+        "contract_version": {
+          "const": "fundamental.v1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "decimals": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decimals"
+        },
+        "fact_id": {
+          "minLength": 1,
+          "title": "Fact Id",
+          "type": "string"
+        },
+        "filed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filed At"
+        },
+        "filing_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filing Version"
+        },
+        "instant": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instant"
+        },
+        "is_amendment": {
+          "default": false,
+          "title": "Is Amendment",
+          "type": "boolean"
+        },
+        "issue_codes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Issue Codes",
+          "type": "array"
+        },
+        "issuer_id": {
+          "minLength": 1,
+          "title": "Issuer Id",
+          "type": "string"
+        },
+        "mapping_confidence": {
+          "anyOf": [
+            {
+              "enum": [
+                "high",
+                "medium",
+                "low",
+                "unresolved"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mapping Confidence"
+        },
+        "mapping_decision_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mapping Decision Id"
+        },
+        "normalized_field": {
+          "minLength": 1,
+          "title": "Normalized Field",
+          "type": "string"
+        },
+        "period_end": {
+          "format": "date",
+          "title": "Period End",
+          "type": "string"
+        },
+        "period_start": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Period Start"
+        },
+        "point_in_time_policy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Point In Time Policy"
+        },
+        "quality": {
+          "enum": [
+            "verified",
+            "provisional",
+            "degraded",
+            "unsupported",
+            "abstain",
+            "error"
+          ],
+          "title": "Quality",
+          "type": "string"
+        },
+        "rejected_candidate_reasons": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FundamentalCandidateRejectionV1"
+          },
+          "title": "Rejected Candidate Reasons",
+          "type": "array"
+        },
+        "rejected_candidates": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Rejected Candidates",
+          "type": "array"
+        },
+        "scale": {
+          "title": "Scale",
+          "type": "integer"
+        },
+        "security_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Security Id"
+        },
+        "security_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Security Scope"
+        },
+        "selection_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selection Reason"
+        },
+        "source": {
+          "$ref": "#/$defs/FundamentalSourceProvenanceV1"
+        },
+        "supersedes_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes Accession"
+        },
+        "taxonomy_version": {
+          "minLength": 1,
+          "title": "Taxonomy Version",
+          "type": "string"
+        },
+        "unit": {
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract_version",
+        "fact_id",
+        "issuer_id",
+        "security_id",
+        "concept",
+        "normalized_field",
+        "value",
+        "unit",
+        "scale",
+        "currency",
+        "period_start",
+        "period_end",
+        "instant",
+        "context",
+        "security_scope",
+        "as_of",
+        "available_at",
+        "filed_at",
+        "captured_at",
+        "accession_number",
+        "filing_version",
+        "is_amendment",
+        "amends_accession",
+        "supersedes_accession",
+        "amendment_scope",
+        "decimals",
+        "taxonomy_version",
+        "source",
+        "quality",
+        "issue_codes",
+        "mapping_decision_id",
+        "mapping_confidence",
+        "rejected_candidates",
+        "rejected_candidate_reasons",
+        "point_in_time_policy",
+        "selection_reason"
+      ],
+      "title": "StatementNumericFactV1",
+      "type": "object"
+    },
+    "StatementProfileV1": {
+      "additionalProperties": false,
+      "properties": {
+        "comparability_policy": {
+          "const": "actual-annual-periods-no-annualization-v1",
+          "title": "Comparability Policy",
+          "type": "string"
+        },
+        "contract_version": {
+          "const": "fundamental.annual-statements.v1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "executable_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Executable Digest",
+          "type": "string"
+        },
+        "history_coverage_target": {
+          "const": 5,
+          "default": 5,
+          "title": "History Coverage Target",
+          "type": "integer"
+        },
+        "profile_id": {
+          "const": "us-gaap-nonfinancial-annual-v1",
+          "title": "Profile Id",
+          "type": "string"
+        },
+        "reconciliation_policy": {
+          "const": "reported-decimals-half-unit-sum-v1",
+          "title": "Reconciliation Policy",
+          "type": "string"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/StatementRowDefinitionV1"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "selection_policy": {
+          "const": "canonical-pit-exact-row-key-v1",
+          "title": "Selection Policy",
+          "type": "string"
+        },
+        "supported_history_threshold": {
+          "default": null,
+          "title": "Supported History Threshold",
+          "type": "null"
+        }
+      },
+      "required": [
+        "profile_id",
+        "contract_version",
+        "rows",
+        "selection_policy",
+        "reconciliation_policy",
+        "comparability_policy",
+        "executable_digest",
+        "history_coverage_target",
+        "supported_history_threshold"
+      ],
+      "title": "StatementProfileV1",
+      "type": "object"
+    },
+    "StatementReconciliationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "difference": {
+          "anyOf": [
+            {
+              "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Difference"
+        },
+        "expression": {
+          "title": "Expression",
+          "type": "string"
+        },
+        "input_fact_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input Fact Ids",
+          "type": "array"
+        },
+        "issue_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issue Codes",
+          "type": "array"
+        },
+        "period_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Period Id",
+          "type": "string"
+        },
+        "policy_version": {
+          "const": "reported-decimals-half-unit-sum-v1",
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error",
+            "fatal"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "statement": {
+          "enum": [
+            "income_statement",
+            "balance_sheet",
+            "cash_flow"
+          ],
+          "title": "Statement",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "rounding",
+            "unresolved",
+            "not_applicable",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tolerance"
+        }
+      },
+      "required": [
+        "statement",
+        "period_id",
+        "check_id",
+        "status",
+        "severity",
+        "expression",
+        "input_fact_ids",
+        "difference",
+        "tolerance",
+        "issue_codes",
+        "policy_version"
+      ],
+      "title": "StatementReconciliationV1",
+      "type": "object"
+    },
+    "StatementRowDefinitionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "concepts": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Concepts",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "row_id": {
+          "enum": [
+            "revenue",
+            "cost_of_revenue",
+            "gross_profit",
+            "operating_income",
+            "income_before_tax",
+            "income_tax_expense",
+            "net_income",
+            "cash_and_equivalents",
+            "operating_current_receivables",
+            "inventory",
+            "current_assets",
+            "property_plant_and_equipment",
+            "total_assets",
+            "operating_current_payables",
+            "current_liabilities",
+            "total_liabilities",
+            "total_equity",
+            "liabilities_and_equity",
+            "operating_cash_flow",
+            "investing_cash_flow",
+            "financing_cash_flow",
+            "effect_of_exchange_rates_on_cash",
+            "net_change_in_cash",
+            "cash_flow_beginning_balance",
+            "cash_flow_ending_balance"
+          ],
+          "title": "Row Id",
+          "type": "string"
+        },
+        "sign_policy": {
+          "const": "reported_signed_decimal_v1",
+          "default": "reported_signed_decimal_v1",
+          "title": "Sign Policy",
+          "type": "string"
+        },
+        "statement": {
+          "enum": [
+            "income_statement",
+            "balance_sheet",
+            "cash_flow"
+          ],
+          "title": "Statement",
+          "type": "string"
+        },
+        "value_period_role": {
+          "enum": [
+            "duration",
+            "period_end",
+            "day_before_period_start"
+          ],
+          "title": "Value Period Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row_id",
+        "statement",
+        "label",
+        "value_period_role",
+        "concepts",
+        "sign_policy"
+      ],
+      "title": "StatementRowDefinitionV1",
+      "type": "object"
+    },
+    "StatementRowV1": {
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "reported": "#/$defs/ReportedStatementCellV1",
+                "unavailable": "#/$defs/UnavailableStatementCellV1"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ReportedStatementCellV1"
+              },
+              {
+                "$ref": "#/$defs/UnavailableStatementCellV1"
+              }
+            ]
+          },
+          "title": "Cells",
+          "type": "array"
+        },
+        "definition": {
+          "$ref": "#/$defs/StatementRowDefinitionV1"
+        }
+      },
+      "required": [
+        "definition",
+        "cells"
+      ],
+      "title": "StatementRowV1",
+      "type": "object"
+    },
+    "StatementScopeV1": {
+      "additionalProperties": false,
+      "properties": {
+        "consolidation_scope": {
+          "const": "consolidated",
+          "default": "consolidated",
+          "title": "Consolidation Scope",
+          "type": "string"
+        },
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "entity_scope": {
+          "title": "Entity Scope",
+          "type": "string"
+        },
+        "issuer_id": {
+          "minLength": 1,
+          "title": "Issuer Id",
+          "type": "string"
+        },
+        "security_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Security Id"
+        },
+        "security_scope": {
+          "title": "Security Scope",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issuer_id",
+        "security_id",
+        "security_scope",
+        "entity_scope",
+        "currency",
+        "unit",
+        "consolidation_scope"
+      ],
+      "title": "StatementScopeV1",
+      "type": "object"
+    },
+    "StatementSourceRecordV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accession_number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accession Number"
+        },
+        "amendment_scope": {
+          "anyOf": [
+            {
+              "enum": [
+                "valuation_relevant",
+                "unrelated",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amendment Scope"
+        },
+        "amends_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amends Accession"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "declared_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Declared Size"
+        },
+        "filed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filed At"
+        },
+        "filing_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filing Date"
+        },
+        "filing_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filing Version"
+        },
+        "form": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Form"
+        },
+        "http_status": {
+          "maximum": 599,
+          "minimum": 100,
+          "title": "Http Status",
+          "type": "integer"
+        },
+        "is_amendment": {
+          "default": false,
+          "title": "Is Amendment",
+          "type": "boolean"
+        },
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "parser_input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parser Input Hash"
+        },
+        "parser_version": {
+          "title": "Parser Version",
+          "type": "string"
+        },
+        "point_in_time_relevant": {
+          "default": true,
+          "title": "Point In Time Relevant",
+          "type": "boolean"
+        },
+        "publication_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication At"
+        },
+        "received_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Received Size"
+        },
+        "response_headers": {
+          "default": [],
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Response Headers",
+          "type": "array"
+        },
+        "role": {
+          "enum": [
+            "filing",
+            "company_facts",
+            "taxonomy",
+            "acquisition",
+            "macro",
+            "market",
+            "reference"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "supersedes_accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes Accession"
+        },
+        "taxonomy_manifest_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Taxonomy Manifest Id"
+        },
+        "terms_reference": {
+          "title": "Terms Reference",
+          "type": "string"
+        },
+        "uri": {
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "uri",
+        "role",
+        "available_at",
+        "captured_at",
+        "publication_at",
+        "http_status",
+        "media_type",
+        "terms_reference",
+        "content_hash",
+        "parser_input_hash",
+        "parser_version",
+        "accession_number",
+        "form",
+        "filing_date",
+        "filed_at",
+        "filing_version",
+        "is_amendment",
+        "amends_accession",
+        "supersedes_accession",
+        "amendment_scope",
+        "taxonomy_manifest_id",
+        "response_headers",
+        "declared_size",
+        "received_size",
+        "point_in_time_relevant"
+      ],
+      "title": "StatementSourceRecordV1",
+      "type": "object"
+    },
+    "StatementTableV1": {
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/StatementColumnV1"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/StatementRowV1"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "statement": {
+          "enum": [
+            "income_statement",
+            "balance_sheet",
+            "cash_flow"
+          ],
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement",
+        "columns",
+        "rows"
+      ],
+      "title": "StatementTableV1",
+      "type": "object"
+    },
+    "StatementUnavailableSourceV1": {
+      "additionalProperties": false,
+      "properties": {
+        "accession_number": {
+          "title": "Accession Number",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "issue_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Issue Codes",
+          "type": "array"
+        },
+        "kind": {
+          "const": "unavailable",
+          "default": "unavailable",
+          "title": "Kind",
+          "type": "string"
+        },
+        "missing": {
+          "$ref": "#/$defs/FundamentalMissingValueV1"
+        },
+        "outcome_ref": {
+          "$ref": "#/$defs/StatementArtifactRefV1"
+        },
+        "quality_status": {
+          "enum": [
+            "verified",
+            "provisional",
+            "degraded",
+            "unsupported",
+            "abstain",
+            "error"
+          ],
+          "title": "Quality Status",
+          "type": "string"
+        },
+        "report_period_end": {
+          "format": "date",
+          "title": "Report Period End",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "accession_number",
+        "available_at",
+        "report_period_end",
+        "outcome_ref",
+        "quality_status",
+        "missing",
+        "issue_codes"
+      ],
+      "title": "StatementUnavailableSourceV1",
+      "type": "object"
+    },
+    "UnavailableStatementCellV1": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_fact_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Candidate Fact Ids",
+          "type": "array"
+        },
+        "cell_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Cell Id",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/StatementArtifactRefV1"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "issue_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Issue Codes",
+          "type": "array"
+        },
+        "missing": {
+          "$ref": "#/$defs/FundamentalMissingValueV1"
+        },
+        "period_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Period Id",
+          "type": "string"
+        },
+        "quality_status": {
+          "enum": [
+            "verified",
+            "provisional",
+            "degraded",
+            "unsupported",
+            "abstain",
+            "error"
+          ],
+          "title": "Quality Status",
+          "type": "string"
+        },
+        "rejected_candidates": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FundamentalCandidateRejectionV1"
+          },
+          "title": "Rejected Candidates",
+          "type": "array"
+        },
+        "row_id": {
+          "enum": [
+            "revenue",
+            "cost_of_revenue",
+            "gross_profit",
+            "operating_income",
+            "income_before_tax",
+            "income_tax_expense",
+            "net_income",
+            "cash_and_equivalents",
+            "operating_current_receivables",
+            "inventory",
+            "current_assets",
+            "property_plant_and_equipment",
+            "total_assets",
+            "operating_current_payables",
+            "current_liabilities",
+            "total_liabilities",
+            "total_equity",
+            "liabilities_and_equity",
+            "operating_cash_flow",
+            "investing_cash_flow",
+            "financing_cash_flow",
+            "effect_of_exchange_rates_on_cash",
+            "net_change_in_cash",
+            "cash_flow_beginning_balance",
+            "cash_flow_ending_balance"
+          ],
+          "title": "Row Id",
+          "type": "string"
+        },
+        "status": {
+          "const": "unavailable",
+          "default": "unavailable",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "cell_id",
+        "row_id",
+        "period_id",
+        "missing",
+        "quality_status",
+        "issue_codes",
+        "evidence_refs",
+        "candidate_fact_ids",
+        "rejected_candidates"
+      ],
+      "title": "UnavailableStatementCellV1",
+      "type": "object"
+    },
+    "UnresolvedStatementPeriodV1": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "unresolved",
+          "default": "unresolved",
+          "title": "Kind",
+          "type": "string"
+        },
+        "missing": {
+          "$ref": "#/$defs/FundamentalMissingValueV1"
+        },
+        "reported_period_end": {
+          "format": "date",
+          "title": "Reported Period End",
+          "type": "string"
+        },
+        "source_outcome_ref": {
+          "$ref": "#/$defs/StatementArtifactRefV1"
+        }
+      },
+      "required": [
+        "kind",
+        "reported_period_end",
+        "missing",
+        "source_outcome_ref"
+      ],
+      "title": "UnresolvedStatementPeriodV1",
+      "type": "object"
+    },
+    "UnsupportedDurationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "format": "date",
+          "title": "End",
+          "type": "string"
+        },
+        "kind": {
+          "const": "unsupported_duration",
+          "default": "unsupported_duration",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "start": {
+          "format": "date",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "start",
+        "end",
+        "reason"
+      ],
+      "title": "UnsupportedDurationV1",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "workspace.statement-read.v3",
+      "default": "workspace.statement-read.v3",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "edition": {
+      "$ref": "#/$defs/StatementEditionV2"
+    },
+    "read": {
+      "discriminator": {
+        "mapping": {
+          "annual": "#/$defs/AnnualSavedReadV2",
+          "fiscal": "#/$defs/FiscalSavedReadV3"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AnnualSavedReadV2"
+        },
+        {
+          "$ref": "#/$defs/FiscalSavedReadV3"
+        }
+      ],
+      "title": "Read"
+    }
+  },
+  "required": [
+    "contract_version",
+    "edition",
+    "read"
+  ],
+  "title": "StatementReadArtifactV3",
+  "type": "object"
+}

@@ -18,18 +18,18 @@ from .data_releases import (
     verify_data_release_candidate,
 )
 from .fiscal_release_contracts import (
-    ActiveFiscalReleaseV1,
-    FiscalReleaseManifestV1,
-    FiscalReleaseVerificationV1,
-    FiscalStoredVerificationV1,
+    ActiveFiscalReleaseV2,
+    FiscalReleaseManifestV2,
+    FiscalReleaseVerificationV2,
+    FiscalStoredVerificationV2,
 )
 from .serialization import canonical_bytes
 
-PublicationManifest: TypeAlias = DataReleaseManifestV1 | FiscalReleaseManifestV1
+PublicationManifest: TypeAlias = DataReleaseManifestV1 | FiscalReleaseManifestV2
 PublicationVerification: TypeAlias = (
-    DataReleaseVerificationV1 | FiscalStoredVerificationV1
+    DataReleaseVerificationV1 | FiscalStoredVerificationV2
 )
-ActivePublication: TypeAlias = ActiveDataReleaseWithManifestV1 | ActiveFiscalReleaseV1
+ActivePublication: TypeAlias = ActiveDataReleaseWithManifestV1 | ActiveFiscalReleaseV2
 _OBJECT = TypeAdapter(dict[str, object])
 
 
@@ -49,8 +49,8 @@ def decode_release_manifest(
         model: type[PublicationManifest] = DataReleaseManifestV1
     elif tag == "fundamental.issuer-operating-release.v1":
         model = IssuerOperatingReleaseManifestV1
-    elif tag == "fundamental.fiscal-release-manifest.v1":
-        model = FiscalReleaseManifestV1
+    elif tag == "fundamental.fiscal-release-manifest.v2":
+        model = FiscalReleaseManifestV2
     else:
         raise DataReleaseError(
             "DATA_RELEASE_PROTOCOL_UNSUPPORTED",
@@ -73,8 +73,8 @@ def decode_release_verification(
     tag = fields.get("protocol")
     if "protocol" not in fields:
         return DataReleaseVerificationV1.model_validate_json(raw)
-    if tag == "fundamental.fiscal-stored-verification.v1":
-        return FiscalStoredVerificationV1.model_validate_json(raw)
+    if tag == "fundamental.fiscal-stored-verification.v2":
+        return FiscalStoredVerificationV2.model_validate_json(raw)
     raise DataReleaseError(
         "DATA_RELEASE_PROTOCOL_UNSUPPORTED",
         "release verification protocol is unsupported",
@@ -85,8 +85,8 @@ def require_publication_pair(
     manifest: PublicationManifest, verification: PublicationVerification
 ) -> None:
     if (
-        isinstance(manifest, FiscalReleaseManifestV1)
-        != isinstance(verification, FiscalStoredVerificationV1)
+        isinstance(manifest, FiscalReleaseManifestV2)
+        != isinstance(verification, FiscalStoredVerificationV2)
         or manifest.manifest_digest != verification.manifest_digest
     ):
         raise DataReleaseError(
@@ -96,7 +96,7 @@ def require_publication_pair(
 
 
 def verify_fiscal_signature(
-    verification: FiscalReleaseVerificationV1, roots: DataReleaseTrustRootsV1
+    verification: FiscalReleaseVerificationV2, roots: DataReleaseTrustRootsV1
 ) -> None:
     configured = roots.verifiers.get(verification.verifier_id)
     if configured is None or (
@@ -107,7 +107,7 @@ def verify_fiscal_signature(
             "DATA_RELEASE_VERIFIER_MISMATCH",
             "fiscal verification workflow or suite differs from deployment",
         )
-    checked = FiscalReleaseVerificationV1.model_validate_json(
+    checked = FiscalReleaseVerificationV2.model_validate_json(
         canonical_bytes(verification)
     )
     try:
@@ -127,8 +127,8 @@ def verify_publication_pair(
     roots: DataReleaseTrustRootsV1,
 ) -> None:
     require_publication_pair(manifest, verification)
-    if isinstance(manifest, FiscalReleaseManifestV1) and isinstance(
-        verification, FiscalStoredVerificationV1
+    if isinstance(manifest, FiscalReleaseManifestV2) and isinstance(
+        verification, FiscalStoredVerificationV2
     ):
         verify_fiscal_signature(verification.signed, roots)
     elif isinstance(manifest, DataReleaseManifestV1) and isinstance(
@@ -140,6 +140,6 @@ def verify_publication_pair(
 def active_publication(
     active: ActiveDataReleaseV1, manifest: PublicationManifest
 ) -> ActivePublication:
-    if isinstance(manifest, FiscalReleaseManifestV1):
-        return ActiveFiscalReleaseV1(active=active, manifest=manifest)
+    if isinstance(manifest, FiscalReleaseManifestV2):
+        return ActiveFiscalReleaseV2(active=active, manifest=manifest)
     return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)

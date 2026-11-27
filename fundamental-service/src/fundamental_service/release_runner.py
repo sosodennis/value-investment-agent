@@ -38,9 +38,9 @@ from .automatic_market_policy_evidence import (
     requires_automatic_market_policy,
 )
 from .fiscal_release_contracts import (
-    FiscalReleaseCanaryV1,
-    FiscalReleaseManifestV1,
-    FiscalStoredVerificationV1,
+    FiscalReleaseCanaryV2,
+    FiscalReleaseManifestV2,
+    FiscalStoredVerificationV2,
 )
 from .fiscal_releases import FiscalReleaseReader
 from .publication_codec import (
@@ -49,6 +49,7 @@ from .publication_codec import (
     decode_release_manifest,
     decode_release_verification,
     require_publication_pair,
+    verify_publication_pair,
 )
 
 from .data_releases import (
@@ -284,11 +285,11 @@ class DataReleaseCanaryRunner:
     @overload
     def validate(
         self,
-        manifest: FiscalReleaseManifestV1,
-        verification: FiscalStoredVerificationV1,
+        manifest: FiscalReleaseManifestV2,
+        verification: FiscalStoredVerificationV2,
         *,
         deadline_at: datetime,
-    ) -> FiscalReleaseCanaryV1: ...
+    ) -> FiscalReleaseCanaryV2: ...
 
     def validate(
         self,
@@ -296,19 +297,25 @@ class DataReleaseCanaryRunner:
         verification: PublicationVerification,
         *,
         deadline_at: datetime | None = None,
-    ) -> DataReleaseCanaryReportV1 | FiscalReleaseCanaryV1:
+    ) -> DataReleaseCanaryReportV1 | FiscalReleaseCanaryV2:
         require_publication_pair(manifest, verification)
-        if isinstance(manifest, FiscalReleaseManifestV1) and isinstance(
-            verification, FiscalStoredVerificationV1
+        if isinstance(manifest, FiscalReleaseManifestV2) and isinstance(
+            verification, FiscalStoredVerificationV2
         ):
             if self._fiscal_reader is None or deadline_at is None:
                 raise DataReleaseError(
                     "FISCAL_CANARY_UNCONFIGURED",
                     "fiscal canary requires its read-only owner and absolute deadline",
                 )
-            report = self._fiscal_reader.canary(
-                manifest, verification.signed, deadline_at=deadline_at
+            verify_publication_pair(manifest, verification, self._trust_roots)
+            report = self._fiscal_reader.replay_canary(
+                manifest.manifest_digest, deadline_at=deadline_at
             )
+            if report.artifact_id != verification.canary_ref.artifact_id:
+                raise DataReleaseError(
+                    "FISCAL_CANARY_INVALID",
+                    "full replay differs from the supplied publication",
+                )
             return report
         if not isinstance(manifest, DataReleaseManifestV1) or not isinstance(
             verification, DataReleaseVerificationV1

@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { parseArtifactEnvelope } from '../src/types/agents/artifact-envelope-parser';
 import { parseFundamentalArtifact } from '../src/types/agents/artifact-parsers';
-import { object, nonEmpty } from '../src/types/agents/fundamental-parser-primitives';
+import { object, nonEmpty, literal } from '../src/types/agents/fundamental-parser-primitives';
 import type { components } from '../src/types/generated/api-contract';
 import { closeInspector, login, requiredEnv } from './fundamental-report-live.helpers';
 
 type Contracts = components['schemas'];
-const parseRead = object<Contracts['AnnualStatementArtifactResponse']>({ thread_id: nonEmpty, reference: object<Contracts['ArtifactReference']>({ artifact_id: nonEmpty, download_url: nonEmpty, type: nonEmpty }) });
+const parseRead = object<Contracts['StatementArtifactResponseV2']>({ contract_version: literal('workspace.statement-reader.v2'), edition_id: nonEmpty, frequency: literal('annual', 'quarter', 'ttm'), thread_id: nonEmpty, reference: object<Contracts['ArtifactReference']>({ artifact_id: nonEmpty, download_url: nonEmpty, type: nonEmpty }) });
 const STATEMENT_TITLES = { income_statement: 'Income statement', balance_sheet: 'Balance sheet', cash_flow: 'Cash flow statement' };
 
 test.describe('Annual statement production reader', () => {
@@ -18,16 +18,16 @@ test.describe('Annual statement production reader', () => {
         let statementReads = 0;
         page.on('request', (request) => {
             if (request.method() === 'POST' && /\/api\/v1\/threads\/[^/]+\/runs$/.test(new URL(request.url()).pathname)) runStarts += 1;
-            if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/fundamental/annual-statements/read') statementReads += 1;
+            if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/fundamental/statements/read') statementReads += 1;
         });
         await login(page);
         await page.setViewportSize({ width: 1335, height: 1000 });
         await page.goto('/workspace');
         await page.getByRole('tab', { name: 'Fundamental', exact: true }).click();
-        await page.getByRole('combobox', { name: 'Statement company' }).click();
+        await page.getByRole('combobox', { name: 'Statement company and edition' }).click();
         const issuerId = requiredEnv('ANNUAL_STATEMENTS_LIVE_ISSUER_ID');
         await page.getByRole('option').filter({ hasText: issuerId }).click();
-        const readResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/annual-statements/read'));
+        const readResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/statements/read'));
         await page.getByRole('button', { name: 'Read prepared statements' }).click();
         const response = await readResponse;
         expect(response.status()).toBe(200);
@@ -38,7 +38,7 @@ test.describe('Annual statement production reader', () => {
         expect(artifactResponse.status()).toBe(200);
         const artifactPayload: unknown = await artifactResponse.json();
         const artifact = parseFundamentalArtifact(parseArtifactEnvelope(artifactPayload, 'live statement artifact', 'financial_reports').data);
-        const annual = artifact.annual_statements;
+        const annual = artifact.statement_read?.read.kind === 'annual' ? artifact.statement_read.read.response : undefined;
         if (!annual) throw new Error('The real artifact must contain annual statements.');
         expect(annual.statements.scope.issuer_id).toBe(issuerId);
         const report = page.getByRole('article', { name: 'Annual financial statements' });
@@ -126,7 +126,7 @@ test.describe('Annual statement production reader', () => {
             const touchPage = await touchContext.newPage();
             touchPage.on('request', (request) => {
                 if (request.method() === 'POST' && /\/api\/v1\/threads\/[^/]+\/runs$/.test(new URL(request.url()).pathname)) touchRunStarts += 1;
-                if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/fundamental/annual-statements/read') touchReads += 1;
+                if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/fundamental/statements/read') touchReads += 1;
             });
             await touchPage.goto(savedUrl);
             const touchReport = touchPage.getByRole('article', { name: 'Annual financial statements' });

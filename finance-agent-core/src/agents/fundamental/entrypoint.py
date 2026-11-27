@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from fastapi import APIRouter
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.fundamental.interface.forward_evidence_routes import (
@@ -18,6 +19,7 @@ from src.agents.fundamental.workflow.state import (
     FundamentalAnalysisState,
     IntentExtractionContext,
 )
+from src.artifacts.public import FiscalCurrentReadContext
 
 
 def build_fundamental_subgraph(
@@ -72,4 +74,23 @@ __all__ = [
     "build_default_fundamental_forward_evidence_router",
     "fundamental_forward_evidence_router",
     "fundamental_annual_statement_router",
+    "fundamental_statement_router",
+    "build_default_fiscal_artifact_current_reader",
 ]
+
+
+def build_default_fundamental_statement_router() -> APIRouter:
+    from src.agents.fundamental.application.wiring import build_default_statement_router
+
+    return build_default_statement_router()
+
+
+def build_default_fiscal_artifact_current_reader() -> FiscalCurrentReadContext:
+    from src.agents.fundamental.application.wiring import (
+        build_default_fiscal_artifact_current_reader as factory,
+    )
+
+    return factory()
+
+
+fundamental_statement_router = build_default_fundamental_statement_router()
