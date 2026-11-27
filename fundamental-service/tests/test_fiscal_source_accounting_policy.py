@@ -36,6 +36,7 @@ from fundamental_service.fiscal_source_accounting_policy_contracts import (
     AccountingReplayRecordV3,
     encode_accounting_record,
     read_accounting_record,
+    read_prepared_accounting_record,
 )
 from fundamental_service.fiscal_source_contracts import evaluate_fiscal_issuer
 from fundamental_service.fiscal_statement_mapping import (
@@ -422,6 +423,12 @@ def test_retained_original_produces_limited_opinion_and_all_five_whole_bridges(
     raw = encode_accounting_record(live, check_deadline=_deadline)
     adapter = TypeAdapter(AccountingReplayRecordV3)
     embedded = read_accounting_record(raw, check_deadline=_deadline)
+    prepared = read_prepared_accounting_record(raw, source, check_deadline=_deadline)
+    assert prepared.result == result
+    assert isinstance(prepared.result, AccountingSupport)
+    assert {item.role: item.transcription.value for item in prepared.result.tagged} == {
+        role: fact.value for role, fact in by_role.items()
+    }
     for _ in range(2):
         embedded = adapter.validate_json(embedded.model_dump_json(), strict=True)
         assert embedded.result == result
@@ -1118,6 +1125,32 @@ def historical_wire(sources):
         evaluate_source_accounting(sources["historical"], check_deadline=_deadline),
         check_deadline=_deadline,
     )
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        "validation_json_b64",
+        "witness_json_b64",
+        "scope_json_b64",
+        "archive_zip_b64",
+        "noncanonical_outer",
+    ),
+)
+def test_prepared_record_requires_exact_inputs_and_canonical_outer(
+    sources, historical_wire, change
+):
+    if change == "noncanonical_outer":
+        raw = historical_wire + b"\n"
+    else:
+        payload = json.loads(historical_wire)
+        original = base64.b64decode(payload["inputs"][change])
+        payload["inputs"][change] = base64.b64encode(original + b" ").decode("ascii")
+        raw = canonical_bytes(payload)
+    with pytest.raises(ValueError, match="Prepared accounting inputs differ"):
+        read_prepared_accounting_record(
+            raw, sources["historical"], check_deadline=_deadline
+        )
 
 
 @pytest.mark.parametrize(

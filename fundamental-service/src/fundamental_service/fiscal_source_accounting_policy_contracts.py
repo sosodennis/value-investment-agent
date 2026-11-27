@@ -354,7 +354,10 @@ def read_prepared_accounting_record(
         scope_json_b64=base64.b64encode(canonical_bytes(source.scope)).decode("ascii"),
         archive_zip_b64=base64.b64encode(source.archive).decode("ascii"),
     )
-    if record.inputs != expected or canonical_bytes(record) != raw:
+    if (
+        record.inputs != expected
+        or canonical_bytes(record.model_dump(mode="json")) != raw
+    ):
         raise ValueError("Prepared accounting inputs differ from current source bytes")
     _load_resources()
     check_deadline()
