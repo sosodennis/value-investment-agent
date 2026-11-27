@@ -47,7 +47,7 @@ from .fiscal_display_contracts import (
     FiscalDisplayReviewV2,
     SignedFiscalDisplayDecisionV2,
 )
-from .fiscal_source_closure import FiscalArtifactRead
+from .fiscal_source_closure import FiscalArtifactRead, fiscal_closure_read_operation
 from .fiscal_statement_policy import FiscalRowPolicyV1, fiscal_statement_policy
 from .metadata import metadata_operation_budget
 from .replay import (
@@ -637,8 +637,11 @@ class FiscalDisplayAdmission:
         deadline_at: datetime,
         expected_head: FiscalHistoryHeadV1 | None,
     ) -> Iterator[FiscalDisplayRead]:
-        with metadata_operation_budget(
-            partial(self._budget, deadline_at), self._expired
+        with (
+            fiscal_closure_read_operation(),
+            metadata_operation_budget(
+                partial(self._budget, deadline_at), self._expired
+            ),
         ):
             read: FiscalDisplayRead | None = None
             try:

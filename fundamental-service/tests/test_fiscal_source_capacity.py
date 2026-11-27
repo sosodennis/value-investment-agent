@@ -32,13 +32,15 @@ def test_source_distinct_capacity_accepts_five_plus_four_and_keeps_one_global_ke
 
 def test_source_distinct_capacity_is_per_operation_and_never_promotes_derived_bytes():
     budget = FiscalClosureReadBudget()
-    for index in range(8):
-        budget._consume_source_body(str(index), "a" * 64, 8 * MIB)
+    for index in range(16):
+        budget._consume_source_body(str(index), "a" * 64, 16 * MIB)
     assert budget._source_remaining("new-source") == 0
     with pytest.raises(SnapshotError, match="bound"):
         budget._consume_source_body("new-source", "a" * 64, 1)
-    assert budget._source_remaining("0") == 8 * MIB
+    assert budget._source_remaining("0") == 16 * MIB
     budget = FiscalClosureReadBudget()
+    with pytest.raises(SnapshotError, match="bound"):
+        budget._consume_source_body("oversized", "a" * 64, 16 * MIB + 1)
     budget.consume(("body", "derived"), 1)
     with pytest.raises(SnapshotError, match="cannot acquire"):
         budget._source_remaining("derived")
@@ -49,7 +51,7 @@ def test_source_distinct_capacity_is_per_operation_and_never_promotes_derived_by
         budget._consume_source_body("source", "b" * 64, 1)
 
 
-@pytest.mark.parametrize("used", [0, 63 * MIB])
+@pytest.mark.parametrize("used", [0, 255 * MIB])
 def test_source_preflight_refuses_registered_overflow_before_returning_body(
     tmp_path, used
 ):
@@ -64,7 +66,7 @@ def test_source_preflight_refuses_registered_overflow_before_returning_body(
             return record
 
         def read_bounded(self, identity, *, maximum_bytes):
-            assert maximum_bytes == (MIB if used else 8 * MIB)
+            assert maximum_bytes == (MIB if used else 16 * MIB)
             registered_length = maximum_bytes + 1
             if registered_length > maximum_bytes:
                 raise SnapshotError(
@@ -76,13 +78,13 @@ def test_source_preflight_refuses_registered_overflow_before_returning_body(
     port = RegisteredPort()
     with fiscal_closure_read_operation():
         reader = _FiscalSourceArtifactRead(port, lambda: None, "source")
-        for index in range(7):
+        for index in range(15):
             if used:
                 reader._source_budget._consume_source_body(
-                    str(index), "a" * 64, 8 * MIB
+                    str(index), "a" * 64, 16 * MIB
                 )
         if used:
-            reader._source_budget._consume_source_body("last", "a" * 64, 7 * MIB)
+            reader._source_budget._consume_source_body("last", "a" * 64, 15 * MIB)
         with pytest.raises(SnapshotError, match="registered source exceeds bound"):
             reader.read("source")
     assert port.body_reads == 0

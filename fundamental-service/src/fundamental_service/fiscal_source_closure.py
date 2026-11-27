@@ -94,12 +94,17 @@ def _invalid(message: str) -> SnapshotError:
     return SnapshotError("FISCAL_VALIDATION_INVALID", message)
 
 
+_MAXIMUM_CLOSURE_KEYS = 4096
+_MAXIMUM_DERIVED_CLOSURE_BYTES = 8 * 1024 * 1024
+_MAXIMUM_SOURCE_BODY_BYTES = 16 * 1024 * 1024
+_MAXIMUM_OPERATION_SOURCE_BYTES = 256 * 1024 * 1024
+
 _FISCAL_CLOSURE_RESOURCE_POLICY = (
-    "fundamental.fiscal-closure-resource-policy.v2",
-    ("aggregate_keys", 4096),
-    ("derived_metadata_commitments_footprints_bytes", 8 * 1024 * 1024),
-    ("source_canonical_body_bytes", 8 * 1024 * 1024),
-    ("operation_distinct_source_canonical_bytes", 64 * 1024 * 1024),
+    "fundamental.fiscal-closure-resource-policy.v3",
+    ("aggregate_keys", _MAXIMUM_CLOSURE_KEYS),
+    ("derived_metadata_commitments_footprints_bytes", _MAXIMUM_DERIVED_CLOSURE_BYTES),
+    ("source_canonical_body_bytes", _MAXIMUM_SOURCE_BODY_BYTES),
+    ("operation_distinct_source_canonical_bytes", _MAXIMUM_OPERATION_SOURCE_BYTES),
 )
 
 
@@ -109,13 +114,17 @@ class FiscalClosureReadBudget:
         self._source_items: dict[str, tuple[str, int]] = {}
 
     def remaining(self, key: tuple[object, ...]) -> int:
-        return 8 * 1024 * 1024 - sum(self._items.values()) + self._items.get(key, 0)
+        return (
+            _MAXIMUM_DERIVED_CLOSURE_BYTES
+            - sum(self._items.values())
+            + self._items.get(key, 0)
+        )
 
     def consume(self, key: tuple[object, ...], length: int) -> None:
         if (
             length < 0
             or key not in self._items
-            and len(self._items) >= 4096
+            and len(self._items) >= _MAXIMUM_CLOSURE_KEYS
             or length > self.remaining(key)
             or self._items.setdefault(key, length) != length
         ):
@@ -127,7 +136,10 @@ class FiscalClosureReadBudget:
             raise _invalid("derived body cannot acquire a source origin")
         used = sum(length for _, length in self._source_items.values())
         previous = self._source_items.get(identity, ("", 0))[1]
-        return min(8 * 1024 * 1024, 64 * 1024 * 1024 - used + previous)
+        return min(
+            _MAXIMUM_SOURCE_BODY_BYTES,
+            _MAXIMUM_OPERATION_SOURCE_BYTES - used + previous,
+        )
 
     def _consume_source_body(self, identity: str, digest: str, length: int) -> None:
         if length < 0 or length > self._source_remaining(identity):
@@ -381,7 +393,7 @@ class FiscalArtifactRead:
             maximum = (
                 budget._source_remaining(artifact_id)
                 if budget is not None
-                else 8 * 1024 * 1024
+                else _MAXIMUM_SOURCE_BODY_BYTES
             )
             raw = self._artifacts.read_bounded(artifact_id, maximum_bytes=maximum)
             if (record.content_hash, len(raw)) != (
