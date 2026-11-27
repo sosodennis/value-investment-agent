@@ -95,13 +95,15 @@ def _invalid(message: str) -> SnapshotError:
 
 
 _MAXIMUM_CLOSURE_KEYS = 4096
-_MAXIMUM_DERIVED_CLOSURE_BYTES = 8 * 1024 * 1024
+_MAXIMUM_DERIVED_BODY_BYTES = 8 * 1024 * 1024
+_MAXIMUM_DERIVED_CLOSURE_BYTES = 32 * 1024 * 1024
 _MAXIMUM_SOURCE_BODY_BYTES = 16 * 1024 * 1024
 _MAXIMUM_OPERATION_SOURCE_BYTES = 256 * 1024 * 1024
 
 _FISCAL_CLOSURE_RESOURCE_POLICY = (
-    "fundamental.fiscal-closure-resource-policy.v3",
+    "fundamental.fiscal-closure-resource-policy.v4",
     ("aggregate_keys", _MAXIMUM_CLOSURE_KEYS),
+    ("derived_canonical_body_bytes", _MAXIMUM_DERIVED_BODY_BYTES),
     ("derived_metadata_commitments_footprints_bytes", _MAXIMUM_DERIVED_CLOSURE_BYTES),
     ("source_canonical_body_bytes", _MAXIMUM_SOURCE_BODY_BYTES),
     ("operation_distinct_source_canonical_bytes", _MAXIMUM_OPERATION_SOURCE_BYTES),
@@ -123,6 +125,8 @@ class FiscalClosureReadBudget:
     def consume(self, key: tuple[object, ...], length: int) -> None:
         if (
             length < 0
+            or key[:1] == ("body",)
+            and length > _MAXIMUM_DERIVED_BODY_BYTES
             or key not in self._items
             and len(self._items) >= _MAXIMUM_CLOSURE_KEYS
             or length > self.remaining(key)
@@ -184,11 +188,13 @@ def read_fiscal_artifact_bytes(
     artifacts: EvidenceArtifactStore, artifact_id: str
 ) -> bytes:
     budget = _CLOSURE_BUDGET.get()
-    if budget is None:
-        return artifacts.read(artifact_id)
     key = ("body", artifact_id)
-    raw = artifacts.read_bounded(artifact_id, maximum_bytes=budget.remaining(key))
-    budget.consume(key, len(raw))
+    maximum = _MAXIMUM_DERIVED_BODY_BYTES
+    if budget is not None:
+        maximum = min(maximum, budget.remaining(key))
+    raw = artifacts.read_bounded(artifact_id, maximum_bytes=maximum)
+    if budget is not None:
+        budget.consume(key, len(raw))
     return raw
 
 

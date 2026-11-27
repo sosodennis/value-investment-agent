@@ -11,7 +11,10 @@ from fundamental_service.fiscal_candidate_contracts import (
 from fundamental_service.fiscal_source_closure import (
     FiscalArtifactRead,
     FiscalClosureReadBudget,
+    _CLOSURE_BUDGET,
+    bound_fiscal_closure_value,
     fiscal_closure_read_operation,
+    read_fiscal_artifact_bytes,
 )
 from fundamental_service.fiscal_validation_contracts import FiscalRetainedInputBindingV1
 from fundamental_service.replay import ArtifactStore
@@ -139,7 +142,9 @@ def test_absence_can_only_transition_through_this_invocations_actual_own_receipt
         foreign.check_current()
 
 
-def test_nested_canonical_reads_share_the_aggregate_bound(tmp_path):
+def test_nested_canonical_reads_accept_five_plus_four_within_the_operation_bound(
+    tmp_path,
+):
     store = ArtifactStore(tmp_path)
     store.put_bytes_with_receipt(
         "one", b"x" * (5 * 1024 * 1024), media_type="application/json"
@@ -151,8 +156,57 @@ def test_nested_canonical_reads_share_the_aggregate_bound(tmp_path):
         reader = FiscalArtifactRead(store, lambda: 1.0)
         assert len(reader.read("one")) == 5 * 1024 * 1024
         with fiscal_closure_read_operation():
+            assert len(reader.for_consumer().read("two")) == 4 * 1024 * 1024
+        reader.check_bodies()
+
+
+def test_nested_canonical_bodies_metadata_and_footprints_share_32_mib():
+    with fiscal_closure_read_operation():
+        budget = _CLOSURE_BUDGET.get()
+        assert budget is not None
+        for index in range(4):
+            budget.consume(("body", str(index)), 7 * 1024 * 1024)
+        budget.consume(("metadata", "retained"), 3 * 1024 * 1024)
+        with fiscal_closure_read_operation():
+            bound_fiscal_closure_value(("owner",), "x" * (1024 * 1024 - 2))
             with pytest.raises(SnapshotError, match="bound"):
-                reader.for_consumer().read("two")
+                bound_fiscal_closure_value(("overflow",), None)
+
+
+@pytest.mark.parametrize("remaining", [None, 32 * 1024 * 1024, 1024 * 1024])
+def test_derived_read_refuses_registered_overflow_before_body_read(remaining):
+    from contextlib import nullcontext
+
+    class RegisteredPort:
+        def read(self, identity):
+            raise AssertionError("derived reads must always be bounded")
+
+        def read_bounded(self, identity, *, maximum_bytes):
+            assert identity == "oversized"
+            assert maximum_bytes == (
+                1024 * 1024 if remaining == 1024 * 1024 else 8 * 1024 * 1024
+            )
+            raise SnapshotError(
+                "FISCAL_CLOSURE_LIMIT", "registered derived body exceeds read bound"
+            )
+
+    operation = (
+        fiscal_closure_read_operation() if remaining is not None else nullcontext()
+    )
+    with operation:
+        if remaining is not None:
+            budget = _CLOSURE_BUDGET.get()
+            assert budget is not None
+            budget.consume(("canonical", "already-read"), 32 * 1024 * 1024 - remaining)
+        with pytest.raises(SnapshotError, match="registered derived body"):
+            read_fiscal_artifact_bytes(RegisteredPort(), "oversized")
+
+
+def test_derived_body_limit_cannot_be_bypassed_by_direct_budget_consumption():
+    budget = FiscalClosureReadBudget()
+    budget.consume(("body", "within"), 8 * 1024 * 1024)
+    with pytest.raises(SnapshotError, match="bound"):
+        budget.consume(("body", "oversized"), 8 * 1024 * 1024 + 1)
 
 
 def test_aggregate_entry_limit_includes_each_distinct_owner_footprint():
