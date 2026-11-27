@@ -170,6 +170,21 @@ class RetainedDiscoveryAdapter:
     def read_current(self, artifact_id, *, deadline_at):
         return self.read(artifact_id, deadline_at=deadline_at)
 
+    def read_current_inputs(self, artifact_id, *, deadline_at):
+        from test_fiscal_projection_builder import SyntheticDiscoveryPort
+
+        return SyntheticDiscoveryPort(self.discovery, self.store).read_with_inputs(
+            artifact_id, deadline_at=deadline_at
+        )
+
+    def _read_validation_inputs(self, artifact_id, accession, *, deadline_at):
+        from types import SimpleNamespace
+
+        assert accession == self.evidence.request.filing.accession_number
+        result = self.read_current_inputs(artifact_id, deadline_at=deadline_at)
+        result.target = SimpleNamespace(selected=(self.evidence.request.filing,))
+        return result
+
     def read_current_with_metadata(self, artifact_id, *, deadline_at):
         return self.read(artifact_id, deadline_at=deadline_at), (
             (artifact_id, self.store.get(artifact_id)),
@@ -196,6 +211,12 @@ class RetainedSECAdapter:
     def verify(self, request, outcome, *, artifacts, deadline_at):
         assert request == self.evidence.request
         assert outcome == self.evidence.outcome
+        from fundamental_service.fiscal_source_closure import _FiscalSourceArtifactRead
+
+        if isinstance(artifacts, _FiscalSourceArtifactRead):
+            artifacts._source_edges.update(
+                ref.artifact_id for ref in self.evidence.outcome.action_refs
+            )
         for ref in outcome.action_refs:
             assert (
                 hashlib.sha256(read_retained_artifact(artifacts, ref)).hexdigest()
@@ -213,7 +234,8 @@ class RetainedSECAdapter:
 
             @property
             def input_footprint(self):
-                return (canonical_bytes(owner.evidence.model_dump(mode="json")).hex(),)
+                raw = canonical_bytes(owner.evidence.model_dump(mode="json"))
+                return (hashlib.sha256(raw).hexdigest(), len(raw), outcome.action_refs)
 
             def retained_input_binding(self, reference):
                 from test_fiscal_projection_builder import (

@@ -633,11 +633,14 @@ class FiscalDiscovery:
     def read_current_inputs(
         self, artifact_id: str, *, deadline_at: datetime
     ) -> _VerifiedDiscovery:
-        from .fiscal_source_closure import FiscalArtifactRead, FiscalSourceContentRead
+        from .fiscal_source_closure import (
+            _FiscalSourceArtifactRead,
+            FiscalSourceContentRead,
+        )
 
         with self._operation(deadline_at):
             check = partial(self._before_deadline, deadline_at)
-            reader = FiscalArtifactRead(self._artifacts, check)
+            reader = _FiscalSourceArtifactRead(self._artifacts, check, artifact_id)
             content = FiscalSourceContentRead(self._content, check)
             raw = reader.read(artifact_id)
             evidence = FiscalDiscoveryEvidenceV1.model_validate_json(raw)
@@ -651,6 +654,7 @@ class FiscalDiscovery:
                 raise SnapshotError(
                     "FISCAL_DISCOVERY_INVALID", "current discovery identity differs"
                 )
+            reader._discovery_edges(evidence)
             request_id = f"fiscal-discovery-request:{evidence.request.digest}"
             request_record = reader.get(request_id)
             if (
@@ -694,6 +698,8 @@ class FiscalDiscovery:
                         "current discovery source receipt differs",
                     )
                 reader.expect(retained[1].artifact_id, retained[1])
+            reader._complete_source_graph("fiscal-discovery")
+            reader._enroll_content_readset(content.readset)
             reader.check_bodies()
             content.check_current()
             check()
@@ -726,6 +732,15 @@ class FiscalDiscovery:
         FiscalFilingV1,
         tuple[tuple[str, ArtifactRecordV1 | None], ...],
     ]:
+        verified = self._read_validation_inputs(
+            artifact_id, accession_number, deadline_at=deadline_at
+        )
+        assert verified.target is not None
+        return verified.evidence.request, verified.target.selected[0], verified.records
+
+    def _read_validation_inputs(
+        self, artifact_id: str, accession_number: str, *, deadline_at: datetime
+    ) -> _VerifiedDiscovery:
         with self._operation(deadline_at):
             check_deadline = partial(self._before_deadline, deadline_at)
             record = self._current_record(artifact_id, check_deadline)
@@ -745,7 +760,7 @@ class FiscalDiscovery:
                 "FISCAL_CANDIDATE_INELIGIBLE",
                 "retained fiscal discovery could not select this accession",
             )
-        return verified.evidence.request, verified.target.selected[0], verified.records
+        return verified
 
     def _read(
         self,
@@ -755,9 +770,12 @@ class FiscalDiscovery:
         *,
         target_accession: str | None = None,
     ) -> _VerifiedDiscovery:
-        from .fiscal_source_closure import FiscalArtifactRead, FiscalSourceContentRead
+        from .fiscal_source_closure import (
+            _FiscalSourceArtifactRead,
+            FiscalSourceContentRead,
+        )
 
-        reader = FiscalArtifactRead(self._artifacts, check_deadline)
+        reader = _FiscalSourceArtifactRead(self._artifacts, check_deadline, artifact_id)
         content = FiscalSourceContentRead(self._content, check_deadline)
         reader.expect(artifact_id, record)
         try:
@@ -776,6 +794,7 @@ class FiscalDiscovery:
                 or evidence.artifact_id != artifact_id
             ):
                 raise ValueError("fiscal discovery artifact identity differs")
+            reader._discovery_edges(evidence)
             request_id = f"fiscal-discovery-request:{evidence.request.digest}"
             request_record = self._current_record(request_id, check_deadline)
             if (
@@ -851,6 +870,8 @@ class FiscalDiscovery:
                 "FISCAL_DISCOVERY_INVALID",
                 "retained fiscal discovery failed verification",
             ) from error
+        reader._complete_source_graph("fiscal-discovery")
+        reader._enroll_content_readset(content.readset)
         return _VerifiedDiscovery(
             evidence,
             tuple(records.items()),

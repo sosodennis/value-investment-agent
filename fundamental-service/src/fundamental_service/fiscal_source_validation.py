@@ -348,6 +348,10 @@ class SecFiscalSourceValidation:
                 build_checks=build_checks,
                 delivery_revision=runtime.delivery_revision,
             )
+            if actions.refs != retained.action_refs:
+                raise SnapshotError(
+                    "FISCAL_VALIDATION_INVALID", "retained parser action edges differ"
+                )
             if runtime_read is not None:
                 actions = RetainedFiscalActions(
                     actions.normalized, actions.archive, runtime_read
@@ -636,6 +640,10 @@ class SecFiscalSourceValidation:
             build_checks=ParserBuildChecks(),
             delivery_revision=outcome.runtime.delivery_revision,
         )
+        if actions.refs != outcome.action_refs:
+            raise SnapshotError(
+                "FISCAL_VALIDATION_INVALID", "current parser action edges differ"
+            )
         for action in (actions.normalized, actions.archive):
             if action is not None:
                 runtime.observe(

@@ -215,7 +215,6 @@ class FiscalClassificationSourceResolver:
 
         check_deadline()
         reader = reader.for_consumer()
-        raw = read_retained_artifact(reader, source_ref)
         sources, discovery_owner, witnesses, content_store = (
             self.sources,
             self.discovery,
@@ -224,6 +223,7 @@ class FiscalClassificationSourceResolver:
         )
         source = sources.observe(source_ref.artifact_id, deadline_at=deadline_at)
         reader.enroll(source.artifact_readset)
+        raw = read_retained_artifact(reader, source_ref)
         evidence = source.evidence
         outcome = evidence.outcome
         if (
@@ -390,7 +390,6 @@ class FiscalClassificationSourceResolver:
 
         check_deadline()
         reader = reader.for_consumer()
-        raw = read_retained_artifact(reader, source_ref)
         sources, discovery_owner, witnesses, content_store = (
             self.sources,
             self.discovery,
@@ -401,6 +400,7 @@ class FiscalClassificationSourceResolver:
             source_ref.artifact_id, binding, deadline_at=deadline_at
         )
         reader.enroll(source.artifact_readset)
+        raw = read_retained_artifact(reader, source_ref)
         evidence = source.evidence
         outcome = evidence.outcome
         if (

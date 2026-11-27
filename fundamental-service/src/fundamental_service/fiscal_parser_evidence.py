@@ -45,20 +45,28 @@ def _invalid(message: str) -> SnapshotError:
 
 
 def fiscal_source_closure_contract_digest() -> str:
+    from .fiscal_source_closure import _FISCAL_CLOSURE_RESOURCE_POLICY
+
     root = Path(__file__).parent
     return sha256_digest(
-        tuple(
-            (name, hashlib.sha256((root / name).read_bytes()).hexdigest())
-            for name in (
-                "fiscal_parser_evidence.py",
-                "fiscal_source_validation.py",
-                "fiscal_validation_contracts.py",
-                "fiscal_source_closure.py",
-                "parser_action_contracts.py",
-                "parser_action_evidence.py",
-                "parser_action_identity.py",
-                "ingestion.py",
-            )
+        (
+            _FISCAL_CLOSURE_RESOURCE_POLICY,
+            tuple(
+                (name, hashlib.sha256((root / name).read_bytes()).hexdigest())
+                for name in (
+                    "fiscal_parser_evidence.py",
+                    "fiscal_source_validation.py",
+                    "fiscal_validation_contracts.py",
+                    "fiscal_source_closure.py",
+                    "fiscal_discovery.py",
+                    "fiscal_classification_source.py",
+                    "fiscal_source_preparation.py",
+                    "parser_action_contracts.py",
+                    "parser_action_evidence.py",
+                    "parser_action_identity.py",
+                    "ingestion.py",
+                )
+            ),
         )
     )
 
@@ -451,6 +459,8 @@ def read_fiscal_parser_actions(
     build_checks: ParserBuildChecks,
     delivery_revision: str,
 ) -> RetainedFiscalActions:
+    from .fiscal_source_closure import _FiscalSourceArtifactRead
+
     try:
         markers = parser_action_markers(evidence)
     except ValueError as error:
@@ -465,6 +475,8 @@ def read_fiscal_parser_actions(
             raise _invalid("fiscal validation requires current parser action delivery")
         result_role = "sec-parser-action-result-v2"
         result_id = f"{result_role}:{key}:{digest}"
+        if isinstance(artifacts, _FiscalSourceArtifactRead):
+            artifacts._parser_result_edge(result_id)
         report, result, record = read_parser_action_result(
             result_id, artifacts=artifacts
         )
@@ -481,6 +493,8 @@ def read_fiscal_parser_actions(
             )
         delivery_role = "sec-parser-action-delivery-v2"
         delivery_id = f"{delivery_role}:{binding_digest}"
+        if isinstance(artifacts, _FiscalSourceArtifactRead):
+            artifacts._parser_delivery_edge(delivery_id)
         delivery_record = artifacts.get(delivery_id)
         raw = artifacts.read(delivery_id)
         delivery = ParserActionDeliveryV2.model_validate_json(raw)

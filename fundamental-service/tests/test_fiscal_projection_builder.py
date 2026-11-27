@@ -67,18 +67,18 @@ class SyntheticDiscoveryPort:
             raise SnapshotError(
                 "SYNTHETIC_DISCOVERY_REFUSED", "synthetic discovery is revoked"
             )
-        from fundamental_service.fiscal_source_closure import FiscalArtifactReadSet
+        from fundamental_service.fiscal_source_closure import _FiscalSourceArtifactRead
 
-        raw = canonical_bytes(evidence)
+        reader = _FiscalSourceArtifactRead(self.artifacts, lambda: None, identity)
+        raw = reader.read(identity)
+        assert raw == canonical_bytes(evidence)
+        assert FiscalDiscoveryEvidenceV1.model_validate_json(raw) == evidence
+        reader._complete_source_graph("fiscal-discovery")
         return SimpleNamespace(
             evidence=evidence,
-            records=((identity, record),),
-            input_footprint=(canonical_bytes(evidence).hex(), record),
-            artifact_readset=FiscalArtifactReadSet(
-                ((identity, record),),
-                ((identity, (sha256_digest(evidence), len(raw))),),
-                (),
-            ),
+            records=reader.records,
+            input_footprint=reader.input_footprint,
+            artifact_readset=reader.readset,
             content_readsets=(),
         )
 
@@ -157,6 +157,16 @@ class SyntheticRetainedSourcePort:
 
         owner = self
         original = deepcopy(self.read_with_metadata(identity, deadline_at=deadline_at))
+        from fundamental_service.fiscal_source_closure import _FiscalSourceArtifactRead
+
+        reader = _FiscalSourceArtifactRead(self.artifacts, lambda: None, identity)
+        raw = reader.read(identity)
+        assert raw == canonical_bytes(original.evidence.model_dump(mode="json"))
+        assert (
+            FiscalOriginalValidationEvidenceV1.model_validate_json(raw)
+            == original.evidence
+        )
+        reader._complete_source_graph("fiscal-original-validation")
 
         class Read:
             @property
@@ -169,26 +179,7 @@ class SyntheticRetainedSourcePort:
 
             @property
             def artifact_readset(self):
-                from fundamental_service.fiscal_source_closure import (
-                    FiscalArtifactReadSet,
-                )
-
-                raw = canonical_bytes(original.evidence.model_dump(mode="json"))
-                return FiscalArtifactReadSet(
-                    original.records,
-                    (
-                        (
-                            identity,
-                            (
-                                sha256_digest(
-                                    original.evidence.model_dump(mode="json")
-                                ),
-                                len(raw),
-                            ),
-                        ),
-                    ),
-                    (),
-                )
+                return reader.readset
 
             @property
             def content_readsets(self):
@@ -196,10 +187,7 @@ class SyntheticRetainedSourcePort:
 
             @property
             def input_footprint(self):
-                return (
-                    original.records,
-                    self.artifact_readset.bodies,
-                )
+                return reader.input_footprint
 
             def retained_input_binding(self, reference):
                 self.check_current()
@@ -210,8 +198,10 @@ class SyntheticRetainedSourcePort:
                     owner.read_with_metadata(identity, deadline_at=deadline_at)
                     == original
                 )
-                raw = owner.artifacts.read(identity)
-                assert raw == canonical_bytes(original.evidence.model_dump(mode="json"))
+                reader.check_bodies()
+                assert reader.read(identity) == canonical_bytes(
+                    original.evidence.model_dump(mode="json")
+                )
                 assert datetime.now(UTC) < deadline_at
 
         return Read()

@@ -94,9 +94,19 @@ def _invalid(message: str) -> SnapshotError:
     return SnapshotError("FISCAL_VALIDATION_INVALID", message)
 
 
+_FISCAL_CLOSURE_RESOURCE_POLICY = (
+    "fundamental.fiscal-closure-resource-policy.v2",
+    ("aggregate_keys", 4096),
+    ("derived_metadata_commitments_footprints_bytes", 8 * 1024 * 1024),
+    ("source_canonical_body_bytes", 8 * 1024 * 1024),
+    ("operation_distinct_source_canonical_bytes", 64 * 1024 * 1024),
+)
+
+
 class FiscalClosureReadBudget:
     def __init__(self) -> None:
         self._items: dict[tuple[object, ...], int] = {}
+        self._source_items: dict[str, tuple[str, int]] = {}
 
     def remaining(self, key: tuple[object, ...]) -> int:
         return 8 * 1024 * 1024 - sum(self._items.values()) + self._items.get(key, 0)
@@ -110,6 +120,24 @@ class FiscalClosureReadBudget:
             or self._items.setdefault(key, length) != length
         ):
             raise _invalid("fiscal canonical closure exceeds its aggregate bound")
+
+    def _source_remaining(self, identity: str) -> int:
+        key = ("body", identity)
+        if key in self._items and identity not in self._source_items:
+            raise _invalid("derived body cannot acquire a source origin")
+        used = sum(length for _, length in self._source_items.values())
+        previous = self._source_items.get(identity, ("", 0))[1]
+        return min(8 * 1024 * 1024, 64 * 1024 * 1024 - used + previous)
+
+    def _consume_source_body(self, identity: str, digest: str, length: int) -> None:
+        if length < 0 or length > self._source_remaining(identity):
+            raise _invalid(
+                "source canonical closure exceeds its body or operation bound"
+            )
+        expected = (digest, length)
+        if self._source_items.setdefault(identity, expected) != expected:
+            raise _invalid("source canonical body commitment changed")
+        self.consume(("body", identity), 0)
 
     def replace_own_metadata(self, identity: str, record: ArtifactRecordV1) -> None:
         key = ("metadata", identity)
@@ -157,6 +185,40 @@ class FiscalArtifactReadSet:
     records: tuple[tuple[str, ArtifactRecordV1 | None], ...]
     bodies: tuple[tuple[str, tuple[str, int]], ...]
     source_contents: tuple[tuple[ArtifactRefV1, int], ...]
+    source_bodies: tuple[_SourceCanonicalBody, ...] = ()
+    content_readsets: tuple[FiscalSourceContentReadSet, ...] = ()
+
+
+@dataclass(frozen=True)
+class _SourceBodyOrigin:
+    operation: FiscalClosureReadBudget | None
+    owner: _FiscalSourceArtifactRead
+    root_ref: ArtifactRefV1
+    source_contract_digest: str
+
+    @property
+    def commitment(self) -> tuple[object, ...]:
+        return (self.root_ref, self.source_contract_digest)
+
+
+@dataclass(frozen=True)
+class _SourceCanonicalBody:
+    identity: str
+    content_hash: str
+    byte_length: int
+    origin: _SourceBodyOrigin
+
+    @property
+    def commitment(self) -> tuple[object, ...]:
+        return (
+            self.identity,
+            self.content_hash,
+            self.byte_length,
+            self.origin.commitment,
+        )
+
+    def __deepcopy__(self, memo: dict[int, object]) -> _SourceCanonicalBody:
+        return self
 
 
 @dataclass(frozen=True)
@@ -186,6 +248,8 @@ class FiscalArtifactRead:
         self._bodies: dict[str, tuple[str, int]] = {}
         self._source_content_bodies: dict[str, tuple[ArtifactRefV1, int]] = {}
         self._parent: FiscalArtifactRead | None = None
+        self._source_bodies: dict[str, tuple[_SourceCanonicalBody, ...]] = {}
+        self._content_readsets: tuple[FiscalSourceContentReadSet, ...] = ()
 
     def for_consumer(self) -> FiscalArtifactRead:
         reader = FiscalArtifactRead(self._artifacts, self._check_deadline)
@@ -198,15 +262,67 @@ class FiscalArtifactRead:
             tuple(self._records.items()),
             tuple(self._bodies.items()),
             tuple(self._source_content_bodies.values()),
+            tuple(body for values in self._source_bodies.values() for body in values),
+            self._content_readsets,
         )
 
     def enroll(self, readset: FiscalArtifactReadSet) -> None:
+        for source_body in readset.source_bodies:
+            self._enroll_source_body(source_body)
+        for content in readset.content_readsets:
+            self._enroll_content_readset(content)
         for identity, record in readset.records:
             self.expect(identity, record)
         for identity, body in readset.bodies:
             self._expect_body(identity, body)
         for reference, length in readset.source_contents:
             self._expect_source_content(reference, length)
+
+    def _enroll_source_body(self, body: _SourceCanonicalBody) -> None:
+        origin = body.origin
+        if (
+            origin.operation is not _CLOSURE_BUDGET.get()
+            or not origin.owner._source_complete
+            or body not in origin.owner._source_bodies.get(body.identity, ())
+        ):
+            raise _invalid("source body origin is not complete in this operation")
+        previous = self._source_bodies.get(body.identity, ())
+        if any(
+            (item.content_hash, item.byte_length)
+            != (body.content_hash, body.byte_length)
+            or item.origin.root_ref.artifact_id == origin.root_ref.artifact_id
+            and (
+                item.origin.root_ref != origin.root_ref
+                or item.origin.source_contract_digest != origin.source_contract_digest
+            )
+            for item in previous
+        ):
+            raise _invalid("source body origin or commitment conflicts")
+        budget = _CLOSURE_BUDGET.get()
+        if budget is not None:
+            budget._consume_source_body(
+                body.identity, body.content_hash, body.byte_length
+            )
+            budget.consume(
+                (
+                    "source-origin",
+                    body.identity,
+                    origin.root_ref.artifact_id,
+                    origin.root_ref.content_hash,
+                    origin.source_contract_digest,
+                ),
+                len(canonical_bytes(body.commitment)),
+            )
+        if not any(item.commitment == body.commitment for item in previous):
+            self._source_bodies[body.identity] = (*previous, body)
+        if self._parent is not None:
+            self._parent._enroll_source_body(body)
+
+    def _enroll_content_readset(self, content: FiscalSourceContentReadSet) -> None:
+        if content not in self._content_readsets:
+            self._content_readsets = (*self._content_readsets, content)
+        if self._parent is not None:
+            self._parent._enroll_content_readset(content)
 
     def current(self, identity: str) -> ArtifactRecordV1 | None:
         self._check_deadline()
@@ -253,7 +369,28 @@ class FiscalArtifactRead:
 
     def read(self, artifact_id: str) -> bytes:
         record = self.get(artifact_id)
-        raw = read_fiscal_artifact_bytes(self._artifacts, artifact_id)
+        sources = self._source_bodies.get(artifact_id, ())
+        parent = self._parent
+        while not sources and parent is not None:
+            sources = parent._source_bodies.get(artifact_id, ())
+            parent = parent._parent
+        if sources:
+            for source in sources:
+                self._enroll_source_body(source)
+            budget = _CLOSURE_BUDGET.get()
+            maximum = (
+                budget._source_remaining(artifact_id)
+                if budget is not None
+                else 8 * 1024 * 1024
+            )
+            raw = self._artifacts.read_bounded(artifact_id, maximum_bytes=maximum)
+            if (record.content_hash, len(raw)) != (
+                sources[0].content_hash,
+                sources[0].byte_length,
+            ):
+                raise _invalid("source canonical body differs from its origin")
+        else:
+            raw = read_fiscal_artifact_bytes(self._artifacts, artifact_id)
         self._check_deadline()
         if hashlib.sha256(raw).hexdigest() != record.content_hash:
             raise _invalid("fiscal validation artifact bytes changed")
@@ -306,7 +443,7 @@ class FiscalArtifactRead:
             or self._records[identity] is not None
             or self.current(identity) != publication.artifact
             or hashlib.sha256(raw).hexdigest() != publication.artifact.content_hash
-            or self._artifacts.read(identity) != raw
+            or read_fiscal_artifact_bytes(self._artifacts, identity) != raw
         ):
             raise _invalid(
                 "absence transition requires this invocation's exact own write"
@@ -324,6 +461,17 @@ class FiscalArtifactRead:
             tuple(sorted(self._records.items())),
             tuple(sorted(self._bodies.items())),
             tuple(sorted(self._source_content_bodies.items())),
+            tuple(
+                sorted(
+                    (
+                        body.commitment
+                        for values in self._source_bodies.values()
+                        for body in values
+                    ),
+                    key=canonical_bytes,
+                )
+            ),
+            tuple(sorted((item.contents for item in self._content_readsets))),
         )
 
     @property
@@ -335,6 +483,8 @@ class FiscalArtifactRead:
             self.read(identity)
         for reference, length in tuple(self._source_content_bodies.values()):
             self.read_source_content(reference, byte_length=length)
+        for content in self._content_readsets:
+            content.check_current(self._check_deadline)
         self.check_current()
 
     def check_current(self) -> None:
@@ -346,6 +496,114 @@ class FiscalArtifactRead:
     @property
     def records(self) -> tuple[tuple[str, ArtifactRecordV1 | None], ...]:
         return tuple(self._records.items())
+
+
+class _FiscalSourceArtifactRead(FiscalArtifactRead):
+    def __init__(
+        self,
+        artifacts: EvidenceArtifactStore,
+        check_deadline: Callable[[], object],
+        root_id: str,
+    ) -> None:
+        super().__init__(artifacts, check_deadline)
+        self._source_root = root_id
+        self._source_edges = {root_id}
+        self._source_complete = False
+        self._source_budget = _CLOSURE_BUDGET.get() or FiscalClosureReadBudget()
+
+    def _discovery_edges(self, evidence: object) -> None:
+        from .fiscal_discovery import FiscalDiscoveryEvidenceV1
+        from .sec_capture import SecFiscalSubmissionsCaptureScopeV1
+
+        if type(evidence) is not FiscalDiscoveryEvidenceV1:
+            raise _invalid("source discovery requires the concrete typed evidence")
+        self._source_edges.add(f"fiscal-discovery-request:{evidence.request.digest}")
+        scope = SecFiscalSubmissionsCaptureScopeV1(
+            cik=evidence.request.cik,
+            valuation_timestamp=evidence.request.valuation_timestamp,
+        )
+        self._source_edges.update(
+            sec_response_artifact_id(scope, source.receipt.uri)
+            for source in evidence.sources
+            if source.receipt is not None
+        )
+
+    def _validation_edges(self, evidence: FiscalOriginalValidationEvidenceV1) -> None:
+        if type(evidence) is not FiscalOriginalValidationEvidenceV1:
+            raise _invalid("source validation requires the concrete typed evidence")
+        self._source_edges.add(evidence.request.artifact_id)
+        outcome = evidence.outcome
+        if not isinstance(outcome, FiscalValidationIncompleteV1):
+            self._source_edges.update(
+                sec_response_artifact_id(evidence.request.scope, receipt.uri)
+                for receipt in outcome.responses
+            )
+            from .fiscal_validation_contracts import FiscalValidationCompleteRefusedV1
+
+            if isinstance(outcome, FiscalValidationCompleteRefusedV1):
+                if outcome.rejection_ref is not None:
+                    self._source_edges.add(outcome.rejection_ref.artifact_id)
+
+    def _parser_result_edge(self, identity: str) -> None:
+        self._source_edges.add(identity)
+
+    def _parser_report_edge(self, result: object) -> None:
+        from .parser_action_contracts import ParserActionInputV3, ParserActionResultV2
+
+        if (
+            type(result) is not ParserActionResultV2
+            or type(result.request) is not ParserActionInputV3
+            or result.artifact_id not in self._source_edges
+        ):
+            raise _invalid("source parser requires its concrete current result")
+        self._source_edges.add(
+            f"sec-parser-action-report-v1:{result.report_content_hash}"
+        )
+
+    def _parser_delivery_edge(self, identity: str) -> None:
+        self._source_edges.add(identity)
+
+    def read(self, artifact_id: str) -> bytes:
+        if artifact_id in self._source_bodies:
+            return super().read(artifact_id)
+        if self._source_complete or artifact_id not in self._source_edges:
+            raise _invalid("artifact is outside the typed source graph")
+        record = self.get(artifact_id)
+        maximum = self._source_budget._source_remaining(artifact_id)
+        raw = self._artifacts.read_bounded(artifact_id, maximum_bytes=maximum)
+        self._check_deadline()
+        if hashlib.sha256(raw).hexdigest() != record.content_hash:
+            raise _invalid("source canonical artifact bytes changed")
+        self._source_budget._consume_source_body(
+            artifact_id, record.content_hash, len(raw)
+        )
+        self._expect_body(artifact_id, (record.content_hash, len(raw)))
+        return raw
+
+    def _complete_source_graph(self, role: str) -> None:
+        from .fiscal_parser_evidence import fiscal_source_closure_contract_digest
+
+        root = self.get(self._source_root)
+        if self._source_root not in self._bodies:
+            raise _invalid("typed source completion requires its actual root body")
+        origin = _SourceBodyOrigin(
+            _CLOSURE_BUDGET.get(),
+            self,
+            ArtifactRefV1(
+                artifact_id=root.artifact_id,
+                content_hash=root.content_hash,
+                media_type=root.media_type,
+                role=role,
+            ),
+            fiscal_source_closure_contract_digest(),
+        )
+        inherited = set(self._source_bodies)
+        self._source_complete = True
+        for identity, (digest, length) in self._bodies.items():
+            if identity not in inherited:
+                body = _SourceCanonicalBody(identity, digest, length, origin)
+                self._source_bodies[identity] = (body,)
+                self._enroll_source_body(body)
 
 
 @dataclass(frozen=True)
@@ -426,7 +684,7 @@ class FiscalSourceRead:
 
     @property
     def content_readsets(self) -> tuple[FiscalSourceContentReadSet, ...]:
-        return self.validation.content_readsets
+        return (*self.reader._content_readsets, *self.validation.content_readsets)
 
     def check_current(self) -> None:
         with self.owner._operation(self.deadline_at):
@@ -540,11 +798,14 @@ class FiscalSourceClosure:
         if ref.role != "fiscal-discovery" or ref.media_type != "application/json":
             raise _invalid("fiscal validation requires a discovery artifact reference")
         require_retained_artifact(reader, ref)
-        discovery, filing, records = self._discovery.read_for_validation(
+        observed = self._discovery._read_validation_inputs(
             ref.artifact_id, request.accession_number, deadline_at=deadline_at
         )
-        for identity, record in records:
-            reader.expect(identity, record)
+        discovery = observed.evidence.request
+        if observed.target is None or len(observed.target.selected) != 1:
+            raise _invalid("source discovery did not select its exact filing")
+        filing = observed.target.selected[0]
+        reader.enroll(observed.artifact_readset)
         if discovery.declared_source_revision != self._pin.declared_source_revision:
             raise _invalid(
                 "fiscal discovery source revision differs from configured revision"
@@ -575,6 +836,8 @@ class FiscalSourceClosure:
         self, evidence: FiscalOriginalValidationEvidenceV1, reader: FiscalArtifactRead
     ) -> None:
         request, outcome = evidence.request, evidence.outcome
+        if isinstance(reader, _FiscalSourceArtifactRead):
+            reader._validation_edges(evidence)
         _read_json(
             reader,
             request.artifact_id,
@@ -589,11 +852,6 @@ class FiscalSourceClosure:
                     receipt,
                     (receipt.content_hash,),
                 )
-            for ref in outcome.action_refs:
-                if ref.media_type != "application/json":
-                    raise _invalid("fiscal parser actions require JSON evidence")
-                require_retained_artifact(reader, ref)
-                reader.read(ref.artifact_id)
 
     def _read_evidence(
         self,
@@ -645,8 +903,8 @@ class FiscalSourceClosure:
     def observe(self, artifact_id: str, *, deadline_at: datetime) -> FiscalSourceRead:
         with self._operation(deadline_at):
             artifacts, discovery = self._artifacts, self._discovery
-            reader = FiscalArtifactRead(
-                artifacts, partial(self._before_deadline, deadline_at)
+            reader = _FiscalSourceArtifactRead(
+                artifacts, partial(self._before_deadline, deadline_at), artifact_id
             )
             source = self._configured_source()
             try:
@@ -659,6 +917,7 @@ class FiscalSourceClosure:
                     deadline_at=deadline_at,
                 )
                 reader.check_current()
+                reader._complete_source_graph("fiscal-original-validation")
                 return FiscalSourceRead(
                     self,
                     source,
@@ -682,8 +941,10 @@ class FiscalSourceClosure:
         deadline_at: datetime,
     ) -> FiscalSourceRead:
         with self._operation(deadline_at):
-            reader = FiscalArtifactRead(
-                self._artifacts, partial(self._before_deadline, deadline_at)
+            reader = _FiscalSourceArtifactRead(
+                self._artifacts,
+                partial(self._before_deadline, deadline_at),
+                artifact_id,
             )
             raw = reader.read(artifact_id)
             evidence = FiscalOriginalValidationEvidenceV1.model_validate_json(raw)
@@ -708,6 +969,7 @@ class FiscalSourceClosure:
                 artifacts=reader,
                 deadline_at=deadline_at,
             )
+            reader._complete_source_graph("fiscal-original-validation")
             result = _PreparedFiscalSourceRead(
                 self,
                 source,
@@ -731,11 +993,11 @@ class FiscalSourceClosure:
         if ref.role != "fiscal-discovery" or ref.media_type != "application/json":
             raise _invalid("current source discovery role differs")
         require_retained_artifact(reader, ref)
-        discovery, records = self._discovery.read_current_with_metadata(
+        observed = self._discovery.read_current_inputs(
             ref.artifact_id, deadline_at=deadline_at
         )
-        for identity, record in records:
-            reader.expect(identity, record)
+        discovery = observed.evidence
+        reader.enroll(observed.artifact_readset)
         candidates = tuple(
             item.filing
             for item in discovery.selection.candidates
@@ -765,12 +1027,15 @@ class FiscalSourceClosure:
         self, artifact_id: str, *, deadline_at: datetime
     ) -> FiscalSourceMetadataRead:
         with self._operation(deadline_at):
-            reader = FiscalArtifactRead(
-                self._artifacts, partial(self._before_deadline, deadline_at)
+            reader = _FiscalSourceArtifactRead(
+                self._artifacts,
+                partial(self._before_deadline, deadline_at),
+                artifact_id,
             )
             self._before_deadline(deadline_at)
             self._configured_source()
             evidence = self._read(artifact_id, reader, deadline_at)
+            reader._complete_source_graph("fiscal-original-validation")
             return FiscalSourceMetadataRead(evidence, reader.records)
 
     def read_matched(
@@ -782,8 +1047,10 @@ class FiscalSourceClosure:
     def _read_matched(
         self, ref: ArtifactRefV1, deadline_at: datetime
     ) -> ValidatedFiscalOriginalV1:
-        reader = FiscalArtifactRead(
-            self._artifacts, partial(self._before_deadline, deadline_at)
+        reader = _FiscalSourceArtifactRead(
+            self._artifacts,
+            partial(self._before_deadline, deadline_at),
+            ref.artifact_id,
         )
         if ref.role != "fiscal-original-validation":
             raise _invalid("fiscal validation reference has the wrong role")
@@ -792,6 +1059,7 @@ class FiscalSourceClosure:
         except DataReleaseError as error:
             raise _invalid("retained fiscal validation reference differs") from error
         evidence = self._read(ref.artifact_id, reader, deadline_at)
+        reader._complete_source_graph("fiscal-original-validation")
         if not isinstance(evidence.outcome, FiscalValidationMatchedV1):
             raise SnapshotError(
                 "FISCAL_VALIDATION_REFUSED",
@@ -818,6 +1086,11 @@ class FiscalSourceClosure:
             )
             resolved = self._resolve(request, reader, deadline_at)
             completed_id = resolved.completed_artifact_id
+            resolved_reads = reader.readset
+            reader = _FiscalSourceArtifactRead(
+                self._artifacts, check_deadline, completed_id
+            )
+            reader.enroll(resolved_reads)
             check_deadline()
             with self._capture_lock(completed_id, deadline_at):
                 check_deadline()

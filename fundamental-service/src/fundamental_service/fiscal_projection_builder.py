@@ -443,7 +443,7 @@ class FiscalProjectionBuilder:
         root = Path(__file__).parent
         return sha256_digest(
             (
-                "fundamental.fiscal-current-closure.v1",
+                "fundamental.fiscal-current-closure.v2",
                 fiscal_source_closure_contract_digest(),
                 tuple(
                     (name, hashlib.sha256((root / name).read_bytes()).hexdigest())
