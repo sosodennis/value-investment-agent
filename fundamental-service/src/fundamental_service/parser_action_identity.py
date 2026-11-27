@@ -743,11 +743,11 @@ def parser_action_resource_descriptor(
     taxonomy_cache_dir: Path,
     checks: ParserBuildChecks,
 ) -> bytes:
+    """Commit stable resource identity after proving the current local boundary."""
     return _resource_descriptor(
         profile,
         taxonomy_cache_dir,
         build=canonical_bytes(checks.current()),
-        configuration=checks._configuration,
     ).encoded()
 
 

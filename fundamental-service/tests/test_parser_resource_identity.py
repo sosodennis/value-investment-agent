@@ -238,6 +238,57 @@ def resource_action_case(tmp_path, monkeypatch):
     return SimpleNamespace(**locals())
 
 
+def test_runtime_resources_match_across_independent_configuration_consumers(
+    tmp_path, monkeypatch
+):
+    import fundamental_service.fiscal_parser_evidence as evidence
+    import fundamental_service.parser_action_identity as identity
+
+    current = identity.ParserBuildChecks.current
+    c = resource_action_case(tmp_path, monkeypatch)
+    monkeypatch.setattr(identity.ParserBuildChecks, "current", current)
+    configuration = ["publisher boundary"]
+    monkeypatch.setattr(
+        identity, "_immutable_build_configuration", lambda: (configuration[0], ())
+    )
+    files = identity._files
+    monkeypatch.setattr(
+        identity,
+        "_files",
+        lambda path: (("code.py", "1" * 64),)
+        if path == Path(identity.__file__).parent
+        else files(path),
+    )
+    monkeypatch.setattr(identity, "_runtime_identity", lambda **kwargs: "2" * 64)
+    consumers = []
+
+    def checks():
+        consumer = identity.ParserBuildChecks()
+        consumers.append(consumer)
+        return consumer
+
+    monkeypatch.setattr(evidence, "ParserBuildChecks", checks)
+    request = c.request()
+    reads = []
+    for boundary in ("publisher boundary", "reader boundary"):
+        configuration[0] = boundary
+        with identity._ParserResourceOperation(lambda: 60.0) as operation:
+            read = evidence.FiscalParserRuntimeRead()
+            read.observe(
+                request, c.profile, c.arguments["taxonomy_cache_dir"], "d" * 40
+            )
+            read.check_current(c.profile, c.arguments["taxonomy_cache_dir"], "d" * 40)
+            operation.finish()
+        reads.append(read)
+    assert len(consumers) == 2
+    assert all(consumer._configuration is not None for consumer in consumers)
+    assert consumers[0]._configuration != consumers[1]._configuration
+    assert consumers[0]._build == consumers[1]._build == request.build
+    with pytest.raises(identity.IncompleteParserClosure, match="configuration changed"):
+        consumers[0].current()
+    assert reads[0].resources == reads[1].resources
+
+
 def test_candidate_resource_operation_preserves_wire_and_reads_first_and_final_bytes(
     tmp_path, monkeypatch
 ):
