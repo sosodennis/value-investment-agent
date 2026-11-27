@@ -15,8 +15,10 @@ from fundamental_service.contracts import (
 )
 from fundamental_service.data_releases import ArtifactRefV1
 from fundamental_service.fiscal_source_closure import (
+    _CLOSURE_BUDGET,
     FiscalArtifactRead,
     FiscalSourceClosure,
+    fiscal_closure_read_operation,
 )
 from fundamental_service.fiscal_source_contracts import evaluate_fiscal_issuer
 from fundamental_service.fiscal_validation_contracts import (
@@ -142,6 +144,8 @@ def test_reader_keeps_metadata_absence_and_non_enrolling_probe(tmp_path, consume
             observed.check_current()
     with pytest.raises(SnapshotError, match="metadata changed"):
         reader.get("absent")
+    with pytest.raises(SnapshotError, match="metadata changed"):
+        reader.read("absent")
     assert dict(reader.records)["absent"] is None
     assert dict(parent.records)["absent"] is None
 
@@ -188,21 +192,23 @@ def test_reader_does_not_return_bytes_after_store_or_deadline_failure(
 
     parent = FiscalArtifactRead(artifacts, budget)
     reader = parent.for_consumer() if consumer else parent
-    original = artifacts.read_bounded
+    original = artifacts.read_bounded_checked
 
-    def read(identity, *, maximum_bytes):
+    def read(identity, *, before):
         nonlocal expired
+        if failure != "deadline":
+            before(record)
         if failure == "io":
             raise OSError("synthetic read failed")
         if failure == "registration":
             raise SnapshotError("CONTENT_NOT_FOUND", "synthetic registration missing")
         if failure == "hash":
-            return b"changed"
-        raw = original(identity, maximum_bytes=maximum_bytes)
+            return record, b"changed"
+        result = original(identity, before=before)
         expired = True
-        return raw
+        return result
 
-    monkeypatch.setattr(artifacts, "read_bounded", read)
+    monkeypatch.setattr(artifacts, "read_bounded_checked", read)
     with pytest.raises((OSError, SnapshotError)) as raised:
         reader.read(record.artifact_id)
     if failure == "io":
@@ -219,10 +225,11 @@ def test_reader_does_not_return_bytes_after_store_or_deadline_failure(
             }[failure]
         )
     assert parent.records == reader.records == ((record.artifact_id, record),)
-    monkeypatch.setattr(artifacts, "read_bounded", original)
+    monkeypatch.setattr(artifacts, "read_bounded_checked", original)
     expired = False
-    assert reader.read(record.artifact_id) == original(
-        record.artifact_id, maximum_bytes=8 * 1024 * 1024
+    assert (
+        reader.read(record.artifact_id)
+        == original(record.artifact_id, before=lambda observed: 8 * 1024 * 1024)[1]
     )
     parent.check_bodies()
 
@@ -244,6 +251,100 @@ def test_consumer_body_conflict_does_not_return_bytes_or_replace_first_length(
         consumer.read(record.artifact_id)
     with pytest.raises(SnapshotError, match="bytes changed"):
         owner.check_bodies()
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    ("first", "absent", "prior", "remaining", "acquisition", "body"),
+)
+def test_checked_body_observes_before_policy_and_preserves_failure_ledger(
+    tmp_path, scenario
+):
+    store = ArtifactStore(tmp_path)
+    record = store.put("body", {"value": "body"})
+    raw = store.read("body")
+    observed = None if scenario == "absent" else record
+    events = []
+
+    class CheckedAdapter:
+        def get(self, identity):
+            raise AssertionError("checked body must use its own before observation")
+
+        def read_bounded_checked(self, identity, *, before):
+            events.append("acquire")
+            if scenario == "acquisition":
+                raise OSError("before acquisition failed")
+            events.append("callback")
+            maximum = before(observed)
+            events.append(("registration", maximum))
+            assert child.records == parent.records == ((identity, observed),)
+            events.append("body")
+            if scenario == "body":
+                raise OSError("body failed")
+            events.append("after")
+            return record, raw
+
+    with fiscal_closure_read_operation():
+        parent = FiscalArtifactRead(CheckedAdapter(), lambda: None)
+        child = parent.for_consumer()
+        if scenario == "prior":
+            parent.expect("body", record.model_copy(update={"content_hash": "2" * 64}))
+        budget = _CLOSURE_BUDGET.get()
+        assert budget is not None
+        if scenario == "remaining":
+            budget.consume(("canonical", "prior"), 32 * 1024 * 1024 - 1024)
+        if scenario in ("first", "remaining"):
+            assert child.read("body") == raw
+            expected_maximum = (
+                1024 - len(canonical_bytes(("body", record)))
+                if scenario == "remaining"
+                else 8 * 1024 * 1024
+            )
+            assert events == [
+                "acquire",
+                "callback",
+                ("registration", expected_maximum),
+                "body",
+                "after",
+            ]
+            assert (
+                child.readset.bodies
+                == parent.readset.bodies
+                == (("body", (record.content_hash, len(raw))),)
+            )
+        else:
+            with pytest.raises((OSError, SnapshotError)) as refused:
+                child.read("body")
+            if scenario in ("acquisition", "body"):
+                assert isinstance(refused.value, OSError)
+                assert str(refused.value) == (
+                    "before acquisition failed"
+                    if scenario == "acquisition"
+                    else "body failed"
+                )
+            else:
+                assert refused.value.code == (
+                    "ARTIFACT_NOT_FOUND"
+                    if scenario == "absent"
+                    else "FISCAL_VALIDATION_INVALID"
+                )
+            assert events == (
+                ["acquire"]
+                if scenario == "acquisition"
+                else ["acquire", "callback", ("registration", 8 * 1024 * 1024), "body"]
+                if scenario == "body"
+                else ["acquire", "callback"]
+            )
+            assert child.readset.bodies == parent.readset.bodies == ()
+        if scenario == "acquisition":
+            assert child.records == parent.records == ()
+        elif scenario == "prior":
+            assert child.records == (("body", record),)
+            assert parent.records == (
+                ("body", record.model_copy(update={"content_hash": "2" * 64})),
+            )
+        else:
+            assert child.records == parent.records == (("body", observed),)
 
 
 @dataclass
@@ -521,6 +622,13 @@ class SyntheticCompleteSource:
             for ref in outcome.action_refs
             if ref.role == "sec-parser-action-report-v1"
         )
+        delivery = next(
+            ref
+            for ref in outcome.action_refs
+            if ref.role == "sec-parser-action-delivery-v2"
+        )
+        require_retained_artifact(artifacts, body, dependency_hashes=())
+        require_retained_artifact(artifacts, delivery, dependency_hashes=())
         require_retained_artifact(
             artifacts, normalized, dependency_hashes=(body.content_hash,)
         )
@@ -737,7 +845,11 @@ def test_synthetic_complete_read_rechecks_revocable_metadata_after_verification(
         "source": sec_response_artifact_id(
             evidence.request.scope, outcome.responses[0].uri
         ),
-        "action": outcome.action_refs[0].artifact_id,
+        "action": next(
+            ref.artifact_id
+            for ref in outcome.action_refs
+            if ref.role == "sec-parser-action-delivery-v2"
+        ),
     }
     source.on_verify = lambda: harness.artifacts.invalidate(ids[target])
 

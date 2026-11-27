@@ -372,6 +372,11 @@ class FiscalArtifactRead:
 
     def get(self, artifact_id: str) -> ArtifactRecordV1:
         record = self.current(artifact_id)
+        return self._require_retained_record(artifact_id, record)
+
+    def _require_retained_record(
+        self, artifact_id: str, record: ArtifactRecordV1 | None
+    ) -> ArtifactRecordV1:
         self.expect(artifact_id, record)
         if record is None:
             raise SnapshotError(
@@ -386,29 +391,46 @@ class FiscalArtifactRead:
         return record
 
     def read(self, artifact_id: str) -> bytes:
-        record = self.get(artifact_id)
-        sources = self._source_bodies.get(artifact_id, ())
-        parent = self._parent
-        while not sources and parent is not None:
-            sources = parent._source_bodies.get(artifact_id, ())
-            parent = parent._parent
-        if sources:
-            for source in sources:
-                self._enroll_source_body(source)
-            budget = _CLOSURE_BUDGET.get()
-            maximum = (
-                budget._source_remaining(artifact_id)
+        self._check_deadline()
+        sources: tuple[_SourceCanonicalBody, ...] = ()
+        budget = _CLOSURE_BUDGET.get()
+
+        def prepare_body(record: ArtifactRecordV1 | None) -> int:
+            nonlocal sources
+            self._check_deadline()
+            self._require_retained_record(artifact_id, record)
+            sources = self._source_bodies.get(artifact_id, ())
+            parent = self._parent
+            while not sources and parent is not None:
+                sources = parent._source_bodies.get(artifact_id, ())
+                parent = parent._parent
+            if sources:
+                for source in sources:
+                    self._enroll_source_body(source)
+                return (
+                    budget._source_remaining(artifact_id)
+                    if budget is not None
+                    else _MAXIMUM_SOURCE_BODY_BYTES
+                )
+            return (
+                min(
+                    _MAXIMUM_DERIVED_BODY_BYTES, budget.remaining(("body", artifact_id))
+                )
                 if budget is not None
-                else _MAXIMUM_SOURCE_BODY_BYTES
+                else _MAXIMUM_DERIVED_BODY_BYTES
             )
-            raw = self._artifacts.read_bounded(artifact_id, maximum_bytes=maximum)
+
+        record, raw = self._artifacts.read_bounded_checked(
+            artifact_id, before=prepare_body
+        )
+        if sources:
             if (record.content_hash, len(raw)) != (
                 sources[0].content_hash,
                 sources[0].byte_length,
             ):
                 raise _invalid("source canonical body differs from its origin")
-        else:
-            raw = read_fiscal_artifact_bytes(self._artifacts, artifact_id)
+        elif budget is not None:
+            budget.consume(("body", artifact_id), len(raw))
         self._check_deadline()
         if hashlib.sha256(raw).hexdigest() != record.content_hash:
             raise _invalid("fiscal validation artifact bytes changed")
@@ -593,9 +615,16 @@ class _FiscalSourceArtifactRead(FiscalArtifactRead):
             return super().read(artifact_id)
         if self._source_complete or artifact_id not in self._source_edges:
             raise _invalid("artifact is outside the typed source graph")
-        record = self.get(artifact_id)
-        maximum = self._source_budget._source_remaining(artifact_id)
-        raw = self._artifacts.read_bounded(artifact_id, maximum_bytes=maximum)
+        self._check_deadline()
+
+        def prepare_source(record: ArtifactRecordV1 | None) -> int:
+            self._check_deadline()
+            self._require_retained_record(artifact_id, record)
+            return self._source_budget._source_remaining(artifact_id)
+
+        record, raw = self._artifacts.read_bounded_checked(
+            artifact_id, before=prepare_source
+        )
         self._check_deadline()
         if hashlib.sha256(raw).hexdigest() != record.content_hash:
             raise _invalid("source canonical artifact bytes changed")

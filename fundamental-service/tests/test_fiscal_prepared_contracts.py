@@ -107,19 +107,153 @@ def test_correctness_refuses_unknown_owner_and_duplicate_owner_use_path():
         )
 
 
-def test_bounded_artifact_read_checks_full_bytes_and_refuses_overflow(tmp_path):
+def _bounded_read(store, identity, maximum_bytes, checked):
+    if checked:
+        return store.read_bounded_checked(
+            identity, before=lambda record: maximum_bytes
+        )[1]
+    return store.read_bounded(identity, maximum_bytes=maximum_bytes)
+
+
+@pytest.mark.parametrize("checked", (False, True))
+def test_bounded_artifact_read_checks_full_bytes_and_refuses_overflow(
+    tmp_path, checked
+):
     store = ArtifactStore(tmp_path)
     payload = b'{"exact":"bytes"}'
     store.put_bytes_with_receipt("fixture", payload, media_type="application/json")
-    assert store.read_bounded("fixture", maximum_bytes=len(payload)) == payload
+    assert _bounded_read(store, "fixture", len(payload), checked) == payload
     with pytest.raises(SnapshotError, match="bound"):
-        store.read_bounded("fixture", maximum_bytes=len(payload) - 1)
+        _bounded_read(store, "fixture", len(payload) - 1, checked)
     record = store.get("fixture")
     store._artifact_path(record.content_hash, record.media_type).write_bytes(
         b"x" * len(payload)
     )
     with pytest.raises(SnapshotError, match="differ"):
-        store.read_bounded("fixture", maximum_bytes=len(payload))
+        _bounded_read(store, "fixture", len(payload), checked)
+
+
+@pytest.mark.parametrize("adapter", ("filesystem", "postgres", "scoped"))
+@pytest.mark.parametrize("outcome", ("present", "absent", "refused"))
+def test_checked_adapter_calls_policy_once_before_consuming_body(
+    tmp_path, monkeypatch, adapter, outcome
+):
+    from contextlib import nullcontext
+    from threading import get_ident
+
+    from fundamental_service.metadata import (
+        PostgresArtifactStore,
+        PostgresContentStore,
+        _BoundedArtifactObservation,
+        _RetainedArtifactMetadata,
+    )
+
+    store = ArtifactStore(tmp_path / "artifacts")
+    record = store.put("fixture", {"value": 1})
+    raw = store.read("fixture")
+    observed = None if outcome == "absent" else record
+    events = []
+    caller_thread = get_ident()
+
+    class Metadata:
+        def _bounded_artifact_before(self, identity):
+            return _BoundedArtifactObservation(
+                canonical_bytes(observed) if observed is not None else None, len(raw)
+            )
+
+        def _bounded_artifact_after(self, identity, *, content_hash, media_type):
+            assert (content_hash, media_type) == (
+                record.content_hash,
+                record.media_type,
+            )
+            return self._bounded_artifact_before(identity)
+
+        def retained_artifact_records(self, identities):
+            return (
+                {
+                    "fixture": _RetainedArtifactMetadata(
+                        canonical_bytes(record), len(raw)
+                    )
+                }
+                if "fixture" in identities and observed is not None
+                else {}
+            )
+
+        def content_byte_length(self, digest, *, media_type):
+            return len(raw)
+
+    if adapter == "filesystem":
+        if observed is None:
+            store = ArtifactStore(tmp_path / "absent")
+        body_owner = store
+        body_method = "_read_bounded_record"
+    else:
+        metadata = Metadata()
+        content = PostgresContentStore(tmp_path / "content", metadata)
+        content._filesystem.put(raw, media_type=record.media_type)
+        store = PostgresArtifactStore(metadata, content).as_read_only()
+        body_owner = store._content._filesystem
+        body_method = "get_bounded"
+    body = getattr(body_owner, body_method)
+
+    def consume(*args, **kwargs):
+        events.append("body")
+        return body(*args, **kwargs)
+
+    monkeypatch.setattr(body_owner, body_method, consume)
+
+    def before(current):
+        assert get_ident() == caller_thread
+        assert current == observed
+        events.append("policy")
+        if outcome == "refused":
+            raise SnapshotError("POLICY_REFUSED", "controlled policy refusal")
+        return len(raw)
+
+    with store.scoped_read_operation() if adapter == "scoped" else nullcontext():
+        if outcome == "present":
+            assert store.read_bounded_checked("fixture", before=before) == (record, raw)
+            assert events == ["policy", "body"]
+        else:
+            with pytest.raises(SnapshotError) as refused:
+                store.read_bounded_checked("fixture", before=before)
+            assert refused.value.code == (
+                "ARTIFACT_NOT_FOUND" if outcome == "absent" else "POLICY_REFUSED"
+            )
+            assert events == ["policy"]
+
+
+@pytest.mark.parametrize("refuse", (False, True))
+def test_checked_publication_reader_preserves_budget_and_policy_failure(
+    tmp_path, refuse
+):
+    from fundamental_service.fiscal_source_validation import _FiscalEvidencePublications
+
+    store = ArtifactStore(tmp_path)
+    record = store.put("fixture", {"value": 1})
+    raw = store.read("fixture")
+    events = []
+
+    def budget():
+        events.append("budget")
+        return 60.0
+
+    def before(current):
+        assert current == record
+        events.append("policy")
+        if refuse:
+            raise SnapshotError("POLICY_REFUSED", "controlled policy refusal")
+        return len(raw)
+
+    reader = _FiscalEvidencePublications(store, budget)
+    if refuse:
+        with pytest.raises(SnapshotError) as refused:
+            reader.read_bounded_checked("fixture", before=before)
+        assert refused.value.code == "POLICY_REFUSED"
+        assert events == ["budget", "policy"]
+    else:
+        assert reader.read_bounded_checked("fixture", before=before) == (record, raw)
+        assert events == ["budget", "policy", "budget"]
 
 
 def test_absence_can_only_transition_through_this_invocations_actual_own_receipt(
@@ -285,8 +419,9 @@ def test_current_records_refuses_first_mismatch_before_decoding_later_bad_record
     "after_length, expected_code",
     [(None, "CONTENT_REGISTRATION_UNAVAILABLE"), (99, "CONTENT_METADATA_MISMATCH")],
 )
+@pytest.mark.parametrize("checked", (False, True))
 def test_bounded_artifact_refuses_registration_before_decoding_after_metadata(
-    tmp_path, after_length, expected_code
+    tmp_path, after_length, expected_code, checked
 ):
     from types import SimpleNamespace
 
@@ -310,11 +445,14 @@ def test_bounded_artifact_refuses_registration_before_decoding_after_metadata(
     content._filesystem.put(raw, media_type=record.media_type)
     artifacts = PostgresArtifactStore(metadata, content)
     with pytest.raises(SnapshotError) as refused:
-        artifacts.read_bounded(record.artifact_id, maximum_bytes=len(raw))
+        _bounded_read(artifacts, record.artifact_id, len(raw), checked)
     assert refused.value.code == expected_code
 
 
-def test_bounded_artifact_refuses_actual_length_before_after_metadata_lookup(tmp_path):
+@pytest.mark.parametrize("checked", (False, True))
+def test_bounded_artifact_refuses_actual_length_before_after_metadata_lookup(
+    tmp_path, checked
+):
     from types import SimpleNamespace
 
     from fundamental_service.metadata import (
@@ -339,7 +477,7 @@ def test_bounded_artifact_refuses_actual_length_before_after_metadata_lookup(tmp
     content._filesystem.put(raw, media_type=record.media_type)
     artifacts = PostgresArtifactStore(metadata, content)
     with pytest.raises(SnapshotError) as refused:
-        artifacts.read_bounded(record.artifact_id, maximum_bytes=len(raw) + 1)
+        _bounded_read(artifacts, record.artifact_id, len(raw) + 1, checked)
     assert refused.value.code == "CONTENT_METADATA_MISMATCH"
 
 

@@ -166,6 +166,9 @@ class ArtifactRecordV1(BaseModel):
         return tuple(sorted(set(values)))
 
 
+BoundedReadPrecondition = Callable[[ArtifactRecordV1 | None], int]
+
+
 class ArtifactPublicationV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -433,6 +436,28 @@ class ArtifactStore:
 
     def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
         record = self.get(artifact_id)
+        return self._read_bounded_record(
+            artifact_id, record, maximum_bytes=maximum_bytes
+        )
+
+    def read_bounded_checked(
+        self, artifact_id: str, *, before: BoundedReadPrecondition
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        with self._lock:
+            self._load_records(force=True)
+            record = self._records.get(artifact_id)
+        maximum_bytes = before(record)
+        if record is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return record, self._read_bounded_record(
+            artifact_id, record, maximum_bytes=maximum_bytes
+        )
+
+    def _read_bounded_record(
+        self, artifact_id: str, record: ArtifactRecordV1, *, maximum_bytes: int
+    ) -> bytes:
         path = self._artifact_path(record.content_hash, record.media_type)
         with path.open("rb") as source:
             length = os.fstat(source.fileno()).st_size

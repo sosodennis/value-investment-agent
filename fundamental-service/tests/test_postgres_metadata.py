@@ -1740,8 +1740,17 @@ def test_current_records_does_not_reuse_an_active_scoped_starting_record(
     assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
 
 
+def _bounded_artifact_read(store, identity, maximum_bytes, checked):
+    if checked:
+        return store.read_bounded_checked(
+            identity, before=lambda record: maximum_bytes
+        )[1]
+    return store.read_bounded(identity, maximum_bytes=maximum_bytes)
+
+
+@pytest.mark.parametrize("checked", (False, True))
 def test_bounded_artifact_rechecks_actual_bytes_and_never_repairs_registration(
-    metadata: PostgresMetadataStore, tmp_path: Path
+    metadata: PostgresMetadataStore, tmp_path: Path, checked: bool
 ):
     content = PostgresContentStore(tmp_path / "content", metadata)
     artifacts = PostgresArtifactStore(metadata, content)
@@ -1749,14 +1758,16 @@ def test_bounded_artifact_rechecks_actual_bytes_and_never_repairs_registration(
     record = artifacts.put_bytes_with_receipt(uuid4().hex, raw).artifact
     readonly = artifacts.as_read_only()
     for store in (artifacts, readonly):
-        assert store.read_bounded(record.artifact_id, maximum_bytes=len(raw)) == raw
+        assert (
+            _bounded_artifact_read(store, record.artifact_id, len(raw), checked) == raw
+        )
         with pytest.raises(SnapshotError) as overflow:
-            store.read_bounded(record.artifact_id, maximum_bytes=len(raw) - 1)
+            _bounded_artifact_read(store, record.artifact_id, len(raw) - 1, checked)
         assert overflow.value.code == "FISCAL_CLOSURE_LIMIT"
     path = content._filesystem._path(record.content_hash, record.media_type)
     path.write_bytes(b"x" * len(raw))
     with pytest.raises(SnapshotError) as corrupt:
-        readonly.read_bounded(record.artifact_id, maximum_bytes=len(raw))
+        _bounded_artifact_read(readonly, record.artifact_id, len(raw), checked)
     assert corrupt.value.code == "SOURCE_HASH_MISMATCH"
     path.write_bytes(raw)
     _change_artifact_metadata(
@@ -1767,7 +1778,7 @@ def test_bounded_artifact_rechecks_actual_bytes_and_never_repairs_registration(
     )
     for store in (artifacts, readonly):
         with pytest.raises(SnapshotError) as missing:
-            store.read_bounded(record.artifact_id, maximum_bytes=len(raw))
+            _bounded_artifact_read(store, record.artifact_id, len(raw), checked)
         assert missing.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
     with pytest.raises(SnapshotError) as still_missing:
         metadata.content_byte_length(record.content_hash, media_type=record.media_type)
@@ -1776,12 +1787,14 @@ def test_bounded_artifact_rechecks_actual_bytes_and_never_repairs_registration(
 
 @pytest.mark.parametrize("artifact_change", ("missing", "different-pair"))
 @pytest.mark.parametrize("registration_missing", (False, True))
+@pytest.mark.parametrize("checked", (False, True))
 def test_bounded_artifact_after_observes_original_pair_even_if_artifact_changes(
     metadata: PostgresMetadataStore,
     tmp_path: Path,
     monkeypatch,
     artifact_change: str,
     registration_missing: bool,
+    checked: bool,
 ):
     content = PostgresContentStore(tmp_path / "content", metadata)
     artifacts = PostgresArtifactStore(metadata, content)
@@ -1835,7 +1848,7 @@ def test_bounded_artifact_after_observes_original_pair_even_if_artifact_changes(
         else DataReleaseError
     )
     with pytest.raises(expected_type) as refused:
-        artifacts.read_bounded(record.artifact_id, maximum_bytes=len(raw))
+        _bounded_artifact_read(artifacts, record.artifact_id, len(raw), checked)
     assert refused.value.code == (
         "CONTENT_REGISTRATION_UNAVAILABLE"
         if registration_missing
@@ -1845,6 +1858,54 @@ def test_bounded_artifact_after_observes_original_pair_even_if_artifact_changes(
             else "ARTIFACT_EVIDENCE_CHANGED"
         )
     )
+
+
+@pytest.mark.parametrize("limits", ({}, {"max_entries": 0}, {"max_bytes": 1}))
+@pytest.mark.parametrize("present", (False, True))
+def test_checked_retained_reads_keep_absence_and_final_fresh_guard(
+    metadata: PostgresMetadataStore, tmp_path: Path, limits, present
+):
+    from threading import get_ident
+
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    identity = uuid4().hex
+    raw = b'{"retained":true}'
+    record = (
+        artifacts.put_bytes_with_receipt(identity, raw).artifact if present else None
+    )
+    caller_thread = get_ident()
+    observed = []
+
+    def before(current):
+        assert get_ident() == caller_thread
+        observed.append(current)
+        return len(raw)
+
+    with pytest.raises(DataReleaseError) as changed:
+        with artifacts.retained_read_operation((identity,), **limits) as reader:
+            if present:
+                assert reader.read_bounded_checked(identity, before=before) == (
+                    record,
+                    raw,
+                )
+                _change_artifact_metadata(
+                    metadata,
+                    "UPDATE fundamental.artifact_references SET status='invalidated' "
+                    "WHERE artifact_id=:id",
+                    {"id": identity},
+                )
+            else:
+                with pytest.raises(SnapshotError) as missing:
+                    reader.read_bounded_checked(identity, before=before)
+                assert missing.value.code == "ARTIFACT_NOT_FOUND"
+                artifacts.put_bytes_with_receipt(identity, raw)
+    assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    assert observed == [record]
+    with pytest.raises(RuntimeError, match="ended"):
+        reader.read_bounded_checked(identity, before=before)
+    assert observed == [record]
 
 
 def test_retained_metadata_preserves_first_byte_failure_before_later_bad_row(

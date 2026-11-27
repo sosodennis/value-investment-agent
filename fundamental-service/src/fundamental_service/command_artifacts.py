@@ -11,7 +11,12 @@ from typing import Literal, Protocol
 from .data_releases import DataReleaseError
 from .content_publication import configured_content_publication_access
 from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
-from .replay import ArtifactPublicationV1, ArtifactRecordV1, ArtifactStore
+from .replay import (
+    ArtifactPublicationV1,
+    ArtifactRecordV1,
+    ArtifactStore,
+    BoundedReadPrecondition,
+)
 
 
 class EvidenceArtifactStore(Protocol):
@@ -29,6 +34,15 @@ class EvidenceArtifactStore(Protocol):
     def read(self, artifact_id: str) -> bytes: ...
 
     def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes: ...
+
+    def read_bounded_checked(
+        self, artifact_id: str, *, before: BoundedReadPrecondition
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        """Run before once on the caller thread before registration or body checks.
+
+        The callback observes optional metadata and returns the body byte bound.
+        """
+        ...
 
     def put_with_receipt(
         self,

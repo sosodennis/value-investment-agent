@@ -56,6 +56,7 @@ from .replay import (
     ArtifactPublicationDeadlineExceeded,
     ArtifactPublicationV1,
     ArtifactRecordV1,
+    BoundedReadPrecondition,
 )
 from .sec_capture import RetainedSecSourceAdapter
 from .sec_source import SecSourceError
@@ -139,6 +140,14 @@ class _FiscalEvidencePublications:
         raw = self.store.read_bounded(artifact_id, maximum_bytes=maximum_bytes)
         self.budget()
         return raw
+
+    def read_bounded_checked(
+        self, artifact_id: str, *, before: BoundedReadPrecondition
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        self.budget()
+        result = self.store.read_bounded_checked(artifact_id, before=before)
+        self.budget()
+        return result
 
     def put_with_receipt(
         self,

@@ -73,6 +73,7 @@ from .replay import (
     ArtifactPublicationDeadlineExceeded,
     ArtifactPublicationV1,
     ArtifactRecordV1,
+    BoundedReadPrecondition,
     check_publication_budget,
 )
 from .serialization import canonical_bytes, sha256_digest
@@ -2638,6 +2639,39 @@ class PostgresArtifactStore:
             return scoped.reader.read_bounded(artifact_id, maximum_bytes=maximum_bytes)
         before = self._metadata._bounded_artifact_before(artifact_id)
         record = before.record(artifact_id)
+        return self._read_bounded_record(
+            artifact_id, before, record, maximum_bytes=maximum_bytes
+        )
+
+    def read_bounded_checked(
+        self, artifact_id: str, *, before: BoundedReadPrecondition
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        scoped = self._scoped_reads()
+        if scoped is not None:
+            return scoped.reader.read_bounded_checked(artifact_id, before=before)
+        observed = self._metadata._bounded_artifact_before(artifact_id)
+        record = (
+            ArtifactRecordV1.model_validate_json(observed.artifact_payload)
+            if observed.artifact_payload is not None
+            else None
+        )
+        maximum_bytes = before(record)
+        if record is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return record, self._read_bounded_record(
+            artifact_id, observed, record, maximum_bytes=maximum_bytes
+        )
+
+    def _read_bounded_record(
+        self,
+        artifact_id: str,
+        before: _BoundedArtifactObservation,
+        record: ArtifactRecordV1,
+        *,
+        maximum_bytes: int,
+    ) -> bytes:
         _check_metadata_budget()
         length = before.require_byte_length()
         if maximum_bytes < 0 or length > maximum_bytes:
@@ -2654,7 +2688,9 @@ class PostgresArtifactStore:
                 "CONTENT_METADATA_MISMATCH", "bounded content registration differs"
             )
         after = self._metadata._bounded_artifact_after(
-            artifact_id, content_hash=record.content_hash, media_type=record.media_type
+            artifact_id,
+            content_hash=record.content_hash,
+            media_type=record.media_type,
         )
         if after.require_byte_length() != length:
             raise SnapshotError(
@@ -2842,6 +2878,14 @@ class _RetainedPostgresArtifactReads:
         return self._entry(artifact_id).record()
 
     def _entry(self, artifact_id: str) -> _RetainedArtifactMetadata:
+        entry = self._optional_entry(artifact_id)
+        if entry is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return entry
+
+    def _optional_entry(self, artifact_id: str) -> _RetainedArtifactMetadata | None:
         if self._closed:
             raise RuntimeError("retained artifact read operation has ended")
         if self._fallback:
@@ -2849,16 +2893,12 @@ class _RetainedPostgresArtifactReads:
                 (artifact_id,)
             ).get(artifact_id)
             self._witness(artifact_id, entry)
-            if entry is None:
-                raise SnapshotError(
-                    "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
-                )
             return entry
         if artifact_id not in self._ids:
             if len(self._ids) >= self._max_entries:
                 self._require_current()
                 self._discard_batch()
-                return self._entry(artifact_id)
+                return self._optional_entry(artifact_id)
             self._ids.add(artifact_id)
             self._records.update(
                 self._artifacts._metadata.retained_artifact_records((artifact_id,))
@@ -2866,13 +2906,29 @@ class _RetainedPostgresArtifactReads:
             if self._over_budget():
                 self._require_current()
                 self._discard_batch()
-                return self._entry(artifact_id)
-        entry = self._records.get(artifact_id)
-        if entry is None:
+                return self._optional_entry(artifact_id)
+        return self._records.get(artifact_id)
+
+    def read_bounded_checked(
+        self, artifact_id: str, *, before: BoundedReadPrecondition
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        entry = self._optional_entry(artifact_id)
+        record = entry.record() if entry is not None else None
+        maximum_bytes = before(record)
+        if entry is None or record is None:
             raise SnapshotError(
                 "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
             )
-        return entry
+        if entry.byte_length is None:
+            raise SnapshotError(
+                "CONTENT_REGISTRATION_UNAVAILABLE",
+                "bounded artifact verification requires retained registration",
+            )
+        if maximum_bytes < 0 or entry.byte_length > maximum_bytes:
+            raise SnapshotError("FISCAL_CLOSURE_LIMIT", "artifact exceeds read bound")
+        return record, self._read_bounded_entry(
+            artifact_id, entry, record, maximum_bytes=maximum_bytes
+        )
 
     def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
         entry = self._entry(artifact_id)
@@ -2884,6 +2940,18 @@ class _RetainedPostgresArtifactReads:
         if maximum_bytes < 0 or entry.byte_length > maximum_bytes:
             raise SnapshotError("FISCAL_CLOSURE_LIMIT", "artifact exceeds read bound")
         record = entry.record()
+        return self._read_bounded_entry(
+            artifact_id, entry, record, maximum_bytes=maximum_bytes
+        )
+
+    def _read_bounded_entry(
+        self,
+        artifact_id: str,
+        entry: _RetainedArtifactMetadata,
+        record: ArtifactRecordV1,
+        *,
+        maximum_bytes: int,
+    ) -> bytes:
         raw = self._artifacts._content.get_bounded(
             record.content_hash,
             media_type=record.media_type,

@@ -694,18 +694,21 @@ def test_owner_read_rejects_metadata_revoked_after_its_bytes_are_read(
 ):
     evidence, _ = harness.publish()
     target_id = harness.ids(evidence)[target]
-    read_original = harness.artifacts.read
+    read_original = harness.artifacts.read_bounded_checked
+    revoked = []
 
-    def read_then_revoke(artifact_id):
-        payload = read_original(artifact_id)
+    def read_then_revoke(artifact_id, *, before):
+        result = read_original(artifact_id, before=before)
         if artifact_id == target_id:
             harness.artifacts.invalidate(artifact_id)
-        return payload
+            revoked.append(artifact_id)
+        return result
 
-    monkeypatch.setattr(harness.artifacts, "read", read_then_revoke)
+    monkeypatch.setattr(harness.artifacts, "read_bounded_checked", read_then_revoke)
     with pytest.raises(SnapshotError) as failure:
         harness.read(evidence.artifact_id)
     assert failure.value.code == "FISCAL_DISCOVERY_INVALID"
+    assert revoked == [target_id]
 
 
 def test_retained_read_has_no_lookahead_from_malformed_future_amendment(harness):
@@ -781,25 +784,30 @@ def test_retained_read_stops_before_reading_more_bytes_after_deadline(
 ):
     evidence, _ = harness.publish()
     history_receipt_id = harness.ids(evidence)["receipt"]
-    read_original = harness.artifacts.read
+    read_original = harness.artifacts.read_bounded_checked
     get_original = harness.content.get
     source_reads = []
+    expired_after = []
 
-    def read_receipt_then_expire(artifact_id):
-        payload = read_original(artifact_id)
+    def read_receipt_then_expire(artifact_id, *, before):
+        result = read_original(artifact_id, before=before)
         if artifact_id == history_receipt_id:
             harness.now = harness.deadline
-        return payload
+            expired_after.append(artifact_id)
+        return result
 
     def read_source(content_hash, *, media_type):
         source_reads.append(content_hash)
         return get_original(content_hash, media_type=media_type)
 
-    monkeypatch.setattr(harness.artifacts, "read", read_receipt_then_expire)
+    monkeypatch.setattr(
+        harness.artifacts, "read_bounded_checked", read_receipt_then_expire
+    )
     monkeypatch.setattr(harness.content, "get", read_source)
     with pytest.raises(SecSourceError) as failure:
         harness.read(evidence.artifact_id)
     assert failure.value.code == "REQUEST_DEADLINE_EXCEEDED"
+    assert expired_after == [history_receipt_id]
     recent_receipt = evidence.sources[0].receipt
     assert recent_receipt is not None
     assert source_reads == [recent_receipt.content_hash]
