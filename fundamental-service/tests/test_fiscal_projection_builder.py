@@ -198,7 +198,7 @@ class SyntheticRetainedSourcePort:
             def input_footprint(self):
                 return (
                     original.records,
-                    canonical_bytes(original.evidence.model_dump(mode="json")).hex(),
+                    self.artifact_readset.bodies,
                 )
 
             def retained_input_binding(self, reference):
