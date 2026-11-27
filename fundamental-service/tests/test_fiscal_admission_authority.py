@@ -910,13 +910,19 @@ def test_expired_absolute_command_cannot_be_renewed_by_retry(environment):
 def test_corrupt_retained_bytes_are_rejected_even_with_unchanged_metadata(environment):
     environment.owner.grant(grant_command(), expected_head=None, deadline_at=deadline())
 
+    injected = False
+
     class CorruptReader:
         def __getattr__(self, name):
             return getattr(environment.store, name)
 
-        def read(self, identity):
-            raw = environment.store.read(identity)
-            return raw + b" " if identity == "synthetic-business-provisioning" else raw
+        def read_bounded(self, identity, *, maximum_bytes):
+            nonlocal injected
+            raw = environment.store.read_bounded(identity, maximum_bytes=maximum_bytes)
+            if identity == "synthetic-business-provisioning":
+                injected = True
+                return raw + b" "
+            return raw
 
     owner = FiscalAuthorityOwner(
         artifacts=CorruptReader(),
@@ -928,6 +934,7 @@ def test_corrupt_retained_bytes_are_rejected_even_with_unchanged_metadata(enviro
             "synthetic-classifier", expected_role="classifier", deadline_at=deadline()
         )
     assert failure.value.code == "FISCAL_AUTHORITY_INVALID"
+    assert injected
 
 
 def test_original_deadline_cancels_a_real_registry_lock_and_retry_recovers(

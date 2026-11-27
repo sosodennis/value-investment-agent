@@ -32,14 +32,20 @@ def test_whole_observation_exceeds_single_batch_in_one_readonly_snapshot(
     for start in range(0, len(records), 256):
         history.checkpoint(records[start : start + 256], deadline_at=deadline())
     epoch = history.read_epoch(deadline_at=deadline())
-    read_head = history._head
+    read_group = history._stream_group
     changed = False
+    read_groups = []
 
-    async def racing(connection, identity):
+    async def racing(streams, connection, *, remaining_entries, remaining_bytes):
         nonlocal changed
-        head = await read_head(connection, identity)
-        if not changed and identity.endswith("0260"):
-            changed = True
+        group = await read_group(
+            streams,
+            connection,
+            remaining_entries=remaining_entries,
+            remaining_bytes=remaining_bytes,
+        )
+        read_groups.append(streams)
+        if not changed and "evidence:synthetic-whole:0260" in streams:
             async with metadata._runner._engine.begin() as writer:
                 await writer.execute(
                     text(
@@ -47,11 +53,13 @@ def test_whole_observation_exceeds_single_batch_in_one_readonly_snapshot(
                     ),
                     {"first": records[0].artifact_id, "last": records[-1].artifact_id},
                 )
-        return head
+            changed = True
+        return group
 
-    monkeypatch.setattr(history, "_head", racing)
+    monkeypatch.setattr(history, "_stream_group", racing)
     observed = history.finish_observation(records, (), epoch, deadline_at=deadline())
     assert changed
+    assert len(read_groups) > 1
     assert len(observed.heads) == 270
     assert {entry.event.body.record.artifact_id for entry in observed.entries} == {
         record.artifact_id for record in records

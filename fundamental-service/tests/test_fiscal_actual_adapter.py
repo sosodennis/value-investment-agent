@@ -824,6 +824,7 @@ def test_configured_fiscal_validation_and_retained_replay(
             )
             assert observation.witness == published_witness.witness
             observation.check_current()
+        read_injections = 0
         if witness_case == "read-metadata-expired":
             expire_metadata_lookup()
             expected_read_error = "REQUEST_DEADLINE_EXCEEDED"
@@ -831,27 +832,34 @@ def test_configured_fiscal_validation_and_retained_replay(
             harness.artifacts.invalidate(evidence.artifact_id)
             expected_read_error = "FISCAL_VALIDATION_INVALID"
         elif witness_case == "read-envelope-revoked":
-            original_read = harness.artifacts.read
+            original_read = harness.artifacts.read_bounded_checked
 
-            def revoke_envelope(artifact_id):
-                raw = original_read(artifact_id)
+            def revoke_envelope(artifact_id, *, before):
+                nonlocal read_injections
+                observed = original_read(artifact_id, before=before)
                 if artifact_id == published_witness.witness.artifact_id:
                     harness.artifacts.invalidate(artifact_id)
-                return raw
+                    read_injections += 1
+                return observed
 
-            monkeypatch.setattr(harness.artifacts, "read", revoke_envelope)
+            monkeypatch.setattr(
+                harness.artifacts, "read_bounded_checked", revoke_envelope
+            )
             expected_read_error = "FISCAL_VALIDATION_INVALID"
         elif witness_case == "read-authority-revoked-during-read":
-            original_read = harness.artifacts.read
+            original_read = harness.artifacts.read_bounded_checked
 
-            def revoke_authority(artifact_id):
-                nonlocal authority
-                raw = original_read(artifact_id)
+            def revoke_authority(artifact_id, *, before):
+                nonlocal authority, read_injections
+                observed = original_read(artifact_id, before=before)
                 if artifact_id == evidence.artifact_id:
                     authority = authority.model_copy(update={"status": "revoked"})
-                return raw
+                    read_injections += 1
+                return observed
 
-            monkeypatch.setattr(harness.artifacts, "read", revoke_authority)
+            monkeypatch.setattr(
+                harness.artifacts, "read_bounded_checked", revoke_authority
+            )
             expected_read_error = "FISCAL_FOCUS_AUTHORITY_INVALID"
         elif witness_case in {
             "read-authority-revoked",
@@ -880,6 +888,11 @@ def test_configured_fiscal_validation_and_retained_replay(
                     published_witness.witness.artifact_id, deadline_at=harness.deadline
                 )
             assert failure.value.code == expected_read_error
+            if witness_case in {
+                "read-envelope-revoked",
+                "read-authority-revoked-during-read",
+            }:
+                assert read_injections > 0
             if observation is not None:
                 with pytest.raises(SnapshotError) as current_failure:
                     observation.check_current()
