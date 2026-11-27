@@ -2032,6 +2032,65 @@ class PostgresMetadataStore:
             for row in rows
         }
 
+    def _bounded_artifact_before(self, artifact_id: str) -> _BoundedArtifactObservation:
+        self._require_ready()
+        rows = self._runner.run(self._retained_artifact_records((artifact_id,)))
+        if not rows:
+            return _BoundedArtifactObservation(None, None)
+        row = rows[0]
+        return _BoundedArtifactObservation(
+            canonical_bytes(
+                {key: value for key, value in row.items() if key != "byte_length"}
+            ),
+            row["byte_length"],
+        )
+
+    def _bounded_artifact_after(
+        self, artifact_id: str, *, content_hash: str, media_type: str
+    ) -> _BoundedArtifactObservation:
+        self._require_ready()
+        return self._runner.run(
+            self._read_bounded_artifact_after(artifact_id, content_hash, media_type)
+        )
+
+    async def _read_bounded_artifact_after(
+        self, artifact_id: str, content_hash: str, media_type: str
+    ) -> _BoundedArtifactObservation:
+        async with self._runner._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT artifact.artifact_id, artifact.content_hash, "
+                            "artifact.media_type, artifact.dependency_hashes, "
+                            "artifact.status, artifact.retention, content.byte_length "
+                            "FROM (SELECT CAST(:artifact_id AS text) AS artifact_id) "
+                            "AS requested "
+                            "LEFT JOIN fundamental.artifact_references AS artifact "
+                            "ON artifact.artifact_id=requested.artifact_id "
+                            "LEFT JOIN fundamental.content_objects AS content "
+                            "ON content.content_hash=:content_hash "
+                            "AND content.media_type=:media_type"
+                        ),
+                        {
+                            "artifact_id": artifact_id,
+                            "content_hash": content_hash,
+                            "media_type": media_type,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        return _BoundedArtifactObservation(
+            canonical_bytes(
+                {key: value for key, value in row.items() if key != "byte_length"}
+            )
+            if row["artifact_id"] is not None
+            else None,
+            row["byte_length"],
+        )
+
     async def _retained_artifact_records(
         self,
         artifact_ids: tuple[str, ...],
@@ -2544,6 +2603,28 @@ class PostgresArtifactStore:
             else self._metadata.get_artifact(artifact_id)
         )
 
+    def require_current_records(
+        self,
+        expected: tuple[tuple[str, ArtifactRecordV1 | None], ...],
+        *,
+        check_deadline: Callable[[], object],
+    ) -> None:
+        self._scoped_reads()
+        check_deadline()
+        entries = self._metadata.retained_artifact_records(
+            tuple(identity for identity, _ in expected)
+        )
+        for identity, record in expected:
+            check_deadline()
+            entry = entries.get(identity)
+            current = entry.record() if entry is not None else None
+            check_deadline()
+            if current != record:
+                raise DataReleaseError(
+                    "ARTIFACT_EVIDENCE_CHANGED", "artifact metadata changed"
+                )
+        check_deadline()
+
     def read(self, artifact_id: str) -> bytes:
         scoped = self._scoped_reads()
         if scoped is not None:
@@ -2555,13 +2636,32 @@ class PostgresArtifactStore:
         scoped = self._scoped_reads()
         if scoped is not None:
             return scoped.reader.read_bounded(artifact_id, maximum_bytes=maximum_bytes)
-        record = self.get(artifact_id)
-        raw = self._content.get_bounded(
+        before = self._metadata._bounded_artifact_before(artifact_id)
+        record = before.record(artifact_id)
+        _check_metadata_budget()
+        length = before.require_byte_length()
+        if maximum_bytes < 0 or length > maximum_bytes:
+            raise SnapshotError(
+                "FISCAL_CLOSURE_LIMIT", "registered content exceeds read bound"
+            )
+        raw = self._content._filesystem.get_bounded(
             record.content_hash,
             media_type=record.media_type,
             maximum_bytes=maximum_bytes,
         )
-        if self.get(artifact_id) != record:
+        if len(raw) != length:
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH", "bounded content registration differs"
+            )
+        after = self._metadata._bounded_artifact_after(
+            artifact_id, content_hash=record.content_hash, media_type=record.media_type
+        )
+        if after.require_byte_length() != length:
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH", "bounded content registration differs"
+            )
+        _check_metadata_budget()
+        if after.record(artifact_id) != record:
             raise DataReleaseError(
                 "ARTIFACT_EVIDENCE_CHANGED", "bounded artifact metadata changed"
             )
@@ -2607,6 +2707,27 @@ class PostgresArtifactStore:
 
     def reset_operational_cache(self) -> None:
         return None
+
+
+@dataclass(frozen=True, slots=True)
+class _BoundedArtifactObservation:
+    artifact_payload: bytes | None
+    byte_length: int | None
+
+    def record(self, artifact_id: str) -> ArtifactRecordV1:
+        if self.artifact_payload is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return ArtifactRecordV1.model_validate_json(self.artifact_payload)
+
+    def require_byte_length(self) -> int:
+        if self.byte_length is None:
+            raise SnapshotError(
+                "CONTENT_REGISTRATION_UNAVAILABLE",
+                "retained content registration is missing",
+            )
+        return self.byte_length
 
 
 @dataclass(frozen=True, slots=True)

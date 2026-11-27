@@ -188,9 +188,9 @@ def test_reader_does_not_return_bytes_after_store_or_deadline_failure(
 
     parent = FiscalArtifactRead(artifacts, budget)
     reader = parent.for_consumer() if consumer else parent
-    original = artifacts.read
+    original = artifacts.read_bounded
 
-    def read(identity):
+    def read(identity, *, maximum_bytes):
         nonlocal expired
         if failure == "io":
             raise OSError("synthetic read failed")
@@ -198,11 +198,11 @@ def test_reader_does_not_return_bytes_after_store_or_deadline_failure(
             raise SnapshotError("CONTENT_NOT_FOUND", "synthetic registration missing")
         if failure == "hash":
             return b"changed"
-        raw = original(identity)
+        raw = original(identity, maximum_bytes=maximum_bytes)
         expired = True
         return raw
 
-    monkeypatch.setattr(artifacts, "read", read)
+    monkeypatch.setattr(artifacts, "read_bounded", read)
     with pytest.raises((OSError, SnapshotError)) as raised:
         reader.read(record.artifact_id)
     if failure == "io":
@@ -219,9 +219,11 @@ def test_reader_does_not_return_bytes_after_store_or_deadline_failure(
             }[failure]
         )
     assert parent.records == reader.records == ((record.artifact_id, record),)
-    monkeypatch.setattr(artifacts, "read", original)
+    monkeypatch.setattr(artifacts, "read_bounded", original)
     expired = False
-    assert reader.read(record.artifact_id) == original(record.artifact_id)
+    assert reader.read(record.artifact_id) == original(
+        record.artifact_id, maximum_bytes=8 * 1024 * 1024
+    )
     parent.check_bodies()
 
 

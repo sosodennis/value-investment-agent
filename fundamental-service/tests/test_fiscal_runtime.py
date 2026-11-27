@@ -19,7 +19,11 @@ from fundamental_service.app import create_runtime_app
 from fundamental_service.arelle_parser import _directory_hash
 from fundamental_service.data_releases import DataReleaseTrustRootsV1
 from fundamental_service.fiscal_discovery import FiscalDiscoveryRequestV1
-from fundamental_service.metadata import PostgresMetadataStore
+from fundamental_service.metadata import (
+    PostgresMetadataStore,
+    _BoundedArtifactObservation,
+    _RetainedArtifactMetadata,
+)
 from fundamental_service.replay import ArtifactRecordV1
 from fundamental_service.sec_capture import sec_response_artifact_id
 from fundamental_service.serialization import canonical_bytes
@@ -380,6 +384,7 @@ def test_runtime_owners_publish_separate_receipts_and_share_sec_pacing(
     app = create_runtime_app()
     metadata = app.state.metadata_store
     records: dict[str, ArtifactRecordV1] = {}
+    lengths: dict[tuple[str, str], int] = {}
 
     def get_artifact(artifact_id: str) -> ArtifactRecordV1:
         if artifact_id not in records:
@@ -391,9 +396,39 @@ def test_runtime_owners_publish_separate_receipts_and_share_sec_pacing(
         records[record.artifact_id] = record
         return True
 
+    def register_content(digest: str, *, media_type: str, byte_length: int) -> None:
+        lengths[digest, media_type] = byte_length
+
+    def retained_records(identities: tuple[str, ...]):
+        return {
+            identity: _RetainedArtifactMetadata(
+                canonical_bytes(record),
+                lengths.get((record.content_hash, record.media_type)),
+            )
+            for identity in identities
+            if (record := records.get(identity)) is not None
+        }
+
+    def bounded_before(identity: str):
+        entry = retained_records((identity,)).get(identity)
+        return _BoundedArtifactObservation(
+            entry.payload if entry is not None else None,
+            entry.byte_length if entry is not None else None,
+        )
+
+    def bounded_after(identity: str, *, content_hash: str, media_type: str):
+        record = records.get(identity)
+        return _BoundedArtifactObservation(
+            canonical_bytes(record) if record is not None else None,
+            lengths.get((content_hash, media_type)),
+        )
+
     monkeypatch.setattr(metadata, "get_artifact", get_artifact)
     monkeypatch.setattr(metadata, "publish_artifact", publish_artifact)
-    monkeypatch.setattr(metadata, "register_content", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(metadata, "register_content", register_content)
+    monkeypatch.setattr(metadata, "retained_artifact_records", retained_records)
+    monkeypatch.setattr(metadata, "_bounded_artifact_before", bounded_before)
+    monkeypatch.setattr(metadata, "_bounded_artifact_after", bounded_after)
     monkeypatch.setattr(metadata, "try_acquire_ingestion_lock", lambda key: key)
     monkeypatch.setattr(metadata, "release_ingestion_lock", lambda _lease: None)
     try:

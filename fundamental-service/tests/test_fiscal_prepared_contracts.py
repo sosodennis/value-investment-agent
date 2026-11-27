@@ -246,6 +246,103 @@ def test_registered_bounded_content_refuses_before_reading_bytes_and_never_repai
         store.get_bounded("a" * 64, media_type="application/json", maximum_bytes=10)
 
 
+def test_current_records_refuses_first_mismatch_before_decoding_later_bad_record(
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    from fundamental_service.data_releases import DataReleaseError
+    from fundamental_service.metadata import (
+        PostgresArtifactStore,
+        PostgresContentStore,
+        _RetainedArtifactMetadata,
+    )
+
+    record = ArtifactStore(tmp_path / "artifacts").put("first", {"value": 1})
+    entries = {
+        "first": _RetainedArtifactMetadata(
+            canonical_bytes(record.model_copy(update={"status": "invalidated"})), 11
+        ),
+        "later": _RetainedArtifactMetadata(b"not-json", 0),
+    }
+    metadata = SimpleNamespace(retained_artifact_records=lambda ids: entries)
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    with pytest.raises(DataReleaseError) as changed:
+        artifacts.require_current_records(
+            (("first", record), ("later", None)), check_deadline=lambda: None
+        )
+    assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    entries["first"] = _RetainedArtifactMetadata(canonical_bytes(record), 11)
+    with pytest.raises(ValidationError):
+        artifacts.require_current_records(
+            (("first", record), ("later", None)), check_deadline=lambda: None
+        )
+
+
+@pytest.mark.parametrize(
+    "after_length, expected_code",
+    [(None, "CONTENT_REGISTRATION_UNAVAILABLE"), (99, "CONTENT_METADATA_MISMATCH")],
+)
+def test_bounded_artifact_refuses_registration_before_decoding_after_metadata(
+    tmp_path, after_length, expected_code
+):
+    from types import SimpleNamespace
+
+    from fundamental_service.metadata import (
+        PostgresArtifactStore,
+        PostgresContentStore,
+        _BoundedArtifactObservation,
+    )
+
+    raw = b'{"value":1}'
+    record = ArtifactStore(tmp_path / "artifacts").put("retained", {"value": 1})
+    metadata = SimpleNamespace(
+        _bounded_artifact_before=lambda identity: _BoundedArtifactObservation(
+            canonical_bytes(record), len(raw)
+        ),
+        _bounded_artifact_after=lambda identity, **pair: _BoundedArtifactObservation(
+            b"not-json", after_length
+        ),
+    )
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    content._filesystem.put(raw, media_type=record.media_type)
+    artifacts = PostgresArtifactStore(metadata, content)
+    with pytest.raises(SnapshotError) as refused:
+        artifacts.read_bounded(record.artifact_id, maximum_bytes=len(raw))
+    assert refused.value.code == expected_code
+
+
+def test_bounded_artifact_refuses_actual_length_before_after_metadata_lookup(tmp_path):
+    from types import SimpleNamespace
+
+    from fundamental_service.metadata import (
+        PostgresArtifactStore,
+        PostgresContentStore,
+        _BoundedArtifactObservation,
+    )
+
+    raw = b'{"value":1}'
+    record = ArtifactStore(tmp_path / "artifacts").put("retained", {"value": 1})
+
+    def unavailable(*args, **kwargs):
+        raise AssertionError("actual length mismatch must refuse before after lookup")
+
+    metadata = SimpleNamespace(
+        _bounded_artifact_before=lambda identity: _BoundedArtifactObservation(
+            canonical_bytes(record), len(raw) + 1
+        ),
+        _bounded_artifact_after=unavailable,
+    )
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    content._filesystem.put(raw, media_type=record.media_type)
+    artifacts = PostgresArtifactStore(metadata, content)
+    with pytest.raises(SnapshotError) as refused:
+        artifacts.read_bounded(record.artifact_id, maximum_bytes=len(raw) + 1)
+    assert refused.value.code == "CONTENT_METADATA_MISMATCH"
+
+
 def test_readonly_canary_refuses_missing_configuration_and_retained_network_gaps():
     from fundamental_service.fiscal_release_runtime import (
         FiscalCanaryConfigurationV1,

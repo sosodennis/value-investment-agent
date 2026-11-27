@@ -42,6 +42,10 @@ def test_scoped_read_is_readonly_nested_and_not_reused_outside_operation(
         readonly.seal_scoped_read_operation()
         with pytest.raises(RuntimeError, match="ended"):
             readonly.get(record.artifact_id)
+        with pytest.raises(RuntimeError, match="ended"):
+            readonly.require_current_records(
+                ((record.artifact_id, record),), check_deadline=lambda: None
+            )
     assert readonly.get(record.artifact_id) == record
     assert readonly.read(record.artifact_id) == b'{"value":"1"}'
 

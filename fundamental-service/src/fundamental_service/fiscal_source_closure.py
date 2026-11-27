@@ -506,9 +506,16 @@ class FiscalArtifactRead:
         self.check_current()
 
     def check_current(self) -> None:
-        for identity, expected in self._records.items():
-            if self.current(identity) != expected:
-                raise _invalid("fiscal validation artifact metadata changed")
+        expected = tuple(self._records.items())
+        self._check_deadline()
+        try:
+            self._artifacts.require_current_records(
+                expected, check_deadline=self._check_deadline
+            )
+        except DataReleaseError as error:
+            if error.code != "ARTIFACT_EVIDENCE_CHANGED":
+                raise
+            raise _invalid("fiscal validation artifact metadata changed") from error
         self._check_deadline()
 
     @property

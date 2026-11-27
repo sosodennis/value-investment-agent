@@ -65,6 +65,9 @@ def test_source_preflight_refuses_registered_overflow_before_returning_body(
             assert identity == "source"
             return record
 
+        def require_current_records(self, expected, *, check_deadline):
+            store.require_current_records(expected, check_deadline=check_deadline)
+
         def read_bounded(self, identity, *, maximum_bytes):
             assert maximum_bytes == (MIB if used else 16 * MIB)
             registered_length = maximum_bytes + 1

@@ -118,6 +118,16 @@ class _FiscalEvidencePublications:
         self.budget()
         return record
 
+    def require_current_records(
+        self,
+        expected: tuple[tuple[str, ArtifactRecordV1 | None], ...],
+        *,
+        check_deadline: Callable[[], object],
+    ) -> None:
+        self.budget()
+        self.store.require_current_records(expected, check_deadline=check_deadline)
+        self.budget()
+
     def read(self, artifact_id: str) -> bytes:
         self.budget()
         raw = self.store.read(artifact_id)

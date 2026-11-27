@@ -25,6 +25,7 @@ from .calculator import (
     with_calculation_result_hash,
 )
 from .contracts import CalculationArtifactV1, ReleaseManifestV1, ValuationInputV1
+from .data_releases import DataReleaseError
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError, SnapshotRepository
 
@@ -394,6 +395,25 @@ class ArtifactStore:
                 raise SnapshotError(
                     "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
                 ) from exc
+
+    def require_current_records(
+        self,
+        expected: tuple[tuple[str, ArtifactRecordV1 | None], ...],
+        *,
+        check_deadline: Callable[[], object],
+    ) -> None:
+        check_deadline()
+        with self._lock:
+            self._load_records(force=True)
+            for identity, record in expected:
+                check_deadline()
+                current = self._records.get(identity)
+                check_deadline()
+                if current != record:
+                    raise DataReleaseError(
+                        "ARTIFACT_EVIDENCE_CHANGED", "artifact metadata changed"
+                    )
+        check_deadline()
 
     def read(self, artifact_id: str) -> bytes:
         record = self.get(artifact_id)

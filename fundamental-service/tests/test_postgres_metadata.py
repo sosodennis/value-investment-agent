@@ -70,7 +70,7 @@ from fundamental_service.sec_source import (
     SecSourceError,
     sec_deadline_exceeded,
 )
-from fundamental_service.serialization import sha256_digest
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.source_acquisition import SecAcquisitionUseCase
 from fundamental_service.testsupport import (
@@ -1688,6 +1688,163 @@ def _change_artifact_metadata(metadata, query, parameters):
             await connection.execute(text(query), parameters)
 
     metadata._runner.run(change())
+
+
+def test_current_records_observes_fresh_absence_and_metadata_without_registration(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(uuid4().hex, {"retained": uuid4().hex})
+    absent = tuple((uuid4().hex, None) for _ in range(4095))
+    expected = (*absent, (record.artifact_id, record))
+    readonly = artifacts.as_read_only()
+    readonly.require_current_records(expected, check_deadline=lambda: None)
+    _change_artifact_metadata(
+        metadata,
+        "DELETE FROM fundamental.content_objects "
+        "WHERE content_hash=:hash AND media_type=:media",
+        {"hash": record.content_hash, "media": record.media_type},
+    )
+    readonly.require_current_records(expected, check_deadline=lambda: None)
+    with pytest.raises(SnapshotError) as missing_registration:
+        metadata.content_byte_length(record.content_hash, media_type=record.media_type)
+    assert missing_registration.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
+    artifacts.put(absent[0][0], {"appeared": uuid4().hex})
+    with pytest.raises(DataReleaseError) as changed:
+        readonly.require_current_records(expected, check_deadline=lambda: None)
+    assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+
+
+def test_current_records_does_not_reuse_an_active_scoped_starting_record(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(uuid4().hex, {"retained": uuid4().hex})
+    readonly = artifacts.as_read_only()
+    with pytest.raises(DataReleaseError) as changed:
+        with readonly.scoped_read_operation():
+            assert readonly.get(record.artifact_id) == record
+            _change_artifact_metadata(
+                metadata,
+                "UPDATE fundamental.artifact_references SET status='invalidated' "
+                "WHERE artifact_id=:id",
+                {"id": record.artifact_id},
+            )
+            readonly.require_current_records(
+                ((record.artifact_id, record),), check_deadline=lambda: None
+            )
+    assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+
+
+def test_bounded_artifact_rechecks_actual_bytes_and_never_repairs_registration(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    raw = canonical_bytes({"retained": uuid4().hex})
+    record = artifacts.put_bytes_with_receipt(uuid4().hex, raw)
+    readonly = artifacts.as_read_only()
+    for store in (artifacts, readonly):
+        assert store.read_bounded(record.artifact_id, maximum_bytes=len(raw)) == raw
+        with pytest.raises(SnapshotError) as overflow:
+            store.read_bounded(record.artifact_id, maximum_bytes=len(raw) - 1)
+        assert overflow.value.code == "FISCAL_CLOSURE_LIMIT"
+    path = content._filesystem._path(record.content_hash, record.media_type)
+    path.write_bytes(b"x" * len(raw))
+    with pytest.raises(SnapshotError) as corrupt:
+        readonly.read_bounded(record.artifact_id, maximum_bytes=len(raw))
+    assert corrupt.value.code == "SOURCE_HASH_MISMATCH"
+    path.write_bytes(raw)
+    _change_artifact_metadata(
+        metadata,
+        "DELETE FROM fundamental.content_objects "
+        "WHERE content_hash=:hash AND media_type=:media",
+        {"hash": record.content_hash, "media": record.media_type},
+    )
+    for store in (artifacts, readonly):
+        with pytest.raises(SnapshotError) as missing:
+            store.read_bounded(record.artifact_id, maximum_bytes=len(raw))
+        assert missing.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
+    with pytest.raises(SnapshotError) as still_missing:
+        metadata.content_byte_length(record.content_hash, media_type=record.media_type)
+    assert still_missing.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("artifact_change", ("missing", "different-pair"))
+@pytest.mark.parametrize("registration_missing", (False, True))
+def test_bounded_artifact_after_observes_original_pair_even_if_artifact_changes(
+    metadata: PostgresMetadataStore,
+    tmp_path: Path,
+    monkeypatch,
+    artifact_change: str,
+    registration_missing: bool,
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    raw = canonical_bytes({"before": uuid4().hex})
+    record = artifacts.put_bytes_with_receipt(uuid4().hex, raw)
+    replacement = artifacts.put(uuid4().hex, {"after": uuid4().hex})
+    read = content._filesystem.get_bounded
+
+    def change_after_read(*args, **kwargs):
+        payload = read(*args, **kwargs)
+
+        async def change():
+            async with metadata._runner._engine.begin() as connection:
+                if registration_missing:
+                    await connection.execute(
+                        text(
+                            "DELETE FROM fundamental.content_objects "
+                            "WHERE content_hash=:hash AND media_type=:media"
+                        ),
+                        {"hash": record.content_hash, "media": record.media_type},
+                    )
+                if artifact_change == "missing":
+                    await connection.execute(
+                        text(
+                            "DELETE FROM fundamental.artifact_references "
+                            "WHERE artifact_id=:id"
+                        ),
+                        {"id": record.artifact_id},
+                    )
+                else:
+                    await connection.execute(
+                        text(
+                            "UPDATE fundamental.artifact_references "
+                            "SET content_hash=:hash, media_type=:media "
+                            "WHERE artifact_id=:id"
+                        ),
+                        {
+                            "id": record.artifact_id,
+                            "hash": replacement.content_hash,
+                            "media": replacement.media_type,
+                        },
+                    )
+
+        metadata._runner.run(change())
+        return payload
+
+    monkeypatch.setattr(content._filesystem, "get_bounded", change_after_read)
+    expected_type = (
+        SnapshotError
+        if registration_missing or artifact_change == "missing"
+        else DataReleaseError
+    )
+    with pytest.raises(expected_type) as refused:
+        artifacts.read_bounded(record.artifact_id, maximum_bytes=len(raw))
+    assert refused.value.code == (
+        "CONTENT_REGISTRATION_UNAVAILABLE"
+        if registration_missing
+        else (
+            "ARTIFACT_NOT_FOUND"
+            if artifact_change == "missing"
+            else "ARTIFACT_EVIDENCE_CHANGED"
+        )
+    )
 
 
 def test_retained_metadata_preserves_first_byte_failure_before_later_bad_row(

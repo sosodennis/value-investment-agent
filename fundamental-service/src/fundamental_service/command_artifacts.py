@@ -17,6 +17,15 @@ from .replay import ArtifactPublicationV1, ArtifactRecordV1, ArtifactStore
 class EvidenceArtifactStore(Protocol):
     def get(self, artifact_id: str) -> ArtifactRecordV1: ...
 
+    def require_current_records(
+        self,
+        expected: tuple[tuple[str, ArtifactRecordV1 | None], ...],
+        *,
+        check_deadline: Callable[[], object],
+    ) -> None:
+        """Freshly compare every record or absence in input order."""
+        ...
+
     def read(self, artifact_id: str) -> bytes: ...
 
     def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes: ...
