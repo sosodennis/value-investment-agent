@@ -8,13 +8,13 @@ import platform
 import sys
 from asyncio import current_task
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock, get_ident
 from types import TracebackType
-from typing import Literal
+from typing import Literal, Protocol
 
 from .arelle_parser import (
     ArelleParseReportV1,
@@ -553,6 +553,7 @@ class _ParserResourceState:
         self.status: Literal["new", "open", "finished", "aborted"] = "new"
         self._build: tuple[bytes, str | None] | None = None
         self.observations: dict[_ResourceDescriptor, _ResourceObservation] = {}
+        self.active_cut: _ParserResourceCut | None = None
         self.retained_bytes = 0
         self.high_water_keys = 0
         self.high_water_bytes = 0
@@ -629,31 +630,34 @@ class _ParserResourceState:
             self.high_water_bytes = max(self.high_water_bytes, self.retained_bytes)
         return resources
 
+    def recheck(
+        self, descriptor: _ResourceDescriptor, observed: _ResourceObservation
+    ) -> None:
+        self.check(self.nonce)
+        profile = ArelleValidationProfileV1.model_validate_json(descriptor.profile_json)
+        if (
+            self.descriptor(
+                profile, descriptor.taxonomy_cache_dir, observed.build_checks
+            )
+            != descriptor
+        ):
+            raise IncompleteParserClosure("parser resource paths changed")
+        if _read_parser_action_resources(descriptor) != observed.resources:
+            raise IncompleteParserClosure("parser resource bytes changed")
+        self.check(self.nonce)
+        if (
+            self.descriptor(
+                profile, descriptor.taxonomy_cache_dir, observed.build_checks
+            )
+            != descriptor
+        ):
+            raise IncompleteParserClosure("parser resource paths changed")
+
     def finish(self) -> None:
         try:
             self.check(self.nonce)
             for descriptor, observed in self.observations.items():
-                self.check(self.nonce)
-                profile = ArelleValidationProfileV1.model_validate_json(
-                    descriptor.profile_json
-                )
-                if (
-                    self.descriptor(
-                        profile, descriptor.taxonomy_cache_dir, observed.build_checks
-                    )
-                    != descriptor
-                ):
-                    raise IncompleteParserClosure("parser resource paths changed")
-                if _read_parser_action_resources(descriptor) != observed.resources:
-                    raise IncompleteParserClosure("parser resource bytes changed")
-                self.check(self.nonce)
-                if (
-                    self.descriptor(
-                        profile, descriptor.taxonomy_cache_dir, observed.build_checks
-                    )
-                    != descriptor
-                ):
-                    raise IncompleteParserClosure("parser resource paths changed")
+                self.recheck(descriptor, observed)
         except BaseException:
             self.status = "aborted"
             raise
@@ -680,15 +684,160 @@ class _ParserResourceBorrow:
         return self._state.observe(self._nonce, profile, root, checks, reuse=reuse)
 
 
-_RESOURCE_OPERATION: ContextVar[_ParserResourceBorrow | None] = ContextVar(
-    "parser_resource_operation", default=None
-)
+class _ResourceCompletion(Protocol):
+    def seal(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class _LegacyResourceCompletion:
+    operation: _ParserResourceOperation
+    terminal: bool
+
+    def seal(self) -> None:
+        if self.terminal:
+            self.operation.finish()
+        else:
+            self.operation._state.check(self.operation._state.nonce)
+
+
+@dataclass(frozen=True)
+class _CurrentResourceBorrow:
+    cut: _ParserResourceCut
+    nonce: object
+
+    def observe(
+        self,
+        profile: ArelleValidationProfileV1,
+        root: Path,
+        checks: ParserBuildChecks | None,
+        *,
+        reuse: bool,
+    ) -> ParserActionResources:
+        return self.cut.observe(self.nonce, profile, root, checks)
+
+
+class _ParserResourceCut(AbstractContextManager["_ParserResourceCut"]):
+    """Opening/closing byte samples for one synchronous readonly candidate proof.
+
+    Intermediate helpers borrow only this cut's opening observation. Restored
+    transient changes between samples are not continuous-immutability evidence.
+    """
+
+    def __init__(
+        self, operation: _CurrentParserResourceOperation, terminal: bool
+    ) -> None:
+        self._operation = operation
+        self._state = operation._state
+        self._lifetime_nonce = self._state.nonce
+        self._nonce = object()
+        self._borrow = _CurrentResourceBorrow(self, self._nonce)
+        self._terminal = terminal
+        self._phase: Literal["new", "open", "sealed", "aborted"] = "new"
+        self._observed: set[_ResourceDescriptor] = set()
+        self._token: (
+            Token[_ParserResourceBorrow | _CurrentResourceBorrow | None] | None
+        ) = None
+
+    def check(self, nonce: object) -> None:
+        self._state.check(self._lifetime_nonce)
+        self._operation._require_owner()
+        if (
+            nonce is not self._nonce
+            or self._phase != "open"
+            or self._state.active_cut is not self
+            or _RESOURCE_OPERATION.get() is not self._borrow
+        ):
+            raise IncompleteParserClosure("parser resource cut is not current")
+
+    def __enter__(self) -> _ParserResourceCut:
+        self._state.check(self._lifetime_nonce)
+        self._operation._require_owner()
+        if self._phase != "new" or self._state.active_cut is not None:
+            raise IncompleteParserClosure("parser resource cut cannot reopen or nest")
+        self._phase = "open"
+        self._state.active_cut = self
+        self._token = _RESOURCE_OPERATION.set(self._borrow)
+        return self
+
+    def observe(
+        self,
+        nonce: object,
+        profile: ArelleValidationProfileV1,
+        root: Path,
+        checks: ParserBuildChecks | None,
+    ) -> ParserActionResources:
+        self.check(nonce)
+        descriptor = self._state.descriptor(profile, root, checks)
+        if (
+            descriptor in self._observed
+            and descriptor.build is not None
+            and descriptor.configuration is not None
+        ):
+            self.check(nonce)
+            return self._state.observations[descriptor].resources
+        resources = self._state.observe(
+            self._lifetime_nonce, profile, root, checks, reuse=False
+        )
+        self.check(nonce)
+        key = next(key for key in self._state.observations if key == descriptor)
+        self._observed.add(key)
+        return resources
+
+    def seal(self) -> None:
+        try:
+            self.check(self._nonce)
+            if self._terminal:
+                for descriptor, observed in self._state.observations.items():
+                    if descriptor not in self._observed:
+                        self._state.recheck(descriptor, observed)
+                        self._observed.add(descriptor)
+            for descriptor in self._observed:
+                self.check(self._nonce)
+                self._state.recheck(descriptor, self._state.observations[descriptor])
+            self.check(self._nonce)
+        except BaseException:
+            self._phase = "aborted"
+            self._state.status = "aborted"
+            raise
+        else:
+            self._phase = "sealed"
+            if self._terminal:
+                self._state.status = "finished"
+        finally:
+            self._observed.clear()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> Literal[False]:
+        try:
+            if exc_type is None and self._phase != "sealed":
+                raise IncompleteParserClosure("parser resource cut did not seal")
+        finally:
+            if self._token is not None:
+                _RESOURCE_OPERATION.reset(self._token)
+                self._token = None
+            self._state.active_cut = None
+            self._observed.clear()
+            if exc_type is not None or self._phase != "sealed":
+                self._phase = "aborted"
+                self._state.status = "aborted"
+        return False
+
+
+_RESOURCE_OPERATION: ContextVar[
+    _ParserResourceBorrow | _CurrentResourceBorrow | None
+] = ContextVar("parser_resource_operation", default=None)
 
 
 class _ParserResourceOperation(AbstractContextManager["_ParserResourceOperation"]):
     def __init__(self, check_deadline: Callable[[], float]) -> None:
         self._state = _ParserResourceState(check_deadline)
-        self._token: Token[_ParserResourceBorrow | None] | None = None
+        self._token: (
+            Token[_ParserResourceBorrow | _CurrentResourceBorrow | None] | None
+        ) = None
 
     def __enter__(self) -> _ParserResourceOperation:
         if self._state.status != "new":
@@ -699,6 +848,13 @@ class _ParserResourceOperation(AbstractContextManager["_ParserResourceOperation"
             _ParserResourceBorrow(self._state, self._state.nonce)
         )
         return self
+
+    def completion(self, *, terminal: bool) -> _ResourceCompletion:
+        return _LegacyResourceCompletion(self, terminal)
+
+    @contextmanager
+    def current_cut(self, *, terminal: bool) -> Iterator[_ResourceCompletion]:
+        yield self.completion(terminal=terminal)
 
     def finish(self) -> None:
         self._state.finish()
@@ -724,10 +880,34 @@ class _ParserResourceOperation(AbstractContextManager["_ParserResourceOperation"
         return False
 
 
+class _CurrentParserResourceOperation(_ParserResourceOperation):
+    def __init__(
+        self, check_deadline: Callable[[], float], require_owner: Callable[[], None]
+    ) -> None:
+        super().__init__(check_deadline)
+        self._require_owner = require_owner
+
+    def __enter__(self) -> _CurrentParserResourceOperation:
+        if self._state.status != "new":
+            raise IncompleteParserClosure("parser resource operation cannot reopen")
+        self._require_owner()
+        self._state.status = "open"
+        self._state.check(self._state.nonce)
+        return self
+
+    @contextmanager
+    def current_cut(self, *, terminal: bool) -> Iterator[_ResourceCompletion]:
+        with _ParserResourceCut(self, terminal) as cut:
+            yield cut
+
+    def finish(self) -> None:
+        raise IncompleteParserClosure("readonly resources require a terminal cut")
+
+
 def parser_action_resources(
     profile: ArelleValidationProfileV1, taxonomy_cache_dir: Path
 ) -> ParserActionResources:
-    """Always read full resource bytes, including explicit source current cuts."""
+    """Read fresh bytes, or borrow inside a mandatory readonly candidate cut seal."""
     operation = _RESOURCE_OPERATION.get()
     if operation is not None:
         return operation.observe(

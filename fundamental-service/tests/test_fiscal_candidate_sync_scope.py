@@ -8,6 +8,7 @@ import pytest
 
 import fundamental_service.fiscal_candidate_preparation as preparation
 import fundamental_service.metadata as metadata_module
+import fundamental_service.parser_action_identity as resource_identity
 from fundamental_service.data_releases import ArtifactRefV1
 from fundamental_service.fiscal_admission_history import FiscalControlBindingV1
 from fundamental_service.metadata import PostgresArtifactStore
@@ -136,18 +137,21 @@ def candidate_scope(monkeypatch):
             if state.cleanup_failure:
                 raise RuntimeError("child cleanup")
 
-    class Resources:
-        def __init__(self, budget):
-            pass
+    seal_resources = resource_identity._ParserResourceCut.seal
+    close_resources = resource_identity._CurrentParserResourceOperation.__exit__
 
-        def __enter__(self):
-            return self
+    def resources_seal(cut):
+        require_scope("resources_finish")
+        return seal_resources(cut)
 
-        def __exit__(self, *args):
-            trace.append((state.active, "resources_close"))
+    def resources_close(operation, *args):
+        trace.append((state.active, "resources_close"))
+        return close_resources(operation, *args)
 
-        def finish(self):
-            require_scope("resources_finish")
+    monkeypatch.setattr(resource_identity._ParserResourceCut, "seal", resources_seal)
+    monkeypatch.setattr(
+        resource_identity._CurrentParserResourceOperation, "__exit__", resources_close
+    )
 
     authority = SimpleNamespace(
         history_heads=(),
@@ -192,7 +196,6 @@ def candidate_scope(monkeypatch):
         return "intent"
 
     monkeypatch.setattr(preparation, "FiscalArtifactRead", Read)
-    monkeypatch.setattr(preparation, "_ParserResourceOperation", Resources)
     monkeypatch.setattr(
         preparation, "FiscalCandidateSigningIntentV2", lambda **kw: "marker"
     )
@@ -239,6 +242,7 @@ def test_candidate_returns_each_proof_after_its_own_final_cut(candidate_scope):
     case = candidate_scope
     with case.operation as candidate:
         assert case.state.active is None
+        assert resource_identity._RESOURCE_OPERATION.get() is None
         candidate.current()
         assert case.state.active is None
         case.trace.extend(
@@ -251,6 +255,7 @@ def test_candidate_returns_each_proof_after_its_own_final_cut(candidate_scope):
         stages = [stage for scope, stage in case.trace if scope == identity]
         assert stages[0] == "open"
         assert stages[-1] == "reset"
+        assert stages.index("resources_finish") < stages.index("bodies")
         assert (
             stages.index("fresh_records")
             < stages.index("seal")
@@ -265,6 +270,9 @@ def test_candidate_returns_each_proof_after_its_own_final_cut(candidate_scope):
             "intent",
             "reset",
         ]
+    assert case.trace.index((3, "children_close")) < case.trace.index(
+        (3, "resources_finish")
+    )
     assert case.trace.index((2, "reset")) < case.trace.index((None, "parent_write"))
     assert case.trace.index((None, "parent_sign")) < case.trace.index((3, "open"))
 

@@ -64,7 +64,11 @@ from .fiscal_statement_mapping import (
 from .fiscal_statement_policy import fiscal_statement_policy
 from .fiscal_validation_contracts import FiscalValidationPinV1
 from .metadata import metadata_operation_budget
-from .parser_action_identity import _ParserResourceOperation
+from .parser_action_identity import (
+    _CurrentParserResourceOperation,
+    _ParserResourceOperation,
+    _ResourceCompletion,
+)
 from .replay import (
     ArtifactPublicationDeadlineExceeded,
     ArtifactPublicationV1,
@@ -321,10 +325,9 @@ class FiscalCandidatePreparation:
         publication: ArtifactPublicationV1,
         materialized: FiscalCandidateMaterialization,
         *,
-        resources: _ParserResourceOperation,
+        resources: _ResourceCompletion,
         deadline_at: datetime,
         configuration_generation: str,
-        terminal: bool,
         seal_read_operation: Callable[[], None],
     ) -> CurrentFiscalCandidate:
         budget = partial(self._budget, deadline_at)
@@ -401,8 +404,7 @@ class FiscalCandidatePreparation:
             raise _invalid("candidate has no exact selected preparation control")
         control.require_current_epoch(control.entries)
         heads.update({head.stream_id: head for head in control.heads})
-        if terminal:
-            resources.finish()
+        resources.seal()
         for readset in materialized.content_readsets:
             readset.check_current(budget)
         reader.check_bodies()
@@ -746,10 +748,9 @@ class FiscalCandidatePreparation:
             signed,
             publication,
             materialized,
-            resources=resources,
+            resources=resources.completion(terminal=True),
             deadline_at=deadline_at,
             configuration_generation=configuration_generation,
-            terminal=True,
             seal_read_operation=_no_read_cut,
         )
 
@@ -850,10 +851,11 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
                     partial(owner._budget, self._deadline_at), owner._expired
                 )
             )
-            self._resources = self._scope.enter_context(
-                _ParserResourceOperation(partial(owner._budget, self._deadline_at))
-            )
-            with owner.read_operation() as seal_read_operation:
+            self._resources = self._scope.enter_context(self._resource_operation())
+            with (
+                self._resources.current_cut(terminal=False) as resource_completion,
+                owner.read_operation() as seal_read_operation,
+            ):
                 self._generation = owner.current_configuration_digest()
                 reader = FiscalArtifactRead(
                     owner._read_artifacts, partial(owner._budget, self._deadline_at)
@@ -869,7 +871,9 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
                     artifact=reader.get(self._reference.artifact_id), wrote=False
                 )
                 self._current_in_scope(
-                    terminal=False, seal_read_operation=seal_read_operation
+                    terminal=False,
+                    seal_read_operation=seal_read_operation,
+                    resource_completion=resource_completion,
                 )
             return self
         except BaseException as error:
@@ -881,6 +885,11 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
                 ) from error
             raise
 
+    def _resource_operation(self) -> _ParserResourceOperation:
+        return _CurrentParserResourceOperation(
+            partial(self._owner._budget, self._deadline_at), self._require
+        )
+
     def _open_materialization(
         self, trusted: _TrustedCandidateCorrectness
     ) -> AbstractContextManager[_MaterializationRead]:
@@ -890,13 +899,24 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
 
     def _current(self, *, terminal: bool) -> CurrentFiscalCandidate:
         self._require()
-        with self._owner.read_operation() as seal_read_operation:
+        if self._resources is None:
+            raise _invalid("candidate observation has no resource owner")
+        with (
+            self._resources.current_cut(terminal=terminal) as resource_completion,
+            self._owner.read_operation() as seal_read_operation,
+        ):
             return self._current_in_scope(
-                terminal=terminal, seal_read_operation=seal_read_operation
+                terminal=terminal,
+                seal_read_operation=seal_read_operation,
+                resource_completion=resource_completion,
             )
 
     def _current_in_scope(
-        self, *, terminal: bool, seal_read_operation: Callable[[], None]
+        self,
+        *,
+        terminal: bool,
+        seal_read_operation: Callable[[], None],
+        resource_completion: _ResourceCompletion,
     ) -> CurrentFiscalCandidate:
         self._require()
         if (
@@ -918,10 +938,9 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             self._signed,
             self._publication,
             materialized,
-            resources=self._resources,
+            resources=resource_completion,
             deadline_at=self._deadline_at,
             configuration_generation=self._generation,
-            terminal=terminal,
             seal_read_operation=seal_read_operation,
         )
 
@@ -992,6 +1011,9 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
 
 
 class _FiscalCandidateReplayOperation(FiscalCandidateOperation):
+    def _resource_operation(self) -> _ParserResourceOperation:
+        return _ParserResourceOperation(partial(self._owner._budget, self._deadline_at))
+
     def _open_materialization(
         self, trusted: _TrustedCandidateCorrectness
     ) -> AbstractContextManager[_MaterializationRead]:
