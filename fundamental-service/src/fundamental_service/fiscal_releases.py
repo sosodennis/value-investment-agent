@@ -186,7 +186,7 @@ class FiscalReleaseReader:
         trust_roots: Callable[[], DataReleaseTrustRootsV1],
         configuration_digest: Callable[[], str],
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-        read_operation: Callable[[], AbstractContextManager[None]] = nullcontext,
+        read_operation: Callable[[], AbstractContextManager[object]] = nullcontext,
         seal_read_operation: Callable[[], None] = lambda: None,
         expected_candidate_authority_id: str | None = None,
     ) -> None:

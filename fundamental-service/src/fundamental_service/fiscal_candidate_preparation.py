@@ -8,7 +8,7 @@ from threading import get_ident
 from contextvars import ContextVar, Token
 from copy import deepcopy
 from collections.abc import Callable
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
@@ -159,6 +159,14 @@ def _ref(record: ArtifactRecordV1, role: str) -> ArtifactRefV1:
     )
 
 
+def _no_read_cut() -> None:
+    pass
+
+
+def _unretained_read_operation() -> AbstractContextManager[Callable[[], None]]:
+    return nullcontext(_no_read_cut)
+
+
 class FiscalCandidatePreparation:
     def __init__(
         self,
@@ -174,6 +182,9 @@ class FiscalCandidatePreparation:
         private_key: Callable[[], Ed25519PrivateKey] | None = None,
         configuration_digest: Callable[[], str],
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        read_operation: Callable[
+            [], AbstractContextManager[Callable[[], None]]
+        ] = _unretained_read_operation,
     ) -> None:
         self._builder = builder
         self._read_artifacts = read_artifacts
@@ -181,6 +192,7 @@ class FiscalCandidatePreparation:
         self.authority_id, self.clock = authority_id, clock
         self._configuration_digest = configuration_digest
         self._capture_lock, self._private_key = capture_lock, private_key
+        self.read_operation = read_operation
 
     def current_configuration_digest(self) -> str:
         return self._configuration_digest()
@@ -313,6 +325,7 @@ class FiscalCandidatePreparation:
         deadline_at: datetime,
         configuration_generation: str,
         terminal: bool,
+        seal_read_operation: Callable[[], None],
     ) -> CurrentFiscalCandidate:
         budget = partial(self._budget, deadline_at)
         if signed.body.correctness != materialized.correctness:
@@ -403,6 +416,7 @@ class FiscalCandidatePreparation:
             raise _invalid("candidate grant changed before whole observation")
         reader.check_bodies()
         records = tuple(record for _, record in reader.records if record is not None)
+        seal_read_operation()
         observed = self.history.finish_observation(
             records, tuple(heads.values()), epoch, deadline_at=deadline_at
         )
@@ -736,6 +750,7 @@ class FiscalCandidatePreparation:
             deadline_at=deadline_at,
             configuration_generation=configuration_generation,
             terminal=True,
+            seal_read_operation=_no_read_cut,
         )
 
 
@@ -796,6 +811,7 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             owner.authority_id,
             owner._configuration_digest,
             owner.clock,
+            owner.read_operation,
         )
 
     def _require(self) -> None:
@@ -817,6 +833,7 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             owner.authority_id,
             owner._configuration_digest,
             owner.clock,
+            owner.read_operation,
         ):
             raise _invalid("candidate configured owner changed")
 
@@ -836,21 +853,24 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             self._resources = self._scope.enter_context(
                 _ParserResourceOperation(partial(owner._budget, self._deadline_at))
             )
-            self._generation = owner.current_configuration_digest()
-            reader = FiscalArtifactRead(
-                owner._read_artifacts, partial(owner._budget, self._deadline_at)
-            )
-            self._signed = owner._load(reader, self._reference)
-            owner._authority(self._signed, self._deadline_at)
-            self._materialization = self._children.enter_context(
-                self._open_materialization(
-                    _TrustedCandidateCorrectness(self._signed, self)
+            with owner.read_operation() as seal_read_operation:
+                self._generation = owner.current_configuration_digest()
+                reader = FiscalArtifactRead(
+                    owner._read_artifacts, partial(owner._budget, self._deadline_at)
                 )
-            )
-            self._publication = ArtifactPublicationV1(
-                artifact=reader.get(self._reference.artifact_id), wrote=False
-            )
-            self.current()
+                self._signed = owner._load(reader, self._reference)
+                owner._authority(self._signed, self._deadline_at)
+                self._materialization = self._children.enter_context(
+                    self._open_materialization(
+                        _TrustedCandidateCorrectness(self._signed, self)
+                    )
+                )
+                self._publication = ArtifactPublicationV1(
+                    artifact=reader.get(self._reference.artifact_id), wrote=False
+                )
+                self._current_in_scope(
+                    terminal=False, seal_read_operation=seal_read_operation
+                )
             return self
         except BaseException as error:
             self._phase = "failed"
@@ -869,6 +889,15 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         )
 
     def _current(self, *, terminal: bool) -> CurrentFiscalCandidate:
+        self._require()
+        with self._owner.read_operation() as seal_read_operation:
+            return self._current_in_scope(
+                terminal=terminal, seal_read_operation=seal_read_operation
+            )
+
+    def _current_in_scope(
+        self, *, terminal: bool, seal_read_operation: Callable[[], None]
+    ) -> CurrentFiscalCandidate:
         self._require()
         if (
             self._materialization is None
@@ -893,6 +922,7 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             deadline_at=self._deadline_at,
             configuration_generation=self._generation,
             terminal=terminal,
+            seal_read_operation=seal_read_operation,
         )
 
     def current(self) -> CurrentFiscalCandidate:
@@ -911,9 +941,14 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
+        cleanup_error: BaseException | None = None
         try:
-            self._children.__exit__(exc_type, exc, tb)
-            self._scope.__exit__(exc_type, exc, tb)
+            for stack in (self._children, self._scope):
+                try:
+                    stack.__exit__(exc_type, exc, tb)
+                except BaseException as error:
+                    if exc is None and cleanup_error is None:
+                        cleanup_error = error
         finally:
             if self._token is not None:
                 _CANDIDATE_OPERATION.reset(self._token)
@@ -921,6 +956,9 @@ class FiscalCandidateOperation(AbstractContextManager[FiscalCandidateRead]):
             self._materialization = None
             self._signed = None
             self._publication = None
+        if cleanup_error is not None:
+            self._phase = "failed"
+            raise cleanup_error
 
     def __exit__(
         self,

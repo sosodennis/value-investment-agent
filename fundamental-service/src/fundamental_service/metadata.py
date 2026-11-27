@@ -2565,7 +2565,7 @@ class PostgresArtifactStore:
         return scoped
 
     @contextmanager
-    def scoped_read_operation(self) -> Iterator[None]:
+    def scoped_read_operation(self) -> Iterator[Callable[[], None]]:
         if not self._read_only:
             raise SnapshotError(
                 "READ_ONLY_STORAGE",
@@ -2575,20 +2575,35 @@ class PostgresArtifactStore:
         active = _SCOPED_ARTIFACT_READS.get()
         if active is not None and key in active:
             self._scoped_reads()
-            yield
+            yield lambda: None
             return
         reader = _RetainedPostgresArtifactReads(
             self, (), max_entries=512, max_bytes=2 * 1024 * 1024
         )
         scoped = _ScopedArtifactReads(reader)
         token = _SCOPED_ARTIFACT_READS.set({**(active or {}), key: scoped})
+
+        def seal_owned_scope() -> None:
+            if reader._closed or scoped.sealed:
+                raise RuntimeError(
+                    "scoped artifact reads ended before final observation"
+                )
+            reader._require_current()
+            scoped.sealed = True
+
         try:
-            yield
+            yield seal_owned_scope
             if not scoped.sealed:
-                reader.finish()
+                reader._require_current()
         finally:
-            reader.close()
-            _SCOPED_ARTIFACT_READS.reset(token)
+            error = sys.exception()
+            try:
+                reader.close()
+            except BaseException:
+                if error is None:
+                    raise
+            finally:
+                _SCOPED_ARTIFACT_READS.reset(token)
 
     def seal_scoped_read_operation(self) -> None:
         scoped = self._scoped_reads()

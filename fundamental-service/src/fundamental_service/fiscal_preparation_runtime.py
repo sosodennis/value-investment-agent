@@ -4,7 +4,7 @@ import os
 import hashlib
 import stat
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -152,6 +152,15 @@ def build_fiscal_candidate_runtime(
         if isinstance(inputs.artifacts, PostgresArtifactStore)
         else inputs.artifacts
     )
+    read_operation: Callable[[], AbstractContextManager[Callable[[], None]]]
+    if isinstance(read_artifacts, PostgresArtifactStore):
+        read_operation = read_artifacts.scoped_read_operation
+    else:
+
+        def unretained_read_operation() -> AbstractContextManager[Callable[[], None]]:
+            return nullcontext(lambda: None)
+
+        read_operation = unretained_read_operation
     history: FiscalAdmissionHistoryReaderPort = PostgresFiscalAdmissionHistory(metadata)
     if not write:
         history = ReadOnlyFiscalAdmissionHistory(history)
@@ -239,6 +248,7 @@ def build_fiscal_candidate_runtime(
         history=history,
         authorities=authorities,
         authority_id=deployment.candidate_authority_id,
+        read_operation=read_operation,
         configuration_digest=lambda: sha256_digest(
             (
                 hashlib.sha256(
