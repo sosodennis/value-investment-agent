@@ -335,7 +335,20 @@ def test_interrupted_group_restore_checks_access_before_retrying(
         with pytest.raises(SnapshotError) as error:
             restore()
         assert error.value.code == "CONTENT_ACCESS_INSTALL_REQUIRED"
-        assert path.stat() == private_stat
+        assert path.read_bytes() == before[0][1]
+        after = path.stat()
+        for field in (
+            "st_mode",
+            "st_ino",
+            "st_dev",
+            "st_nlink",
+            "st_uid",
+            "st_gid",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        ):
+            assert getattr(after, field) == getattr(private_stat, field), field
         return
     assert restore().wrote is True
     assert (
