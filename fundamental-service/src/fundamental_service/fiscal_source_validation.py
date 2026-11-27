@@ -652,22 +652,14 @@ class SecFiscalSourceValidation:
                     owner.settings.taxonomy_cache_dir,
                     outcome.runtime.delivery_revision,
                 )
-        for receipt in outcome.responses:
-            content.get(receipt.content_hash, media_type=receipt.media_type)
-        primary = next(
-            item
-            for item in outcome.responses
-            if item.uri == outcome.integrity.primary_document_uri
+        self._observe_current_content(
+            request,
+            outcome,
+            actions,
+            content,
+            artifacts=artifacts,
+            deadline_at=deadline_at,
         )
-        for digest in {
-            outcome.integrity.normalized_content_hash,
-            outcome.integrity.archive_member_hash,
-        }:
-            content.get(digest, media_type=primary.media_type)
-        if outcome.integrity.inline_documents:
-            content.get(
-                outcome.integrity.parser_input_hash, media_type="application/json"
-            )
         if (
             isinstance(outcome, FiscalValidationCompleteRefusedV1)
             and outcome.rejection_ref is not None
@@ -703,6 +695,64 @@ class SecFiscalSourceValidation:
         )
         observation.check_current()
         return observation
+
+    def _observe_current_content(
+        self,
+        request: ResolvedFiscalValidationRequestV1,
+        outcome: FiscalValidationMatchedV1 | FiscalValidationCompleteRefusedV1,
+        actions: RetainedFiscalActions,
+        content: FiscalSourceContentRead,
+        *,
+        artifacts: EvidenceArtifactReader,
+        deadline_at: datetime,
+    ) -> None:
+        for receipt in outcome.responses:
+            content.get(receipt.content_hash, media_type=receipt.media_type)
+        primary = next(
+            item
+            for item in outcome.responses
+            if item.uri == outcome.integrity.primary_document_uri
+        )
+        for digest in {
+            outcome.integrity.normalized_content_hash,
+            outcome.integrity.archive_member_hash,
+        }:
+            content.get(digest, media_type=primary.media_type)
+        if outcome.integrity.inline_documents:
+            content.get(
+                outcome.integrity.parser_input_hash, media_type="application/json"
+            )
+        owner, filing = self.acquisition, request.filing
+        adapter = RetainedSecSourceAdapter(
+            owner.adapter,
+            scope=request.scope,
+            receipts=self.store,
+            content=content,
+            capture_lock=owner._capture_lock,
+            check_deadline=partial(fiscal_validation_budget, deadline_at),
+            replay_reader=artifacts,
+        )
+        package = owner._capture_fiscal_package(
+            adapter=adapter, filing=filing, deadline_at=deadline_at
+        )
+        archive = adapter.capture_filing_archive(
+            cik=filing.cik,
+            accession_number=filing.accession_number,
+            filename=package.archive_filename,
+            filed_at=filing.accepted_at,
+            accepted_at=filing.accepted_at,
+            form=filing.form,
+            deadline_at=deadline_at,
+        )
+        members = read_sec_xbrl_archive(
+            archive.content,
+            primary_document=package.xbrl_entrypoint,
+            dts_filenames=package.dts_filenames,
+            inline_documents=package.inline_documents,
+        )
+        retained = RetainedFiscalValidation(artifacts, content, actions)
+        for filename in package.dts_filenames:
+            retained.match_content(members[filename], media_type="application/xml")
 
 
 class _FiscalValidationRead:
