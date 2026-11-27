@@ -2,7 +2,7 @@ import hashlib
 import json
 from io import BytesIO
 from contextlib import nullcontext
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import Message
 from http.client import IncompleteRead
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,6 +11,7 @@ from urllib.error import HTTPError
 from urllib.request import Request
 
 import pytest
+from fundamental_service import sec_source
 from fundamental_service.contracts import SourceRole
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1
@@ -42,6 +43,45 @@ class FakeResponse:
 
     def __exit__(self, *_args):
         return False
+
+
+@pytest.mark.parametrize(("slot_seconds", "expected_timeout"), [(2, None), (0.5, 0.5)])
+def test_zero_delay_sec_slot_rechecks_http_deadline(
+    monkeypatch, slot_seconds, expected_timeout
+):
+    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    deadline = now + timedelta(seconds=1)
+    opened = []
+
+    class FixedClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    def slot(_interval):
+        nonlocal now
+        now += timedelta(seconds=slot_seconds)
+        return 0.0
+
+    def open_response(_request, *, timeout):
+        opened.append(timeout)
+        return FakeResponse(b'{"entityName":"Example Co"}')
+
+    monkeypatch.setattr(sec_source, "datetime", FixedClock)
+    provider = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        request_slot=slot,
+        opener=open_response,
+    )
+    if expected_timeout is None:
+        with pytest.raises(SecSourceError, match="deadline"):
+            provider.capture_company_facts("0000320193", deadline_at=deadline)
+        assert not opened
+    else:
+        provider.capture_company_facts("0000320193", deadline_at=deadline)
+        assert opened == [expected_timeout]
 
 
 @pytest.mark.parametrize("chunked", [False, True])

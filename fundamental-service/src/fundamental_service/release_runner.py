@@ -11,7 +11,8 @@ import argparse
 import hashlib
 import sys
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, overload
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -36,8 +37,22 @@ from .automatic_market_policy_evidence import (
     load_release_automatic_market_policy,
     requires_automatic_market_policy,
 )
+from .fiscal_release_contracts import (
+    FiscalReleaseCanaryV2,
+    FiscalReleaseManifestV2,
+    FiscalStoredVerificationV2,
+)
+from .fiscal_releases import FiscalReleaseReader
+from .publication_codec import (
+    PublicationManifest,
+    PublicationVerification,
+    decode_release_manifest,
+    decode_release_verification,
+    require_publication_pair,
+    verify_publication_pair,
+)
+
 from .data_releases import (
-    DataReleaseCandidatePublishRequestV1,
     DataReleaseContentRequestV1,
     DataReleaseError,
     AutomaticMappingApprovalV1,
@@ -242,6 +257,7 @@ class DataReleaseCanaryRunner:
         policy_registry: PolicyRegistry | None = None,
         statement_originals: OriginalPreparation | None = None,
         statement_content: ContentAddressedStore | None = None,
+        fiscal_reader: FiscalReleaseReader | None = None,
     ) -> None:
         self._snapshots = snapshot_repository
         self._facts = fact_repository
@@ -255,12 +271,58 @@ class DataReleaseCanaryRunner:
         self._policy_registry = policy_registry
         self._statement_originals = statement_originals
         self._statement_content = statement_content
+        self._fiscal_reader = fiscal_reader
 
+    @overload
     def validate(
         self,
         manifest: DataReleaseManifestV1,
         verification: DataReleaseVerificationV1,
-    ) -> DataReleaseCanaryReportV1:
+        *,
+        deadline_at: datetime | None = None,
+    ) -> DataReleaseCanaryReportV1: ...
+
+    @overload
+    def validate(
+        self,
+        manifest: FiscalReleaseManifestV2,
+        verification: FiscalStoredVerificationV2,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalReleaseCanaryV2: ...
+
+    def validate(
+        self,
+        manifest: PublicationManifest,
+        verification: PublicationVerification,
+        *,
+        deadline_at: datetime | None = None,
+    ) -> DataReleaseCanaryReportV1 | FiscalReleaseCanaryV2:
+        require_publication_pair(manifest, verification)
+        if isinstance(manifest, FiscalReleaseManifestV2) and isinstance(
+            verification, FiscalStoredVerificationV2
+        ):
+            if self._fiscal_reader is None or deadline_at is None:
+                raise DataReleaseError(
+                    "FISCAL_CANARY_UNCONFIGURED",
+                    "fiscal canary requires its read-only owner and absolute deadline",
+                )
+            verify_publication_pair(manifest, verification, self._trust_roots)
+            report = self._fiscal_reader.replay_canary(
+                manifest.manifest_digest, deadline_at=deadline_at
+            )
+            if report.artifact_id != verification.canary_ref.artifact_id:
+                raise DataReleaseError(
+                    "FISCAL_CANARY_INVALID",
+                    "full replay differs from the supplied publication",
+                )
+            return report
+        if not isinstance(manifest, DataReleaseManifestV1) or not isinstance(
+            verification, DataReleaseVerificationV1
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_MISMATCH", "release canary purpose differs"
+            )
         verify_data_release_candidate(manifest, verification, self._trust_roots)
         content = self.validate_content(
             manifest,
@@ -1294,10 +1356,21 @@ class _FilesystemMappingReader:
 def _load_candidate(
     path: Path,
 ) -> tuple[DataReleaseManifestV1, DataReleaseVerificationV1]:
-    candidate = DataReleaseCandidatePublishRequestV1.model_validate_json(
-        path.read_bytes()
-    )
-    return candidate.manifest, candidate.verification
+    from pydantic import TypeAdapter
+
+    fields = TypeAdapter(dict[str, object]).validate_json(path.read_bytes())
+    if set(fields) != {"manifest", "verification"}:
+        raise ValueError("release candidate requires exactly manifest and verification")
+    manifest = decode_release_manifest(canonical_bytes(fields["manifest"]))
+    verification = decode_release_verification(canonical_bytes(fields["verification"]))
+    require_publication_pair(manifest, verification)
+    if not isinstance(manifest, DataReleaseManifestV1) or not isinstance(
+        verification, DataReleaseVerificationV1
+    ):
+        raise ValueError(
+            "fiscal publication uses its protected workflow and read-only fiscal canary"
+        )
+    return manifest, verification
 
 
 def main(argv: list[str] | None = None) -> int:

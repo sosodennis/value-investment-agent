@@ -8,8 +8,15 @@ import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
+from .content_publication import (
+    ContentPublicationAccess,
+    PrivateContentPublication,
+    assert_published_access,
+    ensure_publication_directory,
+    prepare_publication_fd,
+)
 from .contracts import (
     IdentityV1,
     IssueV1,
@@ -51,9 +58,15 @@ class ContentAddressedStore(Protocol):
 class FilesystemContentStore:
     """A service-owned SHA-256 store. Writes are atomic and never overwrite bytes."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        publication_access: ContentPublicationAccess = PrivateContentPublication(),
+    ) -> None:
         self.root = root
-        self.root.mkdir(parents=True, exist_ok=True)
+        self._publication_access = publication_access
+        ensure_publication_directory(self.root, publication_access)
 
     def _path(self, content_hash: str, media_type: str) -> Path:
         if not is_digest(content_hash) or content_hash != content_hash.lower():
@@ -70,20 +83,29 @@ class FilesystemContentStore:
 
     def put(self, content: bytes, *, media_type: str) -> str:
         content_hash = hashlib.sha256(content).hexdigest()
+        assert_published_access(self.root, self._publication_access)
         path = self._path(content_hash, media_type)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_publication_directory(path.parent, self._publication_access)
         if path.exists():
-            if path.read_bytes() != content:
+            try:
+                existing = path.read_bytes()
+            except PermissionError as exc:
+                raise SnapshotError(
+                    "SOURCE_BYTES_FORBIDDEN", "content access is forbidden by storage"
+                ) from exc
+            if existing != content:
                 raise SnapshotError(
                     "CONTENT_HASH_COLLISION",
                     "stored content hash does not match existing bytes",
                 )
+            assert_published_access(path, self._publication_access)
             return content_hash
         fd, temporary = tempfile.mkstemp(prefix="snapshot-", dir=path.parent)
         try:
             with os.fdopen(fd, "wb") as handle:
                 handle.write(content)
                 handle.flush()
+                prepare_publication_fd(handle.fileno(), self._publication_access)
                 os.fsync(handle.fileno())
             os.replace(temporary, path)
         finally:
@@ -99,11 +121,39 @@ class FilesystemContentStore:
             raise SnapshotError(
                 "SOURCE_BYTES_UNAVAILABLE", f"content {content_hash} is unavailable"
             ) from exc
+        except PermissionError as exc:
+            raise SnapshotError(
+                "SOURCE_BYTES_FORBIDDEN", "content access is forbidden by storage"
+            ) from exc
         actual = hashlib.sha256(content).hexdigest()
         if actual != content_hash:
             raise SnapshotError(
                 "SOURCE_HASH_MISMATCH", f"content {content_hash} failed verification"
             )
+        assert_published_access(self.root, self._publication_access)
+        assert_published_access(path.parent, self._publication_access)
+        assert_published_access(path, self._publication_access)
+        return content
+
+    def get_bounded(
+        self, content_hash: str, *, media_type: str, maximum_bytes: int
+    ) -> bytes:
+        path = self._path(content_hash, media_type)
+        with path.open("rb") as source:
+            length = os.fstat(source.fileno()).st_size
+            if maximum_bytes < 0 or length > maximum_bytes:
+                raise SnapshotError(
+                    "FISCAL_CLOSURE_LIMIT", "content exceeds read bound"
+                )
+            content = source.read(maximum_bytes + 1)
+        if (
+            len(content) != length
+            or hashlib.sha256(content).hexdigest() != content_hash
+        ):
+            raise SnapshotError("SOURCE_HASH_MISMATCH", "bounded content bytes differ")
+        assert_published_access(self.root, self._publication_access)
+        assert_published_access(path.parent, self._publication_access)
+        assert_published_access(path, self._publication_access)
         return content
 
 
@@ -268,7 +318,7 @@ class CapturedSource:
     is_amendment: bool = False
     amends_accession: str | None = None
     supersedes_accession: str | None = None
-    amendment_scope: str | None = None
+    amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"] | None = None
     taxonomy_manifest_id: str | None = None
     response_headers: tuple[tuple[str, str], ...] = ()
     declared_size: int | None = None
@@ -376,12 +426,12 @@ class SnapshotBuilder:
             legal_source = self.source_register.require(
                 source.source_id, role=source.role
             )
-            for timestamp_name, timestamp in (
+            for timestamp_name, source_timestamp in (
                 ("available_at", source.available_at),
                 ("publication_at", source.publication_at),
                 ("filed_at", source.filed_at),
             ):
-                if timestamp is not None and timestamp.tzinfo is None:
+                if source_timestamp is not None and source_timestamp.tzinfo is None:
                     raise SnapshotError(
                         "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
                         f"{timestamp_name} must include a timezone",

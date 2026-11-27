@@ -16,17 +16,19 @@ def isolated_image_build_value(monkeypatch):
 
 
 @pytest.fixture
-def recovery_databases():
+def recovery_databases(monkeypatch):
     database_url = os.getenv("FUNDAMENTAL_TEST_DATABASE_URL")
     if not database_url:
         pytest.skip("isolated PostgreSQL is required")
     base = database_url.replace("postgresql+asyncpg://", "postgresql://")
     prefix, _ = base.rsplit("/", 1)
     names = tuple(f"issue361_recovery_{uuid4().hex}" for _ in range(2))
+    runtime_role = "issue532_runtime_" + uuid4().hex
 
     async def create():
         connection = await asyncpg.connect(base)
         try:
+            await connection.execute(f'CREATE ROLE "{runtime_role}" NOLOGIN')
             for name in names:
                 await connection.execute(f'CREATE DATABASE "{name}"')
         finally:
@@ -37,10 +39,12 @@ def recovery_databases():
         try:
             for name in names:
                 await connection.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+            await connection.execute(f'DROP ROLE "{runtime_role}"')
         finally:
             await connection.close()
 
     asyncio.run(create())
+    monkeypatch.setenv("FUNDAMENTAL_TEST_RECOVERY_RUNTIME_ROLE", runtime_role)
     try:
         yield tuple(f"{prefix}/{name}" for name in names)
     finally:

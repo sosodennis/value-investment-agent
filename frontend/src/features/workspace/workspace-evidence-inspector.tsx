@@ -49,7 +49,7 @@ export interface EvidenceSelection {
     snapshotId?: string;
     snapshotManifestDigest?: string;
     unit?: string;
-    scale?: number;
+    scale?: number | null;
     issueCodes?: string[];
     statementId?: string;
     cellId?: string;
@@ -66,6 +66,14 @@ export interface EvidenceSelection {
     candidateFactIds?: string[];
     rejectedCandidates?: string[];
     statementEvidence?: string;
+    editionId?: string;
+    rawText?: string;
+    sign?: string;
+    decimals?: string;
+    archiveMemberHash?: string;
+    sourceBindingDigest?: string;
+    formulaVersion?: string;
+    evidenceLinks?: { id: string; label: string; relationship: string; coefficient?: -1 | 1 }[];
 }
 
 export function buildEvidenceItems(agent: AgentInfo, viewModel: AgentOutputViewModel): EvidenceSelection[] {
@@ -139,43 +147,42 @@ export function EvidenceInspector({
                 {headerAction}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                {selected ? <EvidenceDetail key={selected.id} item={selected} /> : null}
+                {selected ? <EvidenceDetail key={`detail:${selected.id}`} item={selected} items={items} onSelect={onSelect} /> : null}
                 {items.length === 0 ? (
                     <div className="grid min-h-40 place-items-center border border-dashed p-4 text-center text-sm text-muted-foreground">
                         <p>Evidence becomes available when a report artifact is loaded.</p>
                     </div>
                 ) : (
-                    <details open={!selected} className="mt-3 min-w-0">
-                        <summary className="cursor-pointer rounded-sm py-2 text-sm font-medium">Browse all evidence ({items.length})</summary>
-                        <div className="grid gap-2">
-                        {items.map((item) => (
-                            <Button
-                                key={item.id}
-                                type="button"
-                                variant={selected?.id === item.id ? 'secondary' : 'ghost'}
-                                className="h-auto min-w-0 justify-start whitespace-normal border border-transparent px-3 py-2 text-left hover:border-border"
-                                onClick={() => onSelect(item)}
-                            >
-                                <span className="min-w-0">
-                                    <span className="block truncate text-xs font-semibold">{item.title}</span>
-                                    <span className="mt-1 block text-xs font-normal text-muted-foreground [overflow-wrap:anywhere]">{item.displayValue ?? item.value}</span>
-                                </span>
-                            </Button>
-                        ))}
-                    </div>
-                    </details>
+                    <EvidenceInventory key={`inventory:${selected?.id ?? 'unselected'}`} items={items} selected={selected} onSelect={onSelect} />
                 )}
             </div>
         </aside>
     );
 }
 
-function EvidenceDetail({ item }: { item: EvidenceSelection }) {
+function EvidenceInventory({ items, selected, onSelect }: { items: EvidenceSelection[]; selected: EvidenceSelection | null; onSelect: (item: EvidenceSelection) => void }) {
+    const [open, setOpen] = useState(selected === null);
+    return <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="mt-3 min-w-0">
+        <summary className="cursor-pointer rounded-sm py-2 text-sm font-medium">Browse all evidence ({items.length})</summary>
+        {open && <div className="grid gap-2">{items.map((item) => <Button
+            key={item.id} type="button" variant={selected?.id === item.id ? 'secondary' : 'ghost'}
+            className="h-auto min-w-0 justify-start whitespace-normal border border-transparent px-3 py-2 text-left hover:border-border"
+            onClick={() => onSelect(item)}
+        ><span className="min-w-0">
+            <span className="block truncate text-xs font-semibold">{item.title}</span>
+            <span className="mt-1 block text-xs font-normal text-muted-foreground [overflow-wrap:anywhere]">{item.displayValue ?? item.value}</span>
+        </span></Button>)}</div>}
+    </details>;
+}
+
+function EvidenceDetail({ item, items, onSelect }: { item: EvidenceSelection; items: EvidenceSelection[]; onSelect: (item: EvidenceSelection) => void }) {
     const rawId = useId();
+    const detail = useRef<HTMLDivElement>(null);
     const rawField = useRef<HTMLTextAreaElement>(null);
     const displayField = useRef<HTMLTextAreaElement>(null);
     const [copy, setCopy] = useState<{ kind: 'idle' } | { kind: 'pending' | 'copied' | 'failed'; target: 'raw' | 'display' }>({ kind: 'idle' });
     const sourceUrl = safeSourceUrl(item.sourceUrl);
+    useEffect(() => { detail.current?.focus(); }, [item.id]);
     useEffect(() => {
         if (copy.kind !== 'failed') return;
         const field = copy.target === 'raw' ? rawField.current : displayField.current;
@@ -192,7 +199,7 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
         }
     }
     return (
-        <Card className="min-w-0 border-primary/30">
+        <div ref={detail} tabIndex={-1} aria-label={`${item.title} details`} className="min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Card className="min-w-0 border-primary/30">
             <CardHeader className="p-4 pb-3">
                 <CardTitle className="text-sm">{item.title}</CardTitle>
             </CardHeader>
@@ -223,6 +230,10 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Reason" value={item.rationale} />
                     <EvidenceField label="Period" value={item.period} />
                     <EvidenceField label="Formula" value={item.formula} />
+                    <EvidenceField label="Formula version" value={item.formulaVersion} />
+                    <EvidenceField label="Reported raw text" value={item.rawText} />
+                    <EvidenceField label="Reported sign" value={item.sign} />
+                    <EvidenceField label="Reported decimals" value={item.decimals} />
                     <EvidenceField label="Data quality" value={item.dataQuality} />
                     <EvidenceField label="Assumption method" value={item.assumptionMethod} />
                     <EvidenceField label="Evidence assessment" value={item.confidence} />
@@ -231,9 +242,25 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Concept" value={factMetadataValue(item, item.concept)} />
                     <EvidenceField label="Accession" value={factMetadataValue(item, item.accessionNumber)} />
                     <EvidenceField label="Unit" value={factMetadataValue(item, item.unit)} />
-                    <EvidenceField label="Source scale" value={item.scale === undefined ? undefined : String(item.scale)} />
+                    <EvidenceField label="Source scale" value={item.scale === undefined ? undefined : item.scale === null ? 'Unspecified' : String(item.scale)} />
                     <EvidenceField label="Issue codes" value={formatIssueCodes(item)} />
                 </dl>
+                {item.evidenceLinks && item.evidenceLinks.length > 0 && <section aria-label="Statement lineage" className="min-w-0 space-y-2">
+                    <h3 className="text-sm font-semibold">Inputs and verification</h3>
+                    <p className="text-xs text-muted-foreground">Follow a signed input to its quarterly value or reported source. Parent links return to the value that uses this evidence.</p>
+                    <ul className="space-y-2">{item.evidenceLinks.map((link, index) => {
+                        const target = items.find((candidate) => candidate.id === link.id);
+                        return <li key={`${link.relationship}:${link.id}:${index}`}>
+                            {target && <Button type="button" variant="outline" aria-label={`${link.coefficient === undefined ? '' : `${link.coefficient > 0 ? '+1' : '−1'} · `}${link.relationship} ${target.title}`} className="h-auto min-h-10 w-full justify-start whitespace-normal text-left text-xs" onClick={() => onSelect(target)}>
+                                <span className="min-w-0 [overflow-wrap:anywhere]">
+                                    <span className="block font-medium">{link.coefficient === undefined ? '' : `${link.coefficient > 0 ? '+1' : '−1'} · `}{link.relationship}</span>
+                                    <span className="mt-1 block">{target.title}</span>
+                                    {link.relationship === 'candidate' && <span className="mt-1 block text-muted-foreground">{link.label}</span>}
+                                </span>
+                            </Button>}
+                        </li>;
+                    })}</ul>
+                </section>}
                 {item.statementEvidence && <details className="min-w-0 rounded-md border px-3 py-2 text-xs">
                     <summary className="cursor-pointer font-medium">Complete statement selection evidence</summary>
                     <Textarea aria-label="Statement cell and candidate evidence" readOnly value={item.statementEvidence} rows={12} className="mt-3 font-mono text-xs" />
@@ -251,6 +278,9 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Statement" value={item.statementId} />
                     <EvidenceField label="Statement cutoff" value={item.statementCutoff} />
                     <EvidenceField label="Statement release" value={item.statementRelease} />
+                    <EvidenceField label="Edition" value={item.editionId} />
+                    <EvidenceField label="Source binding" value={item.sourceBindingDigest} />
+                    <EvidenceField label="Archive member hash" value={item.archiveMemberHash} />
                     <EvidenceField label="Cell" value={item.cellId} />
                     <EvidenceField label="Row" value={item.rowId} />
                     <EvidenceField label="Period identity" value={item.periodId} />
@@ -281,7 +311,7 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     </Button>
                 ) : null}
             </CardContent>
-        </Card>
+        </Card></div>
     );
 }
 
@@ -310,7 +340,7 @@ function factMetadataValue(item: EvidenceSelection, value: string | undefined): 
 }
 
 function formatIssueCodes(item: EvidenceSelection): string | undefined {
-    if (!item.factId) return undefined;
+    if (!item.factId && !item.cellId) return undefined;
     if (item.issueCodes === undefined) return 'Unavailable';
     return item.issueCodes.length === 0 ? 'None' : item.issueCodes.join(', ');
 }

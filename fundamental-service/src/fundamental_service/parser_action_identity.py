@@ -6,11 +6,15 @@ import hashlib
 import os
 import platform
 import sys
-from collections.abc import Iterator
+from asyncio import current_task
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from pathlib import Path
-from threading import Lock
-from typing import Literal
+from threading import Lock, get_ident
+from types import TracebackType
+from typing import Literal, Protocol
 
 from .arelle_parser import (
     ArelleParseReportV1,
@@ -23,7 +27,7 @@ from .parser_action_contracts import (
     ParserActionInputV3,
     ParserBuildIdentityV1,
 )
-from .serialization import sha256_digest
+from .serialization import canonical_bytes, sha256_digest
 from .parser_native_closure import NativeClosureError, native_closure
 from .resource_hashing import ResourceHashReader
 from .snapshots import SnapshotError
@@ -147,9 +151,6 @@ def _runtime_tree(
                         "mode": stat.st_mode,
                         "uid": stat.st_uid,
                         "gid": stat.st_gid,
-                        "parser_uid": os.geteuid(),
-                        "parser_gid": os.getegid(),
-                        "parser_groups": tuple(sorted(os.getgroups())),
                     }
                 )
             result = sha256_digest(
@@ -421,6 +422,739 @@ class ParserBuildChecks:
             self.current()
 
 
+@dataclass(frozen=True)
+class ParserActionResources:
+    physical: tuple[tuple[str, str], ...]
+    logical: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class _ResourceDescriptor:
+    profile_json: bytes
+    taxonomy_cache_dir: Path
+    trees: tuple[tuple[str, Path, Path, Path], ...]
+    files: tuple[tuple[str, Path, Path, Path], ...]
+    build: bytes | None
+    configuration: str | None
+
+    def encoded(self) -> bytes:
+        return canonical_bytes(
+            (
+                self.profile_json.decode(),
+                str(self.taxonomy_cache_dir),
+                tuple(tuple(map(str, item)) for item in self.trees),
+                tuple(tuple(map(str, item)) for item in self.files),
+                self.build.decode() if self.build is not None else None,
+                self.configuration,
+            )
+        )
+
+
+def _resource_descriptor(
+    profile: ArelleValidationProfileV1,
+    taxonomy_cache_dir: Path,
+    *,
+    build: bytes | None = None,
+    configuration: str | None = None,
+) -> _ResourceDescriptor:
+    trees = (
+        ("taxonomy", taxonomy_cache_dir),
+        ("edgar", profile.edgar_plugin_dir),
+        ("xule", profile.xule_plugin_dir),
+        ("historical", profile.historical_dqc_dir),
+    )
+    files = [
+        ("dqc-primary", profile.dqc_ruleset_path),
+        ("historical-axis", profile.historical_dqc_axis_config),
+    ]
+    if profile.dqc_ruleset_catalog is not None:
+        files.extend(
+            ("dqc-catalog:" + binding.taxonomy_namespace, binding.path)
+            for binding in profile.dqc_ruleset_catalog.bindings
+        )
+    return _ResourceDescriptor(
+        canonical_bytes(profile.model_dump(mode="json")),
+        taxonomy_cache_dir,
+        tuple(
+            (role, path, path.absolute(), path.resolve(strict=True))
+            for role, path in trees
+            if path is not None
+        ),
+        tuple(
+            (role, path, path.absolute(), path.resolve(strict=True))
+            for role, path in files
+            if path is not None
+        ),
+        build,
+        configuration,
+    )
+
+
+_ResourceBinding = tuple[str, Path, Path, Path]
+
+
+def _file_digest(path: Path) -> str:
+    with path.open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def _assemble_resources(
+    descriptor: _ResourceDescriptor,
+    tree: Callable[[_ResourceBinding], tuple[str, str]],
+    file: Callable[[_ResourceBinding], str],
+) -> ParserActionResources:
+    resources: list[tuple[str, str]] = []
+    for binding in descriptor.trees:
+        name = binding[0]
+        content, closure = tree(binding)
+        resources.extend(((name, content), (name + "-closure", closure)))
+    resource_trees = tuple(resources)
+    logical_files = []
+    for binding in descriptor.files:
+        role, physical, item, _ = binding
+        digest = file(binding)
+        resources.append((str(physical), digest))
+        logical_files.append((role + ":" + item.name, digest))
+    return ParserActionResources(
+        tuple(sorted(dict(resources).items())),
+        tuple(sorted((*resource_trees, *logical_files))),
+    )
+
+
+def _read_parser_action_resources(
+    descriptor: _ResourceDescriptor,
+    *,
+    physical_pass: _PhysicalResourcePass | None = None,
+    pending_baseline_bytes: int = 0,
+) -> ParserActionResources:
+    if (
+        physical_pass is not None
+        and descriptor.build is not None
+        and descriptor.configuration is not None
+    ):
+        return _assemble_resources(
+            descriptor,
+            lambda binding: physical_pass.tree(
+                descriptor, binding, pending_baseline_bytes
+            ),
+            lambda binding: physical_pass.file(
+                descriptor, binding, pending_baseline_bytes
+            ),
+        )
+    return _assemble_resources(
+        descriptor,
+        lambda binding: _resource_digests(binding[2]),
+        lambda binding: _file_digest(binding[2]),
+    )
+
+
+@dataclass(frozen=True)
+class _PhysicalResourceKey:
+    kind: Literal["tree", "file"]
+    binding: _ResourceBinding
+    build: bytes
+    configuration: str
+
+    def encoded(self) -> tuple[str, tuple[str, ...], str, str]:
+        return (
+            self.kind,
+            tuple(map(str, self.binding)),
+            self.build.decode(),
+            self.configuration,
+        )
+
+
+class _PhysicalResourcePass:
+    def __init__(self, cut: _ParserResourceCut) -> None:
+        self._cut = cut
+        self._nonce = cut._nonce
+        self._active = True
+        self._trees: dict[_PhysicalResourceKey, tuple[str, str]] = {}
+        self._files: dict[_PhysicalResourceKey, str] = {}
+        self._bytes = len(
+            canonical_bytes(
+                ("physical-pass", "cut-reference", "nonce-reference", "trees", "files")
+            )
+        )
+        state = cut._state
+        reserved = max(state.pass_reserved_bytes, self._bytes)
+        if state.retained_bytes + reserved > 2 * 1024 * 1024:
+            raise IncompleteParserClosure(
+                "parser resource operation exceeds its bounds"
+            )
+        state.pass_reserved_bytes = reserved
+        state.high_water_bytes = max(
+            state.high_water_bytes, state.retained_bytes + reserved
+        )
+
+    def check(self) -> None:
+        self._cut.check(self._nonce)
+        if not self._active or self._cut._physical_pass is not self:
+            raise IncompleteParserClosure(
+                "parser physical resource pass is not current"
+            )
+
+    def _key(
+        self,
+        kind: Literal["tree", "file"],
+        descriptor: _ResourceDescriptor,
+        binding: _ResourceBinding,
+    ) -> _PhysicalResourceKey:
+        self.check()
+        if descriptor.build is None or descriptor.configuration is None:
+            raise IncompleteParserClosure(
+                "parser physical resource build is unavailable"
+            )
+        return _PhysicalResourceKey(
+            kind, binding, descriptor.build, descriptor.configuration
+        )
+
+    def _reserve(
+        self,
+        key: _PhysicalResourceKey,
+        value: str | tuple[str, str],
+        pending_baseline_bytes: int,
+    ) -> None:
+        # The index retains a key reference in addition to the key/value entry.
+        size = len(canonical_bytes((key.encoded(), value, ("index", key.encoded()))))
+        state = self._cut._state
+        reserved = max(state.pass_reserved_bytes, self._bytes + size)
+        if state.retained_bytes + reserved + pending_baseline_bytes > 2 * 1024 * 1024:
+            raise IncompleteParserClosure(
+                "parser resource operation exceeds its bounds"
+            )
+        state.pass_reserved_bytes = reserved
+        self._bytes += size
+        state.high_water_bytes = max(
+            state.high_water_bytes, state.retained_bytes + reserved
+        )
+
+    def tree(
+        self,
+        descriptor: _ResourceDescriptor,
+        binding: _ResourceBinding,
+        pending_baseline_bytes: int,
+    ) -> tuple[str, str]:
+        key = self._key("tree", descriptor, binding)
+        result = self._trees.get(key)
+        if result is None:
+            result = _resource_digests(binding[2])
+            self.check()
+            self._reserve(key, result, pending_baseline_bytes)
+            self._trees[key] = result
+        self.check()
+        return result
+
+    def file(
+        self,
+        descriptor: _ResourceDescriptor,
+        binding: _ResourceBinding,
+        pending_baseline_bytes: int,
+    ) -> str:
+        key = self._key("file", descriptor, binding)
+        result = self._files.get(key)
+        if result is None:
+            result = _file_digest(binding[2])
+            self.check()
+            self._reserve(key, result, pending_baseline_bytes)
+            self._files[key] = result
+        self.check()
+        return result
+
+    def close(self) -> None:
+        self._active = False
+        self._trees.clear()
+        self._files.clear()
+
+
+@dataclass(frozen=True)
+class _ResourcePrincipal:
+    pid: int
+    thread: int
+    task: object | None
+    uid: int
+    euid: int
+    gid: int
+    egid: int
+    groups: tuple[int, ...]
+
+
+def _resource_principal() -> _ResourcePrincipal:
+    try:
+        task: object | None = current_task()
+    except RuntimeError:
+        task = None
+    return _ResourcePrincipal(
+        os.getpid(),
+        get_ident(),
+        task,
+        os.getuid(),
+        os.geteuid(),
+        os.getgid(),
+        os.getegid(),
+        tuple(sorted(os.getgroups())),
+    )
+
+
+@dataclass(frozen=True)
+class _ResourceObservation:
+    resources: ParserActionResources
+    build_checks: ParserBuildChecks | None
+
+
+class _ParserResourceState:
+    def __init__(self, check_deadline: Callable[[], float]) -> None:
+        self.nonce = object()
+        self._principal = _resource_principal()
+        self._check_deadline = check_deadline
+        self.status: Literal["new", "open", "finished", "aborted"] = "new"
+        self._build: tuple[bytes, str | None] | None = None
+        self.observations: dict[_ResourceDescriptor, _ResourceObservation] = {}
+        self.active_cut: _ParserResourceCut | None = None
+        self.retained_bytes = 0
+        self.pass_reserved_bytes = 0
+        self.high_water_keys = 0
+        self.high_water_bytes = 0
+
+    def check(self, nonce: object) -> None:
+        if (
+            nonce is not self.nonce
+            or self.status != "open"
+            or _resource_principal() != self._principal
+        ):
+            raise IncompleteParserClosure("parser resource operation is not current")
+        self._check_deadline()
+
+    def descriptor(
+        self,
+        profile: ArelleValidationProfileV1,
+        root: Path,
+        checks: ParserBuildChecks | None,
+    ) -> _ResourceDescriptor:
+        build = None
+        configuration = None
+        if checks is not None:
+            try:
+                build = canonical_bytes(checks.current())
+            except IncompleteParserClosure:
+                if self._build is not None:
+                    raise
+            else:
+                configuration = checks._configuration
+                identity = build, configuration
+                if self._build is not None and identity != self._build:
+                    raise IncompleteParserClosure("parser resource build changed")
+                self._build = identity
+        return _resource_descriptor(
+            profile, root, build=build, configuration=configuration
+        )
+
+    def observe(
+        self,
+        nonce: object,
+        profile: ArelleValidationProfileV1,
+        root: Path,
+        checks: ParserBuildChecks | None,
+        *,
+        reuse: bool,
+        physical_pass: _PhysicalResourcePass | None = None,
+    ) -> ParserActionResources:
+        self.check(nonce)
+        descriptor = self.descriptor(profile, root, checks)
+        previous = self.observations.get(descriptor)
+        if reuse and descriptor.build is not None and previous is not None:
+            self.check(nonce)
+            return previous.resources
+        pending = 0
+        if previous is None:
+            descriptor_size = len(descriptor.encoded())
+            if (
+                len(self.observations) >= 32
+                or self.retained_bytes + self.pass_reserved_bytes + descriptor_size
+                > 2 * 1024 * 1024
+            ):
+                raise IncompleteParserClosure(
+                    "parser resource operation exceeds its bounds"
+                )
+            shape = _assemble_resources(
+                descriptor,
+                lambda binding: ("0" * 64, "0" * 64),
+                lambda binding: "0" * 64,
+            )
+            pending = descriptor_size + len(
+                canonical_bytes((shape.physical, shape.logical))
+            )
+            del shape
+            if (
+                self.retained_bytes + self.pass_reserved_bytes + pending
+                > 2 * 1024 * 1024
+            ):
+                raise IncompleteParserClosure(
+                    "parser resource operation exceeds its bounds"
+                )
+        resources = (
+            _read_parser_action_resources(
+                descriptor,
+                physical_pass=physical_pass,
+                pending_baseline_bytes=pending,
+            )
+            if physical_pass is not None
+            else _read_parser_action_resources(descriptor)
+        )
+        self.check(nonce)
+        if self.descriptor(profile, root, checks) != descriptor:
+            raise IncompleteParserClosure("parser resource paths changed")
+        if previous is not None:
+            if previous.resources != resources:
+                raise IncompleteParserClosure("parser resource bytes changed")
+        else:
+            size = len(descriptor.encoded()) + len(
+                canonical_bytes((resources.physical, resources.logical))
+            )
+            if (
+                len(self.observations) >= 32
+                or self.retained_bytes + self.pass_reserved_bytes + size
+                > 2 * 1024 * 1024
+            ):
+                raise IncompleteParserClosure(
+                    "parser resource operation exceeds its bounds"
+                )
+            self.observations[descriptor] = _ResourceObservation(resources, checks)
+            self.retained_bytes += size
+            self.high_water_keys = max(self.high_water_keys, len(self.observations))
+            self.high_water_bytes = max(
+                self.high_water_bytes, self.retained_bytes + self.pass_reserved_bytes
+            )
+        return resources
+
+    def recheck(
+        self,
+        descriptor: _ResourceDescriptor,
+        observed: _ResourceObservation,
+        *,
+        physical_pass: _PhysicalResourcePass | None = None,
+    ) -> None:
+        self.check(self.nonce)
+        profile = ArelleValidationProfileV1.model_validate_json(descriptor.profile_json)
+        if (
+            self.descriptor(
+                profile, descriptor.taxonomy_cache_dir, observed.build_checks
+            )
+            != descriptor
+        ):
+            raise IncompleteParserClosure("parser resource paths changed")
+        resources = (
+            _read_parser_action_resources(descriptor, physical_pass=physical_pass)
+            if physical_pass is not None
+            else _read_parser_action_resources(descriptor)
+        )
+        if resources != observed.resources:
+            raise IncompleteParserClosure("parser resource bytes changed")
+        self.check(self.nonce)
+        if (
+            self.descriptor(
+                profile, descriptor.taxonomy_cache_dir, observed.build_checks
+            )
+            != descriptor
+        ):
+            raise IncompleteParserClosure("parser resource paths changed")
+
+    def finish(self) -> None:
+        try:
+            self.check(self.nonce)
+            for descriptor, observed in self.observations.items():
+                self.recheck(descriptor, observed)
+        except BaseException:
+            self.status = "aborted"
+            raise
+        else:
+            self.status = "finished"
+        finally:
+            self.observations.clear()
+            self.retained_bytes = 0
+
+
+@dataclass(frozen=True)
+class _ParserResourceBorrow:
+    _state: _ParserResourceState
+    _nonce: object
+
+    def observe(
+        self,
+        profile: ArelleValidationProfileV1,
+        root: Path,
+        checks: ParserBuildChecks | None,
+        *,
+        reuse: bool,
+    ) -> ParserActionResources:
+        return self._state.observe(self._nonce, profile, root, checks, reuse=reuse)
+
+
+class _ResourceCompletion(Protocol):
+    def seal(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class _LegacyResourceCompletion:
+    operation: _ParserResourceOperation
+    terminal: bool
+
+    def seal(self) -> None:
+        if self.terminal:
+            self.operation.finish()
+        else:
+            self.operation._state.check(self.operation._state.nonce)
+
+
+@dataclass(frozen=True)
+class _CurrentResourceBorrow:
+    cut: _ParserResourceCut
+    nonce: object
+
+    def observe(
+        self,
+        profile: ArelleValidationProfileV1,
+        root: Path,
+        checks: ParserBuildChecks | None,
+        *,
+        reuse: bool,
+    ) -> ParserActionResources:
+        return self.cut.observe(self.nonce, profile, root, checks)
+
+
+class _ParserResourceCut(AbstractContextManager["_ParserResourceCut"]):
+    """Opening/closing byte samples for one synchronous readonly candidate proof.
+
+    Exact physical components share one sample per opening/closing pass across
+    logical descriptors. Restored transients between samples can escape detection;
+    this is not per-descriptor sampling or continuous-immutability evidence.
+    """
+
+    def __init__(
+        self, operation: _CurrentParserResourceOperation, terminal: bool
+    ) -> None:
+        self._operation = operation
+        self._state = operation._state
+        self._lifetime_nonce = self._state.nonce
+        self._nonce = object()
+        self._borrow = _CurrentResourceBorrow(self, self._nonce)
+        self._terminal = terminal
+        self._phase: Literal["new", "open", "sealed", "aborted"] = "new"
+        self._observed: set[_ResourceDescriptor] = set()
+        self._physical_pass = _PhysicalResourcePass(self)
+        self._token: (
+            Token[_ParserResourceBorrow | _CurrentResourceBorrow | None] | None
+        ) = None
+
+    def check(self, nonce: object) -> None:
+        self._state.check(self._lifetime_nonce)
+        self._operation._require_owner()
+        if (
+            nonce is not self._nonce
+            or self._phase != "open"
+            or self._state.active_cut is not self
+            or _RESOURCE_OPERATION.get() is not self._borrow
+        ):
+            raise IncompleteParserClosure("parser resource cut is not current")
+
+    def __enter__(self) -> _ParserResourceCut:
+        self._state.check(self._lifetime_nonce)
+        self._operation._require_owner()
+        if self._phase != "new" or self._state.active_cut is not None:
+            raise IncompleteParserClosure("parser resource cut cannot reopen or nest")
+        self._phase = "open"
+        self._state.active_cut = self
+        self._token = _RESOURCE_OPERATION.set(self._borrow)
+        return self
+
+    def observe(
+        self,
+        nonce: object,
+        profile: ArelleValidationProfileV1,
+        root: Path,
+        checks: ParserBuildChecks | None,
+    ) -> ParserActionResources:
+        self.check(nonce)
+        descriptor = self._state.descriptor(profile, root, checks)
+        if (
+            descriptor in self._observed
+            and descriptor.build is not None
+            and descriptor.configuration is not None
+        ):
+            self.check(nonce)
+            return self._state.observations[descriptor].resources
+        resources = self._state.observe(
+            self._lifetime_nonce,
+            profile,
+            root,
+            checks,
+            reuse=False,
+            physical_pass=self._physical_pass,
+        )
+        self.check(nonce)
+        key = next(key for key in self._state.observations if key == descriptor)
+        self._observed.add(key)
+        return resources
+
+    def seal(self) -> None:
+        try:
+            self.check(self._nonce)
+            if self._terminal:
+                for descriptor, observed in self._state.observations.items():
+                    if descriptor not in self._observed:
+                        self._state.recheck(
+                            descriptor, observed, physical_pass=self._physical_pass
+                        )
+                        self._observed.add(descriptor)
+            self._physical_pass.close()
+            self._physical_pass = _PhysicalResourcePass(self)
+            for descriptor in self._observed:
+                self.check(self._nonce)
+                self._state.recheck(
+                    descriptor,
+                    self._state.observations[descriptor],
+                    physical_pass=self._physical_pass,
+                )
+            self.check(self._nonce)
+        except BaseException:
+            self._phase = "aborted"
+            self._state.status = "aborted"
+            raise
+        else:
+            self._phase = "sealed"
+            if self._terminal:
+                self._state.status = "finished"
+        finally:
+            self._physical_pass.close()
+            self._observed.clear()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> Literal[False]:
+        try:
+            if exc_type is None and self._phase != "sealed":
+                raise IncompleteParserClosure("parser resource cut did not seal")
+        finally:
+            if self._token is not None:
+                _RESOURCE_OPERATION.reset(self._token)
+                self._token = None
+            self._physical_pass.close()
+            self._state.active_cut = None
+            self._observed.clear()
+            if exc_type is not None or self._phase != "sealed":
+                self._phase = "aborted"
+                self._state.status = "aborted"
+        return False
+
+
+_RESOURCE_OPERATION: ContextVar[
+    _ParserResourceBorrow | _CurrentResourceBorrow | None
+] = ContextVar("parser_resource_operation", default=None)
+
+
+class _ParserResourceOperation(AbstractContextManager["_ParserResourceOperation"]):
+    def __init__(self, check_deadline: Callable[[], float]) -> None:
+        self._state = _ParserResourceState(check_deadline)
+        self._token: (
+            Token[_ParserResourceBorrow | _CurrentResourceBorrow | None] | None
+        ) = None
+
+    def __enter__(self) -> _ParserResourceOperation:
+        if self._state.status != "new":
+            raise IncompleteParserClosure("parser resource operation cannot reopen")
+        self._state.status = "open"
+        self._state.check(self._state.nonce)
+        self._token = _RESOURCE_OPERATION.set(
+            _ParserResourceBorrow(self._state, self._state.nonce)
+        )
+        return self
+
+    def completion(self, *, terminal: bool) -> _ResourceCompletion:
+        return _LegacyResourceCompletion(self, terminal)
+
+    @contextmanager
+    def current_cut(self, *, terminal: bool) -> Iterator[_ResourceCompletion]:
+        yield self.completion(terminal=terminal)
+
+    def finish(self) -> None:
+        self._state.finish()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> Literal[False]:
+        try:
+            if exc_type is None and self._state.status != "finished":
+                raise IncompleteParserClosure(
+                    "parser resource operation did not finish"
+                )
+        finally:
+            if self._token is not None:
+                _RESOURCE_OPERATION.reset(self._token)
+            if self._state.status != "finished":
+                self._state.status = "aborted"
+            self._state.observations.clear()
+            self._state.retained_bytes = 0
+            self._state.pass_reserved_bytes = 0
+        return False
+
+
+class _CurrentParserResourceOperation(_ParserResourceOperation):
+    def __init__(
+        self, check_deadline: Callable[[], float], require_owner: Callable[[], None]
+    ) -> None:
+        super().__init__(check_deadline)
+        self._require_owner = require_owner
+
+    def __enter__(self) -> _CurrentParserResourceOperation:
+        if self._state.status != "new":
+            raise IncompleteParserClosure("parser resource operation cannot reopen")
+        self._require_owner()
+        self._state.status = "open"
+        self._state.check(self._state.nonce)
+        return self
+
+    @contextmanager
+    def current_cut(self, *, terminal: bool) -> Iterator[_ResourceCompletion]:
+        with _ParserResourceCut(self, terminal) as cut:
+            yield cut
+
+    def finish(self) -> None:
+        raise IncompleteParserClosure("readonly resources require a terminal cut")
+
+
+def parser_action_resources(
+    profile: ArelleValidationProfileV1, taxonomy_cache_dir: Path
+) -> ParserActionResources:
+    """Read fresh bytes, or borrow inside a mandatory readonly candidate cut seal."""
+    operation = _RESOURCE_OPERATION.get()
+    if operation is not None:
+        return operation.observe(
+            profile, taxonomy_cache_dir, ParserBuildChecks(), reuse=False
+        )
+    return _read_parser_action_resources(
+        _resource_descriptor(profile, taxonomy_cache_dir)
+    )
+
+
+def parser_action_resource_descriptor(
+    profile: ArelleValidationProfileV1,
+    taxonomy_cache_dir: Path,
+    checks: ParserBuildChecks,
+) -> bytes:
+    """Commit stable resource identity after proving the current local boundary."""
+    return _resource_descriptor(
+        profile,
+        taxonomy_cache_dir,
+        build=canonical_bytes(checks.current()),
+    ).encoded()
+
+
 def parser_action_input(
     path: Path,
     *,
@@ -433,33 +1167,12 @@ def parser_action_input(
     source_content_hash: str,
     build_checks: ParserBuildChecks | None = None,
 ) -> ParserActionInput:
-    resources: list[tuple[str, str]] = []
-    for name, directory in (
-        ("taxonomy", taxonomy_cache_dir),
-        ("edgar", profile.edgar_plugin_dir),
-        ("xule", profile.xule_plugin_dir),
-        ("historical", profile.historical_dqc_dir),
-    ):
-        if directory is not None:
-            content, closure = _resource_digests(directory)
-            resources.extend(((name, content), (name + "-closure", closure)))
-    resource_trees = tuple(resources)
-    files = [
-        ("dqc-primary", profile.dqc_ruleset_path),
-        ("historical-axis", profile.historical_dqc_axis_config),
-    ]
-    if profile.dqc_ruleset_catalog is not None:
-        files.extend(
-            ("dqc-catalog:" + binding.taxonomy_namespace, binding.path)
-            for binding in profile.dqc_ruleset_catalog.bindings
-        )
-    logical_files = []
-    for role, item in files:
-        if item is not None:
-            with item.open("rb") as handle:
-                digest = hashlib.file_digest(handle, "sha256").hexdigest()
-                resources.append((str(item), digest))
-                logical_files.append((role + ":" + item.name, digest))
+    operation = _RESOURCE_OPERATION.get()
+    resources = (
+        operation.observe(profile, taxonomy_cache_dir, build_checks, reuse=True)
+        if operation is not None
+        else parser_action_resources(profile, taxonomy_cache_dir)
+    )
     staged = _files(path.parent)
     if dict(staged).get(path.name) != source_content_hash:
         raise SnapshotError("SOURCE_HASH_MISMATCH", "parser action input differs")
@@ -468,7 +1181,7 @@ def parser_action_input(
         entrypoint=path.name,
         files=staged,
         normalization_inputs=tuple(sorted(set(normalization_inputs))),
-        resources=tuple(sorted(dict(resources).items())),
+        resources=resources.physical,
         profile_digest=profile.digest(),
         taxonomy_version=taxonomy_version,
         source_content_hash=source_content_hash,
@@ -482,7 +1195,7 @@ def parser_action_input(
             return ParserActionInputV3.model_validate(
                 {
                     **fields,
-                    "resources": tuple(sorted((*resource_trees, *logical_files))),
+                    "resources": resources.logical,
                     "build": build,
                 }
             )

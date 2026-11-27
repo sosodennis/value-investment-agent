@@ -1,0 +1,101 @@
+{
+  "protocol": "issue495-synthetic-boundaries-v1",
+  "synthetic": true,
+  "issuer_id": "0000789019",
+  "cutoff_at": "2024-08-01T00:00:00Z",
+  "accepted_at": "2024-07-31T12:00:00Z",
+  "fiscal_year_start": "2023-07-01",
+  "quarters": [
+    {"quarter_id":"q1","start_date":"2023-07-01","end_date":"2023-09-30","fiscal_period_focus":"Q1"},
+    {"quarter_id":"q2","start_date":"2023-10-01","end_date":"2023-12-31","fiscal_period_focus":"Q2"},
+    {"quarter_id":"q3","start_date":"2024-01-01","end_date":"2024-03-31","fiscal_period_focus":"Q3"},
+    {"quarter_id":"q4","start_date":"2024-04-01","end_date":"2024-06-30","fiscal_period_focus":"FY"}
+  ],
+  "flow_observations": [
+    {"observation_id":"q1","end_date":"2023-09-30","value":"100","roles":["reported_quarter","same_span_ytd"]},
+    {"observation_id":"q2_ytd","end_date":"2023-12-31","value":"210","roles":["six_month_ytd"]},
+    {"observation_id":"q3_ytd","end_date":"2024-03-31","value":"330","roles":["nine_month_ytd"]},
+    {"observation_id":"fy","end_date":"2024-06-30","value":"490","roles":["full_fiscal_year"]}
+  ],
+  "base_expectations": {
+    "quarters": [
+      {"availability":"reported","value":"100","selected_observation_ids":["q1"]},
+      {"availability":"derived","value":"110","selected_observation_ids":["q2_ytd","q1"]},
+      {"availability":"derived","value":"120","selected_observation_ids":["q3_ytd","q2_ytd"]},
+      {"availability":"derived","value":"160","selected_observation_ids":["fy","q3_ytd"]}
+    ],
+    "ttm":{"availability":"derived","value":"490","outcome_code":"selected"}
+  },
+  "cases": [
+    {"id":"missing_prior_ytd","operation":"quarter","target":"q2","mutation":{"remove_fact":"q1"},"expected":{"availability":"unavailable","value":null,"outcome_code":"prior_ytd_unavailable"}},
+    {"id":"direct_only","operation":"quarter","target":"q2","mutation":{"add_fact":{"observation_id":"direct","start_date":"2023-10-01","end_date":"2023-12-31","value":"110","withhold_ytd":true}},"expected":{"availability":"reported","value":"110","outcome_code":"selected"}},
+    {"id":"direct_derived_conflict","operation":"quarter","target":"q2","mutation":{"add_fact":{"observation_id":"direct","start_date":"2023-10-01","end_date":"2023-12-31","value":"180"}},"expected":{"availability":"conflict","value":null,"outcome_code":"direct_derived_conflict","selected_observation_ids":[]}},
+    {"id":"conflicting_current_ytd","operation":"quarter","target":"q2","mutation":{"add_fact":{"observation_id":"duplicate_ytd","end_date":"2023-12-31","value":"211"}},"expected":{"availability":"conflict","value":null,"outcome_code":"source_candidate_conflict","selected_observation_ids":[]}},
+    {"id":"conflicting_direct","operation":"quarter","target":"q2","mutation":{"add_conflicting_direct":true},"expected":{"availability":"conflict","value":null,"outcome_code":"source_candidate_conflict","selected_observation_ids":[]}},
+    {"id":"conflicting_prior_ytd","operation":"quarter","target":"q2","mutation":{"add_fact":{"observation_id":"duplicate_q1","end_date":"2023-09-30","value":"101"}},"expected":{"availability":"conflict","value":null,"outcome_code":"source_candidate_conflict","selected_observation_ids":[]}},
+    {"id":"conflicting_q4_nine_month","operation":"quarter","target":"q4","mutation":{"add_fact":{"observation_id":"duplicate_nine_month","end_date":"2024-03-31","value":"331"}},"expected":{"availability":"conflict","value":null,"outcome_code":"source_candidate_conflict","selected_observation_ids":[]}},
+    {"id":"decimal_precision_overlap","operation":"quarter","target":"q2","mutation":{"add_fact":{"observation_id":"direct","start_date":"2023-10-01","end_date":"2023-12-31","value":"111","decimals":"-1"}},"expected":{"availability":"reported_with_derived_crosscheck","value":"111","direct_derived_crosscheck":"intervals_overlap"}},
+    {"id":"zero","operation":"quarter","target":"q1","mutation":{"fact":"q1","field":"value","value":"0"},"expected":{"availability":"reported","value":"0","selected_observation_ids":["q1"]}},
+    {"id":"negative","operation":"quarter","target":"q1","mutation":{"fact":"q1","field":"value","value":"-17"},"expected":{"availability":"reported","value":"-17","selected_observation_ids":["q1"]}},
+    {"id":"post_cutoff_comparative","operation":"quarter","target":"q2","mutation":{"add_fact":{"observation_id":"later","start_date":"2023-10-01","end_date":"2023-12-31","value":"999","accepted_at":"2024-08-01T00:00:01Z"}},"expected":{"availability":"derived","value":"110","rejection_reason":"after_cutoff"}},
+    {"id":"amendment_unknown_scope","operation":"quarter","target":"q2","mutation":{"add_fact":{"observation_id":"amendment","start_date":"2023-10-01","end_date":"2023-12-31","value":"999","form":"10-Q/A"}},"expected":{"availability":"derived","value":"110","rejection_reason":"unknown_amendment_scope"}},
+    {"id":"quarter_revision_mismatch","operation":"quarter","target":"q2","mutation":{"fact":"q2_ytd","field":"revision_basis_id","value":"other_revision"},"expected":{"availability":"conflict","value":null,"outcome_code":"revision_basis_mismatch"}},
+    {"id":"missing_quarter","operation":"ttm","mutation":{"remove_period":"q3"},"expected":{"availability":"rejected","outcome_code":"missing_quarter"}},
+    {"id":"duplicate_quarter","operation":"ttm","mutation":{"period":"q3","field":"quarter_id","value":"q2"},"expected":{"availability":"rejected","outcome_code":"duplicate_quarter"}},
+    {"id":"out_of_order_quarters","operation":"ttm","mutation":{"swap_periods":[1,2]},"expected":{"availability":"rejected","outcome_code":"out_of_order_quarters"}},
+    {"id":"overlapping_quarters","operation":"ttm","mutation":{"period":"q2","field":"start_date","value":"2023-09-30"},"expected":{"availability":"rejected","outcome_code":"overlapping_quarters"}},
+    {"id":"quarter_gap","operation":"ttm","mutation":{"period":"q2","field":"start_date","value":"2023-10-02"},"expected":{"availability":"rejected","outcome_code":"quarter_gap"}},
+    {"id":"invalid_quarter_duration","operation":"ttm","mutation":{"period":"q2","field":"end_date","value":"2023-09-29"},"expected":{"availability":"rejected","outcome_code":"invalid_quarter_duration"}},
+    {"id":"missing_quarter_flow","operation":"ttm","mutation":{"remove_cell":"q3/revenue"},"expected":{"availability":"missing","value":null,"outcome_code":"required_quarter_unavailable"}},
+    {"id":"issuer_mismatch","operation":"ttm","mutation":{"observation":"q3_ytd","field":"issuer_id","value":"0000320193"},"expected":{"availability":"conflict","value":null,"outcome_code":"issuer_mismatch"}},
+    {"id":"consolidation_scope_mismatch","operation":"ttm","mutation":{"observation":"q3_ytd","field":"consolidation_scope","value":"parent_only"},"expected":{"availability":"conflict","value":null,"outcome_code":"consolidation_scope_mismatch"}},
+    {"id":"dimension_mismatch","operation":"ttm","mutation":{"observation":"q3_ytd","field":"dimensions","value":[{"kind":"explicitmember","dimension":"sample:RegionAxis","member_or_value":"sample:US"}]},"expected":{"availability":"conflict","value":null,"outcome_code":"dimension_mismatch"}},
+    {"id":"unit_mismatch","operation":"ttm","mutation":{"observation":"q3_ytd","field":"unit_measures","value":["xbrli:shares"]},"expected":{"availability":"conflict","value":null,"outcome_code":"unit_mismatch"}},
+    {"id":"currency_mismatch","operation":"ttm","mutation":{"observation":"q3_ytd","field":"unit_measures","value":["iso4217:EUR"]},"expected":{"availability":"conflict","value":null,"outcome_code":"unit_mismatch"}},
+    {"id":"cash_flow_basis_mismatch","operation":"ttm","mutation":{"observation":"q3_ytd","field":"cash_basis","value":"restricted_included"},"expected":{"availability":"conflict","value":null,"outcome_code":"cash_basis_mismatch"}},
+    {"id":"revision_basis_mismatch","operation":"ttm","mutation":{"observation":"q3_ytd","field":"revision_basis_id","value":"other_revision"},"expected":{"availability":"conflict","value":null,"outcome_code":"revision_basis_mismatch"}},
+    {
+      "id": "diluted_eps",
+      "operation": "ttm_non_additive",
+      "row": {"row_id":"diluted_eps","statement":"income_statement","aggregation":"per_share"},
+      "qname": "us-gaap:EarningsPerShareDiluted",
+      "namespace_uri": "http://fasb.org/us-gaap/2024",
+      "unit_ref": "USDPerShare",
+      "unit_measures": ["iso4217:USD", "xbrli:shares"],
+      "quarter_values": ["1.10", "1.42", "1.29", "1.57"],
+      "expected": {"availability":"unsupported","value":null,"outcome_code":"non_additive_per_share"}
+    },
+    {
+      "id": "diluted_weighted_average_shares",
+      "operation": "ttm_non_additive",
+      "row": {"row_id":"diluted_weighted_average_shares","statement":"income_statement","aggregation":"weighted_average_shares"},
+      "qname": "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+      "namespace_uri": "http://fasb.org/us-gaap/2024",
+      "unit_ref": "shares",
+      "unit_measures": ["xbrli:shares"],
+      "quarter_values": ["102000000", "100000000", "97000000", "95000000"],
+      "expected": {"availability":"unsupported","value":null,"outcome_code":"non_additive_weighted_average_shares"}
+    },
+    {
+      "id": "gross_profit_margin",
+      "operation": "ttm_non_additive",
+      "row": {"row_id":"gross_profit_margin","statement":"income_statement","aggregation":"ratio"},
+      "qname": "synthetic:GrossProfitMargin",
+      "namespace_uri": "https://example.com/synthetic/2024",
+      "unit_ref": "pure",
+      "unit_measures": ["xbrli:pure"],
+      "quarter_values": ["0.27", "0.31", "0.29", "0.33"],
+      "expected": {"availability":"unsupported","value":null,"outcome_code":"non_additive_ratio"}
+    },
+    {"id":"missing_intermediate_instant","operation":"ttm","target":"total_assets","mutation":{"remove_cell":"q3/total_assets"},"expected":{"availability":"reported_instant","value":"910","outcome_code":"selected"}},
+    {"id":"missing_outer_instant","operation":"ttm","target":"total_assets","mutation":{"remove_cell":"q4/total_assets"},"expected":{"availability":"missing","value":null,"outcome_code":"required_quarter_unavailable"}},
+    {"id":"missing_intermediate_cash","operation":"ttm","target":"cash_flow_beginning_balance","mutation":{"remove_cell":"q2/cash_flow_beginning_balance"},"expected":{"availability":"reported_instant","value":"25","outcome_code":"selected"}},
+    {"id":"cash_boundary_basis_mismatch","operation":"ttm","target":"cash_flow_ending_balance","mutation":{"observation":"q4/cash_flow_ending_balance","field":"cash_basis","value":"restricted_included"},"expected":{"availability":"conflict","value":null,"outcome_code":"cash_boundary_basis_mismatch"}},
+    {"id":"source_missing","operation":"source","mutation":{"remove_response":true},"expected":{"availability":"rejected","outcome_code":"retained source bytes are missing"}},
+    {"id":"source_corruption","operation":"source","mutation":{"corrupt_bytes":true},"expected":{"availability":"rejected","outcome_code":"retained source digest differs"}},
+    {"id":"source_wrong_receipt_size","operation":"source","mutation":{"wrong_size":true},"expected":{"availability":"rejected","outcome_code":"retained source size differs"}},
+    {"id":"source_wrong_scope","operation":"parse_filing","mutation":{"issuer_scope":"0000320193"},"expected":{"availability":"rejected","outcome_code":"has a response receipt bound to another filing"}},
+    {"id":"primary_empty_document","operation":"parse_filing","mutation":{"html":""},"expected":{"availability":"rejected","outcome_code":"primary HTML could not be parsed"}},
+    {"id":"primary_missing_xbrl_filing_identity","operation":"parse_filing","mutation":{"html":"<html><body><broken>repairable</body></html>"},"expected":{"availability":"rejected","outcome_code":"missing inline XBRL filing identity"}}
+  ]
+}

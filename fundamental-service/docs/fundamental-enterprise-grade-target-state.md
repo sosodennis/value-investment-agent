@@ -1323,6 +1323,54 @@ validation and model teardown finish. Success, failure, cancellation and worker
 termination release its temporary resources. Package activation, source-constant
 evaluation and completed EFM/DQC evidence are required together.
 
+### 25.4.1 Fiscal historical-statement display admission v1
+
+The raw validation record and a fiscal statement display decision are separate
+records. The raw record keeps the complete EFM/DQC execution, every original
+finding, its code, severity and applicability, the unchanged report bytes and
+the original blocking result. A completed validator run does not mean that the
+filing passed validation. No display decision edits that record or changes the
+existing DQC applicability policy.
+
+The versioned `fiscal-historical-statement-display-v1` profile may authorize a
+provisional historical quarterly or TTM statement for one exact filing. An
+authenticated, independent accounting classification must support that scope.
+A separately authorized release decision must authorize that display. The
+service verifies each authority in its assigned role and records the evidence
+of independence. The decision retains the source,
+parser action, complete report, actual-focus witness, pinned runtime, profile
+and resource references, filing identity, row and period lineage, revision,
+cutoff, disclosure precision, source reconciliation, policy version, review
+evidence, signer identities, signatures, expiry and revocation history. It
+preserves the reported value and links the raw finding and the decision for
+inspection.
+
+The display decision applies only to its named historical statement release. It
+does not authorize an annual artifact, a valuation input, model eligibility or
+another source, period, revision, mapping or policy version. It does not mark
+the filing verified, certify GAAP tagging or represent an official waiver. A
+raw blocking finding continues to block any affected valuation path under the
+existing gate. This version can cover only one precisely identified active,
+non-critical diagnostic with typed source-bound evidence and review. Unknown,
+conflicting, critical, fatal and other unreviewed findings continue to block.
+Any later expansion requires a new normative policy version and independent
+review.
+
+Each decision is immutable and append-only. The service checks current
+authorization, expiry and revocation on every current read. As-of replay
+reconstructs the decision and authority state at the requested time. Current
+reads apply current policy and revocations. An amendment, restatement, source,
+report, resource, build, row, period, revision or policy change requires new
+evidence and a new decision. A prior decision does not carry forward.
+
+For a diagnostic covered by this profile, the actual-focus witness records only
+the focus objects observed while the pinned official validator executes,
+together with the complete facts and findings digests and their retained
+source, action, report, delivery, resource and build bindings. A witness does
+not authorize display or valuation. Missing or multiple target findings or
+focus objects, incomplete execution, a report mismatch, another blocking
+finding, or any changed dependency prevents witness creation.
+
 ### 25.5 Target-compatible service contract chain
 
 The isolated service must create the contracts that the enterprise stage will consume from its first release. It must not expose a temporary payload and plan to replace it later.

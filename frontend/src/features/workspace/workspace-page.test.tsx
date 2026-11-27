@@ -587,14 +587,16 @@ describe('WorkspacePage', () => {
         });
         render(<WorkspacePage />);
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Debate' }));
-        const evidenceButton = screen.getByRole('button', { name: /Verdict Display/i });
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'Debate' }), { button: 0, ctrlKey: false });
+        const evidenceButton = within(screen.getByRole('region', { name: 'Report evidence' })).getByRole('button', { name: /Verdict Display/i });
         evidenceButton.focus();
         fireEvent.click(evidenceButton);
 
         const dialog = screen.getByRole('dialog');
         expect(within(dialog).getByText('Evidence inspector')).toBeTruthy();
-        expect(within(dialog).getByText('Debate Arena summary')).toBeTruthy();
+        expect(within(dialog).getByLabelText('Original value · full precision')).toHaveProperty('value', 'Positive outlook');
+        fireEvent.click(within(dialog).getByText(/Browse all evidence/));
+        expect(await within(dialog).findByRole('button', { name: /Debate Arena summary/ })).toBeTruthy();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close evidence inspector' }));
         await waitFor(() => expect(document.activeElement).toBe(evidenceButton));
     });

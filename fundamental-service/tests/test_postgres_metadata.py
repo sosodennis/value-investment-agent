@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import multiprocessing
@@ -18,8 +19,9 @@ from uuid import uuid4
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncTransaction
 
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
@@ -57,11 +59,18 @@ from fundamental_service.metadata import (
     PostgresContentStore,
     PostgresMetadataStore,
     PostgresSnapshotRepository,
+    metadata_operation_budget,
 )
 from fundamental_service.operations import OperationsConfig
 from fundamental_service.policies import PolicyRecordV1, initial_model_specs
-from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
-from fundamental_service.serialization import sha256_digest
+from fundamental_service.replay import ArtifactPublicationDeadlineExceeded
+from fundamental_service.sec_source import (
+    SecEdgarSourceAdapter,
+    SecRequestPolicy,
+    SecSourceError,
+    sec_deadline_exceeded,
+)
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.source_acquisition import SecAcquisitionUseCase
 from fundamental_service.testsupport import (
@@ -1090,6 +1099,201 @@ def test_postgres_sec_request_slot_matches_source_adapter_callback(
     assert source.source_id == "sec-companyfacts"
 
 
+@pytest.mark.parametrize(
+    ("entry", "statement_fragment"),
+    [
+        ("capture", "SELECT pg_try_advisory_lock"),
+        ("index", "INSERT INTO fundamental.parser_action_results"),
+        ("pacing", "UPDATE fundamental.sec_provider_rate_limits"),
+    ],
+)
+def test_fiscal_metadata_entries_share_deadline(
+    metadata, tmp_path, monkeypatch, entry, statement_fragment
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    action_key = sha256_digest(uuid4().hex)
+    artifact_id = f"fiscal-operation-budget-{action_key}"
+    artifacts.put_with_receipt(artifact_id, {"value": "immutable"})
+    acquisition = SimpleNamespace(metadata=metadata)
+    acquisition._capture_lock = SecAcquisitionUseCase._capture_lock.__get__(acquisition)
+    sql_started, sql_cancelled = Event(), Event()
+    connection_returned = Event()
+    opened = False
+    execute = AsyncConnection.execute
+
+    async def slow_sql(connection, statement, *args, **kwargs):
+        result = await execute(connection, statement, *args, **kwargs)
+        if statement_fragment in str(statement) and not sql_started.is_set():
+            sql_started.set()
+            try:
+                await execute(connection, text("SELECT pg_sleep(1.5)"))
+            except asyncio.CancelledError:
+                sql_cancelled.set()
+                raise
+        return result
+
+    def checked_in(*_args):
+        if sql_started.is_set():
+            connection_returned.set()
+
+    def open_response(_request, *, timeout):
+        nonlocal opened
+        opened = True
+        raise AssertionError(f"HTTP opened with stale remaining time {timeout}")
+
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=open_response,
+        request_slot=metadata.reserve_sec_provider_request_slot,
+    )
+    monkeypatch.setattr(AsyncConnection, "execute", slow_sql)
+    pool = metadata._runner._engine.sync_engine.pool
+    event.listen(pool, "checkin", checked_in)
+    try:
+        start = time.monotonic()
+        deadline = datetime.now(UTC) + timedelta(seconds=0.35)
+        with (
+            SecAcquisitionUseCase._fiscal_metadata_operation(deadline),
+            pytest.raises(SecSourceError, match="deadline"),
+        ):
+            if entry == "capture":
+                with acquisition._capture_lock(action_key):
+                    pytest.fail("expired capture lock entered source acquisition")
+            elif entry == "index":
+                metadata.publish_parser_action_result(action_key, artifact_id)
+            else:
+                adapter.capture_company_facts("0000320193", deadline_at=deadline)
+        assert time.monotonic() - start < 1, "caller waited for the untimed SQL"
+        assert sql_started.is_set()
+        assert sql_cancelled.wait(3), "PostgreSQL wait was never cancelled"
+        assert connection_returned.wait(3), "cancelled connection was never returned"
+    finally:
+        event.remove(pool, "checkin", checked_in)
+    assert not opened
+    assert metadata.parser_action_result(action_key) is None
+    lease = metadata.try_acquire_ingestion_lock(action_key)
+    assert lease is not None
+    metadata.release_ingestion_lock(lease)
+    metadata.publish_parser_action_result(action_key, artifact_id)
+    metadata.publish_parser_action_result(action_key, artifact_id)
+    assert metadata.parser_action_result(action_key) == artifact_id
+
+
+def test_fiscal_index_checks_deadline_at_commit(metadata, tmp_path, monkeypatch):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    action_key = sha256_digest(uuid4().hex)
+    artifact_id = f"fiscal-operation-commit-{action_key}"
+    artifacts.put_with_receipt(artifact_id, {"value": "immutable"})
+    expired = Event()
+    exit_transaction = AsyncTransaction.__aexit__
+
+    async def expire_at_commit(transaction, exc_type, exc_value, traceback):
+        if exc_type is None and not expired.is_set():
+            expired.set()
+        return await exit_transaction(transaction, exc_type, exc_value, traceback)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncTransaction, "__aexit__", expire_at_commit)
+        with (
+            metadata_operation_budget(
+                lambda: 0 if expired.is_set() else 3, sec_deadline_exceeded
+            ),
+            pytest.raises(SecSourceError, match="deadline"),
+        ):
+            metadata.publish_parser_action_result(action_key, artifact_id)
+
+    assert metadata.parser_action_result(action_key) is None
+    metadata.publish_parser_action_result(action_key, artifact_id)
+    metadata.publish_parser_action_result(action_key, artifact_id)
+    assert metadata.parser_action_result(action_key) == artifact_id
+
+
+def test_fiscal_metadata_scopes_isolate_actors_and_release_expired_lease(metadata):
+    first_key = sha256_digest(uuid4().hex)
+    second_key = sha256_digest(uuid4().hex)
+    first_expired = Event()
+    both_started = Barrier(2, timeout=3)
+
+    def first_actor():
+        with metadata_operation_budget(
+            lambda: 0 if first_expired.is_set() else 3, sec_deadline_exceeded
+        ):
+            lease = metadata.try_acquire_ingestion_lock(first_key)
+            assert lease is not None
+            first_expired.set()
+            both_started.wait()
+            with (
+                metadata_operation_budget(lambda: 5, sec_deadline_exceeded),
+                pytest.raises(SecSourceError, match="deadline"),
+            ):
+                metadata.try_acquire_ingestion_lock(second_key)
+            metadata.release_ingestion_lock(lease)
+            with pytest.raises(SecSourceError, match="deadline"):
+                metadata.parser_action_result(first_key)
+        return metadata.try_acquire_ingestion_lock(first_key)
+
+    def second_actor():
+        with metadata_operation_budget(lambda: 5, sec_deadline_exceeded):
+            both_started.wait()
+            lease = metadata.try_acquire_ingestion_lock(second_key)
+            assert lease is not None
+            metadata.release_ingestion_lock(lease)
+        assert metadata.parser_action_result(second_key) is None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(first_actor)
+        second = executor.submit(second_actor)
+        lease = first.result(timeout=5)
+        second.result(timeout=5)
+    assert lease is not None
+    metadata.release_ingestion_lock(lease)
+
+
+def test_fiscal_metadata_close_completes_cancelled_lock_cleanup(metadata, monkeypatch):
+    acquisition_key = sha256_digest(uuid4().hex)
+    execute = AsyncConnection.execute
+    cancellation_finished = Event()
+
+    async def slow_lock(connection, statement, *args, **kwargs):
+        result = await execute(connection, statement, *args, **kwargs)
+        if str(statement).startswith("SELECT pg_try_advisory_lock"):
+            try:
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                await asyncio.sleep(0.15)
+                cancellation_finished.set()
+                raise
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncConnection, "execute", slow_lock)
+        with (
+            SecAcquisitionUseCase._fiscal_metadata_operation(
+                datetime.now(UTC) + timedelta(seconds=0.35)
+            ),
+            pytest.raises(SecSourceError, match="deadline"),
+        ):
+            metadata.try_acquire_ingestion_lock(acquisition_key)
+        metadata.close()
+
+    assert cancellation_finished.is_set()
+    assert DATABASE_URL is not None
+    observer = PostgresMetadataStore(DATABASE_URL)
+    observer.start()
+    try:
+        lease = observer.try_acquire_ingestion_lock(acquisition_key)
+        assert lease is not None
+        observer.release_ingestion_lock(lease)
+    finally:
+        observer.close()
+
+
 def test_versioned_releases_and_mappings_are_durable_and_immutable(
     metadata: PostgresMetadataStore,
 ):
@@ -1204,6 +1408,185 @@ def test_artifact_publication_is_concurrent_and_hash_verified(
     assert path.read_bytes() == b"tampered"
 
 
+@pytest.mark.parametrize(
+    "when", ["after_insert", "before_commit", "during_sql", "during_commit_wait"]
+)
+def test_artifact_publication_rolls_back_when_deadline_expires(
+    metadata, tmp_path, monkeypatch, when
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    artifact_id = f"artifact-deadline-{uuid4().hex}"
+    payload = {"value": "immutable"}
+    now = datetime.now(UTC)
+    short_budget = when in {"during_sql", "during_commit_wait"}
+    deadline = now + (timedelta(seconds=1) if short_budget else timedelta(minutes=1))
+    execute = AsyncConnection.execute
+    exit_transaction = AsyncTransaction.__aexit__
+    inserted = False
+    commit_wait_cancelled = False
+
+    async def expire_after_insert(connection, statement, parameters=None, **kwargs):
+        nonlocal now, inserted
+        result = await execute(connection, statement, parameters, **kwargs)
+        if (
+            str(statement).startswith("INSERT INTO fundamental.artifact_references")
+            and parameters
+            and parameters["artifact_id"] == artifact_id
+        ):
+            assert result.rowcount == 1
+            inserted = True
+            if when == "after_insert":
+                now = deadline
+            elif when == "during_sql":
+                await execute(connection, text("SELECT pg_sleep(5)"))
+        return result
+
+    async def expire_before_commit(transaction, exc_type, exc_value, traceback):
+        nonlocal now, commit_wait_cancelled
+        if when == "before_commit" and inserted and exc_type is None:
+            now = deadline
+        elif when == "during_commit_wait" and inserted and exc_type is None:
+            try:
+                await execute(transaction.connection, text("SELECT pg_sleep(5)"))
+            except asyncio.CancelledError:
+                commit_wait_cancelled = True
+                raise
+            now = deadline
+        return await exit_transaction(transaction, exc_type, exc_value, traceback)
+
+    def remaining():
+        return (deadline - now).total_seconds()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AsyncConnection, "execute", expire_after_insert)
+        patch.setattr(AsyncTransaction, "__aexit__", expire_before_commit)
+        if when == "during_commit_wait":
+            run = metadata._runner.run
+
+            def run_with_legacy_wait(coroutine, **kwargs):
+                return run(coroutine)
+
+            patch.setattr(metadata._runner, "run", run_with_legacy_wait)
+        try:
+            artifacts.put_with_receipt(
+                artifact_id, payload, publication_budget=remaining
+            )
+        except ArtifactPublicationDeadlineExceeded as expired:
+            assert expired.code == "REQUEST_DEADLINE_EXCEEDED"
+        else:
+            persisted = artifacts.get(artifact_id)
+            pytest.fail(f"expired publication committed metadata: {persisted}")
+    assert inserted
+    if when == "during_commit_wait":
+        assert commit_wait_cancelled, "the pre-commit SQL wait ran past the deadline"
+    with pytest.raises(SnapshotError) as missing:
+        artifacts.get(artifact_id)
+    assert missing.value.code == "ARTIFACT_NOT_FOUND"
+
+    deadline += timedelta(minutes=1)
+    published = artifacts.put_with_receipt(
+        artifact_id, payload, publication_budget=remaining
+    )
+    assert published.wrote
+    assert artifacts.read(artifact_id) == b'{"value":"immutable"}'
+
+    now = deadline
+    with pytest.raises(ArtifactPublicationDeadlineExceeded):
+        artifacts.put_with_receipt(artifact_id, payload, publication_budget=remaining)
+    deadline += timedelta(minutes=1)
+    assert (
+        artifacts.put_with_receipt(
+            artifact_id, payload, publication_budget=remaining
+        ).artifact
+        == published.artifact
+    )
+    assert not artifacts.put_with_receipt(
+        artifact_id, payload, publication_budget=remaining
+    ).wrote
+
+
+def test_artifact_publication_bridge_cancels_exhausted_wait(
+    metadata, tmp_path, monkeypatch
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    artifact_id = f"artifact-bridge-deadline-{uuid4().hex}"
+    payload = {"value": "immutable"}
+    exit_transaction = AsyncTransaction.__aexit__
+    submit = asyncio.run_coroutine_threadsafe
+    submitted = None
+    entered_commit_wait = Event()
+    release_event_loop = Event()
+    event_loop_wait_expired = Event()
+    commit_wait_cancelled = Event()
+    connection_returned = Event()
+
+    def track_submission(coroutine, loop):
+        nonlocal submitted
+        submitted = submit(coroutine, loop)
+        return submitted
+
+    async def block_before_commit(transaction, exc_type, exc_value, traceback):
+        if exc_type is None and not entered_commit_wait.is_set():
+            result = await transaction.connection.execute(
+                text(
+                    "SELECT 1 FROM fundamental.artifact_references "
+                    "WHERE artifact_id=:artifact_id"
+                ),
+                {"artifact_id": artifact_id},
+            )
+            if result.scalar_one_or_none() is not None:
+                entered_commit_wait.set()
+                if not release_event_loop.wait(timeout=5):
+                    event_loop_wait_expired.set()
+                try:
+                    await asyncio.sleep(0)
+                except asyncio.CancelledError:
+                    commit_wait_cancelled.set()
+                    raise
+        return await exit_transaction(transaction, exc_type, exc_value, traceback)
+
+    def track_checkin(*args):
+        if entered_commit_wait.is_set():
+            connection_returned.set()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(asyncio, "run_coroutine_threadsafe", track_submission)
+        patch.setattr(AsyncTransaction, "__aexit__", block_before_commit)
+        pool = metadata._runner._engine.sync_engine.pool
+        event.listen(pool, "checkin", track_checkin)
+        deadline = time.monotonic() + 1
+        try:
+            try:
+                with pytest.raises(ArtifactPublicationDeadlineExceeded) as expired:
+                    artifacts.put_with_receipt(
+                        artifact_id,
+                        payload,
+                        publication_budget=lambda: deadline - time.monotonic(),
+                    )
+                assert expired.value.code == "REQUEST_DEADLINE_EXCEEDED"
+                assert entered_commit_wait.is_set()
+                assert not event_loop_wait_expired.is_set(), (
+                    "the synchronous caller waited for the blocked event loop"
+                )
+                assert submitted is not None and submitted.cancelled()
+            finally:
+                release_event_loop.set()
+            assert commit_wait_cancelled.wait(timeout=5)
+            assert connection_returned.wait(timeout=5)
+        finally:
+            event.remove(pool, "checkin", track_checkin)
+
+    with pytest.raises(SnapshotError) as missing:
+        artifacts.get(artifact_id)
+    assert missing.value.code == "ARTIFACT_NOT_FOUND"
+    assert artifacts.put_with_receipt(artifact_id, payload).wrote
+    assert not artifacts.put_with_receipt(artifact_id, payload).wrote
+
+
 @pytest.mark.parametrize("fault", ("status", "dependency", "missing"))
 def test_retained_artifact_operation_rejects_metadata_changes(
     metadata: PostgresMetadataStore, tmp_path: Path, fault: str
@@ -1305,6 +1688,224 @@ def _change_artifact_metadata(metadata, query, parameters):
             await connection.execute(text(query), parameters)
 
     metadata._runner.run(change())
+
+
+def test_current_records_observes_fresh_absence_and_metadata_without_registration(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(uuid4().hex, {"retained": uuid4().hex})
+    absent = tuple((uuid4().hex, None) for _ in range(4095))
+    expected = (*absent, (record.artifact_id, record))
+    readonly = artifacts.as_read_only()
+    readonly.require_current_records(expected, check_deadline=lambda: None)
+    _change_artifact_metadata(
+        metadata,
+        "DELETE FROM fundamental.content_objects "
+        "WHERE content_hash=:hash AND media_type=:media",
+        {"hash": record.content_hash, "media": record.media_type},
+    )
+    readonly.require_current_records(expected, check_deadline=lambda: None)
+    with pytest.raises(SnapshotError) as missing_registration:
+        metadata.content_byte_length(record.content_hash, media_type=record.media_type)
+    assert missing_registration.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
+    artifacts.put(absent[0][0], {"appeared": uuid4().hex})
+    with pytest.raises(DataReleaseError) as changed:
+        readonly.require_current_records(expected, check_deadline=lambda: None)
+    assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+
+
+def test_current_records_does_not_reuse_an_active_scoped_starting_record(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(uuid4().hex, {"retained": uuid4().hex})
+    readonly = artifacts.as_read_only()
+    with pytest.raises(DataReleaseError) as changed:
+        with readonly.scoped_read_operation():
+            assert readonly.get(record.artifact_id) == record
+            _change_artifact_metadata(
+                metadata,
+                "UPDATE fundamental.artifact_references SET status='invalidated' "
+                "WHERE artifact_id=:id",
+                {"id": record.artifact_id},
+            )
+            readonly.require_current_records(
+                ((record.artifact_id, record),), check_deadline=lambda: None
+            )
+    assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+
+
+def _bounded_artifact_read(store, identity, maximum_bytes, checked):
+    if checked:
+        return store.read_bounded_checked(
+            identity, before=lambda record: maximum_bytes
+        )[1]
+    return store.read_bounded(identity, maximum_bytes=maximum_bytes)
+
+
+@pytest.mark.parametrize("checked", (False, True))
+def test_bounded_artifact_rechecks_actual_bytes_and_never_repairs_registration(
+    metadata: PostgresMetadataStore, tmp_path: Path, checked: bool
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    raw = canonical_bytes({"retained": uuid4().hex})
+    record = artifacts.put_bytes_with_receipt(uuid4().hex, raw).artifact
+    readonly = artifacts.as_read_only()
+    for store in (artifacts, readonly):
+        assert (
+            _bounded_artifact_read(store, record.artifact_id, len(raw), checked) == raw
+        )
+        with pytest.raises(SnapshotError) as overflow:
+            _bounded_artifact_read(store, record.artifact_id, len(raw) - 1, checked)
+        assert overflow.value.code == "FISCAL_CLOSURE_LIMIT"
+    path = content._filesystem._path(record.content_hash, record.media_type)
+    path.write_bytes(b"x" * len(raw))
+    with pytest.raises(SnapshotError) as corrupt:
+        _bounded_artifact_read(readonly, record.artifact_id, len(raw), checked)
+    assert corrupt.value.code == "SOURCE_HASH_MISMATCH"
+    path.write_bytes(raw)
+    _change_artifact_metadata(
+        metadata,
+        "DELETE FROM fundamental.content_objects "
+        "WHERE content_hash=:hash AND media_type=:media",
+        {"hash": record.content_hash, "media": record.media_type},
+    )
+    for store in (artifacts, readonly):
+        with pytest.raises(SnapshotError) as missing:
+            _bounded_artifact_read(store, record.artifact_id, len(raw), checked)
+        assert missing.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
+    with pytest.raises(SnapshotError) as still_missing:
+        metadata.content_byte_length(record.content_hash, media_type=record.media_type)
+    assert still_missing.value.code == "CONTENT_REGISTRATION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("artifact_change", ("missing", "different-pair"))
+@pytest.mark.parametrize("registration_missing", (False, True))
+@pytest.mark.parametrize("checked", (False, True))
+def test_bounded_artifact_after_observes_original_pair_even_if_artifact_changes(
+    metadata: PostgresMetadataStore,
+    tmp_path: Path,
+    monkeypatch,
+    artifact_change: str,
+    registration_missing: bool,
+    checked: bool,
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    raw = canonical_bytes({"before": uuid4().hex})
+    record = artifacts.put_bytes_with_receipt(uuid4().hex, raw).artifact
+    replacement = artifacts.put(uuid4().hex, {"after": uuid4().hex})
+    read = content._filesystem.get_bounded
+
+    def change_after_read(*args, **kwargs):
+        payload = read(*args, **kwargs)
+
+        async def change():
+            async with metadata._runner._engine.begin() as connection:
+                if registration_missing:
+                    await connection.execute(
+                        text(
+                            "DELETE FROM fundamental.content_objects "
+                            "WHERE content_hash=:hash AND media_type=:media"
+                        ),
+                        {"hash": record.content_hash, "media": record.media_type},
+                    )
+                if artifact_change == "missing":
+                    await connection.execute(
+                        text(
+                            "DELETE FROM fundamental.artifact_references "
+                            "WHERE artifact_id=:id"
+                        ),
+                        {"id": record.artifact_id},
+                    )
+                else:
+                    await connection.execute(
+                        text(
+                            "UPDATE fundamental.artifact_references "
+                            "SET content_hash=:hash, media_type=:media "
+                            "WHERE artifact_id=:id"
+                        ),
+                        {
+                            "id": record.artifact_id,
+                            "hash": replacement.content_hash,
+                            "media": replacement.media_type,
+                        },
+                    )
+
+        metadata._runner.run(change())
+        return payload
+
+    monkeypatch.setattr(content._filesystem, "get_bounded", change_after_read)
+    expected_type = (
+        SnapshotError
+        if registration_missing or artifact_change == "missing"
+        else DataReleaseError
+    )
+    with pytest.raises(expected_type) as refused:
+        _bounded_artifact_read(artifacts, record.artifact_id, len(raw), checked)
+    assert refused.value.code == (
+        "CONTENT_REGISTRATION_UNAVAILABLE"
+        if registration_missing
+        else (
+            "ARTIFACT_NOT_FOUND"
+            if artifact_change == "missing"
+            else "ARTIFACT_EVIDENCE_CHANGED"
+        )
+    )
+
+
+@pytest.mark.parametrize("limits", ({}, {"max_entries": 0}, {"max_bytes": 1}))
+@pytest.mark.parametrize("present", (False, True))
+def test_checked_retained_reads_keep_absence_and_final_fresh_guard(
+    metadata: PostgresMetadataStore, tmp_path: Path, limits, present
+):
+    from threading import get_ident
+
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    identity = uuid4().hex
+    raw = b'{"retained":true}'
+    record = (
+        artifacts.put_bytes_with_receipt(identity, raw).artifact if present else None
+    )
+    caller_thread = get_ident()
+    observed = []
+
+    def before(current):
+        assert get_ident() == caller_thread
+        observed.append(current)
+        return len(raw)
+
+    with pytest.raises(DataReleaseError) as changed:
+        with artifacts.retained_read_operation((identity,), **limits) as reader:
+            if present:
+                assert reader.read_bounded_checked(identity, before=before) == (
+                    record,
+                    raw,
+                )
+                _change_artifact_metadata(
+                    metadata,
+                    "UPDATE fundamental.artifact_references SET status='invalidated' "
+                    "WHERE artifact_id=:id",
+                    {"id": identity},
+                )
+            else:
+                with pytest.raises(SnapshotError) as missing:
+                    reader.read_bounded_checked(identity, before=before)
+                assert missing.value.code == "ARTIFACT_NOT_FOUND"
+                artifacts.put_bytes_with_receipt(identity, raw)
+    assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    assert observed == [record]
+    with pytest.raises(RuntimeError, match="ended"):
+        reader.read_bounded_checked(identity, before=before)
+    assert observed == [record]
 
 
 def test_retained_metadata_preserves_first_byte_failure_before_later_bad_row(

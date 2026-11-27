@@ -1,0 +1,459 @@
+{
+  "protocol": "issue495-independent-decimal-golden-v1",
+  "coverage": {
+    "source_count": 33,
+    "observation_count": 2061,
+    "quarter_cells": 800,
+    "quarter_missing": 16,
+    "quarter_conflicts": 0,
+    "ttm_windows": 20,
+    "ttm_cells": 500,
+    "annual_cells": 500,
+    "separately_reviewed_first_q4_basis_rows": 24,
+    "reviewed_quarter_basis_rows": 784,
+    "reviewed_ttm_basis_rows": 490,
+    "case_coverage": {
+      "aapl-historical": {
+        "quarter_cells": 200,
+        "reported": 154,
+        "derived": 38,
+        "missing": 8,
+        "conflict": 0
+      },
+      "aapl-current": {
+        "quarter_cells": 200,
+        "reported": 154,
+        "derived": 38,
+        "missing": 8,
+        "conflict": 0
+      },
+      "msft-historical": {
+        "quarter_cells": 200,
+        "reported": 176,
+        "derived": 24,
+        "missing": 0,
+        "conflict": 0
+      },
+      "msft-current": {
+        "quarter_cells": 200,
+        "reported": 176,
+        "derived": 24,
+        "missing": 0,
+        "conflict": 0
+      }
+    }
+  },
+  "annual_regression": {
+    "protocol": "issue495-annual-regression-golden-v1",
+    "source_fixture": "../annual-statements/issue494-golden.json",
+    "source_fixture_sha256": "2d96c51d8e33482e8177687dd03fa50aa2402b7503196012a0b9ef28be202ea3",
+    "cell_count": 500,
+    "method": "Select the primary annual row value whose context ends on the filing's actual fiscal-year end. Preserve the existing annual source hash and missing outcomes."
+  },
+  "inputs": {
+    "issue495-cohort.json": "4b7187a4b44bc118cc22ca3969981568ec486999b9351cfd5d5d4e98ec351852",
+    "issue495-row-policy.json": "455cb984e3166be8b484a74efe40f4c932eef87de36b455bee95084531ad6ef0",
+    "issue495-boundary-cases.json": "7fc416c31aba7ac4379f24bff4dfd5f18313a032ab3b5590deaffe7f248f71ae",
+    "issue495-legacy-hash-baseline.json": "680d03a5d1eeeb83acaba283056919b9b73bf761d02a38114ebb3212c8b97f7d",
+    "cases/aapl-current.json": "5393eec33bee6038cdeb9e575e596898687ad361067098555b1d1030302e898c",
+    "cases/aapl-historical.json": "9df75f81ac2e6b9ea772c97d2d3e553a1ad7eb4b7aa3eb41745013cd0b7c1634",
+    "cases/msft-current.json": "6f3e91c6575d75b77b7da7bd132296248e19b52bdf9bcd9bc717e11e5251d821",
+    "cases/msft-historical.json": "fc5db5d33e5e191010635d58287d89360d1bda5e3123d6296209562f90abcc1a",
+    "basis/aapl-historical-2023-09-30.json": "7d68f0ab91b6bd1a381b544715999b249e2f6e8ccec5474297b4d7839ff42dcc",
+    "basis/cohort-aapl-current.json": "e426865ec984560bc92eba6199c7431f71e081e8f238c653932e653d576c37a7",
+    "basis/cohort-aapl-historical.json": "3cd3573abc27ab12d6bcba0ed51edf66279c672b48c7e5d3612310d7d33c1611",
+    "basis/cohort-filings.json": "f5a14892565412946c10a208931a0ed82b12aff81bb297e4251638300541d35f",
+    "basis/cohort-msft-current.json": "3c47290410d907e0e9cbb1605a836947f1dd80c9e65bb8d710990fce621916b8",
+    "basis/cohort-msft-historical.json": "a33c92ea08afba129b409b1de5da9060653c80dfc5fd5ef1d9b1552ad4ba74c8"
+  },
+  "shards": {
+    "golden/annual/aapl-current.json": {
+      "bytes": 136155,
+      "sha256": "19d3545a3c0413e260414b85fcaa7898cf8f62e39f4d2b188b728009fef8572c"
+    },
+    "golden/annual/aapl-historical.json": {
+      "bytes": 138977,
+      "sha256": "2594168f06a0bc23ebbe370cb95c5c985aed4fd338374ab20b4943b16a7f9f9b"
+    },
+    "golden/annual/msft-current.json": {
+      "bytes": 142317,
+      "sha256": "88b96e2df6009a061d264ef984d7d9d11234abf37be480dc8f951b31822b6da0"
+    },
+    "golden/annual/msft-historical.json": {
+      "bytes": 142592,
+      "sha256": "d7b075e72c204def5878de6d5d982d5e3f3d7dbf7e127dd28cdb414a341341a5"
+    },
+    "golden/catalog/aapl-current.json": {
+      "bytes": 2968,
+      "sha256": "3055704ec0ab32814b366672386d08e064cfa45f365c6a49395d015af9aea858"
+    },
+    "golden/catalog/aapl-historical.json": {
+      "bytes": 2971,
+      "sha256": "51acaa85e2d99d141497491f3e62ad38eabd4386e63b9a20cac3960d17aaa0ac"
+    },
+    "golden/catalog/msft-current.json": {
+      "bytes": 3278,
+      "sha256": "51775deb81cea031eaac9147ea6ad736b287027c92c060794c5fbee3754e4d3b"
+    },
+    "golden/catalog/msft-historical.json": {
+      "bytes": 3289,
+      "sha256": "28af186a7aea4591aa4ed21924b5d6e4f66039e8facbfe4b52891fea0582a2cf"
+    },
+    "golden/quarter/aapl-current/2024-12-28.json": {
+      "bytes": 54193,
+      "sha256": "424084dd43ac96dd72fce0758e8227bdd7860f9d44a5e9f771c1ffd587c4dc7b"
+    },
+    "golden/quarter/aapl-current/2025-03-29.json": {
+      "bytes": 95735,
+      "sha256": "1d16ede989b0fe408498232c77fee1e86af2a184d3e64708830dd11128283acd"
+    },
+    "golden/quarter/aapl-current/2025-06-28.json": {
+      "bytes": 95779,
+      "sha256": "28bbafa3300866e91dc915143c67272b6d140c5f5431d0dbe3361e07082c5379"
+    },
+    "golden/quarter/aapl-current/2025-09-27.json": {
+      "bytes": 92648,
+      "sha256": "d7bc9ebb4582f38e07c9bd17639f69309c75de0c2a453effc451b777710cf6b7"
+    },
+    "golden/quarter/aapl-current/2025-12-27.json": {
+      "bytes": 51175,
+      "sha256": "cdcd1ab068c4e7ba5a4d859ea49b2c5bbc1407cb7493f54faa6297e16d5d0ffc"
+    },
+    "golden/quarter/aapl-current/2026-03-28.json": {
+      "bytes": 91850,
+      "sha256": "eff603fdd50c1c2fc653e97b873cb2ddb3aeaa81e192a57ab4f5a038124378ed"
+    },
+    "golden/quarter/aapl-current/2026-06-27.json": {
+      "bytes": 91909,
+      "sha256": "c75bbcf2e600244da7b01cdfe2048ac7b4c02f607acd5a1925ab09ec6bc32180"
+    },
+    "golden/quarter/aapl-current/2026-09-26.json": {
+      "bytes": 83995,
+      "sha256": "f8758990031df928a929cb221c93e05578eeee297bb93d07b00197d1a564cdaf"
+    },
+    "golden/quarter/aapl-current/index.json": {
+      "bytes": 1094,
+      "sha256": "82539711223ce82d69680a8512c98cfd965bf8e598f60afd00f7270226e340ac"
+    },
+    "golden/quarter/aapl-historical/2022-12-31.json": {
+      "bytes": 54947,
+      "sha256": "e3d71f80b7d7ba768e6010afcdc6d91137d893dd56800240699554eed50b0860"
+    },
+    "golden/quarter/aapl-historical/2023-04-01.json": {
+      "bytes": 96415,
+      "sha256": "731271af5a335a6ed61274e3c51301b8709e18c3a145b5f4cf9e936125f0bc02"
+    },
+    "golden/quarter/aapl-historical/2023-07-01.json": {
+      "bytes": 95907,
+      "sha256": "df4c97d6736454951c1c7b38608e4fca5c3245ee8f2e5de3fafdb75a8bcd4e8d"
+    },
+    "golden/quarter/aapl-historical/2023-09-30.json": {
+      "bytes": 101780,
+      "sha256": "ac0c6c93d3fb4c8043acdbbecb91c2db06d5ef410f789d2fedd1d20056663a04"
+    },
+    "golden/quarter/aapl-historical/2023-12-30.json": {
+      "bytes": 51381,
+      "sha256": "34b7cef494c585925517c63bf54378e43bbefd6145a8a586d1008582aa4cffb1"
+    },
+    "golden/quarter/aapl-historical/2024-03-30.json": {
+      "bytes": 91980,
+      "sha256": "6d2818aa39d15922bf00086f7d8625da7e5b4fb1edc7a2fd400ca4210386bae8"
+    },
+    "golden/quarter/aapl-historical/2024-06-29.json": {
+      "bytes": 92006,
+      "sha256": "e9d8b6a69424e416c37cbb4aa92df4bc7c55712428a4cfeafcc795908a7c3f20"
+    },
+    "golden/quarter/aapl-historical/2024-09-28.json": {
+      "bytes": 84140,
+      "sha256": "36e06dd4c796e7fb25bebbed2da6b25331ee2c26127a206957ffc6026b138177"
+    },
+    "golden/quarter/aapl-historical/index.json": {
+      "bytes": 1097,
+      "sha256": "927ba6eefd787a69b979684098a13b5f2cb8b27e5a09f91598c9a43c4a52c8c5"
+    },
+    "golden/quarter/msft-current/2024-12-31.json": {
+      "bytes": 106430,
+      "sha256": "fbaea711583ce5770c170e741307c29273c6867f20e443c2189d07aaa624a7e2"
+    },
+    "golden/quarter/msft-current/2025-03-31.json": {
+      "bytes": 106720,
+      "sha256": "2a81612aa9dc595df141e99e8e24fa083ede0d3f54b1ac05a333a83f11e3c877"
+    },
+    "golden/quarter/msft-current/2025-06-30.json": {
+      "bytes": 96171,
+      "sha256": "61a4906261081069c851199a7eda4e3d681f09fc0edc611fad8bba0f46e7620c"
+    },
+    "golden/quarter/msft-current/2025-09-30.json": {
+      "bytes": 54664,
+      "sha256": "1ca30fc59eef372080d9d4332b6e7b74059717a87a618b22775dbc047c8d3ba4"
+    },
+    "golden/quarter/msft-current/2025-12-31.json": {
+      "bytes": 103189,
+      "sha256": "1ae9489ab6ddc1c4089ecd85badf60f1eabf798d716f7b4c137e918795bec0ad"
+    },
+    "golden/quarter/msft-current/2026-03-31.json": {
+      "bytes": 101448,
+      "sha256": "30316d2d9d73c19f87fbc8b3b5542a5392de6aa77b54a9e8b2ae17579b7354fc"
+    },
+    "golden/quarter/msft-current/2026-06-30.json": {
+      "bytes": 88419,
+      "sha256": "b47385a811081534b57e63ae8ef5aef7dd391eb9c17e20b2fdd52cc89c0c18ba"
+    },
+    "golden/quarter/msft-current/2026-09-30.json": {
+      "bytes": 51279,
+      "sha256": "4a59b32f6fbd0ebf0fb8122722aded0006f683783b94826c2e1ca4efd6383c05"
+    },
+    "golden/quarter/msft-current/index.json": {
+      "bytes": 1094,
+      "sha256": "a16e3f1d9026416587f683200a4f95fbe3c5b1d532ddad8ce0ab26ded18914cf"
+    },
+    "golden/quarter/msft-historical/2022-12-31.json": {
+      "bytes": 106542,
+      "sha256": "d7ad2de3501a770a6fff577a311364654ef039a34cf12eb520a7ea2eadb44ea9"
+    },
+    "golden/quarter/msft-historical/2023-03-31.json": {
+      "bytes": 106910,
+      "sha256": "36cbc52d9ffed423acf09f992af7f078e249b1b9623b3432ce46a03473a24cce"
+    },
+    "golden/quarter/msft-historical/2023-06-30.json": {
+      "bytes": 96336,
+      "sha256": "79c481d63f93866c887eb6ad92659ca2685cb139818cc489885b3a1372ba2dba"
+    },
+    "golden/quarter/msft-historical/2023-09-30.json": {
+      "bytes": 54866,
+      "sha256": "59385c65e38c453708f63a6afb24265334d687720e8eb92c0bba926ba6077edb"
+    },
+    "golden/quarter/msft-historical/2023-12-31.json": {
+      "bytes": 103412,
+      "sha256": "23a449463b2d5fd9b96971827f0aea5ecf0e8bfa3c5d4a9abcd1e9f3c24b2c01"
+    },
+    "golden/quarter/msft-historical/2024-03-31.json": {
+      "bytes": 101766,
+      "sha256": "75774072938b57595d27dac7abcc154e22135b5323df67e54a5b26b04655195f"
+    },
+    "golden/quarter/msft-historical/2024-06-30.json": {
+      "bytes": 88737,
+      "sha256": "0b63c7e4b630346ac33d8e8cf39ff86ac9c5c3af802285003411b8e84705ae1e"
+    },
+    "golden/quarter/msft-historical/2024-09-30.json": {
+      "bytes": 51482,
+      "sha256": "951c04905217f7722b4f5119009f72ffc242211a7765e289d50610bd4b3bb6cc"
+    },
+    "golden/quarter/msft-historical/index.json": {
+      "bytes": 1097,
+      "sha256": "663ce7db13bfe31c23204299ff43707d2b4ce2106a36f681f396b5a3ec690150"
+    },
+    "golden/sources/0000320193-23-000006.json": {
+      "bytes": 86278,
+      "sha256": "0b7ef5e41ac0e8cfd02629be4ae5fbc1117139b172b1b54ebbd180c46eb09caa"
+    },
+    "golden/sources/0000320193-23-000064.json": {
+      "bytes": 106470,
+      "sha256": "adda213ac5955b6cc74b545745f85f4eb9060e5bd04015e7ed501567d0e44e07"
+    },
+    "golden/sources/0000320193-23-000077.json": {
+      "bytes": 101140,
+      "sha256": "f28ff06d5625e6327b09f52007e616aa6e10a2029bfdb1096bf7ced359840db7"
+    },
+    "golden/sources/0000320193-23-000106.json": {
+      "bytes": 100565,
+      "sha256": "8524eff9c36479b8c18047c0faadb803f1b2a69d5294fc6166b6810056b09882"
+    },
+    "golden/sources/0000320193-24-000006.json": {
+      "bytes": 82254,
+      "sha256": "bf0a140907204b4dce301f8d83c73fb7d44e4077f97201bc422dc8fd9bb7b656"
+    },
+    "golden/sources/0000320193-24-000069.json": {
+      "bytes": 100571,
+      "sha256": "61e3828f334953c4ec57444cdeb26a5299594272709ca34942f7fab605410438"
+    },
+    "golden/sources/0000320193-24-000081.json": {
+      "bytes": 100707,
+      "sha256": "6df2cebcf5b7b0ce022423a817b650fd91d03e58e9aa158a57f10acdef2a1e2f"
+    },
+    "golden/sources/0000320193-24-000123.json": {
+      "bytes": 100706,
+      "sha256": "003064123e85cc1d28ea75fcc3d6580dcb0744b67b3284ad77fbd4a760a2a1a6"
+    },
+    "golden/sources/0000320193-25-000008.json": {
+      "bytes": 82396,
+      "sha256": "4b4cd0bde783ebe5a4da9de091a45759b465a78c1ea0017c4844d7ff300a7c02"
+    },
+    "golden/sources/0000320193-25-000057.json": {
+      "bytes": 100963,
+      "sha256": "0fdb46bfe0ab282a4ecc2efee108d701384ea03fe969b1de78f793055035da36"
+    },
+    "golden/sources/0000320193-25-000073.json": {
+      "bytes": 101048,
+      "sha256": "0fb1ffd16f280deaf83889e457cdfbb23c2c94c6466f5d3964650e726423e22c"
+    },
+    "golden/sources/0000320193-25-000079.json": {
+      "bytes": 100826,
+      "sha256": "947d2ae024b1821b85ae30ba5787e2b1d7a865550de11e53a71d4e42b54ba571"
+    },
+    "golden/sources/0000320193-26-000006.json": {
+      "bytes": 82196,
+      "sha256": "cef86f54093f4ca0974586f4d9376dd8d6376a80978db083326cf42cfcc6c636"
+    },
+    "golden/sources/0000320193-26-000013.json": {
+      "bytes": 101073,
+      "sha256": "59fda86559fbb4f9e0fa9796b9413ded3609f9989fac55b0dab57bed875de32c"
+    },
+    "golden/sources/0000320193-26-000020.json": {
+      "bytes": 101232,
+      "sha256": "ee85e0edceed18e3dde0d92677d5722f750ee38fab96fbc78decf97092d0c550"
+    },
+    "golden/sources/0000320193-26-000026.json": {
+      "bytes": 100964,
+      "sha256": "a3666111483645b1b708976e76dc59e62feed82159a4383d56fcfc5491efbe5e"
+    },
+    "golden/sources/0000950170-23-014423.json": {
+      "bytes": 133263,
+      "sha256": "e5bbb6dfee64992e6a4fb8af4f4be8c52d165397aa2abf6c5822cfaee16b4af9"
+    },
+    "golden/sources/0000950170-23-035122.json": {
+      "bytes": 114281,
+      "sha256": "624d6cb4c4d6025ef01ef498fa4a7ddce09dcca6b26fb8ff099863522e6f43e0"
+    },
+    "golden/sources/0000950170-23-054855.json": {
+      "bytes": 94303,
+      "sha256": "cb00e2fd20ad84da48774918a3d5231032b401006d19afc529cbc33daa760489"
+    },
+    "golden/sources/0000950170-24-008814.json": {
+      "bytes": 134161,
+      "sha256": "22234684c2acb1a1ad206e1e7156bb08c07fc2feecaa5694bc2b2171d7d444a4"
+    },
+    "golden/sources/0000950170-24-048288.json": {
+      "bytes": 134398,
+      "sha256": "2988d482927983468a9a9f2c888c81a6615046e7ddbbfa54f82b316b032e7a55"
+    },
+    "golden/sources/0000950170-24-087843.json": {
+      "bytes": 114949,
+      "sha256": "f00d6e0cab7b2e54ca8982c434901fbf557b162ff498a579e7461a402b839505"
+    },
+    "golden/sources/0000950170-24-118967.json": {
+      "bytes": 94643,
+      "sha256": "4288008b787d2c3c78a82c876720d8d393436cd9b0de96abd25a36036ad80a99"
+    },
+    "golden/sources/0000950170-25-010491.json": {
+      "bytes": 134398,
+      "sha256": "cb31852016535eb9393d1dee57c80ebcb1166d9f8f78cdd29059956df4b4e60f"
+    },
+    "golden/sources/0000950170-25-061046.json": {
+      "bytes": 133966,
+      "sha256": "fa497a0df62b7462661ded8f9e282a645b8a7ddc8313784998c0d6efdffac34b"
+    },
+    "golden/sources/0000950170-25-100235.json": {
+      "bytes": 114509,
+      "sha256": "d0453889f706936c33933ccd6f65bcf772586681e2f6bb6ffe33d8f4b8615ff2"
+    },
+    "golden/sources/0001193125-25-256321.json": {
+      "bytes": 93944,
+      "sha256": "b65e0df286034473cbdc3b86073b0589e741978c347fa50d2446a2f71acd0e81"
+    },
+    "golden/sources/0001193125-26-027207.json": {
+      "bytes": 133783,
+      "sha256": "47b463057694deed54b53dd6b353a0c1b81987a863f16a8450c97e5a2e9ec1e2"
+    },
+    "golden/sources/0001193125-26-191507.json": {
+      "bytes": 132329,
+      "sha256": "38f82df75dc11d9934e51d42558091c61cf24294daba6c4de66b4f3bfadcb5ef"
+    },
+    "golden/sources/0001193125-26-323660.json": {
+      "bytes": 114756,
+      "sha256": "c62c2fc90aac260b8ffd6171e4670a857e5d7213e4e28b9f3b19132f94090948"
+    },
+    "golden/sources/0001193125-26-436133.json": {
+      "bytes": 93821,
+      "sha256": "492cc7b379d6199df648dbe6d90df89ff05e8f4ba914f877ee9e4469c42f355c"
+    },
+    "golden/sources/0001564590-22-035087.json": {
+      "bytes": 91948,
+      "sha256": "8bbf30ab995d52430ea641631f357f4cfa7a52cb5abba936a01b094a8fd2e739"
+    },
+    "golden/sources/0001564590-23-000733.json": {
+      "bytes": 131443,
+      "sha256": "845b785b531d53264440b2ad16a5981bef4a0eb1be0cce80a329ee3d76a86cda"
+    },
+    "golden/ttm/aapl-current/2025-09-27.json": {
+      "bytes": 64259,
+      "sha256": "41c4a54c08893f587544856591b1355e2e2b1df5571b516831ef417fc2aa215f"
+    },
+    "golden/ttm/aapl-current/2025-12-27.json": {
+      "bytes": 64396,
+      "sha256": "07ca5682c705b71c41a2118451889a22036ed27585c04f811bf8635db1d51b93"
+    },
+    "golden/ttm/aapl-current/2026-03-28.json": {
+      "bytes": 64403,
+      "sha256": "8b1aee56706b07f01af1c34163b7499c97eb249415196080bea370648fb45330"
+    },
+    "golden/ttm/aapl-current/2026-06-27.json": {
+      "bytes": 64406,
+      "sha256": "7c4053f43d4aef7455909746ae94a7df6ac7f3869f10f8691de8bbd884aa0df4"
+    },
+    "golden/ttm/aapl-current/2026-09-26.json": {
+      "bytes": 64275,
+      "sha256": "ba6139d73d224dd91e7951104841ab1342929165d82df1da0f472ffd9a869db9"
+    },
+    "golden/ttm/aapl-historical/2023-09-30.json": {
+      "bytes": 66397,
+      "sha256": "978e88b5321d3e3cce42b2884b1bc525a93604256580cc884150ed3cc317822a"
+    },
+    "golden/ttm/aapl-historical/2023-12-30.json": {
+      "bytes": 65998,
+      "sha256": "6b8ad2d8243ee16ec556acb6fa3d21c5030f4d459ae73119ae866570ffec1211"
+    },
+    "golden/ttm/aapl-historical/2024-03-30.json": {
+      "bytes": 65458,
+      "sha256": "e64b67c543712b8818933d44fa0970d9090900df91284bfc5a81f8a8c5cf6f8e"
+    },
+    "golden/ttm/aapl-historical/2024-06-29.json": {
+      "bytes": 65462,
+      "sha256": "a07ab997843faf8f21962b5ee12566dff3af6ca08f1e3bd53ac73452428b2d0b"
+    },
+    "golden/ttm/aapl-historical/2024-09-28.json": {
+      "bytes": 65329,
+      "sha256": "ca40387fdd60112676a0b35f7356f34fdb23d369d36be0bc8431fe7001fcf695"
+    },
+    "golden/ttm/msft-current/2025-09-30.json": {
+      "bytes": 66748,
+      "sha256": "68d1f4fef7ec92b9da09ab488167f2ab1dd301fad26b432b354c5be844faa520"
+    },
+    "golden/ttm/msft-current/2025-12-31.json": {
+      "bytes": 66748,
+      "sha256": "f17f2e1945262b48e6fcb5f9fbdfcf3bef5c36e4d5cdab9636c549e523b8ac47"
+    },
+    "golden/ttm/msft-current/2026-03-31.json": {
+      "bytes": 66750,
+      "sha256": "4950cb7a502d115dfc1e552116a5485148bdaad30d7a3fc8487448c5661eda19"
+    },
+    "golden/ttm/msft-current/2026-06-30.json": {
+      "bytes": 66753,
+      "sha256": "f49dabc7e711a7659449e79d0839dda38c768bc407197813080faaeed9022401"
+    },
+    "golden/ttm/msft-current/2026-09-30.json": {
+      "bytes": 66753,
+      "sha256": "519b01ec261a68fcb3ddea8b07e49cd1e31a94e9a9cc3884437711e6c57d0d70"
+    },
+    "golden/ttm/msft-historical/2023-09-30.json": {
+      "bytes": 67729,
+      "sha256": "a8b65b178a6f49066a5b62c1cc0a60771ad1c15ad85b8cc52e6ffccb258d5e7c"
+    },
+    "golden/ttm/msft-historical/2023-12-31.json": {
+      "bytes": 67818,
+      "sha256": "2e14cca971e2f4574f00993b3b5ff6be437499c7e855277d31dbb0bece86b684"
+    },
+    "golden/ttm/msft-historical/2024-03-31.json": {
+      "bytes": 67814,
+      "sha256": "229de3c5e2242ef8160ebf8ccd9723b5fcba63905d80ed130bd83ce925ea9848"
+    },
+    "golden/ttm/msft-historical/2024-06-30.json": {
+      "bytes": 67805,
+      "sha256": "d544b23267ddebcf8dfd8385e68750e78671042fdd50a43d7ff01f00f27a6a74"
+    },
+    "golden/ttm/msft-historical/2024-09-30.json": {
+      "bytes": 67803,
+      "sha256": "716ea65f2f4946d45cd3e69b5a663e9cdab4deeecb5e36dba2e3673388277c2f"
+    }
+  }
+}

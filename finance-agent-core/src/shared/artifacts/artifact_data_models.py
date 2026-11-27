@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.shared.artifacts.annual_statement_contracts import (
     AnnualStatementsReadResponseV1,
@@ -16,6 +16,7 @@ from src.shared.artifacts.news_contracts import (
     FinancialNewsItemModel,
     NewsSearchResultItemModel,
 )
+from src.shared.artifacts.statement_read_artifact import StatementReadArtifactV3
 
 
 class FinancialReportsArtifactData(BaseModel):
@@ -24,6 +25,9 @@ class FinancialReportsArtifactData(BaseModel):
     financial_reports: list[FinancialReportModel] = Field(default_factory=list)
     fundamental_service: FundamentalServiceArtifactV1 | None = None
     annual_statements: AnnualStatementsReadResponseV1 | None = None
+    statement_read: StatementReadArtifactV3 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     forward_signals: list[dict[str, object]] | None = None
     diagnostics: dict[str, object] | None = None
     quality_gates: dict[str, object] | None = None
@@ -42,6 +46,41 @@ class FinancialReportsArtifactData(BaseModel):
     replay_calculation_metrics: dict[str, object] | None = None
     replay_assumptions: list[str] | None = None
     replay_build_metadata: dict[str, object] | None = None
+
+    @model_validator(mode="after")
+    def statement_read_is_standalone(self) -> FinancialReportsArtifactData:
+        if self.statement_read is not None and (
+            self.model_type != "statement_read"
+            or self.status != "done"
+            or self.financial_reports
+            or any(
+                value is not None
+                for value in (
+                    self.annual_statements,
+                    self.fundamental_service,
+                    self.forward_signals,
+                    self.diagnostics,
+                    self.quality_gates,
+                    self.valuation_diagnostics,
+                    self.valuation_preview,
+                    self.ticker,
+                    self.company_name,
+                    self.sector,
+                    self.industry,
+                    self.reasoning,
+                    self.replay_schema_version,
+                    self.replay_market_snapshot,
+                    self.replay_params_dump,
+                    self.replay_calculation_metrics,
+                    self.replay_assumptions,
+                    self.replay_build_metadata,
+                )
+            )
+        ):
+            raise ValueError(
+                "statement read artifact must retain its standalone variant"
+            )
+        return self
 
 
 class PriceSeriesArtifactData(BaseModel):

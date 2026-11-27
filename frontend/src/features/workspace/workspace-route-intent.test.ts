@@ -18,8 +18,15 @@ describe('parseWorkspaceRouteIntent', () => {
     });
 
     it('reopens standalone annual statements by exact saved identity', () => {
-        expect(parseWorkspaceRouteIntent(new URLSearchParams('statement_thread=thread-1&statement_artifact=artifact-1'))).toEqual({ kind: 'statement-report', threadId: 'thread-1', artifactId: 'artifact-1' });
+        expect(parseWorkspaceRouteIntent(new URLSearchParams('statement_thread=thread-1&statement_artifact=artifact-1'))).toEqual({ kind: 'statement-report', threadId: 'thread-1', artifactId: 'artifact-1', frequency: 'annual', periodId: null });
         expect(parseWorkspaceRouteIntent(new URLSearchParams('statement_thread=thread-1'))).toEqual({ kind: 'invalid-history' });
+    });
+
+    it('retains fiscal frequency and opaque returned period identity while rejecting ambiguous links', () => {
+        expect(parseWorkspaceRouteIntent(new URLSearchParams('statement_thread=thread-1&statement_artifact=artifact-1&statement_frequency=ttm&statement_period=fiscal-ttm-v1%3Aabc'))).toEqual({ kind: 'statement-report', threadId: 'thread-1', artifactId: 'artifact-1', frequency: 'ttm', periodId: 'fiscal-ttm-v1:abc' });
+        for (const suffix of ['statement_frequency=monthly', 'statement_frequency=ttm&statement_frequency=quarter', 'statement_period=a&statement_period=b']) {
+            expect(parseWorkspaceRouteIntent(new URLSearchParams(`statement_thread=thread-1&statement_artifact=artifact-1&${suffix}`))).toEqual({ kind: 'invalid-history' });
+        }
     });
 
     it('rejects ambiguous duplicate history identifiers', () => {

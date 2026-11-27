@@ -6,8 +6,8 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Callable
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable
+from contextlib import ExitStack, asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import get_ident
@@ -48,14 +48,21 @@ from .contracts import (
     ValuationEvidenceReadResponseV1,
     ValuationInputV1,
 )
+from pydantic import TypeAdapter
+from .serialization import canonical_bytes
+
+from .fiscal_read_contracts import FiscalReadRequestV2, FiscalReadResultV2
+from .fiscal_releases import FiscalReleaseReader
+from .fiscal_release_runtime import configured_fiscal_release_reader
+from .publication_codec import ActivePublication
 from .data_releases import (
-    ActiveDataReleaseWithManifestV1,
     DataReleaseActivationRequestV1,
     DataReleaseCandidatePublishRequestV1,
     DataReleaseCandidateReceiptV1,
     DataReleaseTrustRootsV1,
 )
 from .facts import CanonicalFactRepository
+from .fiscal_runtime import FiscalRuntimeConfig
 from .quote_providers import QuoteSourceProviderPort
 from .quote_sources import default_quote_providers
 from .free_source_policy import (
@@ -80,6 +87,7 @@ from .interface.transport import (
     readiness_response,
     success_response,
 )
+from .content_publication import configured_content_publication_access
 from .metadata import (
     PostgresArtifactStore,
     PostgresCanonicalFactRepository,
@@ -219,12 +227,14 @@ def create_app(
     policy_registry: PolicyRegistry | None = None,
     model_inventory: ModelInventory | None = None,
     sec_acquisition: SecAcquisitionUseCase | None = None,
+    fiscal_sec_acquisition: SecAcquisitionUseCase | None = None,
     identity_resolution: SecIdentityResolutionUseCase | None = None,
     quote_providers: tuple[QuoteSourceProviderPort, ...] | None = None,
     macro_providers: tuple[MacroSeriesProviderPort, ...] | None = None,
     reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
     source_use_policy: SourceUsePolicyV1 | None = None,
     statement_originals: OriginalPreparation | None = None,
+    fiscal_reader_factory: Callable[[], FiscalReleaseReader] | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -257,6 +267,7 @@ def create_app(
         metrics=metrics,
         metadata_store=metadata_store,
         statement_originals=statement_originals,
+        fiscal_reader_factory=fiscal_reader_factory,
         require_metadata=require_metadata,
         policy_registry=policy_registry,
         model_inventory=model_inventory,
@@ -314,17 +325,30 @@ def create_app(
             if metadata_store is not None:
                 metadata_store.close()
 
+    @asynccontextmanager
+    async def read_only_operator_lifespan(app: FastAPI) -> AsyncIterator[None]:
+        try:
+            if metadata_store is not None:
+                metadata_store.start_read_only()
+            yield
+        finally:
+            diagnostic_sink.close()
+            if metadata_store is not None:
+                metadata_store.close()
+
     app = FastAPI(
         title="Fundamental service",
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.state.read_only_operator_lifespan = read_only_operator_lifespan
     app.state.operations_config = runtime_config
     app.state.metrics = metrics
     app.state.application = application
     app.state.metadata_store = metadata_store
     app.state.model_inventory = model_inventory
     app.state.sec_acquisition = sec_acquisition
+    app.state.fiscal_sec_acquisition = fiscal_sec_acquisition
     app.state.identity_resolution = identity_resolution
     app.state.valuation_diagnostic_sink = diagnostic_sink
     sec_acquisition_limiter = RateLimiter(
@@ -675,6 +699,37 @@ def create_app(
         return success_response(request, result)
 
     @app.get(
+        "/v1/data/fiscal-statements",
+        response_model=TypedFundamentalResponseEnvelopeV1[FiscalReadResultV2],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/FundamentalFiscalStatementsRequestEnvelopeV1"
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def get_fiscal_statements(request: Request) -> JSONResponse:
+        value = decode_input(request, FiscalReadRequestV2)
+        result = await run_valuation_operation(
+            request,
+            application.read_fiscal_statements,
+            value,
+            deadline_at=request.state.deadline,
+        )
+        response = success_response(
+            request,
+            TypeAdapter(dict[str, object]).validate_json(canonical_bytes(result)),
+        )
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+
+    @app.get(
         "/v1/data/facts",
         response_model=TypedFundamentalResponseEnvelopeV1[FactsReadResponseV1],
         openapi_extra={
@@ -905,9 +960,7 @@ def create_app(
 
     @app.get(
         "/v1/data/releases/{profile_id}",
-        response_model=TypedFundamentalResponseEnvelopeV1[
-            ActiveDataReleaseWithManifestV1
-        ],
+        response_model=TypedFundamentalResponseEnvelopeV1[ActivePublication],
         openapi_extra={
             "requestBody": {
                 "required": True,
@@ -931,7 +984,7 @@ def create_app(
         result = application.active_data_release(profile_id)
         return success_response(request, result)
 
-    def change_data_release(
+    async def change_data_release(
         request: Request,
         profile_id: str,
         operation: Literal["activate", "rollback"],
@@ -947,12 +1000,15 @@ def create_app(
                 status_code=422,
                 retryable=False,
             )
-        result = application.change_active_data_release(
+        result = await run_valuation_operation(
+            request,
+            application.change_active_data_release,
             profile_id,
             value,
             actor_id=actor_id,
             organization_id=organization_id,
             correlation_id=request.state.correlation_id,
+            deadline_at=request.state.deadline,
         )
         metric_name = (
             "data_release_activation_total"
@@ -964,9 +1020,7 @@ def create_app(
 
     @app.post(
         "/v1/data/releases/{profile_id}/activate",
-        response_model=TypedFundamentalResponseEnvelopeV1[
-            ActiveDataReleaseWithManifestV1
-        ],
+        response_model=TypedFundamentalResponseEnvelopeV1[ActivePublication],
         openapi_extra={
             "requestBody": {
                 "required": True,
@@ -984,13 +1038,11 @@ def create_app(
         },
     )
     async def activate_data_release(request: Request, profile_id: str) -> JSONResponse:
-        return change_data_release(request, profile_id, "activate")
+        return await change_data_release(request, profile_id, "activate")
 
     @app.post(
         "/v1/data/releases/{profile_id}/rollback",
-        response_model=TypedFundamentalResponseEnvelopeV1[
-            ActiveDataReleaseWithManifestV1
-        ],
+        response_model=TypedFundamentalResponseEnvelopeV1[ActivePublication],
         openapi_extra={
             "requestBody": {
                 "required": True,
@@ -1008,7 +1060,7 @@ def create_app(
         },
     )
     async def rollback_data_release(request: Request, profile_id: str) -> JSONResponse:
-        return change_data_release(request, profile_id, "rollback")
+        return await change_data_release(request, profile_id, "rollback")
 
     @app.post(
         "/v1/data/ingestions",
@@ -1257,6 +1309,10 @@ def create_app(
                 TypedFundamentalRequestEnvelopeV1[SecIngestionRequestV1],
             ),
             (
+                "FundamentalFiscalStatementsRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[FiscalReadRequestV2],
+            ),
+            (
                 "FundamentalAnnualStatementsRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[AnnualStatementsReadRequestV1],
             ),
@@ -1297,9 +1353,15 @@ def create_runtime_app() -> FastAPI:
 
     config = OperationsConfig.from_env()
     source_use_policy = load_runtime_source_use_policy()
+    fiscal_config = FiscalRuntimeConfig.from_env(os.environ)
     root_value = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
     database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
     if not root_value or not database_url:
+        if fiscal_config is not None:
+            raise ValueError(
+                "Fiscal runtime requires FUNDAMENTAL_SERVICE_DATA_ROOT and "
+                "FUNDAMENTAL_SERVICE_DATABASE_URL"
+            )
         return create_app(
             config=config,
             require_metadata=True,
@@ -1309,100 +1371,158 @@ def create_runtime_app() -> FastAPI:
     data_release_trust_roots_file = os.getenv(
         "FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE"
     )
-    metadata_store = PostgresMetadataStore(
-        database_url,
-        auto_migrate=os.getenv("FUNDAMENTAL_SERVICE_AUTO_MIGRATE", "0") == "1",
-        data_release_trust_roots=(
-            DataReleaseTrustRootsV1.from_file(Path(data_release_trust_roots_file))
-            if data_release_trust_roots_file
-            else None
-        ),
-    )
-    trust_roots_value = os.getenv("FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE")
-    model_inventory = ModelInventory.from_deployment_file(
-        (*dated_model_specs(), *expansion_model_specs()),
-        Path(trust_roots_value) if trust_roots_value else None,
-    )
-    model_release_path = os.getenv("FUNDAMENTAL_MODEL_RELEASE_DEPLOYMENT_FILE")
-    promoted_models = (
-        load_model_release_deployment(Path(model_release_path), model_inventory)
-        if model_release_path
-        else ()
-    )
-    content_store = PostgresContentStore(root / "content", metadata_store)
-    taxonomy_cache_dir = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR")
-    taxonomy_manifest_id = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID")
-    taxonomy_version = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_VERSION")
-    taxonomy_cache_sha256 = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256")
-    edgar_plugin_dir = os.getenv("FUNDAMENTAL_SEC_EDGAR_PLUGIN_DIR")
-    xule_plugin_dir = os.getenv("FUNDAMENTAL_SEC_XULE_PLUGIN_DIR")
-    dqc_ruleset_path = os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_PATH")
-    edgar_plugin_sha256 = os.getenv("FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256")
-    xule_plugin_sha256 = os.getenv("FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256")
-    dqc_ruleset_sha256 = os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_SHA256")
-    supported_filing_years = parse_supported_filing_years(
-        os.getenv("FUNDAMENTAL_SEC_SUPPORTED_FILING_YEARS")
-    )
-    supported_filing_forms = parse_supported_filing_forms(
-        os.getenv("FUNDAMENTAL_SEC_SUPPORTED_FILING_FORMS")
-    )
-    sec_acquisition = build_runtime_sec_acquisition(
-        metadata=metadata_store,
-        content_store=content_store,
-        snapshot_repository=PostgresSnapshotRepository(metadata_store),
-        fact_repository=PostgresCanonicalFactRepository(metadata_store),
-        service_token=config.service_token,
-        user_agent=os.getenv("FUNDAMENTAL_SEC_USER_AGENT"),
-        taxonomy_cache_dir=taxonomy_cache_dir,
-        taxonomy_manifest_id=taxonomy_manifest_id,
-        taxonomy_version=taxonomy_version,
-        taxonomy_cache_sha256=taxonomy_cache_sha256,
-        edgar_plugin_dir=edgar_plugin_dir,
-        xule_plugin_dir=xule_plugin_dir,
-        dqc_ruleset_path=dqc_ruleset_path,
-        edgar_plugin_sha256=edgar_plugin_sha256,
-        xule_plugin_sha256=xule_plugin_sha256,
-        dqc_ruleset_sha256=dqc_ruleset_sha256,
-        dqc_ruleset_catalog_path=os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH")
-        or None,
-        dqc_v18_ruleset_catalog_path=os.getenv(
-            "FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH"
+    with ExitStack() as cleanup:
+        metadata_store = PostgresMetadataStore(
+            database_url,
+            auto_migrate=os.getenv("FUNDAMENTAL_SERVICE_AUTO_MIGRATE", "0") == "1",
+            data_release_trust_roots=(
+                DataReleaseTrustRootsV1.from_file(Path(data_release_trust_roots_file))
+                if data_release_trust_roots_file
+                else None
+            ),
         )
-        or None,
-        historical_dqc_dir=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR") or None,
-        historical_dqc_sha256=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256")
-        or None,
-        supported_filing_years=supported_filing_years,
-        supported_filing_forms=supported_filing_forms,
-        authorized_organizations=config.ingestion_authorized_organizations,
-    )
-    identity_resolution = build_runtime_sec_identity_resolution(
-        metadata=metadata_store,
-        content_store=content_store,
-        user_agent=os.getenv("FUNDAMENTAL_SEC_USER_AGENT"),
-        authorized_organizations=config.ingestion_authorized_organizations,
-    )
-    return create_app(
-        snapshot_repository=PostgresSnapshotRepository(metadata_store),
-        artifact_store=PostgresArtifactStore(metadata_store, content_store),
-        content_store=content_store,
-        fact_repository=PostgresCanonicalFactRepository(metadata_store),
-        config=config,
-        metadata_store=metadata_store,
-        require_metadata=True,
-        model_inventory=model_inventory,
-        policy_registry=PolicyRegistry(
-            models=promoted_models,
-            model_repository=MetadataModelRepository(metadata_store),
-            repository=MetadataPolicyRepository(metadata_store),
-        ),
-        sec_acquisition=sec_acquisition,
-        statement_originals=sec_acquisition.original_preparation()
-        if sec_acquisition is not None
-        else None,
-        identity_resolution=identity_resolution,
-        source_use_policy=source_use_policy,
-    )
+        cleanup.callback(metadata_store.close)
+        trust_roots_value = os.getenv("FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE")
+        model_inventory = ModelInventory.from_deployment_file(
+            (*dated_model_specs(), *expansion_model_specs()),
+            Path(trust_roots_value) if trust_roots_value else None,
+        )
+        model_release_path = os.getenv("FUNDAMENTAL_MODEL_RELEASE_DEPLOYMENT_FILE")
+        promoted_models = (
+            load_model_release_deployment(Path(model_release_path), model_inventory)
+            if model_release_path
+            else ()
+        )
+        content_store = PostgresContentStore(
+            root / "content",
+            metadata_store,
+            publication_access=configured_content_publication_access(),
+        )
+        snapshot_repository = PostgresSnapshotRepository(metadata_store)
+        fact_repository = PostgresCanonicalFactRepository(metadata_store)
+        user_agent = os.getenv("FUNDAMENTAL_SEC_USER_AGENT")
+
+        def build_acquisition(
+            *,
+            taxonomy_cache_dir: str | None,
+            taxonomy_manifest_id: str | None,
+            taxonomy_version: str | None,
+            taxonomy_cache_sha256: str | None,
+            supported_filing_years: tuple[int, ...] | None,
+            supported_filing_forms: tuple[str, ...] | None,
+        ) -> SecAcquisitionUseCase | None:
+            return build_runtime_sec_acquisition(
+                metadata=metadata_store,
+                content_store=content_store,
+                snapshot_repository=snapshot_repository,
+                fact_repository=fact_repository,
+                service_token=config.service_token,
+                user_agent=user_agent,
+                taxonomy_cache_dir=taxonomy_cache_dir,
+                taxonomy_manifest_id=taxonomy_manifest_id,
+                taxonomy_version=taxonomy_version,
+                taxonomy_cache_sha256=taxonomy_cache_sha256,
+                edgar_plugin_dir=os.getenv("FUNDAMENTAL_SEC_EDGAR_PLUGIN_DIR"),
+                xule_plugin_dir=os.getenv("FUNDAMENTAL_SEC_XULE_PLUGIN_DIR"),
+                dqc_ruleset_path=os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_PATH"),
+                edgar_plugin_sha256=os.getenv("FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256"),
+                xule_plugin_sha256=os.getenv("FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256"),
+                dqc_ruleset_sha256=os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_SHA256"),
+                dqc_ruleset_catalog_path=os.getenv(
+                    "FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH"
+                )
+                or None,
+                dqc_v18_ruleset_catalog_path=os.getenv(
+                    "FUNDAMENTAL_SEC_DQC_V18_RULESET_CATALOG_PATH"
+                )
+                or None,
+                historical_dqc_dir=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR")
+                or None,
+                historical_dqc_sha256=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256")
+                or None,
+                supported_filing_years=supported_filing_years,
+                supported_filing_forms=supported_filing_forms,
+                authorized_organizations=config.ingestion_authorized_organizations,
+            )
+
+        sec_acquisition = build_acquisition(
+            taxonomy_cache_dir=os.getenv("FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR"),
+            taxonomy_manifest_id=os.getenv("FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID"),
+            taxonomy_version=os.getenv("FUNDAMENTAL_SEC_TAXONOMY_VERSION"),
+            taxonomy_cache_sha256=os.getenv("FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256"),
+            supported_filing_years=parse_supported_filing_years(
+                os.getenv("FUNDAMENTAL_SEC_SUPPORTED_FILING_YEARS")
+            ),
+            supported_filing_forms=parse_supported_filing_forms(
+                os.getenv("FUNDAMENTAL_SEC_SUPPORTED_FILING_FORMS")
+            ),
+        )
+        fiscal_sec_acquisition = None
+        if fiscal_config is not None:
+            fiscal_sec_acquisition = build_acquisition(
+                taxonomy_cache_dir=fiscal_config.taxonomy_cache_dir,
+                taxonomy_manifest_id=fiscal_config.taxonomy_manifest_id,
+                taxonomy_version=fiscal_config.taxonomy_version,
+                taxonomy_cache_sha256=fiscal_config.taxonomy_cache_sha256,
+                supported_filing_years=fiscal_config.supported_filing_years,
+                supported_filing_forms=fiscal_config.supported_filing_forms,
+            )
+            if fiscal_sec_acquisition is None:
+                raise ValueError(
+                    "FUNDAMENTAL_FISCAL_SEC_* requires FUNDAMENTAL_SERVICE_TOKEN, "
+                    "FUNDAMENTAL_SEC_USER_AGENT and shared EDGAR, XULE and DQC pins"
+                )
+        identity_resolution = build_runtime_sec_identity_resolution(
+            metadata=metadata_store,
+            content_store=content_store,
+            user_agent=user_agent,
+            authorized_organizations=config.ingestion_authorized_organizations,
+        )
+        fiscal_reader_factory = None
+        fiscal_reader_path = os.getenv("FUNDAMENTAL_FISCAL_RELEASE_READER_FILE")
+        if fiscal_reader_path:
+            if fiscal_sec_acquisition is None:
+                raise ValueError(
+                    "fiscal release reader requires configured fiscal acquisition"
+                )
+
+            def configured_reader() -> FiscalReleaseReader:
+                return configured_fiscal_release_reader(
+                    fiscal_sec_acquisition,
+                    metadata_store,
+                    PostgresArtifactStore(
+                        metadata_store, content_store, read_only=True
+                    ),
+                    Path(fiscal_reader_path),
+                )
+
+            fiscal_reader_factory = configured_reader
+
+        app = create_app(
+            fiscal_reader_factory=fiscal_reader_factory,
+            snapshot_repository=snapshot_repository,
+            artifact_store=PostgresArtifactStore(metadata_store, content_store),
+            content_store=content_store,
+            fact_repository=fact_repository,
+            config=config,
+            metadata_store=metadata_store,
+            require_metadata=True,
+            model_inventory=model_inventory,
+            policy_registry=PolicyRegistry(
+                models=promoted_models,
+                model_repository=MetadataModelRepository(metadata_store),
+                repository=MetadataPolicyRepository(metadata_store),
+            ),
+            sec_acquisition=sec_acquisition,
+            fiscal_sec_acquisition=fiscal_sec_acquisition,
+            statement_originals=sec_acquisition.original_preparation()
+            if sec_acquisition is not None
+            else None,
+            identity_resolution=identity_resolution,
+            source_use_policy=source_use_policy,
+        )
+        cleanup.pop_all()
+        return app
 
 
 app = create_runtime_app()

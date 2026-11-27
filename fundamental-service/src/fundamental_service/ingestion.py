@@ -17,6 +17,7 @@ from .arelle_parser import (
     fact_semantic_digest,
     parse_filing_offline,
 )
+from .command_artifacts import EvidenceArtifactStore
 from .contracts import (
     ArelleFindingEvidenceV1,
     CanonicalFactV1,
@@ -37,6 +38,7 @@ from .facts import (
     FactSelection,
     select_fact_groups,
 )
+from .fiscal_parser_evidence import RetainedFiscalValidation
 from .regulatory_validation import (
     bind_dqc_filing_context,
     require_sec_validation_evidence,
@@ -84,6 +86,45 @@ _MAX_SEC_XBRL_ARCHIVE_UNCOMPRESSED_BYTES = 256_000_000
 _MAX_SEC_XBRL_PRIMARY_BYTES = 24_000_000
 _MAX_SEC_XBRL_RESOURCE_BYTES = 12_000_000
 _MAX_SEC_XBRL_SELECTED_BYTES = 48_000_000
+
+
+def read_sec_xbrl_member(content: bytes, member_name: str) -> bytes:
+    if (
+        len(content) > _MAX_SEC_XBRL_ARCHIVE_BYTES
+        or not member_name
+        or member_name.startswith("/")
+        or "\\" in member_name
+        or ".." in member_name.split("/")
+    ):
+        raise SnapshotError("SOURCE_PAYLOAD_INVALID", "invalid retained archive member")
+    with ZipFile(BytesIO(content)) as archive:
+        infos = archive.infolist()
+        if (
+            len(infos) > _MAX_SEC_XBRL_ARCHIVE_MEMBERS
+            or len({item.filename for item in infos}) != len(infos)
+            or sum(item.file_size for item in infos)
+            > _MAX_SEC_XBRL_ARCHIVE_UNCOMPRESSED_BYTES
+        ):
+            raise SnapshotError(
+                "INGESTION_BUDGET_EXCEEDED", "retained archive exceeds its bounds"
+            )
+        matches = tuple(item for item in infos if item.filename == member_name)
+        if len(matches) != 1:
+            raise SnapshotError(
+                "SOURCE_PAYLOAD_INVALID", "retained archive member is missing"
+            )
+        item = matches[0]
+        if item.flag_bits & 1 or item.file_size > _MAX_SEC_XBRL_PRIMARY_BYTES:
+            raise SnapshotError(
+                "INGESTION_BUDGET_EXCEEDED", "retained archive member exceeds its bound"
+            )
+        with archive.open(item) as source:
+            raw = source.read(_MAX_SEC_XBRL_PRIMARY_BYTES + 1)
+        if len(raw) != item.file_size:
+            raise SnapshotError(
+                "SOURCE_PAYLOAD_INVALID", "retained archive member size differs"
+            )
+        return raw
 
 
 def read_sec_xbrl_archive(
@@ -307,12 +348,25 @@ class SecIngestionService:
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
-        amendment_scope: str | None = None,
+        amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"]
+        | None = None,
         parser_delivery_revision: str | None = None,
         build_checks: ParserBuildChecks | None = None,
+        retained_fiscal: RetainedFiscalValidation | None = None,
+        fiscal_publications: EvidenceArtifactStore | None = None,
     ) -> ValidatedSecFiling:
         """Validate original bytes and regulatory evidence before identity/publication."""
         adapter = source_adapter or self.source_adapter
+        retain_content = (
+            self.content_store.put
+            if retained_fiscal is None
+            else retained_fiscal.match_content
+        )
+        parser_actions = self.parser_actions
+        if parser_actions is not None and fiscal_publications is not None:
+            parser_actions = ParserActions(
+                index=parser_actions.index, artifacts=fiscal_publications
+            )
         if profile is None:
             raise SnapshotError(
                 "VALIDATION_PROFILE_REQUIRED",
@@ -497,9 +551,7 @@ class SecIngestionService:
                     if item.received_size is not None
                     else len(item.content)
                 ),
-                content_hash=self.content_store.put(
-                    item.content, media_type=item.media_type
-                ),
+                content_hash=retain_content(item.content, media_type=item.media_type),
             )
             for item in evidence_sources
         )
@@ -551,10 +603,10 @@ class SecIngestionService:
                 inline_assessments, key=lambda pair: pair[1].archive_member_name
             )
         )
-        normalized_hash = self.content_store.put(
+        normalized_hash = retain_content(
             assessment.normalized_content, media_type=source.media_type
         )
-        archive_member_hash = self.content_store.put(
+        archive_member_hash = retain_content(
             assessment.archive_member, media_type=source.media_type
         )
         if normalized_hash != assessment.normalized_content_hash:
@@ -593,10 +645,10 @@ class SecIngestionService:
                     (archive_root / filename).write_bytes(
                         item_assessment.archive_member
                     )
-                    self.content_store.put(
+                    retain_content(
                         item_assessment.normalized_content, media_type=item.media_type
                     )
-                    self.content_store.put(
+                    retain_content(
                         item_assessment.archive_member, media_type=item.media_type
                     )
                     _stage_filing_graphics(
@@ -610,7 +662,7 @@ class SecIngestionService:
                 raw_manifest = canonical_bytes(manifest)
                 normalized_path.write_bytes(raw_manifest)
                 archive_path.write_bytes(raw_manifest)
-                parser_input_hash = self.content_store.put(
+                parser_input_hash = retain_content(
                     raw_manifest, media_type="application/json"
                 )
 
@@ -622,6 +674,26 @@ class SecIngestionService:
                 representation: Literal["normalized", "archive"],
                 content_hash: str,
             ) -> ArelleParseReportV1:
+                if retained_fiscal is not None:
+                    if parser_delivery_revision is None:
+                        raise SnapshotError(
+                            "FISCAL_PARSER_ACTION_INVALID",
+                            "parser delivery revision is required",
+                        )
+                    return retained_fiscal.actions.replay(
+                        path,
+                        representation=representation,
+                        delivery_revision=parser_delivery_revision,
+                        normalization_inputs=tuple(
+                            item.content_hash for item in captured_sources
+                        ),
+                        profile=profile,
+                        taxonomy_version=taxonomy_version,
+                        taxonomy_cache_dir=taxonomy_cache_dir,
+                        source_content_hash=content_hash,
+                        build_checks=build_checks,
+                    )
+
                 def execute() -> ArelleParseReportV1:
                     return parse_filing_offline(
                         path,
@@ -633,13 +705,13 @@ class SecIngestionService:
                     )
 
                 if (
-                    self.parser_actions is None
+                    parser_actions is None
                     or parser_delivery_revision is None
                     or deadline_at is None
                 ):
                     return execute()
 
-                return self.parser_actions.parse(
+                return parser_actions.parse(
                     path,
                     representation=representation,
                     delivery_revision=parser_delivery_revision,
@@ -819,10 +891,11 @@ class SecIngestionService:
                 for character in accession_number
                 if character.isascii() and character.isalnum()
             )
-            record = self.audit_store.put(
-                f"sec-ingestion-rejection-{accession_id}-{digest}",
-                rejection,
-                tuple(
+            rejection_id = f"sec-ingestion-rejection-{accession_id}-{digest}"
+            if retained_fiscal is not None:
+                retained_fiscal.match_rejection(rejection_id, rejection)
+            else:
+                dependencies = tuple(
                     sorted(
                         {
                             *(item.content_hash for item in captured_sources),
@@ -832,13 +905,20 @@ class SecIngestionService:
                             taxonomy_hash,
                         }
                     )
-                ),
-                retention="evidence",
-            )
+                )
+                if fiscal_publications is None:
+                    record = self.audit_store.put(
+                        rejection_id, rejection, dependencies, retention="evidence"
+                    )
+                else:
+                    record = fiscal_publications.put_with_receipt(
+                        rejection_id, rejection, dependencies
+                    ).artifact
+                rejection_id = record.artifact_id
             raise SnapshotError(
                 "PARSER_VALIDATION_BLOCKED",
                 "blocking SEC EFM/DQC findings prevent canonical fact publication",
-                evidence_ref=record.artifact_id,
+                evidence_ref=rejection_id,
             )
         if not report.facts:
             raise SnapshotError("PARSER_FACTS_MISSING", "Arelle produced no XBRL facts")
@@ -889,7 +969,8 @@ class SecIngestionService:
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
-        amendment_scope: str | None = None,
+        amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"]
+        | None = None,
         identity_basis: SecIdentityBasis = "current-sec-ticker-v1",
         identity_ticker: str | None = None,
         parser_delivery_revision: str | None = None,
@@ -1270,7 +1351,8 @@ class SecIngestionService:
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
-        amendment_scope: str | None = None,
+        amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"]
+        | None = None,
         accepted_at: datetime | None = None,
         deadline_at: datetime | None = None,
     ) -> SecIngestionResult:

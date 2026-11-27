@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { WorkspacePage } from '@/features/workspace/workspace-page';
+import { replaceStatementLocation } from '@/features/workspace/workspace-statement-location';
 import { parseWorkspaceRouteIntent } from '@/features/workspace/workspace-route-intent';
 
 export function WorkspacePageClient() {
@@ -11,6 +12,9 @@ export function WorkspacePageClient() {
     const promptParam = searchParams.get('prompt');
     const [initialPrompt] = useState(() => promptParam?.trim() || null);
     const routeIntent = parseWorkspaceRouteIntent(searchParams);
+    const workspaceIdentity = routeIntent.kind === 'statement-report'
+        ? { kind: routeIntent.kind, threadId: routeIntent.threadId }
+        : routeIntent;
     const initialTicker = tickerParam ? tickerParam.trim() : null;
     const shouldAutoStart = routeIntent.kind === 'new-analysis' && Boolean(initialPrompt || initialTicker);
 
@@ -18,13 +22,12 @@ export function WorkspacePageClient() {
         if (!initialPrompt || !promptParam) return;
         const url = new URL(window.location.href);
         url.searchParams.delete('prompt');
-        const nextUrl = `${url.pathname}${url.search}${url.hash}`;
-        window.history.replaceState(window.history.state, '', nextUrl);
+        replaceStatementLocation(url);
     }, [initialPrompt, promptParam]);
 
     return (
         <WorkspacePage
-            key={JSON.stringify([routeIntent, initialTicker, initialPrompt])}
+            key={JSON.stringify([workspaceIdentity, initialTicker, initialPrompt])}
             initialTicker={initialTicker}
             initialPrompt={initialPrompt}
             autoStart={shouldAutoStart}

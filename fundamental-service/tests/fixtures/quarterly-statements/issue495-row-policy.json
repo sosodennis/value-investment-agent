@@ -1,0 +1,230 @@
+{
+  "protocol": "issue495-row-aggregation-policy-expectation-v1",
+  "expectation_source": "Issue 495 accepted design and issue 494 frozen statement row identities. This file does not invoke a production calculator.",
+  "rows": [
+    {
+      "row_id": "revenue",
+      "statement": "income_statement",
+      "canonical_row_name": "revenue",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "cost_of_revenue",
+      "statement": "income_statement",
+      "canonical_row_name": "cost of revenue",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "gross_profit",
+      "statement": "income_statement",
+      "canonical_row_name": "gross profit",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "operating_income",
+      "statement": "income_statement",
+      "canonical_row_name": "operating income",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "income_before_tax",
+      "statement": "income_statement",
+      "canonical_row_name": "income before tax",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "income_tax_expense",
+      "statement": "income_statement",
+      "canonical_row_name": "income tax expense",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "net_income",
+      "statement": "income_statement",
+      "canonical_row_name": "net income",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "operating_cash_flow",
+      "statement": "cash_flow",
+      "canonical_row_name": "operating cash flow",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "investing_cash_flow",
+      "statement": "cash_flow",
+      "canonical_row_name": "investing cash flow",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "financing_cash_flow",
+      "statement": "cash_flow",
+      "canonical_row_name": "financing cash flow",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "effect_of_exchange_rates_on_cash",
+      "statement": "cash_flow",
+      "canonical_row_name": "effect of exchange rates on cash",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "net_change_in_cash",
+      "statement": "cash_flow",
+      "canonical_row_name": "net change in cash",
+      "aggregation": "additive_flow",
+      "quarter_rule": "Compute a same-fiscal-year YTD difference where both inputs exist. If a direct quarter also exists, compare quantization intervals. Emit conflict when they disagree. Select direct only when the intervals agree. Use the YTD difference when no direct quarter exists.",
+      "q4_rule": "Reported fiscal year value minus same-fiscal-year nine-month cumulative value.",
+      "ttm_rule": "Sum exactly four consecutive, non-overlapping, basis-compatible quarter values with Decimal and no intermediate rounding."
+    },
+    {
+      "row_id": "cash_and_equivalents",
+      "statement": "balance_sheet",
+      "canonical_row_name": "cash and equivalents",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "operating_current_receivables",
+      "statement": "balance_sheet",
+      "canonical_row_name": "operating current receivables",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "inventory",
+      "statement": "balance_sheet",
+      "canonical_row_name": "inventory",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "current_assets",
+      "statement": "balance_sheet",
+      "canonical_row_name": "current assets",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "property_plant_and_equipment",
+      "statement": "balance_sheet",
+      "canonical_row_name": "property plant and equipment",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "total_assets",
+      "statement": "balance_sheet",
+      "canonical_row_name": "total assets",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "operating_current_payables",
+      "statement": "balance_sheet",
+      "canonical_row_name": "operating current payables",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "current_liabilities",
+      "statement": "balance_sheet",
+      "canonical_row_name": "current liabilities",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "total_liabilities",
+      "statement": "balance_sheet",
+      "canonical_row_name": "total liabilities",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "total_equity",
+      "statement": "balance_sheet",
+      "canonical_row_name": "total equity",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "liabilities_and_equity",
+      "statement": "balance_sheet",
+      "canonical_row_name": "liabilities and equity",
+      "aggregation": "period_end_instant",
+      "quarter_rule": "Use the unsegmented instant whose date equals the actual quarter end.",
+      "ttm_rule": "Use the unsegmented instant at the final quarter end as the TTM as-of balance."
+    },
+    {
+      "row_id": "cash_flow_beginning_balance",
+      "statement": "cash_flow",
+      "canonical_row_name": "cash flow beginning balance",
+      "aggregation": "cash_flow_boundary",
+      "quarter_rule": "Keep start and end balances as instants. The opening cash fact uses the instant one calendar day before the quarter start. Never add the balances.",
+      "ttm_rule": "Select the opening balance at the instant one calendar day before the first quarter start and closing balance at the final quarter end. Never add the balances."
+    },
+    {
+      "row_id": "cash_flow_ending_balance",
+      "statement": "cash_flow",
+      "canonical_row_name": "cash flow ending balance",
+      "aggregation": "cash_flow_boundary",
+      "quarter_rule": "Keep start and end balances as instants. The opening cash fact uses the instant one calendar day before the quarter start. Never add the balances.",
+      "ttm_rule": "Select the opening balance at the instant one calendar day before the first quarter start and closing balance at the final quarter end. Never add the balances."
+    }
+  ],
+  "unsupported_row_families": {
+    "eps_and_per_share": "Not among the 25 frozen rows. Per-share denominators and anti-dilution treatment make simple addition invalid.",
+    "weighted_average_shares": "Not among the 25 frozen rows. These are time-weighted quantities and need weighted-period reconstruction.",
+    "ratios_and_margins": "Not among the 25 frozen rows. Ratios are non-additive and require numerator and denominator policies."
+  },
+  "source_conventions": {
+    "apple_fx": "Keep missing where Apple does not separately report the FX line. Do not insert zero or a balancing plug.",
+    "canonical_amounts": "Apply inline XBRL scale and sign once to the original lexical Decimal. Preserve the raw lexical value and decimals attribute.",
+    "periods": "Derive actual start and end from DEI and unsegmented XBRL contexts. Keep inclusive calendar-day counts.",
+    "point_in_time": "Only source filings accepted at or before each case cutoff may supply an operand.",
+    "revision_basis": "Keep filing and comparative candidates with their exact accession, accepted time, context, table and row. Do not mix incompatible restatements or bases."
+  }
+}

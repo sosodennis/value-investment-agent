@@ -19,6 +19,10 @@ from src.shared.artifacts.annual_statement_contracts import (
     AnnualStatementsReadRequestV1,
     AnnualStatementsReadResponseV1,
 )
+from src.shared.artifacts.fiscal_statement_contracts import (
+    FiscalReadRequestV2,
+    FiscalReadResultV2,
+)
 from src.shared.artifacts.fundamental_contracts import (
     FundamentalFactsReadResultV1,
     FundamentalValuationEvidenceReadResultV1,
@@ -32,6 +36,7 @@ FundamentalOperation = Literal[
     "resolve_snapshot",
     "read_facts",
     "read_annual_statements",
+    "read_fiscal_statements",
     "read_active_release",
     "read_valuation_evidence",
     "prepare_valuation",
@@ -116,6 +121,15 @@ class FundamentalServiceClient(Protocol):
         correlation_id: str,
         deadline_at: datetime,
     ) -> AnnualStatementsReadResponseV1: ...
+
+    async def read_fiscal_statements(
+        self,
+        request: FiscalReadRequestV2,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FiscalReadResultV2: ...
 
     async def prepare_valuation(
         self,

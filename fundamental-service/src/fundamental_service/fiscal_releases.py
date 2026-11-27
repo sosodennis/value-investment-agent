@@ -1,0 +1,1183 @@
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
+from copy import deepcopy
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from functools import partial
+from typing import Protocol, TypeVar
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from pydantic import BaseModel
+
+from .artifact_evidence import read_retained_artifact, require_retained_artifact
+from .command_artifacts import EvidenceArtifactStore
+from .data_releases import (
+    ArtifactRefV1,
+    DataReleaseActivationCommandV1,
+    DataReleaseTrustRootsV1,
+    ActiveDataReleaseV1,
+)
+from .fiscal_admission_history import (
+    FiscalActivationObservationV1,
+    FiscalAdmissionHistoryReaderPort,
+    FiscalAdmissionHistoryPort,
+    FiscalHistoryHeadV1,
+)
+from .fiscal_authority_contracts import (
+    FiscalAuthorityGrantV1,
+    SignedFiscalAuthorityRecordV1,
+)
+from .fiscal_candidate_contracts import (
+    ClassifiedSourceForCandidateV1,
+    FiscalSourceDocumentObservation,
+    FiscalSourceUseScopeV1,
+    VerifiedClassifiedCandidateSource,
+)
+from .fiscal_candidate_preparation import (
+    CurrentFiscalCandidate,
+    fiscal_preparation_executable_digest,
+)
+from .fiscal_projection_builder import FiscalProjectionBuilder
+from .fiscal_display_contracts import CurrentFiscalDisplay
+from .fiscal_display_admission import FiscalDisplayOperation
+from .fiscal_read_contracts import (
+    FiscalCellV1,
+    FiscalDerivedCellV1,
+    FiscalDisplayGraphV1,
+    FiscalDisplayRowV1,
+    FiscalMissingCellV1,
+    FiscalQuarterColumnsV1,
+    FiscalReadBindingV2,
+    FiscalReadRequestV2,
+    FiscalReadResultV2,
+    FiscalReportedCellV1,
+    FiscalSourceInspectionV1,
+    FiscalSourceDocumentV1,
+    FiscalTtmColumnsV1,
+)
+from .fiscal_release_contracts import (
+    FiscalPublishV2,
+    FiscalReleaseCanaryV2,
+    FiscalReleaseCandidateReceiptV2,
+    FiscalReleaseChecksV2,
+    FiscalReleaseEnvelopeV2,
+    FiscalReleaseManifestV2,
+    FiscalReleaseVerificationV2,
+    FiscalStoredVerificationV2,
+    fiscal_manifest,
+)
+from .fiscal_source_closure import FiscalArtifactRead, fiscal_closure_read_operation
+from .fiscal_statement_policy import fiscal_statement_policy
+from .history_recovery_contracts import FiscalHistoryEpochV1
+from .metadata import metadata_operation_budget
+from .publication_codec import (
+    PublicationManifest,
+    PublicationVerification,
+    verify_fiscal_signature,
+    verify_publication_pair,
+)
+from .replay import ArtifactRecordV1
+from .serialization import canonical_bytes, sha256_digest
+from .snapshots import SnapshotError
+
+_Model = TypeVar("_Model", bound=BaseModel)
+
+
+class FiscalDisplayReaderPort(Protocol):
+    def replay_candidate(
+        self, reference: ArtifactRefV1, *, deadline_at: datetime
+    ) -> CurrentFiscalCandidate: ...
+
+    def open_current(
+        self,
+        decision_ref: ArtifactRefV1,
+        candidate_ref: ArtifactRefV1,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalDisplayOperation: ...
+
+
+class FiscalPublicationReaderPort(Protocol):
+    def get_data_release_manifest(
+        self, manifest_digest: str
+    ) -> PublicationManifest | None: ...
+    def get_data_release_verification(
+        self, manifest_digest: str
+    ) -> PublicationVerification | None: ...
+
+
+class FiscalPublicationWriterPort(FiscalPublicationReaderPort, Protocol):
+    def publish_data_release_candidate(
+        self,
+        manifest: PublicationManifest,
+        verification: PublicationVerification,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
+    ) -> None: ...
+    def compare_and_swap_data_release(
+        self,
+        command: DataReleaseActivationCommandV1,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
+    ) -> ActiveDataReleaseV1: ...
+
+
+@dataclass(frozen=True)
+class FiscalReleaseSigningJob:
+    verifier_id: str
+    workflow_identity: str
+    verification_suite_digest: str
+    source_revision: str
+    verification_run_id: str
+    authorize: Callable[[FiscalPublishV2, datetime], Ed25519PrivateKey]
+
+
+@dataclass(frozen=True)
+class FiscalReleaseObservation:
+    display: CurrentFiscalDisplay
+    envelope: FiscalReleaseEnvelopeV2
+    manifest: FiscalReleaseManifestV2
+    checks: FiscalReleaseChecksV2
+    records: tuple[ArtifactRecordV1, ...]
+    heads: tuple[FiscalHistoryHeadV1, ...]
+    epoch: FiscalHistoryEpochV1
+    expires_at: datetime
+    configuration: str
+
+
+def _invalid(message: str) -> SnapshotError:
+    return SnapshotError("FISCAL_RELEASE_INVALID", message)
+
+
+def _reference(record: ArtifactRecordV1, role: str) -> ArtifactRefV1:
+    return ArtifactRefV1(
+        role=role,
+        artifact_id=record.artifact_id,
+        content_hash=record.content_hash,
+        media_type=record.media_type,
+    )
+
+
+@dataclass(frozen=True)
+class _CompletedFiscalReplay:
+    report: FiscalReleaseCanaryV2
+
+
+class FiscalFullReplayPort(Protocol):
+    def _replay_candidate_canary(
+        self,
+        manifest: FiscalReleaseManifestV2,
+        checks_ref: ArtifactRefV1,
+        *,
+        deadline_at: datetime,
+    ) -> _CompletedFiscalReplay: ...
+
+
+class FiscalReleaseReader:
+    def __init__(
+        self,
+        *,
+        display: FiscalDisplayReaderPort,
+        artifacts: EvidenceArtifactStore,
+        history: FiscalAdmissionHistoryReaderPort,
+        publications: FiscalPublicationReaderPort,
+        trust_roots: Callable[[], DataReleaseTrustRootsV1],
+        configuration_digest: Callable[[], str],
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        read_operation: Callable[[], AbstractContextManager[object]] = nullcontext,
+        seal_read_operation: Callable[[], None] = lambda: None,
+        expected_candidate_authority_id: str | None = None,
+    ) -> None:
+        self.display, self.artifacts, self.history, self.publications = (
+            display,
+            artifacts,
+            history,
+            publications,
+        )
+        self.read_operation, self.seal_read_operation = (
+            read_operation,
+            seal_read_operation,
+        )
+        self.expected_candidate_authority_id = expected_candidate_authority_id
+        self.trust_roots, self.configuration_digest, self.clock = (
+            trust_roots,
+            configuration_digest,
+            clock,
+        )
+
+    def _budget(self, deadline_at: datetime) -> float:
+        now = self.clock()
+        if (
+            now.utcoffset() is None
+            or deadline_at.utcoffset() is None
+            or now >= deadline_at
+        ):
+            raise SnapshotError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "fiscal release deadline expired",
+                retryable=True,
+            )
+        return (deadline_at - now).total_seconds()
+
+    def _load(
+        self,
+        reader: FiscalArtifactRead,
+        reference: ArtifactRefV1,
+        model: type[_Model],
+        role: str,
+    ) -> _Model:
+        raw = read_retained_artifact(reader, reference)
+        result = model.model_validate_json(raw)
+        if reference.role != role or canonical_bytes(result) != raw:
+            raise _invalid("fiscal release retained artifact role or bytes differ")
+        return result
+
+    def _observe(
+        self,
+        approved: FiscalPublishV2,
+        current: CurrentFiscalDisplay,
+        reader: FiscalArtifactRead,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalReleaseObservation:
+        self._budget(deadline_at)
+        generation = self.configuration_digest()
+        content, projection = current.candidate.content, current.candidate.projection
+        if (
+            self.expected_candidate_authority_id is not None
+            and current.candidate.preparation.authority_id
+            != self.expected_candidate_authority_id
+        ):
+            raise _invalid("fiscal candidate authority differs from installed selector")
+        if len({use.scope.display_profile_digest for use in content.source_uses}) != 1:
+            raise _invalid("fiscal sources disagree on their display profile")
+        envelope = FiscalReleaseEnvelopeV2(
+            approved=approved,
+            candidate_content_digest=content.content_digest,
+            projection_ref=content.projection_ref,
+        )
+        envelope_ref = ArtifactRefV1(
+            role="fiscal-release-envelope-v2",
+            artifact_id=envelope.artifact_id,
+            content_hash=sha256_digest(envelope),
+            media_type="application/json",
+        )
+        manifest = fiscal_manifest(
+            envelope,
+            envelope_ref,
+            scope=content.scope,
+            cutoff_at=content.cutoff_at,
+            display_profile_digest=content.source_uses[0].scope.display_profile_digest,
+            created_at=current.decision.body.signed_at,
+        )
+        records = {
+            item.artifact_id: item for item in current.candidate.consumed_metadata
+        }
+        for record in current.consumed_metadata:
+            if records.setdefault(record.artifact_id, record) != record:
+                raise _invalid("fiscal release observed conflicting metadata")
+        heads = {head.stream_id: head for head in current.candidate.history_heads}
+        for head in current.history_heads:
+            if heads.setdefault(head.stream_id, head) != head:
+                raise _invalid("fiscal release observed conflicting history heads")
+        values = tuple(sorted(records.values(), key=lambda record: record.artifact_id))
+        retained = tuple(
+            _reference(record, "fiscal-retained-dependency-v1") for record in values
+        )
+        checks = FiscalReleaseChecksV2(
+            manifest_digest=manifest.manifest_digest,
+            candidate_content_digest=content.content_digest,
+            raw_source_closure_digest=sha256_digest((content.source_uses, retained)),
+            parser_resources_digest=sha256_digest(
+                tuple(
+                    (
+                        use.scope.runtime,
+                        use.scope.parser_action_refs,
+                        use.scope.raw_report_digest,
+                    )
+                    for use in content.source_uses
+                )
+            ),
+            mapping_approvals_digest=sha256_digest(content.mapping_refs),
+            admission_scope_digest=sha256_digest(
+                (current.reference, current.decision, current.candidate.candidate)
+            ),
+            periods_and_dag_digest=sha256_digest(
+                (projection, content.period_set_digest, content.row_lineage_digest)
+            ),
+            quality_and_policy_digest=sha256_digest(
+                (
+                    fiscal_statement_policy(),
+                    content.projection_policy_digest,
+                    content.executable_digest,
+                    projection.quality,
+                    projection.valuation_eligibility,
+                )
+            ),
+            retained_refs=retained,
+        )
+        expiries = [
+            current.decision.body.command.request.expires_at,
+            current.candidate.candidate.body.command.expires_at,
+        ]
+        for source in current.candidate.source_evidence:
+            if isinstance(source, VerifiedClassifiedCandidateSource):
+                expiries.extend(source.expires_at)
+        grant_refs = [
+            current.candidate.preparation.grant_ref,
+            current.decision.body.review.execution.grant_ref,
+        ]
+        for source in current.candidate.source_evidence:
+            if isinstance(source, VerifiedClassifiedCandidateSource):
+                grant_refs.extend(activity.grant_ref for activity in source.activities)
+        reader.enroll(current.artifact_readset)
+        for record in values:
+            reader.expect(record.artifact_id, record)
+        for reference in grant_refs:
+            if reference is not None:
+                signed = self._load(
+                    reader, reference, SignedFiscalAuthorityRecordV1, reference.role
+                )
+                if not isinstance(signed.record, FiscalAuthorityGrantV1):
+                    raise _invalid("current activity authority is not a grant")
+                expiries.append(signed.record.valid_until)
+        epoch = self.history.read_epoch(deadline_at=deadline_at)
+        return FiscalReleaseObservation(
+            current,
+            envelope,
+            manifest,
+            checks,
+            values,
+            tuple(heads.values()),
+            epoch,
+            min(expiries),
+            generation,
+        )
+
+    def _finish(
+        self,
+        observation: FiscalReleaseObservation,
+        reader: FiscalArtifactRead,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalActivationObservationV1:
+        records = {record.artifact_id: record for record in observation.records}
+        for _, record in reader.records:
+            if (
+                record is not None
+                and records.setdefault(record.artifact_id, record) != record
+            ):
+                raise _invalid("fiscal release evidence metadata conflicted")
+        values = tuple(sorted(records.values(), key=lambda item: item.artifact_id))
+        for readset in observation.display.content_readsets:
+            readset.check_current(partial(self._budget, deadline_at))
+        reader.check_bodies()
+        self.seal_read_operation()
+        observed = self.history.finish_observation(
+            values, observation.heads, observation.epoch, deadline_at=deadline_at
+        )
+        now = self.clock()
+        if (
+            self.configuration_digest() != observation.configuration
+            or now >= observation.expires_at
+            or now < observed.observed_through
+        ):
+            raise _invalid("fiscal release configuration or current permission changed")
+        observation.epoch.require_current_activity(now)
+        self._budget(deadline_at)
+        return FiscalActivationObservationV1(
+            values,
+            observed.heads,
+            observation.epoch,
+            observation.expires_at,
+            deadline_at,
+        )
+
+    @contextmanager
+    def _open_approved(
+        self, approved: FiscalPublishV2, *, deadline_at: datetime
+    ) -> Iterator[_ReleaseRead]:
+        with self._operation(deadline_at) as read:
+            read.observe(approved)
+            yield read
+
+    @contextmanager
+    def _operation(self, deadline_at: datetime) -> Iterator[_ReleaseRead]:
+        with fiscal_closure_read_operation(), self.read_operation():
+            read = _ReleaseRead(self, deadline_at)
+            try:
+                yield read
+                if not read._completed:
+                    read._complete()
+            except BaseException as error:
+                read._closed = True
+                read.children.__exit__(type(error), error, error.__traceback__)
+                raise
+            finally:
+                read._closed = True
+
+    def observe(
+        self, approved: FiscalPublishV2, *, deadline_at: datetime
+    ) -> FiscalReleaseObservation:
+        with self._open_approved(approved, deadline_at=deadline_at) as read:
+            pass
+        return read.observation
+
+    def _replay_candidate_canary(
+        self,
+        manifest: FiscalReleaseManifestV2,
+        checks_ref: ArtifactRefV1,
+        *,
+        deadline_at: datetime,
+    ) -> _CompletedFiscalReplay:
+        with self._operation(deadline_at) as read:
+            envelope = self._load(
+                read.reader,
+                manifest.envelope_ref,
+                FiscalReleaseEnvelopeV2,
+                "fiscal-release-envelope-v2",
+            )
+            replayed = self.display.replay_candidate(
+                envelope.approved.candidate_ref, deadline_at=deadline_at
+            )
+            observed = read.observe(envelope.approved)
+            checked = self._load(
+                read.reader,
+                checks_ref,
+                FiscalReleaseChecksV2,
+                "fiscal-release-checks-v2",
+            )
+            current = observed.display.candidate
+            if (
+                observed.envelope != envelope
+                or observed.manifest != manifest
+                or observed.checks != checked
+                or checks_ref.artifact_id != checked.artifact_id
+                or replayed.content != current.content
+                or replayed.projection != current.projection
+                or replayed.candidate.body.correctness
+                != current.candidate.body.correctness
+            ):
+                raise _invalid(
+                    "full readonly replay differs from proposed release and exact checks"
+                )
+            report = self._replay_report(manifest, checks_ref, observed)
+        return _CompletedFiscalReplay(report)
+
+    @staticmethod
+    def _replay_report(
+        manifest: FiscalReleaseManifestV2,
+        checks_ref: ArtifactRefV1,
+        observed: FiscalReleaseObservation,
+    ) -> FiscalReleaseCanaryV2:
+        candidate = observed.display.candidate
+        return FiscalReleaseCanaryV2(
+            manifest_digest=manifest.manifest_digest,
+            checked_ref=checks_ref,
+            candidate_correctness_digest=sha256_digest(
+                candidate.candidate.body.correctness
+            ),
+            replay_contract_digest=FiscalProjectionBuilder.closure_contract_digest(),
+            replay_executable_digest=fiscal_preparation_executable_digest(),
+            replay_result_digest=sha256_digest(
+                (
+                    candidate.content,
+                    candidate.projection,
+                    candidate.candidate.body.correctness,
+                    observed.checks,
+                )
+            ),
+        )
+
+    def replay_canary(
+        self, immutable_release_ref: str, *, deadline_at: datetime
+    ) -> FiscalReleaseCanaryV2:
+        with self._open_pinned(
+            immutable_release_ref, deadline_at=deadline_at
+        ) as published:
+            if published.manifest is None or published.verification is None:
+                raise _invalid("full replay requires an exact published release")
+            manifest, signed = published.manifest, published.verification.signed
+        completed = self._replay_candidate_canary(
+            manifest, signed.checked_ref, deadline_at=deadline_at
+        )
+        if sha256_digest(completed.report) != signed.canary_ref.content_hash:
+            raise _invalid("full replay differs from workflow-signed retained canary")
+        return completed.report
+
+    def _inspect_signed_current(
+        self,
+        manifest: FiscalReleaseManifestV2,
+        signed: FiscalReleaseVerificationV2,
+        read: _ReleaseRead,
+        *,
+        deadline_at: datetime,
+    ) -> FiscalReleaseCanaryV2:
+        self._budget(deadline_at)
+        verify_fiscal_signature(signed, self.trust_roots())
+        if signed.manifest_digest != manifest.manifest_digest:
+            raise _invalid("fiscal signature binds another manifest")
+        reader = read.reader
+        signed_id = "fiscal-release-signed-v2:" + manifest.manifest_digest
+        signed_record = reader.get(signed_id)
+        retained = self._load(
+            reader,
+            _reference(signed_record, "fiscal-release-signed-v2"),
+            FiscalReleaseVerificationV2,
+            "fiscal-release-signed-v2",
+        )
+        marker = reader.get("fiscal-release-signing-v2:" + manifest.manifest_digest)
+        dependencies = tuple(
+            sorted(
+                {
+                    signed.checked_ref.content_hash,
+                    signed.canary_ref.content_hash,
+                    signed.candidate_correctness_digest,
+                    signed.replay_contract_digest,
+                    signed.replay_executable_digest,
+                }
+            )
+        )
+        if (
+            retained != signed
+            or reader.read(marker.artifact_id) != signed.signing_bytes()
+            or signed_record.dependency_hashes != dependencies
+        ):
+            raise _invalid("fiscal signing outcome or frozen verification differs")
+        envelope = self._load(
+            reader,
+            manifest.envelope_ref,
+            FiscalReleaseEnvelopeV2,
+            "fiscal-release-envelope-v2",
+        )
+        observed = read.observe(envelope.approved)
+        checked = self._load(
+            reader,
+            signed.checked_ref,
+            FiscalReleaseChecksV2,
+            "fiscal-release-checks-v2",
+        )
+        if (
+            envelope != observed.envelope
+            or manifest != observed.manifest
+            or checked != observed.checks
+            or checked.artifact_id != signed.checked_ref.artifact_id
+        ):
+            raise _invalid("signed fiscal release differs from actual current owners")
+        expected = self._replay_report(manifest, signed.checked_ref, observed)
+        if (
+            signed.candidate_correctness_digest != expected.candidate_correctness_digest
+            or signed.replay_contract_digest != expected.replay_contract_digest
+            or signed.replay_executable_digest != expected.replay_executable_digest
+        ):
+            raise _invalid(
+                "signed canary correctness or installed replay version differs"
+            )
+        return expected
+
+    @contextmanager
+    def _open_pinned(
+        self, manifest_digest: str, *, deadline_at: datetime
+    ) -> Iterator[_ReleaseRead]:
+        with self._operation(deadline_at) as read:
+            read.manifest, read.verification = self._inspect_pinned(
+                manifest_digest, read, deadline_at=deadline_at
+            )
+            yield read
+
+    def pinned(
+        self, manifest_digest: str, *, deadline_at: datetime
+    ) -> tuple[
+        FiscalReleaseManifestV2, FiscalStoredVerificationV2, FiscalReleaseObservation
+    ]:
+        with self._open_pinned(manifest_digest, deadline_at=deadline_at) as read:
+            if read.manifest is None or read.verification is None:
+                raise _invalid("pinned release has no complete publication")
+            manifest, verification = deepcopy((read.manifest, read.verification))
+        return manifest, verification, read.observation
+
+    def _inspect_pinned(
+        self, manifest_digest: str, read: _ReleaseRead, *, deadline_at: datetime
+    ) -> tuple[FiscalReleaseManifestV2, FiscalStoredVerificationV2]:
+        manifest = self.publications.get_data_release_manifest(manifest_digest)
+        verification = self.publications.get_data_release_verification(manifest_digest)
+        if not isinstance(manifest, FiscalReleaseManifestV2) or not isinstance(
+            verification, FiscalStoredVerificationV2
+        ):
+            raise _invalid("pinned fiscal publication is unavailable")
+        verify_publication_pair(manifest, verification, self.trust_roots())
+        expected = self._inspect_signed_current(
+            manifest, verification.signed, read, deadline_at=deadline_at
+        )
+        reader = read.reader
+        actual = self._load(
+            reader,
+            verification.canary_ref,
+            FiscalReleaseCanaryV2,
+            "fiscal-release-canary-v2",
+        )
+        if (
+            actual != expected
+            or verification.canary_ref.artifact_id != actual.artifact_id
+        ):
+            raise _invalid("fiscal canary differs from actual verified checks")
+        return manifest, verification
+
+    def activate(
+        self,
+        command: DataReleaseActivationCommandV1,
+        publications: FiscalPublicationWriterPort,
+        *,
+        deadline_at: datetime,
+    ) -> ActiveDataReleaseV1:
+        with (
+            metadata_operation_budget(
+                partial(self._budget, deadline_at),
+                lambda: SnapshotError(
+                    "REQUEST_DEADLINE_EXCEEDED",
+                    "fiscal activation deadline expired",
+                    retryable=True,
+                ),
+            ),
+            self._open_pinned(command.manifest_digest, deadline_at=deadline_at) as read,
+        ):
+            if read.manifest is None or command.profile_id != read.manifest.profile_id:
+                raise _invalid("fiscal activation profile differs")
+            snapshot = read._complete()
+            return publications.compare_and_swap_data_release(
+                command, fiscal_observation=snapshot
+            )
+
+    def _source_document(
+        self,
+        scope: FiscalSourceUseScopeV1,
+        document: FiscalSourceDocumentObservation,
+        reader: FiscalArtifactRead,
+    ) -> FiscalSourceDocumentV1:
+        if (
+            document.source_validation_ref != scope.source_validation_ref
+            or scope.source_binding_digest != scope.source_validation_ref.content_hash
+        ):
+            raise _invalid("fiscal source document differs from current source use")
+        require_retained_artifact(reader, document.source_validation_ref)
+        return FiscalSourceDocumentV1(
+            issuer_id=scope.issuer_id,
+            accession_number=scope.accession_number,
+            primary_document_url=document.primary_document_url,
+            primary_document_sha256=document.primary_document_sha256,
+            archive_member_sha256=document.archive_member_sha256,
+        )
+
+    def read(
+        self, request: FiscalReadRequestV2, *, deadline_at: datetime
+    ) -> FiscalReadResultV2:
+        with (
+            metadata_operation_budget(
+                partial(self._budget, deadline_at),
+                lambda: _invalid("fiscal read deadline expired"),
+            ),
+            self._open_pinned(
+                request.manifest_digest, deadline_at=deadline_at
+            ) as operation,
+        ):
+            manifest, observed, reader = (
+                operation.manifest,
+                operation.observation,
+                operation.reader,
+            )
+            if manifest is None:
+                raise _invalid("pinned release manifest is unavailable")
+            if (request.scope, request.cutoff_at) != (
+                manifest.scope,
+                manifest.cutoff_at,
+            ):
+                raise _invalid("fiscal requested scope or cutoff differs")
+            projection, content = (
+                observed.display.candidate.projection,
+                observed.display.candidate.content,
+            )
+            roots = (
+                projection.quarter_nodes
+                if request.frequency == "quarter"
+                else projection.ttm_nodes
+            )
+            columns = (
+                FiscalQuarterColumnsV1(periods=projection.quarter_periods)
+                if request.frequency == "quarter"
+                else FiscalTtmColumnsV1(windows=projection.ttm_windows)
+            )
+            rows = []
+            for policy in fiscal_statement_policy().rows:
+                cells: list[FiscalCellV1] = []
+                for node in roots:
+                    if node.row_id != policy.row_id:
+                        continue
+                    if node.availability == "reported" and node.value is not None:
+                        cells.append(
+                            FiscalReportedCellV1(
+                                node_id=node.node_id,
+                                decimal=format(node.value, "f"),
+                                source_observation_ids=node.source_observation_ids,
+                            )
+                        )
+                    elif node.availability == "derived" and node.value is not None:
+                        cells.append(
+                            FiscalDerivedCellV1(
+                                node_id=node.node_id, decimal=format(node.value, "f")
+                            )
+                        )
+                    elif (
+                        node.availability in {"unavailable", "conflict"}
+                        and node.reason_code is not None
+                    ):
+                        cells.append(
+                            FiscalMissingCellV1(
+                                kind="conflict"
+                                if node.availability == "conflict"
+                                else "unavailable",
+                                node_id=node.node_id,
+                                reason_code=node.reason_code,
+                            )
+                        )
+                    else:
+                        raise _invalid(
+                            "fiscal display node has incoherent availability"
+                        )
+                rows.append(FiscalDisplayRowV1(row=policy, cells=tuple(cells)))
+            node_map = {node.node_id: node for node in projection.nodes}
+            selected = {node.node_id for node in roots}
+            pending = list(selected)
+            observation_ids: set[str] = set()
+            while pending:
+                node = node_map[pending.pop()]
+                observation_ids.update(
+                    (*node.source_observation_ids, *node.verification_observation_ids)
+                )
+                observation_ids.update(item.observation_id for item in node.candidates)
+                for identity in (
+                    *tuple(
+                        edge.input_id
+                        for edge in (*node.input_edges, *node.verification_edges)
+                    ),
+                    *node.verification_node_ids,
+                ):
+                    if identity in node_map and identity not in selected:
+                        selected.add(identity)
+                        pending.append(identity)
+                    elif identity not in node_map:
+                        observation_ids.add(identity)
+            documents = {
+                item.source_validation_ref.artifact_id: item
+                for item in observed.display.candidate.source_documents
+            }
+            if len(documents) != len(content.source_uses) or set(documents) != {
+                use.scope.source_validation_ref.artifact_id
+                for use in content.source_uses
+            }:
+                raise _invalid("fiscal current source document set differs")
+            source_uses = tuple(
+                FiscalSourceInspectionV1(
+                    source_validation_ref=use.scope.source_validation_ref,
+                    source_document=self._source_document(
+                        use.scope,
+                        documents[use.scope.source_validation_ref.artifact_id],
+                        reader,
+                    ),
+                    validation_kind=use.scope.validation_kind,
+                    source_binding_digest=use.scope.source_binding_digest,
+                    raw_report_digest=use.scope.raw_report_digest,
+                    parser_action_refs=use.scope.parser_action_refs,
+                    witness_ref=use.scope.witness_ref,
+                    classification_refs=use.classification_refs
+                    if isinstance(use, ClassifiedSourceForCandidateV1)
+                    else (),
+                    mapping_ref=content.mapping_refs[index * 2],
+                    mapping_approval_ref=content.mapping_refs[index * 2 + 1],
+                )
+                for index, use in enumerate(content.source_uses)
+            )
+            result = FiscalReadResultV2(
+                binding=FiscalReadBindingV2(
+                    manifest_digest=manifest.manifest_digest,
+                    approved=observed.envelope.approved,
+                    projection_digest=sha256_digest(projection),
+                    scope=manifest.scope,
+                    cutoff_at=manifest.cutoff_at,
+                    columns=columns,
+                    selected_period_set_digest=sha256_digest(columns),
+                ),
+                rows=tuple(rows),
+                evidence=FiscalDisplayGraphV1(
+                    nodes=tuple(
+                        node for node in projection.nodes if node.node_id in selected
+                    ),
+                    observations=tuple(
+                        item
+                        for item in projection.source_observations
+                        if item.observation_id in observation_ids
+                    ),
+                    source_uses=source_uses,
+                    reconciliations=tuple(
+                        item
+                        for item in projection.reconciliations
+                        if set(item.input_node_ids).issubset(selected)
+                    ),
+                    cash_continuities=tuple(
+                        item
+                        for item in projection.cash_continuities
+                        if set(item.input_node_ids).issubset(selected)
+                    ),
+                ),
+            )
+            return result
+
+
+class FiscalReleaseService:
+    def __init__(
+        self,
+        *,
+        reader: FiscalReleaseReader,
+        canary: FiscalFullReplayPort,
+        artifacts: EvidenceArtifactStore,
+        history: FiscalAdmissionHistoryPort,
+        publications: FiscalPublicationWriterPort,
+        signing: FiscalReleaseSigningJob,
+    ) -> None:
+        (
+            self.reader,
+            self.canary_reader,
+            self.artifacts,
+            self.history,
+            self.publications,
+            self.signing,
+        ) = reader, canary, artifacts, history, publications, signing
+
+    def _put(
+        self,
+        identity: str,
+        value: BaseModel,
+        dependencies: tuple[str, ...],
+        deadline_at: datetime,
+    ) -> ArtifactRefV1:
+        result = self.artifacts.put_with_receipt(
+            identity,
+            value,
+            dependencies,
+            publication_budget=partial(self.reader._budget, deadline_at),
+        )
+        return _reference(result.artifact, identity.split(":", 1)[0])
+
+    def _checkpoint(
+        self, records: tuple[ArtifactRecordV1, ...], deadline_at: datetime
+    ) -> None:
+        for start in range(0, len(records), 256):
+            self.history.checkpoint(
+                records[start : start + 256], deadline_at=deadline_at
+            )
+
+    def publish(
+        self, approved: FiscalPublishV2, *, deadline_at: datetime
+    ) -> FiscalReleaseCandidateReceiptV2:
+        with self.open_publication(approved, deadline_at=deadline_at) as receipt:
+            result = deepcopy(receipt)
+        return result
+
+    @contextmanager
+    def open_publication(
+        self, approved: FiscalPublishV2, *, deadline_at: datetime
+    ) -> Iterator[FiscalReleaseCandidateReceiptV2]:
+        with metadata_operation_budget(
+            partial(self.reader._budget, deadline_at),
+            lambda: _invalid("fiscal publication deadline expired"),
+        ):
+            yield from self._publish(approved, deadline_at=deadline_at)
+
+    def _publish(
+        self, approved: FiscalPublishV2, *, deadline_at: datetime
+    ) -> Iterator[FiscalReleaseCandidateReceiptV2]:
+        approved = FiscalPublishV2.model_validate_json(canonical_bytes(approved))
+        self.signing.authorize(approved, deadline_at)
+        with self.reader._open_approved(approved, deadline_at=deadline_at) as initial:
+            observed = initial.observation
+            envelope_ref = self._put(
+                observed.envelope.artifact_id,
+                observed.envelope,
+                (
+                    approved.candidate_ref.content_hash,
+                    approved.decision_ref.content_hash,
+                    observed.envelope.projection_ref.content_hash,
+                ),
+                deadline_at,
+            )
+            if envelope_ref != observed.manifest.envelope_ref:
+                raise _invalid("published envelope reference differs")
+            checks_ref = self._put(
+                observed.checks.artifact_id,
+                observed.checks,
+                tuple(
+                    sorted({ref.content_hash for ref in observed.checks.retained_refs})
+                ),
+                deadline_at,
+            )
+            self._checkpoint(
+                tuple(
+                    self.artifacts.get(ref.artifact_id)
+                    for ref in (envelope_ref, checks_ref)
+                ),
+                deadline_at,
+            )
+            self.reader._load(
+                initial.reader, envelope_ref, FiscalReleaseEnvelopeV2, envelope_ref.role
+            )
+            self.reader._load(
+                initial.reader, checks_ref, FiscalReleaseChecksV2, checks_ref.role
+            )
+        completed = self.canary_reader._replay_candidate_canary(
+            observed.manifest, checks_ref, deadline_at=deadline_at
+        )
+        report = completed.report
+        report_ref = self._put(
+            report.artifact_id,
+            report,
+            tuple(
+                sorted(
+                    {
+                        checks_ref.content_hash,
+                        report.candidate_correctness_digest,
+                        report.replay_contract_digest,
+                        report.replay_executable_digest,
+                    }
+                )
+            ),
+            deadline_at,
+        )
+        self._checkpoint((self.artifacts.get(report_ref.artifact_id),), deadline_at)
+        payload = dict(
+            protocol="fundamental.fiscal-release-verification.v2",
+            manifest_digest=observed.manifest.manifest_digest,
+            checked_ref=checks_ref,
+            canary_ref=report_ref,
+            candidate_correctness_digest=report.candidate_correctness_digest,
+            replay_contract_digest=report.replay_contract_digest,
+            replay_executable_digest=report.replay_executable_digest,
+            verification_suite_digest=self.signing.verification_suite_digest,
+            source_revision=self.signing.source_revision,
+            verification_run_id=self.signing.verification_run_id,
+            workflow_identity=self.signing.workflow_identity,
+            verifier_id=self.signing.verifier_id,
+        )
+        unsigned = FiscalReleaseVerificationV2.model_validate(
+            {
+                **payload,
+                "verification_digest": sha256_digest(payload),
+                "signature": "0" * 128,
+            }
+        )
+        identity = "fiscal-release-signed-v2:" + observed.manifest.manifest_digest
+        marker_id = "fiscal-release-signing-v2:" + observed.manifest.manifest_digest
+        dependencies = tuple(
+            sorted(
+                {
+                    checks_ref.content_hash,
+                    report_ref.content_hash,
+                    report.candidate_correctness_digest,
+                    report.replay_contract_digest,
+                    report.replay_executable_digest,
+                }
+            )
+        )
+        signing_reader = FiscalArtifactRead(
+            self.artifacts, partial(self.reader._budget, deadline_at)
+        )
+        existing = signing_reader.current(identity)
+        signing_reader.expect(identity, existing)
+        if existing is None:
+            marker_before = signing_reader.current(marker_id)
+            signing_reader.expect(marker_id, marker_before)
+            if marker_before is not None:
+                raise SnapshotError(
+                    "FISCAL_RELEASE_SIGNING_OUTCOME_UNAVAILABLE",
+                    "signing started without a provable durable signed outcome",
+                )
+            marker = self.artifacts.put_bytes_with_receipt(
+                marker_id,
+                unsigned.signing_bytes(),
+                dependencies,
+                media_type="application/json",
+                publication_budget=partial(self.reader._budget, deadline_at),
+            )
+            signing_reader.accept_own_publication(marker, unsigned.signing_bytes())
+            key = self.signing.authorize(approved, deadline_at)
+            signed = unsigned.model_copy(
+                update={"signature": key.sign(unsigned.signing_bytes()).hex()}
+            )
+            publication = self.artifacts.put_with_receipt(
+                identity,
+                signed,
+                dependencies,
+                publication_budget=partial(self.reader._budget, deadline_at),
+            )
+            signing_reader.accept_own_publication(publication, canonical_bytes(signed))
+        signed = FiscalReleaseVerificationV2.model_validate_json(
+            signing_reader.read(identity)
+        )
+        if signed.model_dump(exclude={"signature"}) != unsigned.model_dump(
+            exclude={"signature"}
+        ):
+            raise _invalid(
+                "release retry differs from its immutable workflow signing identity"
+            )
+        self._checkpoint(
+            tuple(self.artifacts.get(item) for item in (identity, marker_id)),
+            deadline_at,
+        )
+        stored = FiscalStoredVerificationV2(signed=signed, canary_ref=report_ref)
+        previous = self.publications.get_data_release_manifest(
+            observed.manifest.manifest_digest
+        )
+        with self.reader._operation(deadline_at) as final:
+            expected = self.reader._inspect_signed_current(
+                observed.manifest, signed, final, deadline_at=deadline_at
+            )
+            retained = self.reader._load(
+                final.reader, report_ref, FiscalReleaseCanaryV2, report_ref.role
+            )
+            if retained != report or retained != expected:
+                raise _invalid(
+                    "final current differs from the completed full readonly canary"
+                )
+            self.signing.authorize(approved, deadline_at)
+            publication_observation = final._complete()
+            self.publications.publish_data_release_candidate(
+                observed.manifest, stored, fiscal_observation=publication_observation
+            )
+        with self.reader._open_pinned(
+            observed.manifest.manifest_digest, deadline_at=deadline_at
+        ):
+            self.signing.authorize(approved, deadline_at)
+            yield FiscalReleaseCandidateReceiptV2(
+                profile_id=observed.manifest.profile_id,
+                release_id=observed.manifest.release_id,
+                manifest_digest=observed.manifest.manifest_digest,
+                verification_digest=signed.verification_digest,
+                envelope_ref=envelope_ref,
+                canary_ref=report_ref,
+                wrote=previous is None,
+            )
+
+    def activate(
+        self, command: DataReleaseActivationCommandV1, *, deadline_at: datetime
+    ) -> ActiveDataReleaseV1:
+        with self.reader._open_pinned(
+            command.manifest_digest, deadline_at=deadline_at
+        ) as read:
+            if read.manifest is None or command.profile_id != read.manifest.profile_id:
+                raise _invalid("fiscal activation profile differs")
+            self.signing.authorize(read.observation.envelope.approved, deadline_at)
+            snapshot = read._complete()
+            with metadata_operation_budget(
+                partial(self.reader._budget, deadline_at),
+                lambda: _invalid("fiscal activation deadline expired"),
+            ):
+                return self.publications.compare_and_swap_data_release(
+                    command, fiscal_observation=snapshot
+                )
+
+
+class _ReleaseRead:
+    def __init__(self, owner: FiscalReleaseReader, deadline_at: datetime) -> None:
+        self.owner, self.deadline_at = owner, deadline_at
+        self.reader = FiscalArtifactRead(
+            owner.artifacts, partial(owner._budget, deadline_at)
+        )
+        self.children = ExitStack()
+        self._display: FiscalDisplayOperation | None = None
+        self._observed: FiscalReleaseObservation | None = None
+        self.manifest: FiscalReleaseManifestV2 | None = None
+        self.verification: FiscalStoredVerificationV2 | None = None
+        self.report: FiscalReleaseCanaryV2 | None = None
+        self._completed = False
+        self._closed = False
+        self._owners = (
+            owner.display,
+            owner.artifacts,
+            owner.history,
+            owner.publications,
+            owner.trust_roots,
+            owner.configuration_digest,
+            owner.clock,
+            owner.read_operation,
+            owner.seal_read_operation,
+            owner.expected_candidate_authority_id,
+        )
+
+    @property
+    def observation(self) -> FiscalReleaseObservation:
+        if self._observed is None:
+            raise _invalid("release observation has no complete first proof")
+        return deepcopy(self._observed)
+
+    def observe(self, approved: FiscalPublishV2) -> FiscalReleaseObservation:
+        if self._closed or self._display is not None:
+            raise _invalid("release observation cannot reopen")
+        self._display = self.owner.display.open_current(
+            approved.decision_ref, approved.candidate_ref, deadline_at=self.deadline_at
+        )
+        display = self.children.enter_context(self._display)
+        self._observed = self.owner._observe(
+            approved, display.current(), self.reader, deadline_at=self.deadline_at
+        )
+        return self.observation
+
+    def _complete(self) -> FiscalActivationObservationV1:
+        owner = self.owner
+        if (
+            self._closed
+            or self._completed
+            or self._display is None
+            or self._observed is None
+        ):
+            raise _invalid("release observation is closed or incomplete")
+        self._closed = True
+        if self._owners != (
+            owner.display,
+            owner.artifacts,
+            owner.history,
+            owner.publications,
+            owner.trust_roots,
+            owner.configuration_digest,
+            owner.clock,
+            owner.read_operation,
+            owner.seal_read_operation,
+            owner.expected_candidate_authority_id,
+        ):
+            raise _invalid("release configured owner changed")
+        self.children.close()
+        final = owner._observe(
+            self._observed.envelope.approved,
+            self._display.completed,
+            self.reader,
+            deadline_at=self.deadline_at,
+        )
+        if final.configuration != self._observed.configuration:
+            raise _invalid("fiscal release configuration or current permission changed")
+        if (
+            final.envelope,
+            final.manifest,
+            final.checks,
+            final.epoch,
+            final.expires_at,
+        ) != (
+            self._observed.envelope,
+            self._observed.manifest,
+            self._observed.checks,
+            self._observed.epoch,
+            self._observed.expires_at,
+        ):
+            raise _invalid("release final owning observation changed")
+        snapshot = owner._finish(final, self.reader, deadline_at=self.deadline_at)
+        self._observed = final
+        self._completed = True
+        return snapshot

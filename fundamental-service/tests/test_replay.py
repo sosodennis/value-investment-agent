@@ -88,6 +88,40 @@ def test_artifact_publication_receipt_reports_unchanged_and_rejects_corruption(
         store.put_with_receipt("source-preparation", {"value": 42})
 
 
+def test_current_records_refreshes_exact_metadata_and_absence_without_reading_body(
+    tmp_path: Path,
+):
+    from fundamental_service.data_releases import DataReleaseError
+
+    store = ArtifactStore(tmp_path)
+    record = store.put("retained", {"value": 42})
+    expected = ((record.artifact_id, record), ("absent", None))
+    store._artifact_path(record.content_hash, record.media_type).unlink()
+    store.require_current_records(expected, check_deadline=lambda: None)
+    writer = ArtifactStore(tmp_path)
+    writer.put("absent", {"value": "appeared"})
+    with pytest.raises(DataReleaseError) as changed:
+        store.require_current_records(expected, check_deadline=lambda: None)
+    assert changed.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    writer.invalidate(record.artifact_id)
+    with pytest.raises(DataReleaseError) as invalidated:
+        store.require_current_records(
+            ((record.artifact_id, record),), check_deadline=lambda: None
+        )
+    assert invalidated.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+
+
+def test_current_records_checks_deadline_even_for_an_empty_readset(tmp_path: Path):
+    store = ArtifactStore(tmp_path)
+
+    def expired():
+        raise SnapshotError("REQUEST_DEADLINE_EXCEEDED", "expired")
+
+    with pytest.raises(SnapshotError) as deadline:
+        store.require_current_records((), check_deadline=expired)
+    assert deadline.value.code == "REQUEST_DEADLINE_EXCEEDED"
+
+
 def test_cache_rebuild_populates_once_for_concurrent_callers():
     cache = CacheLifecycle()
     barrier = Barrier(3)

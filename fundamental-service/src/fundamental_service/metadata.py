@@ -9,22 +9,27 @@ calculator or the existing repository protocols.
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import json
 import sys
 import tempfile
-from concurrent.futures import Future
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterator
+from concurrent.futures import Future, wait
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import Context, ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import resources
 from pathlib import Path
+from stat import S_ISDIR
 from threading import Event, Lock, Thread
-from typing import Any, BinaryIO, Literal
+from typing import Any, BinaryIO, Literal, TypeVar
 from uuid import uuid4
 
-from sqlalchemy import bindparam, text
+import asyncpg
+from sqlalchemy import bindparam, event, text
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from .contracts import (
@@ -34,16 +39,27 @@ from .contracts import (
     SecIngestionResponseV1,
     SourceSnapshotV1,
 )
+from .publication_codec import (
+    ActivePublication,
+    PublicationManifest,
+    PublicationVerification,
+    active_publication,
+    decode_release_manifest,
+    decode_release_verification,
+    verify_publication_pair,
+)
+from .fiscal_release_contracts import FiscalReleaseManifestV2
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .fiscal_admission_history import FiscalActivationObservationV1
+
 from .data_releases import (
     DATA_RELEASE_CAPABILITY,
     ActiveDataReleaseV1,
-    ActiveDataReleaseWithManifestV1,
     DataReleaseActivationCommandV1,
     DataReleaseError,
-    DataReleaseManifestV1,
     DataReleaseTrustRootsV1,
-    DataReleaseVerificationV1,
-    verify_data_release_candidate,
 )
 from .facts import (
     CanonicalFactRepository,
@@ -53,12 +69,59 @@ from .facts import (
 )
 from .original_issuer import IssuerOperatingSourceV1
 from .policies import ModelSpecV1, PolicyRecordV1
-from .replay import ArtifactPublicationV1, ArtifactRecordV1
+from .replay import (
+    ArtifactPublicationDeadlineExceeded,
+    ArtifactPublicationV1,
+    ArtifactRecordV1,
+    BoundedReadPrecondition,
+    check_publication_budget,
+)
 from .serialization import canonical_bytes, sha256_digest
-from .snapshots import SnapshotError, SnapshotRepository
+from .content_publication import ContentPublicationAccess, PrivateContentPublication
+from .snapshots import FilesystemContentStore, SnapshotError, SnapshotRepository
 
 SCHEMA = "fundamental"
 SCHEMA_VERSION = "fundamental-metadata-v2"
+_T = TypeVar("_T")
+
+
+@dataclass(frozen=True)
+class _MetadataBudget:
+    remaining: Callable[[], float]
+    expired: Callable[[], SnapshotError]
+
+    def check(self) -> float:
+        remaining = self.remaining()
+        if remaining <= 0:
+            raise self.expired()
+        return remaining
+
+
+_metadata_budget: ContextVar[_MetadataBudget | None] = ContextVar(
+    "metadata_operation_budget", default=None
+)
+
+
+@contextmanager
+def metadata_operation_budget(
+    remaining: Callable[[], float], expired: Callable[[], SnapshotError]
+) -> Iterator[None]:
+    """Apply a caller deadline to metadata work submitted within this scope."""
+    parent = _metadata_budget.get()
+
+    def remaining_with_parent() -> float:
+        return min(parent.check(), remaining()) if parent is not None else remaining()
+
+    token = _metadata_budget.set(_MetadataBudget(remaining_with_parent, expired))
+    try:
+        yield
+    finally:
+        _metadata_budget.reset(token)
+
+
+def _check_metadata_budget() -> None:
+    if (budget := _metadata_budget.get()) is not None:
+        budget.check()
 
 
 def _async_database_url(database_url: str) -> str:
@@ -74,6 +137,8 @@ class _AsyncRunner:
         self._loop = asyncio.new_event_loop()
         self._ready = Event()
         self._thread = Thread(target=self._serve, name="fundamental-db", daemon=True)
+        self._scoped_tasks: set[asyncio.Task[object]] = set()
+        self._cleanup_tasks: set[asyncio.Task[None]] = set()
         self._engine: AsyncEngine = create_async_engine(
             _async_database_url(database_url),
             pool_pre_ping=True,
@@ -88,16 +153,119 @@ class _AsyncRunner:
         self._ready.set()
         self._loop.run_forever()
 
-    def run(self, coroutine: Any) -> Any:
+    def run(
+        self,
+        coroutine: Coroutine[object, object, _T],
+        *,
+        publication_timeout: float | None = None,
+        cleanup: bool = False,
+    ) -> _T:
         if not self._thread.is_alive():
+            coroutine.close()
             raise RuntimeError("database event loop is unavailable")
-        future: Future[Any] = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
-        return future.result(timeout=15)
+        budget = _metadata_budget.get()
+        if cleanup or budget is None:
+            token = _metadata_budget.set(None)
+            try:
+                future = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
+            finally:
+                _metadata_budget.reset(token)
+            if publication_timeout is None:
+                return future.result(timeout=15)
+            if wait((future,), timeout=publication_timeout).done:
+                return future.result()
+            future.cancel()
+            raise ArtifactPublicationDeadlineExceeded()
+        return self._run_scoped(coroutine, budget)
+
+    def _run_scoped(
+        self, coroutine: Coroutine[object, object, _T], budget: _MetadataBudget
+    ) -> _T:
+        try:
+            budget.check()
+        except BaseException:
+            coroutine.close()
+            raise
+        cancelled = Event()
+        timer: asyncio.Timeout | None = None
+
+        async def bounded() -> _T:
+            nonlocal timer
+            try:
+                if cancelled.is_set():
+                    raise budget.expired()
+                timeout = asyncio.timeout(budget.check())
+            except BaseException:
+                coroutine.close()
+                raise
+            timer = timeout
+            task = asyncio.current_task()
+            assert task is not None
+            self._scoped_tasks.add(task)
+            try:
+                async with timeout:
+                    result = await coroutine
+                    budget.check()
+            except TimeoutError:
+                if timeout.expired():
+                    raise budget.expired() from None
+                raise
+            finally:
+                timer = None
+                self._scoped_tasks.discard(task)
+            return result
+
+        def expire_async_wait() -> None:
+            # Both waiters use one timer so cancellation cannot interrupt cleanup.
+            if timer is not None and not timer.expired():
+                timer.reschedule(self._loop.time())
+
+        future: Future[_T] = asyncio.run_coroutine_threadsafe(bounded(), self._loop)
+        try:
+            if wait((future,), timeout=budget.check()).done:
+                return future.result()
+            raise budget.expired()
+        finally:
+            if not future.done():
+                cancelled.set()
+                self._loop.call_soon_threadsafe(expire_async_wait)
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[AsyncConnection]:
+        budget = _metadata_budget.get()
+
+        def check_commit_deadline(_connection: Connection) -> None:
+            if budget is not None:
+                budget.check()
+
+        async with self._engine.begin() as connection:
+            if budget is not None:
+                event.listen(
+                    connection.sync_connection, "commit", check_commit_deadline
+                )
+            yield connection
+            if budget is not None:
+                budget.check()
+
+    def defer_cleanup(self, coroutine: Coroutine[object, object, None]) -> None:
+        def start_cleanup() -> None:
+            task = self._loop.create_task(coroutine)
+            self._cleanup_tasks.add(task)
+            task.add_done_callback(self._cleanup_tasks.discard)
+
+        self._loop.call_soon_threadsafe(start_cleanup, context=Context())
+
+    async def _dispose(self) -> None:
+        if self._scoped_tasks:
+            await asyncio.gather(*self._scoped_tasks, return_exceptions=True)
+        if self._cleanup_tasks:
+            await asyncio.gather(*self._cleanup_tasks, return_exceptions=True)
+        await self._engine.dispose()
 
     def close(self) -> None:
         if self._thread.is_alive():
             try:
-                self.run(self._engine.dispose())
+                self.run(self._dispose(), cleanup=True)
             finally:
                 self._loop.call_soon_threadsafe(self._loop.stop)
                 self._thread.join(timeout=5)
@@ -156,8 +324,85 @@ class PostgresMetadataStore:
         return self._data_release_trust_roots is not None
 
     def start(self) -> None:
+        self._start(self._startup)
+
+    def start_read_only(self) -> None:
+        self._start(self._inspect_schema)
+
+    def require_fiscal_readonly_role(self, expected_role: str) -> None:
+        async def require(connection: AsyncConnection) -> None:
+            users = (
+                await connection.execute(text("SELECT current_user,session_user"))
+            ).one()
+            if tuple(users) != (expected_role, expected_role):
+                raise SnapshotError(
+                    "FISCAL_CANARY_ROLE_INVALID", "canary database workload differs"
+                )
+            unsafe: bool = (
+                await connection.execute(
+                    text("""
+                WITH reachable AS (
+                    SELECT role.oid,role.rolname,role.rolsuper,role.rolcreaterole,
+                        role.rolcreatedb,role.rolreplication,role.rolbypassrls
+                    FROM pg_roles role
+                    WHERE pg_has_role(current_user,role.oid,'SET')
+                )
+                SELECT EXISTS (
+                    SELECT 1 FROM reachable role
+                    WHERE role.rolsuper OR role.rolcreaterole OR role.rolcreatedb
+                        OR role.rolreplication OR role.rolbypassrls
+                        OR EXISTS (
+                            SELECT 1 FROM pg_class relation JOIN pg_namespace namespace
+                                ON namespace.oid=relation.relnamespace
+                            WHERE namespace.nspname IN ('fundamental','fundamental_recovery')
+                                AND (relation.relowner=role.oid
+                                    OR relation.relkind IN ('r','p','v','m','f')
+                                        AND has_table_privilege(role.oid,relation.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                                    OR relation.relkind='S'
+                                        AND has_sequence_privilege(role.oid,relation.oid,'USAGE,UPDATE'))
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM pg_namespace namespace
+                            WHERE namespace.nspname IN ('fundamental','fundamental_recovery')
+                                AND has_schema_privilege(role.oid,namespace.oid,'CREATE')
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM pg_proc procedure JOIN pg_namespace namespace
+                                ON namespace.oid=procedure.pronamespace
+                            WHERE namespace.nspname IN ('fundamental','fundamental_recovery')
+                                AND procedure.prosecdef AND procedure.prorettype <> 'trigger'::regtype
+                                AND procedure.proname NOT IN (
+                                    'fiscal_history_origin_id','fiscal_history_local_ready','fiscal_recovery_match'
+                                )
+                                AND has_function_privilege(role.oid,procedure.oid,'EXECUTE')
+                        )
+                )
+                OR EXISTS (
+                    SELECT 1 FROM pg_auth_members membership
+                    WHERE membership.admin_option AND pg_has_role(current_user,membership.member,'USAGE')
+                        AND EXISTS (
+                            SELECT 1 FROM pg_class relation JOIN pg_namespace namespace
+                                ON namespace.oid=relation.relnamespace
+                            WHERE namespace.nspname IN ('fundamental','fundamental_recovery')
+                                AND (relation.relowner=membership.roleid
+                                    OR relation.relkind IN ('r','p','v','m','f')
+                                        AND has_table_privilege(membership.roleid,relation.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
+                        )
+                )
+            """)
+                )
+            ).scalar_one()
+            if unsafe:
+                raise SnapshotError(
+                    "FISCAL_CANARY_ROLE_INVALID",
+                    "canary requires an independent SELECT-only service role",
+                )
+
+        self.run_fiscal_admission_history(require)
+
+    def _start(self, operation: Callable[[], Coroutine[object, object, None]]) -> None:
         try:
-            self._runner.run(self._startup())
+            self._runner.run(operation())
         except Exception as exc:  # pragma: no cover - exercised by container startup
             self._ready = False
             self._health = MetadataHealth(False, None)
@@ -170,6 +415,9 @@ class PostgresMetadataStore:
     async def _startup(self) -> None:
         if self.auto_migrate:
             await self._apply_migration()
+        await self._inspect_schema()
+
+    async def _inspect_schema(self) -> None:
         version = await self._schema_version()
         if version != SCHEMA_VERSION:
             raise RuntimeError("Fundamental metadata schema version is incompatible")
@@ -200,10 +448,29 @@ class PostgresMetadataStore:
         for migration in migrations:
             sql = migration.read_text(encoding="utf-8")
             async with self._runner._engine.begin() as connection:
-                for statement in sql.split(";"):
-                    statement = statement.strip()
-                    if statement:
-                        await connection.execute(text(statement))
+                await connection.execute(text("SELECT 1"))
+                raw = await connection.get_raw_connection()
+                driver = raw.driver_connection
+                if not isinstance(driver, asyncpg.Connection):
+                    raise RuntimeError("metadata migrations require PostgreSQL")
+                await driver.execute(sql)
+
+    def run_fiscal_admission_history(
+        self, operation: Callable[[AsyncConnection], Awaitable[_T]]
+    ) -> _T:
+        self._require_ready()
+        if "fiscal-admission-history-v1" not in self._schema_capabilities:
+            raise SnapshotError(
+                "FISCAL_ADMISSION_HISTORY_UNAVAILABLE",
+                "fiscal admission history capability is unavailable",
+            )
+        return self._runner.run(self._fiscal_history_transaction(operation))
+
+    async def _fiscal_history_transaction(
+        self, operation: Callable[[AsyncConnection], Awaitable[_T]]
+    ) -> _T:
+        async with self._runner.transaction() as connection:
+            return await operation(connection)
 
     async def _schema_version(self) -> str | None:
         async with self._runner._engine.connect() as connection:
@@ -328,7 +595,13 @@ class PostgresMetadataStore:
         advisory_key = int.from_bytes(
             bytes.fromhex(acquisition_key[:16]), "big", signed=True
         )
-        return self._runner.run(self._try_acquire_ingestion_lock(advisory_key))
+        lease = IngestionLockLease(uuid4().hex, advisory_key)
+        try:
+            return self._runner.run(self._try_acquire_ingestion_lock(lease))
+        except BaseException:
+            if _metadata_budget.get() is not None:
+                self._runner.defer_cleanup(self._release_ingestion_lock(lease.lease_id))
+            raise
 
     def reserve_sec_provider_request_slot(self, min_interval_seconds: float) -> float:
         self._require_ready()
@@ -343,7 +616,7 @@ class PostgresMetadataStore:
     async def _reserve_sec_provider_request_slot(
         self, min_interval_seconds: float
     ) -> float:
-        async with self._runner._engine.begin() as connection:
+        async with self._runner.transaction() as connection:
             await connection.execute(
                 text(
                     "INSERT INTO fundamental.sec_provider_rate_limits "
@@ -378,31 +651,81 @@ class PostgresMetadataStore:
         return float(row["wait_seconds"])
 
     async def _try_acquire_ingestion_lock(
-        self, advisory_key: int
+        self, lease: IngestionLockLease
     ) -> IngestionLockLease | None:
         connection = await self._runner._engine.connect()
         try:
             result = await connection.execute(
                 text("SELECT pg_try_advisory_lock(:advisory_key)"),
-                {"advisory_key": advisory_key},
+                {"advisory_key": lease.advisory_key},
             )
             acquired = bool(result.scalar_one())
+            _check_metadata_budget()
             await connection.commit()
             if not acquired:
                 await connection.close()
                 return None
-            lease = IngestionLockLease(uuid4().hex, advisory_key)
+            _check_metadata_budget()
             self._ingestion_lock_connections[lease.lease_id] = (
-                advisory_key,
+                lease.advisory_key,
                 connection,
             )
             return lease
-        except Exception:
-            await connection.close()
+        except BaseException:
+            await self._discard_lock_connection(connection)
             raise
 
     def release_ingestion_lock(self, lease: IngestionLockLease) -> None:
-        self._runner.run(self._release_ingestion_lock(lease.lease_id))
+        self._runner.run(self._release_ingestion_lock(lease.lease_id), cleanup=True)
+
+    def require_ingestion_lock(self, lease: IngestionLockLease) -> datetime:
+        self._require_ready()
+        return self._runner.run(self._require_ingestion_lock(lease))
+
+    async def _require_ingestion_lock(self, lease: IngestionLockLease) -> datetime:
+        held = self._ingestion_lock_connections.get(lease.lease_id)
+        if held is None or held[0] != lease.advisory_key or held[1].closed:
+            raise SnapshotError(
+                "INGESTION_LOCK_LOST", "ingestion lease is no longer held"
+            )
+        connection = held[1]
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT clock_timestamp() AS observed_at, EXISTS ("
+                        "SELECT 1 FROM pg_catalog.pg_locks WHERE locktype='advisory' "
+                        "AND pid=pg_backend_pid() AND granted AND objsubid=1 "
+                        "AND classid=:high AND objid=:low) AS held"
+                    ),
+                    {
+                        "high": (lease.advisory_key & ((1 << 64) - 1)) >> 32,
+                        "low": lease.advisory_key & ((1 << 32) - 1),
+                    },
+                )
+            )
+            .mappings()
+            .one()
+        )
+        _check_metadata_budget()
+        await connection.commit()
+        if not row["held"]:
+            raise SnapshotError(
+                "INGESTION_LOCK_LOST", "ingestion lease is no longer held"
+            )
+        observed_at = row["observed_at"]
+        if not isinstance(observed_at, datetime) or observed_at.utcoffset() is None:
+            raise SnapshotError(
+                "INGESTION_LOCK_LOST", "ingestion lease clock is invalid"
+            )
+        return observed_at
+
+    @staticmethod
+    async def _discard_lock_connection(connection: AsyncConnection) -> None:
+        try:
+            await connection.invalidate()
+        finally:
+            await connection.close()
 
     async def _release_ingestion_lock(self, lease_id: str) -> None:
         held = self._ingestion_lock_connections.pop(lease_id, None)
@@ -410,14 +733,17 @@ class PostgresMetadataStore:
             return
         advisory_key, connection = held
         try:
-            if not connection.closed:
-                await connection.execute(
-                    text("SELECT pg_advisory_unlock(:advisory_key)"),
-                    {"advisory_key": advisory_key},
-                )
-                await connection.commit()
-        finally:
-            await connection.close()
+            async with asyncio.timeout(5):
+                if not connection.closed:
+                    await connection.execute(
+                        text("SELECT pg_advisory_unlock(:advisory_key)"),
+                        {"advisory_key": advisory_key},
+                    )
+                    await connection.commit()
+                await connection.close()
+        except BaseException:
+            await self._discard_lock_connection(connection)
+            raise
 
     def get_sec_ingestion(
         self,
@@ -735,26 +1061,47 @@ class PostgresMetadataStore:
 
     def publish_data_release_candidate(
         self,
-        manifest: DataReleaseManifestV1,
-        verification: DataReleaseVerificationV1,
+        manifest: PublicationManifest,
+        verification: PublicationVerification,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
     ) -> None:
         self._require_data_release_capability()
+        manifest = decode_release_manifest(canonical_bytes(manifest))
+        verification = decode_release_verification(canonical_bytes(verification))
         if self._data_release_trust_roots is None:
             raise DataReleaseError(
                 "DATA_RELEASE_TRUST_ROOTS_UNCONFIGURED",
                 "data release trust roots are required to publish a candidate",
             )
-        verify_data_release_candidate(
-            manifest, verification, self._data_release_trust_roots
+        verify_publication_pair(manifest, verification, self._data_release_trust_roots)
+        if isinstance(manifest, FiscalReleaseManifestV2) != (
+            fiscal_observation is not None
+        ):
+            raise DataReleaseError(
+                "FISCAL_PUBLICATION_OBSERVATION_REQUIRED",
+                "fiscal publication requires its complete owning observation",
+            )
+        self._runner.run(
+            self._publish_data_release_candidate(
+                manifest, verification, fiscal_observation=fiscal_observation
+            )
         )
-        self._runner.run(self._publish_data_release_candidate(manifest, verification))
 
     async def _publish_data_release_candidate(
         self,
-        manifest: DataReleaseManifestV1,
-        verification: DataReleaseVerificationV1,
+        manifest: PublicationManifest,
+        verification: PublicationVerification,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
     ) -> None:
+        from .fiscal_admission_history import PostgresFiscalAdmissionHistory
+
         async with self._runner._engine.begin() as connection:
+            if fiscal_observation is not None:
+                await PostgresFiscalAdmissionHistory(self).validate_activation(
+                    fiscal_observation, connection
+                )
             await connection.execute(
                 text(
                     "INSERT INTO fundamental.data_release_manifests "
@@ -837,25 +1184,30 @@ class PostgresMetadataStore:
                     "stored data release verification cannot be replaced",
                 )
 
+            if fiscal_observation is not None:
+                await PostgresFiscalAdmissionHistory.require_activation_clock(
+                    fiscal_observation, connection
+                )
+
     def get_active_data_release(self, profile_id: str) -> ActiveDataReleaseV1 | None:
         self._require_data_release_capability()
         return self._runner.run(self._get_active_data_release(profile_id))
 
     def get_data_release_manifest(
         self, manifest_digest: str
-    ) -> DataReleaseManifestV1 | None:
+    ) -> PublicationManifest | None:
         self._require_data_release_capability()
         return self._runner.run(self._get_data_release_manifest(manifest_digest))
 
     def get_data_release_verification(
         self, manifest_digest: str
-    ) -> DataReleaseVerificationV1 | None:
+    ) -> PublicationVerification | None:
         self._require_data_release_capability()
         return self._runner.run(self._get_data_release_verification(manifest_digest))
 
     async def _get_data_release_verification(
         self, manifest_digest: str
-    ) -> DataReleaseVerificationV1 | None:
+    ) -> PublicationVerification | None:
         async with self._runner._engine.connect() as connection:
             row = (
                 (
@@ -876,12 +1228,8 @@ class PostgresMetadataStore:
             )
         if row is None:
             return None
-        verification = DataReleaseVerificationV1.model_validate_json(
-            canonical_bytes(row["payload"])
-        )
-        manifest = DataReleaseManifestV1.model_validate_json(
-            canonical_bytes(row["manifest_payload"])
-        )
+        verification = decode_release_verification(canonical_bytes(row["payload"]))
+        manifest = decode_release_manifest(canonical_bytes(row["manifest_payload"]))
         if (
             verification.verification_digest != row["verification_digest"]
             or verification.manifest_digest != manifest_digest
@@ -896,14 +1244,12 @@ class PostgresMetadataStore:
                 "DATA_RELEASE_TRUST_ROOTS_UNCONFIGURED",
                 "data release trust roots are required to read verification evidence",
             )
-        verify_data_release_candidate(
-            manifest, verification, self._data_release_trust_roots
-        )
+        verify_publication_pair(manifest, verification, self._data_release_trust_roots)
         return verification
 
     async def _get_data_release_manifest(
         self, manifest_digest: str
-    ) -> DataReleaseManifestV1 | None:
+    ) -> PublicationManifest | None:
         async with self._runner._engine.connect() as connection:
             payload = await connection.scalar(
                 text(
@@ -917,7 +1263,13 @@ class PostgresMetadataStore:
             )
         if payload is None:
             return None
-        return DataReleaseManifestV1.model_validate_json(canonical_bytes(payload))
+        manifest = decode_release_manifest(canonical_bytes(payload))
+        if manifest.manifest_digest != manifest_digest:
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_MISMATCH", "stored manifest identity differs"
+            )
+        await self._get_data_release_verification(manifest_digest)
+        return manifest
 
     async def _get_active_data_release(
         self, profile_id: str
@@ -948,13 +1300,13 @@ class PostgresMetadataStore:
 
     def get_active_data_release_with_manifest(
         self, profile_id: str
-    ) -> ActiveDataReleaseWithManifestV1 | None:
+    ) -> ActivePublication | None:
         self._require_data_release_capability()
         return self._runner.run(self._get_active_data_release_with_manifest(profile_id))
 
     async def _get_active_data_release_with_manifest(
         self, profile_id: str
-    ) -> ActiveDataReleaseWithManifestV1 | None:
+    ) -> ActivePublication | None:
         async with self._runner._engine.connect() as connection:
             row = (
                 (
@@ -982,20 +1334,31 @@ class PostgresMetadataStore:
             revision=int(row["revision"]),
             activated_at=row["activated_at"],
         )
-        manifest = DataReleaseManifestV1.model_validate_json(
-            canonical_bytes(row["payload"])
-        )
-        return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
+        manifest = decode_release_manifest(canonical_bytes(row["payload"]))
+        await self._get_data_release_verification(active.manifest_digest)
+        return active_publication(active, manifest)
 
     def compare_and_swap_data_release(
-        self, command: DataReleaseActivationCommandV1
+        self,
+        command: DataReleaseActivationCommandV1,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
     ) -> ActiveDataReleaseV1:
         self._require_data_release_capability()
-        return self._runner.run(self._compare_and_swap_data_release(command))
+        return self._runner.run(
+            self._compare_and_swap_data_release(
+                command, fiscal_observation=fiscal_observation
+            )
+        )
 
     async def _compare_and_swap_data_release(
-        self, command: DataReleaseActivationCommandV1
+        self,
+        command: DataReleaseActivationCommandV1,
+        *,
+        fiscal_observation: FiscalActivationObservationV1 | None = None,
     ) -> ActiveDataReleaseV1:
+        from .fiscal_admission_history import PostgresFiscalAdmissionHistory
+
         async with self._runner._engine.begin() as connection:
             await connection.execute(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:command_id, 0))"),
@@ -1007,11 +1370,16 @@ class PostgresMetadataStore:
             if previous_command is not None:
                 return self._replay_activation_command(previous_command, command)
 
+            if fiscal_observation is not None:
+                await PostgresFiscalAdmissionHistory(self).validate_activation(
+                    fiscal_observation, connection
+                )
+
             candidate = (
                 (
                     await connection.execute(
                         text(
-                            "SELECT manifest.profile_id "
+                            "SELECT manifest.profile_id, manifest.payload "
                             "FROM fundamental.data_release_manifests AS manifest "
                             "JOIN fundamental.data_release_verifications AS verification "
                             "USING (manifest_digest) "
@@ -1027,6 +1395,16 @@ class PostgresMetadataStore:
                 raise DataReleaseError(
                     "DATA_RELEASE_CANDIDATE_UNVERIFIED",
                     "verified data release candidate was not found for this profile",
+                )
+            candidate_manifest = decode_release_manifest(
+                canonical_bytes(candidate["payload"])
+            )
+            if isinstance(candidate_manifest, FiscalReleaseManifestV2) != (
+                fiscal_observation is not None
+            ):
+                raise DataReleaseError(
+                    "FISCAL_ACTIVATION_OBSERVATION_REQUIRED",
+                    "fiscal activation requires a complete owning current observation",
                 )
             if command.operation == "rollback":
                 previously_active = await connection.scalar(
@@ -1080,6 +1458,11 @@ class PostgresMetadataStore:
                     "DATA_RELEASE_POINTER_CONFLICT",
                     "active data release changed; reread and revalidate the candidate",
                     retryable=True,
+                )
+
+            if fiscal_observation is not None:
+                await PostgresFiscalAdmissionHistory.require_activation_clock(
+                    fiscal_observation, connection
                 )
 
             activated = (
@@ -1372,6 +1755,29 @@ class PostgresMetadataStore:
             )
         return None if row is None else dict(row["payload"])
 
+    def content_byte_length(self, content_hash: str, *, media_type: str) -> int:
+        self._require_ready()
+        value = self._runner.run(self._content_byte_length(content_hash, media_type))
+        if value is None:
+            raise SnapshotError(
+                "CONTENT_REGISTRATION_UNAVAILABLE",
+                "retained content registration is missing",
+            )
+        return value
+
+    async def _content_byte_length(
+        self, content_hash: str, media_type: str
+    ) -> int | None:
+        async with self._runner._engine.connect() as connection:
+            value = await connection.scalar(
+                text(
+                    "SELECT byte_length FROM fundamental.content_objects "
+                    "WHERE content_hash=:digest AND media_type=:media"
+                ),
+                {"digest": content_hash, "media": media_type},
+            )
+            return int(value) if value is not None else None
+
     def register_content(
         self, content_hash: str, *, media_type: str, byte_length: int
     ) -> None:
@@ -1458,7 +1864,7 @@ class PostgresMetadataStore:
     async def _register_content(
         self, content_hash: str, media_type: str, byte_length: int
     ) -> None:
-        async with self._runner._engine.begin() as connection:
+        async with self._runner.transaction() as connection:
             await connection.execute(
                 text(
                     "INSERT INTO fundamental.content_objects"
@@ -1474,38 +1880,65 @@ class PostgresMetadataStore:
                 },
             )
 
-    def publish_artifact(self, record: ArtifactRecordV1) -> bool:
+    def publish_artifact(
+        self,
+        record: ArtifactRecordV1,
+        *,
+        publication_budget: Callable[[], float] | None = None,
+    ) -> bool:
         self._require_ready()
-        return bool(self._runner.run(self._publish_artifact(record)))
-
-    async def _publish_artifact(self, record: ArtifactRecordV1) -> bool:
-        async with self._runner._engine.begin() as connection:
-            existing = (
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT content_hash, media_type, dependency_hashes, "
-                            "status, retention FROM fundamental.artifact_references "
-                            "WHERE artifact_id=:artifact_id"
-                        ),
-                        {"artifact_id": record.artifact_id},
-                    )
-                )
-                .mappings()
-                .first()
+        if _metadata_budget.get() is not None:
+            if publication_budget is None:
+                return self._runner.run(self._publish_scoped_artifact(record))
+            with metadata_operation_budget(
+                publication_budget, ArtifactPublicationDeadlineExceeded
+            ):
+                return self._runner.run(self._publish_scoped_artifact(record))
+        remaining = check_publication_budget(publication_budget)
+        return bool(
+            self._runner.run(
+                self._publish_artifact(record, publication_budget),
+                publication_timeout=remaining,
             )
-            if existing is not None:
-                if (
-                    existing["content_hash"] != record.content_hash
-                    or existing["media_type"] != record.media_type
-                    or tuple(existing["dependency_hashes"]) != record.dependency_hashes
-                    or existing["status"] != record.status
-                    or existing["retention"] != record.retention
-                ):
-                    raise SnapshotError(
-                        "ARTIFACT_ID_REUSED", "artifact IDs are immutable"
-                    )
-                return False
+        )
+
+    async def _publish_scoped_artifact(self, record: ArtifactRecordV1) -> bool:
+        async with self._runner.transaction() as connection:
+            return await self._put_artifact_reference(connection, record)
+
+    async def _publish_artifact(
+        self, record: ArtifactRecordV1, publication_budget: Callable[[], float] | None
+    ) -> bool:
+        def check_commit_deadline(_connection: Connection) -> None:
+            check_publication_budget(publication_budget)
+
+        timeout = asyncio.timeout(check_publication_budget(publication_budget))
+        try:
+            async with timeout:
+                async with self._runner._engine.begin() as connection:
+                    if publication_budget is not None:
+                        event.listen(
+                            connection.sync_connection, "commit", check_commit_deadline
+                        )
+                    wrote = await self._put_artifact_reference(connection, record)
+                    check_publication_budget(publication_budget)
+        except TimeoutError:
+            if timeout.expired():
+                raise ArtifactPublicationDeadlineExceeded() from None
+            raise
+        return wrote
+
+    async def _put_artifact_reference(
+        self, connection: AsyncConnection, record: ArtifactRecordV1
+    ) -> bool:
+        reference_query = text(
+            "SELECT content_hash, media_type, dependency_hashes, "
+            "status, retention FROM fundamental.artifact_references "
+            "WHERE artifact_id=:artifact_id"
+        )
+        key = {"artifact_id": record.artifact_id}
+        existing = (await connection.execute(reference_query, key)).mappings().first()
+        if existing is None:
             inserted = await connection.execute(
                 text(
                     "INSERT INTO fundamental.artifact_references"
@@ -1516,7 +1949,7 @@ class PostgresMetadataStore:
                     "ON CONFLICT (artifact_id) DO NOTHING RETURNING artifact_id"
                 ),
                 {
-                    "artifact_id": record.artifact_id,
+                    **key,
                     "content_hash": record.content_hash,
                     "media_type": record.media_type,
                     "dependency_hashes": json.dumps(record.dependency_hashes),
@@ -1524,29 +1957,21 @@ class PostgresMetadataStore:
                     "retention": record.retention,
                 },
             )
+            wrote = inserted.scalar_one_or_none() is not None
             existing = (
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT content_hash, media_type, dependency_hashes, "
-                            "status, retention FROM fundamental.artifact_references "
-                            "WHERE artifact_id=:artifact_id"
-                        ),
-                        {"artifact_id": record.artifact_id},
-                    )
-                )
-                .mappings()
-                .first()
+                (await connection.execute(reference_query, key)).mappings().first()
             )
-            if existing is None or (
-                existing["content_hash"] != record.content_hash
-                or existing["media_type"] != record.media_type
-                or tuple(existing["dependency_hashes"]) != record.dependency_hashes
-                or existing["status"] != record.status
-                or existing["retention"] != record.retention
-            ):
-                raise SnapshotError("ARTIFACT_ID_REUSED", "artifact IDs are immutable")
-            return inserted.scalar_one_or_none() is not None
+        else:
+            wrote = False
+        if existing is None or (
+            existing["content_hash"] != record.content_hash
+            or existing["media_type"] != record.media_type
+            or tuple(existing["dependency_hashes"]) != record.dependency_hashes
+            or existing["status"] != record.status
+            or existing["retention"] != record.retention
+        ):
+            raise SnapshotError("ARTIFACT_ID_REUSED", "artifact IDs are immutable")
+        return wrote
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecordV1:
         self._require_ready()
@@ -1581,7 +2006,7 @@ class PostgresMetadataStore:
     async def _publish_parser_action_result(
         self, action_key: str, artifact_id: str
     ) -> None:
-        async with self._runner._engine.begin() as connection:
+        async with self._runner.transaction() as connection:
             await connection.execute(
                 text(
                     "INSERT INTO fundamental.parser_action_results(action_key, artifact_id) "
@@ -1607,6 +2032,65 @@ class PostgresMetadataStore:
             )
             for row in rows
         }
+
+    def _bounded_artifact_before(self, artifact_id: str) -> _BoundedArtifactObservation:
+        self._require_ready()
+        rows = self._runner.run(self._retained_artifact_records((artifact_id,)))
+        if not rows:
+            return _BoundedArtifactObservation(None, None)
+        row = rows[0]
+        return _BoundedArtifactObservation(
+            canonical_bytes(
+                {key: value for key, value in row.items() if key != "byte_length"}
+            ),
+            row["byte_length"],
+        )
+
+    def _bounded_artifact_after(
+        self, artifact_id: str, *, content_hash: str, media_type: str
+    ) -> _BoundedArtifactObservation:
+        self._require_ready()
+        return self._runner.run(
+            self._read_bounded_artifact_after(artifact_id, content_hash, media_type)
+        )
+
+    async def _read_bounded_artifact_after(
+        self, artifact_id: str, content_hash: str, media_type: str
+    ) -> _BoundedArtifactObservation:
+        async with self._runner._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT artifact.artifact_id, artifact.content_hash, "
+                            "artifact.media_type, artifact.dependency_hashes, "
+                            "artifact.status, artifact.retention, content.byte_length "
+                            "FROM (SELECT CAST(:artifact_id AS text) AS artifact_id) "
+                            "AS requested "
+                            "LEFT JOIN fundamental.artifact_references AS artifact "
+                            "ON artifact.artifact_id=requested.artifact_id "
+                            "LEFT JOIN fundamental.content_objects AS content "
+                            "ON content.content_hash=:content_hash "
+                            "AND content.media_type=:media_type"
+                        ),
+                        {
+                            "artifact_id": artifact_id,
+                            "content_hash": content_hash,
+                            "media_type": media_type,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        return _BoundedArtifactObservation(
+            canonical_bytes(
+                {key: value for key, value in row.items() if key != "byte_length"}
+            )
+            if row["artifact_id"] is not None
+            else None,
+            row["byte_length"],
+        )
 
     async def _retained_artifact_records(
         self,
@@ -1775,7 +2259,7 @@ class PostgresMetadataStore:
             if self._closed:
                 return
             try:
-                self._runner.run(self._release_all_ingestion_locks())
+                self._runner.run(self._release_all_ingestion_locks(), cleanup=True)
             finally:
                 self._runner.close()
                 self._ready = False
@@ -1796,16 +2280,71 @@ class PostgresMetadataStore:
                 await connection.close()
 
 
+class _ReadOnlyFilesystemContentStore(FilesystemContentStore):
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self._publication_access = PrivateContentPublication()
+
+    def put(self, content: bytes, *, media_type: str) -> str:
+        raise SnapshotError(
+            "READ_ONLY_STORAGE", "filesystem publication capability is unavailable"
+        )
+
+
 class PostgresContentStore:
     """Filesystem bytes with PostgreSQL content-object metadata."""
 
-    def __init__(self, root: Path, metadata: PostgresMetadataStore) -> None:
-        from .snapshots import FilesystemContentStore
-
-        self._filesystem = FilesystemContentStore(root)
+    def __init__(
+        self,
+        root: Path,
+        metadata: PostgresMetadataStore,
+        *,
+        read_only: bool = False,
+        publication_access: ContentPublicationAccess = PrivateContentPublication(),
+    ) -> None:
+        if read_only and not root.is_dir():
+            raise SnapshotError(
+                "SOURCE_BYTES_UNAVAILABLE", "read-only content root is missing"
+            )
+        if not read_only:
+            try:
+                root_stat = root.stat()
+            except FileNotFoundError:
+                pass
+            else:
+                if not S_ISDIR(root_stat.st_mode):
+                    raise NotADirectoryError(
+                        errno.ENOTDIR, "Not a directory", str(root)
+                    )
+        self._root = root
+        self._filesystem_view: FilesystemContentStore | None = None
         self._metadata = metadata
+        self._read_only = read_only
+        self._publication_access = (
+            PrivateContentPublication() if read_only else publication_access
+        )
+
+    @property
+    def _filesystem(self) -> FilesystemContentStore:
+        if self._filesystem_view is None:
+            self._filesystem_view = (
+                _ReadOnlyFilesystemContentStore(self._root)
+                if self._read_only
+                else FilesystemContentStore(
+                    self._root, publication_access=self._publication_access
+                )
+            )
+        return self._filesystem_view
+
+    def as_read_only(self) -> PostgresContentStore:
+        return PostgresContentStore(self._root, self._metadata, read_only=True)
 
     def put(self, content: bytes, *, media_type: str) -> str:
+        if self._read_only:
+            raise SnapshotError(
+                "READ_ONLY_STORAGE", "content publication capability is unavailable"
+            )
+        _check_metadata_budget()
         content_hash = self._filesystem.put(content, media_type=media_type)
         self._metadata.register_content(
             content_hash, media_type=media_type, byte_length=len(content)
@@ -1813,10 +2352,44 @@ class PostgresContentStore:
         return content_hash
 
     def get(self, content_hash: str, *, media_type: str) -> bytes:
+        _check_metadata_budget()
         content = self._filesystem.get(content_hash, media_type=media_type)
-        self._metadata.register_content(
-            content_hash, media_type=media_type, byte_length=len(content)
+        if self._read_only:
+            if self._metadata.content_byte_length(
+                content_hash, media_type=media_type
+            ) != len(content):
+                raise SnapshotError(
+                    "CONTENT_METADATA_MISMATCH",
+                    "retained content registration differs from its bytes",
+                )
+        else:
+            self._metadata.register_content(
+                content_hash, media_type=media_type, byte_length=len(content)
+            )
+        _check_metadata_budget()
+        return content
+
+    def get_bounded(
+        self, content_hash: str, *, media_type: str, maximum_bytes: int
+    ) -> bytes:
+        _check_metadata_budget()
+        length = self._metadata.content_byte_length(content_hash, media_type=media_type)
+        if maximum_bytes < 0 or length > maximum_bytes:
+            raise SnapshotError(
+                "FISCAL_CLOSURE_LIMIT", "registered content exceeds read bound"
+            )
+        content = self._filesystem.get_bounded(
+            content_hash, media_type=media_type, maximum_bytes=maximum_bytes
         )
+        if (
+            len(content) != length
+            or self._metadata.content_byte_length(content_hash, media_type=media_type)
+            != length
+        ):
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH", "bounded content registration differs"
+            )
+        _check_metadata_budget()
         return content
 
 
@@ -1875,14 +2448,33 @@ class PostgresCanonicalFactRepository(CanonicalFactRepository):
         )
 
 
+_SCOPED_ARTIFACT_READS: ContextVar[
+    dict[tuple[PostgresMetadataStore, Path], _ScopedArtifactReads] | None
+] = ContextVar("fiscal_scoped_artifact_reads", default=None)
+
+
+@dataclass
+class _ScopedArtifactReads:
+    reader: _RetainedPostgresArtifactReads
+    sealed: bool = False
+
+
 class PostgresArtifactStore:
     """Artifact metadata in PostgreSQL and immutable bytes in the content volume."""
 
     def __init__(
-        self, metadata: PostgresMetadataStore, content: PostgresContentStore
+        self,
+        metadata: PostgresMetadataStore,
+        content: PostgresContentStore,
+        *,
+        read_only: bool = False,
     ) -> None:
         self._metadata = metadata
-        self._content = content
+        self._content = content.as_read_only() if read_only else content
+        self._read_only = read_only
+
+    def as_read_only(self) -> PostgresArtifactStore:
+        return PostgresArtifactStore(self._metadata, self._content, read_only=True)
 
     def put(
         self,
@@ -1909,6 +2501,7 @@ class PostgresArtifactStore:
         *,
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
+        publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
         return self.put_bytes_with_receipt(
             artifact_id,
@@ -1916,6 +2509,7 @@ class PostgresArtifactStore:
             dependency_hashes,
             media_type=media_type,
             retention=retention,
+            publication_budget=publication_budget,
         )
 
     def put_bytes_with_receipt(
@@ -1926,7 +2520,12 @@ class PostgresArtifactStore:
         *,
         media_type: str = "application/octet-stream",
         retention: Literal["evidence", "operational_cache"] = "evidence",
+        publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
+        if self._read_only:
+            raise SnapshotError(
+                "READ_ONLY_STORAGE", "artifact publication capability is unavailable"
+            )
         content_hash = hashlib.sha256(payload).hexdigest()
         record = ArtifactRecordV1(
             artifact_id=artifact_id,
@@ -1948,17 +2547,176 @@ class PostgresArtifactStore:
                     "ARTIFACT_BYTES_UNAVAILABLE",
                     "published artifact bytes failed verification",
                 )
+            check_publication_budget(publication_budget)
             return ArtifactPublicationV1(artifact=previous, wrote=False)
         self._content.put(payload, media_type=media_type)
-        wrote = self._metadata.publish_artifact(record)
+        wrote = self._metadata.publish_artifact(
+            record, publication_budget=publication_budget
+        )
         return ArtifactPublicationV1(artifact=record, wrote=wrote)
 
+    def _scoped_reads(self) -> _ScopedArtifactReads | None:
+        active = _SCOPED_ARTIFACT_READS.get()
+        if not self._read_only or active is None:
+            return None
+        scoped = active.get((self._metadata, self._content._root.resolve()))
+        if scoped is not None and scoped.sealed:
+            raise RuntimeError("scoped artifact reads ended before final observation")
+        return scoped
+
+    @contextmanager
+    def scoped_read_operation(self) -> Iterator[Callable[[], None]]:
+        if not self._read_only:
+            raise SnapshotError(
+                "READ_ONLY_STORAGE",
+                "scoped fiscal reads require a read-only artifact store",
+            )
+        key = (self._metadata, self._content._root.resolve())
+        active = _SCOPED_ARTIFACT_READS.get()
+        if active is not None and key in active:
+            self._scoped_reads()
+            yield lambda: None
+            return
+        reader = _RetainedPostgresArtifactReads(
+            self, (), max_entries=512, max_bytes=2 * 1024 * 1024
+        )
+        scoped = _ScopedArtifactReads(reader)
+        token = _SCOPED_ARTIFACT_READS.set({**(active or {}), key: scoped})
+
+        def seal_owned_scope() -> None:
+            if reader._closed or scoped.sealed:
+                raise RuntimeError(
+                    "scoped artifact reads ended before final observation"
+                )
+            reader._require_current()
+            scoped.sealed = True
+
+        try:
+            yield seal_owned_scope
+            if not scoped.sealed:
+                reader._require_current()
+        finally:
+            error = sys.exception()
+            try:
+                reader.close()
+            except BaseException:
+                if error is None:
+                    raise
+            finally:
+                _SCOPED_ARTIFACT_READS.reset(token)
+
+    def seal_scoped_read_operation(self) -> None:
+        scoped = self._scoped_reads()
+        if scoped is not None:
+            scoped.reader._require_current()
+            scoped.sealed = True
+
     def get(self, artifact_id: str) -> ArtifactRecordV1:
-        return self._metadata.get_artifact(artifact_id)
+        scoped = self._scoped_reads()
+        return (
+            scoped.reader.get(artifact_id)
+            if scoped is not None
+            else self._metadata.get_artifact(artifact_id)
+        )
+
+    def require_current_records(
+        self,
+        expected: tuple[tuple[str, ArtifactRecordV1 | None], ...],
+        *,
+        check_deadline: Callable[[], object],
+    ) -> None:
+        self._scoped_reads()
+        check_deadline()
+        entries = self._metadata.retained_artifact_records(
+            tuple(identity for identity, _ in expected)
+        )
+        for identity, record in expected:
+            check_deadline()
+            entry = entries.get(identity)
+            current = entry.record() if entry is not None else None
+            check_deadline()
+            if current != record:
+                raise DataReleaseError(
+                    "ARTIFACT_EVIDENCE_CHANGED", "artifact metadata changed"
+                )
+        check_deadline()
 
     def read(self, artifact_id: str) -> bytes:
+        scoped = self._scoped_reads()
+        if scoped is not None:
+            return scoped.reader.read(artifact_id)
         record = self.get(artifact_id)
         return self._content.get(record.content_hash, media_type=record.media_type)
+
+    def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
+        scoped = self._scoped_reads()
+        if scoped is not None:
+            return scoped.reader.read_bounded(artifact_id, maximum_bytes=maximum_bytes)
+        before = self._metadata._bounded_artifact_before(artifact_id)
+        record = before.record(artifact_id)
+        return self._read_bounded_record(
+            artifact_id, before, record, maximum_bytes=maximum_bytes
+        )
+
+    def read_bounded_checked(
+        self, artifact_id: str, *, before: BoundedReadPrecondition
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        scoped = self._scoped_reads()
+        if scoped is not None:
+            return scoped.reader.read_bounded_checked(artifact_id, before=before)
+        observed = self._metadata._bounded_artifact_before(artifact_id)
+        record = (
+            ArtifactRecordV1.model_validate_json(observed.artifact_payload)
+            if observed.artifact_payload is not None
+            else None
+        )
+        maximum_bytes = before(record)
+        if record is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return record, self._read_bounded_record(
+            artifact_id, observed, record, maximum_bytes=maximum_bytes
+        )
+
+    def _read_bounded_record(
+        self,
+        artifact_id: str,
+        before: _BoundedArtifactObservation,
+        record: ArtifactRecordV1,
+        *,
+        maximum_bytes: int,
+    ) -> bytes:
+        _check_metadata_budget()
+        length = before.require_byte_length()
+        if maximum_bytes < 0 or length > maximum_bytes:
+            raise SnapshotError(
+                "FISCAL_CLOSURE_LIMIT", "registered content exceeds read bound"
+            )
+        raw = self._content._filesystem.get_bounded(
+            record.content_hash,
+            media_type=record.media_type,
+            maximum_bytes=maximum_bytes,
+        )
+        if len(raw) != length:
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH", "bounded content registration differs"
+            )
+        after = self._metadata._bounded_artifact_after(
+            artifact_id,
+            content_hash=record.content_hash,
+            media_type=record.media_type,
+        )
+        if after.require_byte_length() != length:
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH", "bounded content registration differs"
+            )
+        _check_metadata_budget()
+        if after.record(artifact_id) != record:
+            raise DataReleaseError(
+                "ARTIFACT_EVIDENCE_CHANGED", "bounded artifact metadata changed"
+            )
+        return raw
 
     @contextmanager
     def retained_read_operation(
@@ -2000,6 +2758,27 @@ class PostgresArtifactStore:
 
     def reset_operational_cache(self) -> None:
         return None
+
+
+@dataclass(frozen=True, slots=True)
+class _BoundedArtifactObservation:
+    artifact_payload: bytes | None
+    byte_length: int | None
+
+    def record(self, artifact_id: str) -> ArtifactRecordV1:
+        if self.artifact_payload is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return ArtifactRecordV1.model_validate_json(self.artifact_payload)
+
+    def require_byte_length(self) -> int:
+        if self.byte_length is None:
+            raise SnapshotError(
+                "CONTENT_REGISTRATION_UNAVAILABLE",
+                "retained content registration is missing",
+            )
+        return self.byte_length
 
 
 @dataclass(frozen=True, slots=True)
@@ -2114,6 +2893,14 @@ class _RetainedPostgresArtifactReads:
         return self._entry(artifact_id).record()
 
     def _entry(self, artifact_id: str) -> _RetainedArtifactMetadata:
+        entry = self._optional_entry(artifact_id)
+        if entry is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return entry
+
+    def _optional_entry(self, artifact_id: str) -> _RetainedArtifactMetadata | None:
         if self._closed:
             raise RuntimeError("retained artifact read operation has ended")
         if self._fallback:
@@ -2121,16 +2908,12 @@ class _RetainedPostgresArtifactReads:
                 (artifact_id,)
             ).get(artifact_id)
             self._witness(artifact_id, entry)
-            if entry is None:
-                raise SnapshotError(
-                    "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
-                )
             return entry
         if artifact_id not in self._ids:
             if len(self._ids) >= self._max_entries:
                 self._require_current()
                 self._discard_batch()
-                return self._entry(artifact_id)
+                return self._optional_entry(artifact_id)
             self._ids.add(artifact_id)
             self._records.update(
                 self._artifacts._metadata.retained_artifact_records((artifact_id,))
@@ -2138,13 +2921,62 @@ class _RetainedPostgresArtifactReads:
             if self._over_budget():
                 self._require_current()
                 self._discard_batch()
-                return self._entry(artifact_id)
-        entry = self._records.get(artifact_id)
-        if entry is None:
+                return self._optional_entry(artifact_id)
+        return self._records.get(artifact_id)
+
+    def read_bounded_checked(
+        self, artifact_id: str, *, before: BoundedReadPrecondition
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        entry = self._optional_entry(artifact_id)
+        record = entry.record() if entry is not None else None
+        maximum_bytes = before(record)
+        if entry is None or record is None:
             raise SnapshotError(
                 "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
             )
-        return entry
+        if entry.byte_length is None:
+            raise SnapshotError(
+                "CONTENT_REGISTRATION_UNAVAILABLE",
+                "bounded artifact verification requires retained registration",
+            )
+        if maximum_bytes < 0 or entry.byte_length > maximum_bytes:
+            raise SnapshotError("FISCAL_CLOSURE_LIMIT", "artifact exceeds read bound")
+        return record, self._read_bounded_entry(
+            artifact_id, entry, record, maximum_bytes=maximum_bytes
+        )
+
+    def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
+        entry = self._entry(artifact_id)
+        if entry.byte_length is None:
+            raise SnapshotError(
+                "CONTENT_REGISTRATION_UNAVAILABLE",
+                "bounded artifact verification requires retained registration",
+            )
+        if maximum_bytes < 0 or entry.byte_length > maximum_bytes:
+            raise SnapshotError("FISCAL_CLOSURE_LIMIT", "artifact exceeds read bound")
+        record = entry.record()
+        return self._read_bounded_entry(
+            artifact_id, entry, record, maximum_bytes=maximum_bytes
+        )
+
+    def _read_bounded_entry(
+        self,
+        artifact_id: str,
+        entry: _RetainedArtifactMetadata,
+        record: ArtifactRecordV1,
+        *,
+        maximum_bytes: int,
+    ) -> bytes:
+        raw = self._artifacts._content.get_bounded(
+            record.content_hash,
+            media_type=record.media_type,
+            maximum_bytes=maximum_bytes,
+        )
+        if len(raw) != entry.byte_length or self._entry(artifact_id) != entry:
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH", "bounded artifact registration changed"
+            )
+        return raw
 
     def read(self, artifact_id: str) -> bytes:
         entry = self._entry(artifact_id)
@@ -2153,6 +2985,11 @@ class _RetainedPostgresArtifactReads:
             record.content_hash, media_type=record.media_type
         )
         if entry.byte_length is None:
+            if self._artifacts._read_only:
+                raise SnapshotError(
+                    "CONTENT_REGISTRATION_UNAVAILABLE",
+                    "read-only artifact verification cannot repair missing registration",
+                )
             self._artifacts._metadata.register_content(
                 record.content_hash, media_type=record.media_type, byte_length=len(raw)
             )

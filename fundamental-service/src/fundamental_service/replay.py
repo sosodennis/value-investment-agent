@@ -25,6 +25,7 @@ from .calculator import (
     with_calculation_result_hash,
 )
 from .contracts import CalculationArtifactV1, ReleaseManifestV1, ValuationInputV1
+from .data_releases import DataReleaseError
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError, SnapshotRepository
 
@@ -165,11 +166,32 @@ class ArtifactRecordV1(BaseModel):
         return tuple(sorted(set(values)))
 
 
+BoundedReadPrecondition = Callable[[ArtifactRecordV1 | None], int]
+
+
 class ArtifactPublicationV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     artifact: ArtifactRecordV1
     wrote: bool
+
+
+class ArtifactPublicationDeadlineExceeded(SnapshotError):
+    def __init__(self) -> None:
+        super().__init__(
+            "REQUEST_DEADLINE_EXCEEDED",
+            "artifact publication deadline expired",
+            retryable=True,
+        )
+
+
+def check_publication_budget(budget: Callable[[], float] | None) -> float | None:
+    if budget is None:
+        return None
+    remaining = budget()
+    if remaining <= 0:
+        raise ArtifactPublicationDeadlineExceeded()
+    return remaining
 
 
 class ArtifactStore:
@@ -242,9 +264,18 @@ class ArtifactStore:
                 return
             offset += len(frame)
 
-    def _append_record_unlocked(self, record: ArtifactRecordV1) -> None:
-        with self._record_log.open("ab") as handle:
-            handle.write(canonical_bytes(record) + b"\n")
+    def _append_record_unlocked(
+        self,
+        record: ArtifactRecordV1,
+        *,
+        publication_budget: Callable[[], float] | None = None,
+    ) -> None:
+        frame = canonical_bytes(record) + b"\n"
+        buffering = 0 if publication_budget is not None else -1
+        with self._record_log.open("ab", buffering=buffering) as handle:
+            check_publication_budget(publication_budget)
+            if handle.write(frame) != len(frame):
+                raise OSError("artifact record append was incomplete")
             handle.flush()
             os.fsync(handle.fileno())
 
@@ -277,6 +308,7 @@ class ArtifactStore:
         *,
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
+        publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
         return self.put_bytes_with_receipt(
             artifact_id,
@@ -284,6 +316,7 @@ class ArtifactStore:
             dependency_hashes,
             media_type=media_type,
             retention=retention,
+            publication_budget=publication_budget,
         )
 
     def put_bytes_with_receipt(
@@ -294,6 +327,7 @@ class ArtifactStore:
         *,
         media_type: str = "application/octet-stream",
         retention: Literal["evidence", "operational_cache"] = "evidence",
+        publication_budget: Callable[[], float] | None = None,
     ) -> ArtifactPublicationV1:
         if not artifact_id:
             raise SnapshotError("ARTIFACT_ID_INVALID", "artifact_id is required")
@@ -322,6 +356,7 @@ class ArtifactStore:
                             "ARTIFACT_BYTES_UNAVAILABLE",
                             "published artifact bytes failed verification",
                         )
+                    check_publication_budget(publication_budget)
                     return ArtifactPublicationV1(artifact=previous, wrote=False)
                 if path.exists() and path.read_bytes() != payload:
                     raise SnapshotError(
@@ -348,7 +383,9 @@ class ArtifactStore:
                     media_type=media_type,
                     retention=retention,
                 )
-                self._append_record_unlocked(record)
+                self._append_record_unlocked(
+                    record, publication_budget=publication_budget
+                )
                 self._records[artifact_id] = record
                 return ArtifactPublicationV1(artifact=record, wrote=True)
 
@@ -361,6 +398,25 @@ class ArtifactStore:
                 raise SnapshotError(
                     "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
                 ) from exc
+
+    def require_current_records(
+        self,
+        expected: tuple[tuple[str, ArtifactRecordV1 | None], ...],
+        *,
+        check_deadline: Callable[[], object],
+    ) -> None:
+        check_deadline()
+        with self._lock:
+            self._load_records(force=True)
+            for identity, record in expected:
+                check_deadline()
+                current = self._records.get(identity)
+                check_deadline()
+                if current != record:
+                    raise DataReleaseError(
+                        "ARTIFACT_EVIDENCE_CHANGED", "artifact metadata changed"
+                    )
+        check_deadline()
 
     def read(self, artifact_id: str) -> bytes:
         record = self.get(artifact_id)
@@ -375,6 +431,51 @@ class ArtifactStore:
         if hashlib.sha256(payload).hexdigest() != record.content_hash:
             raise SnapshotError(
                 "ARTIFACT_HASH_MISMATCH", f"artifact {artifact_id} failed verification"
+            )
+        return payload
+
+    def read_bounded(self, artifact_id: str, *, maximum_bytes: int) -> bytes:
+        record = self.get(artifact_id)
+        return self._read_bounded_record(
+            artifact_id, record, maximum_bytes=maximum_bytes
+        )
+
+    def read_bounded_checked(
+        self, artifact_id: str, *, before: BoundedReadPrecondition
+    ) -> tuple[ArtifactRecordV1, bytes]:
+        with self._lock:
+            self._load_records(force=True)
+            record = self._records.get(artifact_id)
+        maximum_bytes = before(record)
+        if record is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return record, self._read_bounded_record(
+            artifact_id, record, maximum_bytes=maximum_bytes
+        )
+
+    def _read_bounded_record(
+        self, artifact_id: str, record: ArtifactRecordV1, *, maximum_bytes: int
+    ) -> bytes:
+        path = self._artifact_path(record.content_hash, record.media_type)
+        with path.open("rb") as source:
+            length = os.fstat(source.fileno()).st_size
+            if maximum_bytes < 0 or length > maximum_bytes:
+                raise SnapshotError(
+                    "FISCAL_CLOSURE_LIMIT", "artifact exceeds read bound"
+                )
+            payload = source.read(maximum_bytes + 1)
+        if (
+            len(payload) != length
+            or hashlib.sha256(payload).hexdigest() != record.content_hash
+        ):
+            raise SnapshotError(
+                "ARTIFACT_HASH_MISMATCH", "bounded artifact bytes differ"
+            )
+        if self.get(artifact_id) != record:
+            raise SnapshotError(
+                "ARTIFACT_EVIDENCE_CHANGED", "bounded artifact metadata changed"
             )
         return payload
 

@@ -4,13 +4,13 @@ import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 import type { AnnualStatementModel } from './annual-statements-model';
 import { InspectionValue } from './report-value';
 
-export function AnnualStatementsTable({ report, onSelectEvidence }: {
-    report: AnnualStatementModel; onSelectEvidence?: (item: EvidenceSelection) => void;
+export function AnnualStatementsTable({ report, selectedPeriod = null, onSelectEvidence }: {
+    report: AnnualStatementModel; selectedPeriod?: string | null; onSelectEvidence?: (item: EvidenceSelection) => void;
 }) {
     return <article aria-label="Annual financial statements" className="min-w-0 space-y-5 rounded-lg border bg-card p-3 @min-[36rem]:p-4">
         <header className="min-w-0 space-y-2">
             <p className="text-xs text-muted-foreground">Annual financial statements</p>
-            <h2 className="text-lg font-semibold [overflow-wrap:anywhere]">{report.companyName} · {report.ticker}</h2>
+            <h2 tabIndex={-1} className="text-lg font-semibold [overflow-wrap:anywhere]">{report.companyName} · {report.ticker}</h2>
             <p className="text-sm text-muted-foreground">SEC issuer {report.issuerId} · {report.securityScope} · {report.currency} · {report.unit}</p>
             <p className="text-sm">Available by {report.cutoffAt}</p>
             <Badge variant={report.quality === 'verified' ? 'outline' : 'warning'}>{report.quality}</Badge>
@@ -25,7 +25,7 @@ export function AnnualStatementsTable({ report, onSelectEvidence }: {
                     <TableCaption className="px-3 pb-3">{report.currency}. Readable values may use abbreviated units. Inspect a cell for the full precision and reported unit.</TableCaption>
                     <TableHeader><TableRow>
                         <TableHead scope="col" className="min-w-44 align-top">Main line item</TableHead>
-                        {table.columns.map((column) => <TableHead scope="col" key={column.id} className="min-w-48 align-top">
+                        {table.columns.map((column) => <TableHead scope="col" key={column.id} aria-current={selectedPeriod === column.id ? 'true' : undefined} className="min-w-48 align-top aria-current:bg-accent/40">
                             <span className="block font-semibold text-foreground">{column.label}</span>
                             <span className="mt-1 block font-mono text-xs tabular-nums">{column.period}</span>
                             <span className="mt-1 block text-xs">{column.calendar}{column.days == null ? '' : ` · ${column.days} days`}</span>

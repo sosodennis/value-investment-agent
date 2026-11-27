@@ -1,4 +1,4 @@
-import { AnnualStatementsReader } from './annual-statements-reader';
+import { StatementReader } from './statement-reader';
 import { AnnualStatementsTable } from './annual-statements-table';
 import { projectAnnualStatements } from './annual-statements-model';
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
@@ -55,7 +55,7 @@ function FundamentalOutputWithStatements(props: FundamentalAnalysisOutputProps) 
         ] });
     }, [onInventory, sourceKey, statementItems, valuationInventory]);
     return <div className="min-w-0 space-y-5">
-        <AnnualStatementsReader threadId={props.threadId ?? null} ticker={props.resolvedTicker} onSelectEvidence={props.onSelectEvidence} onEvidenceItems={reportStatementItems} />
+        <StatementReader threadId={props.threadId ?? null} ticker={props.resolvedTicker} onSelectEvidence={props.onSelectEvidence} onEvidenceItems={reportStatementItems} />
         {(props.reference || props.status !== 'idle') && <FundamentalValuationOutput {...props} onEvidenceInventory={setValuationInventory} />}
     </div>;
 }

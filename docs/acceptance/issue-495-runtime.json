@@ -1,0 +1,171 @@
+{
+  "schema_version": 2,
+  "acceptance_scope": "fundamental-service",
+  "acceptance_profile": "persistent-valuation-flow-v1",
+  "issue": 495,
+  "branch": "codex/issue-495-quarterly-ttm",
+  "commit": "293c068cc8cca6a4329b13a21f88ce93c1b47326",
+  "status": "WIP",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-495-quarterly-ttm/value-investment-agent",
+    "allowed_untracked_paths": [],
+    "fundamental": {
+      "compose_project": "value-investment-agent-denniswong-495-fiscal",
+      "compose_files": [
+        "/Users/denniswong/.codex/worktrees/issue-495-quarterly-ttm/value-investment-agent/compose/verification/docker-compose.issue280-operations.yml",
+        "/Users/denniswong/.codex/worktrees/issue-495-quarterly-ttm/value-investment-agent/compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "/Users/denniswong/.codex/worktrees/issue-495-quarterly-ttm/value-investment-agent/compose/verification/docker-compose.parser-actions.yml",
+        "/Users/denniswong/.codex/issue-evidence/495/fiscal-runtime/fiscal-runtime.yml"
+      ],
+      "env_files": [
+        {
+          "path": "/Users/denniswong/.codex/issue-evidence/495/fiscal-runtime/fundamental.env",
+          "sha256": "3b0e3c0c9ccefc1b43f151cd891093a79a796162bf7dc8bed0ee4846de0a77fe"
+        }
+      ],
+      "image_id": "sha256:c4acfec35c905d43ceba333beb3a1dc07c1e4cd6b206a3726d4aa3ff87b31c8a",
+      "runtime_pins": {
+        "python": "3.12.16",
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2"
+      },
+      "published_host": "127.0.0.1",
+      "published_port": 23390,
+      "container_port": 8080,
+      "service": "fundamental-service",
+      "url": "http://127.0.0.1:23390",
+      "dependencies": [
+        {
+          "service": "fundamental-postgres",
+          "published_host": "127.0.0.1",
+          "published_port": 23391,
+          "container_port": 5432
+        }
+      ],
+      "networks": [
+        "value-investment-agent-denniswong-495-fiscal_default"
+      ],
+      "volumes": [
+        "value-investment-agent-denniswong-495-fiscal_fundamental-postgres-data",
+        "value-investment-agent-denniswong-495-fiscal_fundamental-service-data",
+        "value-investment-agent-denniswong-495-fiscal_fundamental-parser-scratch"
+      ],
+      "source": {
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 208,
+        "sha256": "9617e0f53ff4ea032945f2c21e0a8e553ad43ee43d944a742bf06a67940b59e9"
+      }
+    }
+  },
+  "readiness": {
+    "status": "not_run",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "architecture",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "artifact_retrieval",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "calculation",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "concurrent_deduplication",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "deterministic_repeat",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "diff",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "failure_retention",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "forecast",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "full_flow_repeat",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "mapping",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "preparation",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "restart_restore",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "review",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "ruff",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "service_acceptance",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "snapshot_persistence",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "source_acquisition",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "source_reuse",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    },
+    {
+      "name": "types",
+      "status": "not_run",
+      "command": "Not executed for this exact source build."
+    }
+  ],
+  "blockers": [
+    "#521 display admission remains incomplete.",
+    "#495 quarterly/TTM production and Q01-Q14 acceptance remain incomplete."
+  ],
+  "next_step": "Run exact-build preflight and actual SEC source representatives, then complete source closure and display admission before production calculations.",
+  "scope_note": "This is the source-stage Fundamental-only tuple. The profile is required by the existing service tuple schema. It does not claim a valuation workflow, investment eligibility, display admission or full issue acceptance. The final app/browser tuple will be recorded for workspace acceptance."
+}

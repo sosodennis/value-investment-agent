@@ -1,6 +1,9 @@
 import asyncio
 import hashlib
 import json
+from datetime import UTC, datetime
+
+from fundamental_service.history_recovery_contracts import FiscalHistoryFrontierV1
 
 import asyncpg
 import pytest
@@ -13,12 +16,12 @@ from fundamental_service.metadata import (
     PostgresSnapshotRepository,
 )
 from fundamental_service.persistence_recovery import (
-    PersistenceBackupV1,
+    PersistenceBackupV2,
     RecoveryError,
     export_backup,
     main,
-    restore_backup,
 )
+from recovery_test_support import restore_backup
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.contracts import CandidateRejectionV1
 from fundamental_service.history_composition import verify_history_components
@@ -118,13 +121,26 @@ def test_backup_restores_metadata_and_bytes_and_repeats_without_writes(
     first = _export(source_db, source, backups)
     assert first.wrote
     bundle = backups / first.manifest_digest
-    before = _inventory(backups)
-    assert _export(source_db, source, backups) == first.model_copy(
-        update={"wrote": False}
+    before = _inventory(bundle)
+    second = _export(source_db, source, backups)
+    assert (
+        second.history_frontier.covered_through > first.history_frontier.covered_through
     )
-    assert _inventory(backups) == before
+    first_manifest = recovery._verify_bundle(bundle, first.manifest_digest)
+    second_manifest = recovery._verify_bundle(
+        backups / second.manifest_digest, second.manifest_digest
+    )
+    assert second_manifest.tables == first_manifest.tables
+    assert second_manifest.objects == first_manifest.objects
+    assert _inventory(bundle) == before
     restored = _restore(target_db, target, bundle, first.manifest_digest)
-    assert restored == first
+    assert restored.manifest_digest == first.manifest_digest
+    assert (restored.row_count, restored.object_count, restored.table_count) == (
+        first.row_count,
+        first.object_count,
+        first.table_count,
+    )
+    assert restored.activation.committed_at > first.history_frontier.covered_through
     target_before = _inventory(target)
     assert _restore(target_db, target, bundle, first.manifest_digest).wrote is False
     assert _inventory(target) == target_before
@@ -150,8 +166,9 @@ def test_backup_restores_metadata_and_bytes_and_repeats_without_writes(
         )
     finally:
         reopened.close()
-    assert _export(target_db, target, backups).wrote is False
-    assert _inventory(backups) == before
+    reexported = _export(target_db, target, backups)
+    assert reexported.history_frontier.origin_id != restored.history_frontier.origin_id
+    assert _inventory(bundle) == before
 
 
 @pytest.mark.parametrize("damage", [None, "missing", "changed"])
@@ -204,9 +221,20 @@ def test_history_backup_requires_each_original_and_recovers_same_composition(
         assert list(backups.iterdir()) == []
         return
     receipt = _export(source_db, source, backups)
-    before = _inventory(backups)
-    assert _export(source_db, source, backups).wrote is False
-    assert _inventory(backups) == before
+    bundle = backups / receipt.manifest_digest
+    before = _inventory(bundle)
+    later = _export(source_db, source, backups)
+    assert (
+        later.history_frontier.covered_through
+        > receipt.history_frontier.covered_through
+    )
+    assert (
+        recovery._verify_bundle(
+            backups / later.manifest_digest, later.manifest_digest
+        ).tables
+        == recovery._verify_bundle(bundle, receipt.manifest_digest).tables
+    )
+    assert _inventory(bundle) == before
     target = tmp_path / "target"
     _restore(
         target_db, target, backups / receipt.manifest_digest, receipt.manifest_digest
@@ -223,7 +251,8 @@ def test_history_backup_requires_each_original_and_recovers_same_composition(
         assert len(reopened.list_snapshots()) == 3
     finally:
         reopened.close()
-    assert _export(target_db, target, backups).wrote is False
+    reexported = _export(target_db, target, backups)
+    assert reexported.history_frontier.origin_id != receipt.history_frontier.origin_id
 
 
 @pytest.mark.parametrize("damage", ["content", "table", "manifest", "extra", "symlink"])
@@ -236,7 +265,7 @@ def test_damaged_backup_is_rejected_before_target_mutation(
     store.close()
     receipt = _export(source_db, source, tmp_path / "backups")
     bundle = tmp_path / "backups" / receipt.manifest_digest
-    manifest = PersistenceBackupV1.model_validate_json(
+    manifest = PersistenceBackupV2.model_validate_json(
         (bundle / "manifest.json").read_bytes()
     )
     if damage in {"content", "table"}:
@@ -301,16 +330,15 @@ def test_interrupted_restore_rolls_back_and_retries_from_retained_bytes(
     store.close()
     receipt = _export(source_db, source, tmp_path / "backups")
     bundle = tmp_path / "backups" / receipt.manifest_digest
-    original = recovery._copy_rows
+    original = recovery._stage_row
 
-    async def interrupted(root, table):
-        async for chunk in original(root, table):
-            yield chunk
-            raise RecoveryError("injected restore interruption")
+    async def interrupted(connection, table, row):
+        await original(connection, table, row)
+        raise RecoveryError("injected restore interruption")
 
     target = tmp_path / "target"
     with monkeypatch.context() as patch:
-        patch.setattr(recovery, "_copy_rows", interrupted)
+        patch.setattr(recovery, "_stage_row", interrupted)
         with pytest.raises(RecoveryError, match="interruption"):
             _restore(target_db, target, bundle, receipt.manifest_digest)
     before = _inventory(target)
@@ -322,7 +350,9 @@ def test_interrupted_restore_rolls_back_and_retries_from_retained_bytes(
     before = _inventory(target)
     assert _restore(target_db, target, bundle, receipt.manifest_digest).wrote
     assert _inventory(target) == before
-    assert _export(target_db, target, tmp_path / "backups").wrote is False
+    reexported = _export(target_db, target, tmp_path / "backups")
+    assert reexported.manifest_digest != receipt.manifest_digest
+    assert reexported.history_frontier.origin_id != receipt.history_frontier.origin_id
     reopened = PostgresMetadataStore(target_db)
     reopened.start()
     try:
@@ -421,7 +451,12 @@ def test_command_identifies_invalid_record_without_disclosing_payload(
     path = tmp_path / "tables" / f"{table}.jsonl"
     path.parent.mkdir()
     path.write_bytes(canonical_bytes([identity, "b" * 64, payload]) + b"\n")
-    manifest = PersistenceBackupV1(
+    manifest = PersistenceBackupV2(
+        history_frontier=FiscalHistoryFrontierV1(
+            origin_id="00000000-0000-0000-0000-000000000001",
+            covered_through=datetime(2026, 1, 1, tzinfo=UTC),
+            heads_digest="f" * 64,
+        ),
         source_revision="1" * 40,
         migration_digest="2" * 64,
         schema_digest="3" * 64,
@@ -477,13 +512,18 @@ def test_command_identifies_invalid_record_without_disclosing_payload(
 
 def test_manifest_rejects_path_traversal():
     with pytest.raises(ValueError, match="match its digest"):
-        PersistenceBackupV1.model_validate_json(
+        PersistenceBackupV2.model_validate_json(
             json.dumps(
                 {
                     "source_revision": "1" * 40,
                     "migration_digest": "a" * 64,
                     "schema_digest": "b" * 64,
                     "postgres_major": 16,
+                    "history_frontier": {
+                        "origin_id": "00000000-0000-0000-0000-000000000001",
+                        "covered_through": "2026-01-01T00:00:00Z",
+                        "heads_digest": "f" * 64,
+                    },
                     "tables": [
                         {
                             "name": "snapshots",

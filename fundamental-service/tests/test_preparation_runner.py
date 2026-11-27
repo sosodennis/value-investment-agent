@@ -33,7 +33,8 @@ from fundamental_service.facts import (
     FilesystemCanonicalFactRepository,
 )
 from fundamental_service.operations import OperationsConfig, ServiceError
-from fundamental_service.persistence_recovery import export_backup, restore_backup
+from fundamental_service.persistence_recovery import export_backup
+from recovery_test_support import restore_backup, assert_same_data_plane_projection
 from fundamental_service.metadata import (
     PostgresArtifactStore,
     PostgresCanonicalFactRepository,
@@ -1270,17 +1271,15 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
             )
         finally:
             recovered.close()
-        assert (
-            asyncio.run(
-                export_backup(
-                    target_database,
-                    restored_root,
-                    tmp_path / "backups",
-                    source_revision=REVISION,
-                )
-            ).wrote
-            is False
+        reexported = asyncio.run(
+            export_backup(
+                target_database,
+                restored_root,
+                tmp_path / "backups",
+                source_revision=REVISION,
+            )
         )
+        assert_same_data_plane_projection(backup, reexported, tmp_path / "backups")
         if public_provider is not None:
             assert len(public_provider.calls) == 1
     finally:

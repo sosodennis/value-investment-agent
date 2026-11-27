@@ -1,0 +1,662 @@
+{
+  "protocol": "issue495-reviewed-quarter-basis-v1",
+  "scope": {
+    "case_id": "aapl-historical",
+    "issuer_id": "0000320193",
+    "cutoff_at": "2024-11-02T00:00:00Z",
+    "quarter_id": "aapl-historical:2023:FY:2023-09-30",
+    "quarter_start": "2023-07-02",
+    "quarter_end": "2023-09-30",
+    "fiscal_year_start": "2022-09-25",
+    "fiscal_year_days": 371,
+    "nine_month_end": "2023-07-01"
+  },
+  "filings": {
+    "original_interim": {
+      "accession_number": "0000320193-23-000077",
+      "form": "10-Q",
+      "reported_period_end": "2023-07-01",
+      "accepted_at": "2023-08-03T22:04:43.000Z",
+      "primary_document_uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000077/aapl-20230701.htm",
+      "primary_html_sha256": "5301028fd306b29348bb514454c681576937c1533ce959a8a66376613b65a98d",
+      "primary_html_bytes": 963325,
+      "opening_cash": {
+        "observation_id": "0000320193-23-000077/fact-316",
+        "sha256": "5cbcb6fed03ef4981c10363f8728491fa34d60b9e504c16a0909b5097497667c"
+      },
+      "disclosures": {
+        "consolidated_gaap_note_1": {
+          "xpath": "/html/body/ix:continuation[1]/ix:nonnumeric[1]/div[2]",
+          "sha256": "bed8e1d5675588acef3e8d95bbf496791eeb429ecaed01acbec8d1ec8edced10"
+        },
+        "fy2022_policy_reference": {
+          "xpath": "/html/body/div[242]",
+          "sha256": "5aa19af8c3dde49f3b12ceade057b28ee7032b9831cdd22da3e387b239a69b33"
+        },
+        "fiscal_calendar": {
+          "xpath": "/html/body/ix:continuation[1]/div[1]",
+          "sha256": "94c06c1cf025c6362b95e333f9409eb818ff7ef49138e2c19662e5cb4be36a56"
+        }
+      }
+    },
+    "original_annual": {
+      "accession_number": "0000320193-23-000106",
+      "form": "10-K",
+      "reported_period_end": "2023-09-30",
+      "accepted_at": "2023-11-02T22:08:27.000Z",
+      "primary_document_uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+      "primary_html_sha256": "c53b281e007596cfc861f3ad72e8eddcdce2908c8c51e4cc67d9555aaf83b568",
+      "primary_html_bytes": 1559040,
+      "opening_cash": {
+        "observation_id": "0000320193-23-000106/fact-290",
+        "sha256": "fc378eaaad06ae8d621cadaf83ca6a656785797e9297ebee048a69ff18a52843"
+      },
+      "disclosures": {
+        "consolidated_gaap_and_prior_period_reclassification_note_1": {
+          "xpath": "/html/body/ix:continuation[1]/ix:nonnumeric[1]/div[2]",
+          "sha256": "b4ba05087cf7be22a51491a5184712c927d1cdf70045eb4c32356629503a94ac"
+        },
+        "fiscal_calendar": {
+          "xpath": "/html/body/ix:continuation[1]/div",
+          "sha256": "9c72f1ff253c1275389f35f90d910f24734dc64bc30b5688da6c6f887a309942"
+        },
+        "restricted_marketable_securities_note_4": {
+          "xpath": "/html/body/ix:continuation[5]/ix:nonnumeric/div[5]",
+          "sha256": "d9fc616d1c6dc517dda768f8810e06da53d1f30a1b1115b4341c12c715bf500f"
+        }
+      }
+    },
+    "later_interim": {
+      "accession_number": "0000320193-24-000081",
+      "form": "10-Q",
+      "reported_period_end": "2024-06-29",
+      "accepted_at": "2024-08-01T22:03:34.000Z",
+      "primary_document_uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000081/aapl-20240629.htm",
+      "primary_html_sha256": "acfffce33f3198553f7e58570d072376d3177c2f5e7ba0ef2b42a3ef3c9015e0",
+      "primary_html_bytes": 889252,
+      "opening_cash": {
+        "observation_id": "0000320193-24-000081/fact-311",
+        "sha256": "fa1549b344c1ec9ef4c92bbcffadee016a0d4dc6e042a47f2c5c3c652c6ad6b0"
+      },
+      "disclosures": {
+        "consolidated_gaap_note_1": {
+          "xpath": "/html/body/ix:continuation[1]/ix:nonnumeric[1]/div[2]",
+          "sha256": "8db2eef3f7db1f4ae3ca8e53a1fc1f3936089563cd03ff735a6d5314004e3035"
+        },
+        "fy2023_policy_reference": {
+          "xpath": "/html/body/div[258]",
+          "sha256": "ce68cbf84cbdedd0d88d50ccb9e881ef78d209f5a6cd657e3a98fc80c11c6e4a"
+        },
+        "fiscal_calendar": {
+          "xpath": "/html/body/ix:continuation[1]/ix:nonnumeric[2]/div",
+          "sha256": "d0162b0d5664b1d02fb986834978c6c35d2b24bd3d1e1321b487b2797085c939"
+        },
+        "tax_disclosure_transition": {
+          "xpath": "/html/body/div[251]",
+          "sha256": "cc691e6581db847ecf2a0d826ecd49f826e2597e3ea0d2e337b44a4697f1dd5d"
+        },
+        "segment_disclosure_transition": {
+          "xpath": "/html/body/div[255]",
+          "sha256": "ef3c9b53c4b24ecd3f1ff37d4ffddbf94879b762146741cf9fdb67479c4a6f16"
+        }
+      }
+    },
+    "later_annual": {
+      "accession_number": "0000320193-24-000123",
+      "form": "10-K",
+      "reported_period_end": "2024-09-28",
+      "accepted_at": "2024-11-01T10:01:36.000Z",
+      "primary_document_uri": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+      "primary_html_sha256": "40c460d3eed32c7394fe651374bb2a6c43f5082098d1a32d5e7516d50110b0bb",
+      "primary_html_bytes": 1503896,
+      "opening_cash": {
+        "observation_id": "0000320193-24-000123/fact-284",
+        "sha256": "9df12b50b4c9b78e16ec1c2eee4c8e3205bb8fbdbdc64684600c816ee80adc94"
+      },
+      "disclosures": {
+        "consolidated_gaap_and_prior_period_reclassification_note_1": {
+          "xpath": "/html/body/ix:continuation[1]/ix:nonnumeric[1]/div[2]",
+          "sha256": "b4ba05087cf7be22a51491a5184712c927d1cdf70045eb4c32356629503a94ac"
+        },
+        "fiscal_calendar": {
+          "xpath": "/html/body/ix:continuation[1]/ix:nonnumeric[2]/div",
+          "sha256": "3e8d8a32252e1e7197cc9a90770dde00d5d8ef66bd00c94aec8ddfe6dafa6801"
+        },
+        "tax_disclosure_transition": {
+          "xpath": "/html/body/div[476]",
+          "sha256": "cc691e6581db847ecf2a0d826ecd49f826e2597e3ea0d2e337b44a4697f1dd5d"
+        },
+        "segment_disclosure_transition": {
+          "xpath": "/html/body/div[478]",
+          "sha256": "ef3c9b53c4b24ecd3f1ff37d4ffddbf94879b762146741cf9fdb67479c4a6f16"
+        },
+        "fy2024_cash_escrow_note_4": {
+          "xpath": "/html/body/ix:continuation[6]/ix:continuation[1]/div[3]",
+          "sha256": "c1c593d75c5e34ab1e033d8299e49fef3e5f0ce2b4156d23a23d7adc99f08b76"
+        },
+        "restricted_marketable_securities_note_4": {
+          "xpath": "/html/body/ix:continuation[6]/ix:continuation[1]/div[4]",
+          "sha256": "049b7b89a4f1e358d265b598a5f86fc2197c1dbc5f2634e2ab79b71bbae55b77"
+        }
+      }
+    }
+  },
+  "rows": {
+    "revenue": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-94",
+            "sha256": "5be7de87473d8b63f30a9bece91c396ccafff6a4d5dd5629da9240646ce19d98"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-88",
+            "sha256": "226d2c104aac6ddb36748693156a068f75843d44db89680edfa3dee5508188a6"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-78",
+            "sha256": "32467301f3ecb54bfdfdc3b5d5ed21529679af49768fca8e07af0c6fde1b293f"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-73",
+            "sha256": "34aac05279d36986f278a400dd77edb0f7a9dc5af8f7cc38081cc8018ee1ddb0"
+          }
+        }
+      ]
+    },
+    "cost_of_revenue": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-103",
+            "sha256": "cd9d09e72fcc6c8a9eacd4116dc9fb5999a30234ac72e669b67bedb73cc57b92"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-97",
+            "sha256": "7b9af354d525a63cafe7afc7678fb976c3cd88c3c95eedfd55eaf96e821ad79f"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-90",
+            "sha256": "eb714a53eaa14aac8d083ee4a78ec79a8dac5ffbf336751424db0bfc1d0c3b00"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-85",
+            "sha256": "de709aba311dce5c0f9e9503f8372866c846b9a0c430a4313b0bec1f6af509ba"
+          }
+        }
+      ]
+    },
+    "gross_profit": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-106",
+            "sha256": "77c9feec6417f9fff9beb6f2e9677f049e8f8da0d25cc6af0932a7e8257f689b"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-100",
+            "sha256": "d0a4227d36d2fa0baecacd24ede5f015a9af6780b9ff84a93cd80e07736b51aa"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-94",
+            "sha256": "1463ece37413b133faca752b54c0057769c5a72799d566983106fae40f38a73b"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-89",
+            "sha256": "a51802f0d716bfcf57939470dcd96691936896b45e3b3ff66a0a2bc84e1966ac"
+          }
+        }
+      ]
+    },
+    "operating_income": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-118",
+            "sha256": "652959198a0ad854b8668ea921912871aa6222a536b5020f3984fe447ebce02c"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-112",
+            "sha256": "a1cad5aba69a5223f844de6a6dbcf97e55734a1376f4b9b5f91ac7120d23b0b5"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-110",
+            "sha256": "f8c66757e9a521cbbfb8b54df1c36b01ca909a4e670a579116ce205fde6e5d58"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-105",
+            "sha256": "12b6a0629166d1e2ec85dc7489b17f660c41405ff3e7fc02881f2930b030d0b3"
+          }
+        }
+      ]
+    },
+    "income_before_tax": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-124",
+            "sha256": "62f60aaba6649a27f5fb47d2982a19c2e3d760fe6b68114f04db889fba08cd3b"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-118",
+            "sha256": "7ef52e62b55ca084a26535c4e52cf0c7cd2a827ad42fcdc81b32f41864a2b86c"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-118",
+            "sha256": "b26bc3077ea1342a27e6d9a2218bda0541563e3f78bc6f06c87c4fc47a01ab8b"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-113",
+            "sha256": "0093444ddee9dd766e688826b39a1a6f37e63bd78b657e0a59dad1950244c07b"
+          }
+        }
+      ]
+    },
+    "income_tax_expense": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-127",
+            "sha256": "9f42d02d2d636c0698693fcbb116d5e7cc2a43755d284b98587c3e6b6354d5e8"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-121",
+            "sha256": "fece5880e4b12634f3b2e0f04b12cabacde70c986606e50cddb59d32cded974b"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-122",
+            "sha256": "761ebf9fc9fa01705876a3eddce95cd220d514141f67834ad40eb9faf380fe2d"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-117",
+            "sha256": "c0756d25256e913171220cc31336863eb2facbbce11d6f94af082dce33cbf185"
+          }
+        }
+      ]
+    },
+    "net_income": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-130",
+            "sha256": "b063ede1e7522987c28994c5886e05f73d89f6616f27e6a88f53073b6d8c67d3"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-124",
+            "sha256": "aeec6cec12fcb6c9a39842805f36556c1c9ed6366934ace5152f0b3f9d19146e"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-126",
+            "sha256": "34dde3105034e1bfa1a86a78f4beb1ea4390418730816ba4f470b50a8ea8adf6"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-121",
+            "sha256": "63b6c010faab6364eb5c26b04f91f3aa4630272694133e3e6f8dc06edfa9b833"
+          }
+        }
+      ]
+    },
+    "operating_cash_flow": {
+      "cash_scope": "includes_restricted_cash",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-323",
+            "sha256": "8beed1c67d0743ccefa94b21c69f11dbd0ae11a217c91ae50120fe6116a2e927"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-317",
+            "sha256": "310775ed6524bb5f8b0d37738b69ed0c853f83521ce00a1a60dd09072901ae11"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-338",
+            "sha256": "eefe0991404a269570f6536296cac73d76e3c382495345c7c8103b96fda34cf9"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-333",
+            "sha256": "b17477697dc586f1c242bd81b131e6408ea4aad414825c05db65cb14b16fef83"
+          }
+        }
+      ]
+    },
+    "investing_cash_flow": {
+      "cash_scope": "includes_restricted_cash",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-341",
+            "sha256": "68ae12599f1dbc5d3bb93276b944f7882ae518b5277e8a8e57df43dd4af29812"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-335",
+            "sha256": "abfb5d3c0589f2abaad919e4658593aa6b06b93cc5953db7d0fb4c267a28328b"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-350",
+            "sha256": "de1b0e5f5b0dccd27304f2a3f6caef2a65cef933433a3551e14839cbf37fb916"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-345",
+            "sha256": "7d71f457008e21d007a181f34a39947e12356d1202dad2171248eddc95514581"
+          }
+        }
+      ]
+    },
+    "financing_cash_flow": {
+      "cash_scope": "includes_restricted_cash",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-365",
+            "sha256": "42c06f6e27a7433b444c0bd62770c55fdf6aad6e3f11e5e0248ec0fe29d18d71"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-359",
+            "sha256": "585c7728974012f3d2b9d54e5203b9ad7c463615c60921c6d4808daf5f9ed4b3"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-366",
+            "sha256": "f1d94b23c3c4f4ec498ca3fbbf1d6a6314410ce0097141d47d21770a3e8ca954"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-361",
+            "sha256": "6b6bc807534c4a9a12345d9ae346cf9ad26d1a25037b017f132311308ff6bcd4"
+          }
+        }
+      ]
+    },
+    "net_change_in_cash": {
+      "cash_scope": "includes_restricted_cash",
+      "pairs": [
+        {
+          "role": "annual_flow",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-368",
+            "sha256": "4331db1a4c8d890ce568b5c125710f2d27cc3de4bc5bd9ead2e38d64eff02f44"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-362",
+            "sha256": "0f75f988965c19e828de81616d1c86fbf13e6308fcad83ef46f831bb2fafef4c"
+          }
+        },
+        {
+          "role": "nine_month_flow",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-368",
+            "sha256": "6698969c8ae6291a86f7be4bf353ee4d796b01353c0b60fb421ca5079bcaf084"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-363",
+            "sha256": "88cea6a3e100db4d03d024801a4ae8aa0c311d868245b042d0a4dd606367b47f"
+          }
+        }
+      ]
+    },
+    "cash_and_equivalents": {
+      "cash_scope": "balance_sheet_cash_and_equivalents",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-175",
+            "sha256": "645ffb94eac680918b5cfe5476bc463b21830a8beceff3a8b1426a8aef7a45dc"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-169",
+            "sha256": "df7eae51223b8869288b57cf3f141a1dcc12fc831be032d787374d673aeb2bc0"
+          }
+        }
+      ]
+    },
+    "operating_current_receivables": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-179",
+            "sha256": "178bd49bf03aad552d4746072567536bcfc31180b67e917c6b89073c392b892f"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-173",
+            "sha256": "f6040ea8e32b5f24a537047c743207c13b6ff13f4c161f991dade418ef54343f"
+          }
+        }
+      ]
+    },
+    "inventory": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-183",
+            "sha256": "f1fbef2a8b2a506be13aca3c950131b5e7eb292f6cc6ae6bd1e49f27445323d8"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-177",
+            "sha256": "82c4ba47e6a23da0790e56f71655834cd2ea4fbf31337ec3b9366325a985c8dd"
+          }
+        }
+      ]
+    },
+    "current_assets": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-187",
+            "sha256": "9a8be0e9d4c3fd141a4cfbf74214268cfdb1e69fe2da628e0ef58c8cbd6f8456"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-181",
+            "sha256": "d860e71341c1bfb14b87cf1ed8e07dffb622001eb0cde314ba4545079772f056"
+          }
+        }
+      ]
+    },
+    "property_plant_and_equipment": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-191",
+            "sha256": "61fbc1563063a57fd05ec6d21fc376283a1d71795c46186aea9acab93a1aacab"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-185",
+            "sha256": "a27b04ee4fb7dcf6de731e9761c227cdc5ac5b8727a0138e031ded25558a0c2f"
+          }
+        }
+      ]
+    },
+    "total_assets": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-197",
+            "sha256": "4e24a65b0e1cd4c9435a98dc2967e4056a153cbd94a2c57287719bafe332fa5b"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-191",
+            "sha256": "acffa91be44375d2e3a2b789b4af372b4257969b5383775f1ec82a17c5c41c52"
+          }
+        }
+      ]
+    },
+    "operating_current_payables": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-199",
+            "sha256": "9270885e1e7b20bf305a7adc0b1b7d1540a08f74812d11668980c323376c4bad"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-193",
+            "sha256": "bb7a8ce8c94bdc239d379af40f68cc9e3cd61024292a5d30051dd21268ca76a2"
+          }
+        }
+      ]
+    },
+    "current_liabilities": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-209",
+            "sha256": "4c8dde0e0e76da97ab5951ae134b8cd9d3fa1ed0e8d7e2b08aa639e30b65770f"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-203",
+            "sha256": "e475567a1754210cd668609b71b45d18c6e3c0a069c11458f5d9ae278941b15e"
+          }
+        }
+      ]
+    },
+    "total_liabilities": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-217",
+            "sha256": "cec4c5cbe7bb35bf7c77962df3d0b514ae1db58a9be8be71c6273df186bf36c8"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-211",
+            "sha256": "f1d66facb36def8ff2274b2f96277789863f1d3d21d97f30c50bbc83d80def2d"
+          }
+        }
+      ]
+    },
+    "total_equity": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-235",
+            "sha256": "7e00f209b63ecb097e1eed9f6daac43f3b86a8d0e0ed96fcd45e1a677d316655"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-229",
+            "sha256": "767c092b15908ef203445aa00aa977849ccd06d738e54098fac833549ca82b2d"
+          }
+        }
+      ]
+    },
+    "liabilities_and_equity": {
+      "cash_scope": "not_applicable",
+      "pairs": [
+        {
+          "role": "year_end_balance",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-237",
+            "sha256": "fb3c75f071bf7973eb79c4e0169e54103274dc1f4b9d37af5eccc3b74c0a164b"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-231",
+            "sha256": "09a5a81f14c1f717580c653ff83ddb100978a6bf6cab1618bc91722895062e17"
+          }
+        }
+      ]
+    },
+    "cash_flow_beginning_balance": {
+      "cash_scope": "includes_restricted_cash",
+      "pairs": [
+        {
+          "role": "q3_cash_close",
+          "original": {
+            "observation_id": "0000320193-23-000077/fact-370",
+            "sha256": "590e7f1324f02eb6b83be739e4c5d5357846617fc02e3b4e20da4e15134bc0cb"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000081/fact-365",
+            "sha256": "e089d737676998f9a50b982aa738a778ced582c6918cb4a582053dd46c678887"
+          }
+        }
+      ]
+    },
+    "cash_flow_ending_balance": {
+      "cash_scope": "includes_restricted_cash",
+      "pairs": [
+        {
+          "role": "year_end_cash_close",
+          "original": {
+            "observation_id": "0000320193-23-000106/fact-371",
+            "sha256": "8e22d3c05ff8b6c2ee5c787c51a95a635b2137d201a02390ace8bcda5b9e01df"
+          },
+          "comparative": {
+            "observation_id": "0000320193-24-000123/fact-365",
+            "sha256": "9bcd1049bbc3562e4269cef45f7942fe793cca0b98b6139bbb7bc64ef043e476"
+          }
+        }
+      ]
+    }
+  },
+  "retained_submissions_sha256": "f001022596bb110c821112a8b12f794e0d5c545475b7d5f0ccfb42d9b431e57b",
+  "review": {
+    "verdict": "limited_support_at_filed_precision",
+    "report_sha256": "53e649c8eb7193dc2d142844a18bdd81ead616c87c2aacc75f61f15c93981f13",
+    "evidence_snapshot_sha256": "ba3b9117be1c7e1771a00d810b24e1a3cef27794439f6c21303a1ec883ae5dfd",
+    "independent_checker_sha256": "1db3b4705805a2b8dac438fe73f24d5f53df75fd8b512afa2f8ec85230c0f248",
+    "accounting_scope": "consolidated_us_gaap",
+    "policy_summary": "The original filings describe Apple and wholly owned subsidiaries on a consolidated GAAP basis. The later interim filing refers to FY2023 annual accounting policies. FY2023 and the nine-month period start on the same day. The 35 original and comparative fact pairs agree at filed precision.",
+    "cash_summary": "The four cash-flow statements share the FY2023 opening total including restricted cash. Both FY2023 quarter boundaries reconcile to the original reported totals on that definition. The later annual Note 4 dates the escrow cash to FY2024 and presents FY2023 restricted marketable securities separately.",
+    "limits": "Support covers the 24 listed rows at filed precision and the retained recent submissions scope. The generic prior-period reclassification leaves its effect on unlisted disclosures unresolved. FX, other quarters, all TTM windows and formal validation are outside this proof."
+  }
+}

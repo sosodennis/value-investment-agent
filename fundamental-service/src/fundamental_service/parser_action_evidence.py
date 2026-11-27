@@ -114,6 +114,10 @@ def read_parser_action_result(
         raise SnapshotError(
             "PARSER_ACTION_EVIDENCE_INVALID", "parser action result differs"
         )
+    from .fiscal_source_closure import _FiscalSourceArtifactRead
+
+    if isinstance(artifacts, _FiscalSourceArtifactRead):
+        artifacts._parser_report_edge(result)
     body_id = f"sec-parser-action-report-v1:{result.report_content_hash}"
     body_record = artifacts.get(body_id)
     body = artifacts.read(body_id)

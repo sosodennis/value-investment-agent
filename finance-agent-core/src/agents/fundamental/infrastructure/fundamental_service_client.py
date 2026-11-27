@@ -38,6 +38,10 @@ from src.shared.artifacts.annual_statement_contracts import (
     AnnualStatementsReadRequestV1,
     AnnualStatementsReadResponseV1,
 )
+from src.shared.artifacts.fiscal_statement_contracts import (
+    FiscalReadRequestV2,
+    FiscalReadResultV2,
+)
 from src.shared.artifacts.fundamental_contracts import (
     FundamentalFactsReadResultV1,
     FundamentalValuationEvidenceReadResultV1,
@@ -60,6 +64,7 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "resolve_snapshot": "/v1/data/snapshots/resolve",
     "read_facts": "/v1/data/facts",
     "read_annual_statements": "/v1/data/annual-statements",
+    "read_fiscal_statements": "/v1/data/fiscal-statements",
     "read_active_release": "/v1/data/releases/{profile_id}",
     "read_valuation_evidence": "/v1/valuation/evidence/facts",
     "prepare_valuation": "/v1/valuation/prepare",
@@ -73,6 +78,7 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
 }
 _OPERATION_METHODS: dict[FundamentalOperation, str] = {
     "read_facts": "GET",
+    "read_fiscal_statements": "GET",
     "read_active_release": "GET",
 }
 
@@ -428,6 +434,45 @@ class HttpFundamentalServiceClient:
             raise FundamentalServiceFailure(
                 "STATEMENT_READ_BINDING_MISMATCH",
                 "Annual statements do not match the requested release and cutoff",
+                retryable=False,
+                status_code=502,
+            )
+        return result
+
+    async def read_fiscal_statements(
+        self,
+        request: FiscalReadRequestV2,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FiscalReadResultV2:
+        response = await self.execute(
+            "read_fiscal_statements",
+            request.model_dump(mode="json"),
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            result = FiscalReadResultV2.model_validate(response.result)
+        except ValidationError as exc:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned invalid fiscal statements",
+                retryable=False,
+                status_code=502,
+            ) from exc
+        binding = result.binding
+        if (
+            binding.manifest_digest != request.manifest_digest
+            or binding.scope != request.scope
+            or binding.cutoff_at != request.cutoff_at
+            or binding.columns.frequency != request.frequency
+        ):
+            raise FundamentalServiceFailure(
+                "STATEMENT_READ_BINDING_MISMATCH",
+                "Fiscal statements differ from requested release, scope, cutoff or frequency",
                 retryable=False,
                 status_code=502,
             )

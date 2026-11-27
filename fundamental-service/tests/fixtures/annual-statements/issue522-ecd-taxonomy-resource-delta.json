@@ -1,0 +1,22 @@
+{
+  "protocol": "arelle-taxonomy-cache-delta-v1",
+  "base_manifests": [
+    {
+      "path": "fundamental-service/tests/fixtures/annual-statements/issue494-sec-taxonomy-resources-part-1.json",
+      "sha256": "57678c9b4f035cd135e58154a5ce3dfa60df320b67a33c9e5e498442dabafe70"
+    },
+    {
+      "path": "fundamental-service/tests/fixtures/annual-statements/issue494-sec-taxonomy-resources-part-2.json",
+      "sha256": "228b82d67bfd47c8d65583d477db59013533c77c77a3c40271da7fdd7d908d3d"
+    }
+  ],
+  "base_cache_sha256": "fbcd82b406a2420f37bf17c7afc8baa823e7cfadd2308ccb8bfecf88648a9691",
+  "cache_sha256": "af63b0b36d5cad6f2788e90fc323b56955ce581fd84e41330bac4ba765f3a6f0",
+  "resources": [
+    {
+      "uri": "https://xbrl.sec.gov/ecd/2026/ecd-sub-2026.xsd",
+      "sha256": "6b29d3efb973c6519d56d4d084b4553bec10e170ceff966924149e2c2ee57317",
+      "byte_size": 169069
+    }
+  ]
+}

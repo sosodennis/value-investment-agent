@@ -370,6 +370,39 @@ def test_unlistable_runtime_requires_proven_search_denial(
         _files(tmp_path)
 
 
+def test_unsearchable_runtime_identity_depends_on_content_access_not_parser_principal(
+    tmp_path, monkeypatch
+):
+    import fundamental_service.parser_action_identity as identity
+
+    directory = tmp_path / "private"
+    directory.mkdir()
+    (directory / "known.cfg").write_bytes(b"dependency")
+    readable = _runtime_tree(directory, set(), {})
+    iterdir = Path.iterdir
+
+    def denied(path):
+        if path == directory:
+            raise PermissionError()
+        return iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", denied)
+    monkeypatch.setattr(identity.os, "access", lambda *a, **k: False)
+    observations = []
+    for uid, gid, groups in (
+        (11001, 11003, [11003, 11003]),
+        (11002, 11002, [11002, 11003]),
+    ):
+        monkeypatch.setattr(identity.os, "geteuid", lambda uid=uid: uid)
+        monkeypatch.setattr(identity.os, "getegid", lambda gid=gid: gid)
+        monkeypatch.setattr(identity.os, "getgroups", lambda groups=groups: groups)
+        observations.append(_runtime_tree(directory, set(), {}))
+    assert observations[0] == observations[1]
+    assert observations[0] != readable
+    directory.chmod(directory.stat().st_mode ^ 0o100)
+    assert _runtime_tree(directory, set(), {}) != observations[0]
+
+
 def test_fresh_mapping_verifier_tracks_action_result_and_report_revocation(tmp_path):
     from fundamental_service.automatic_mapping_evidence import (
         AutomaticMappingEvidenceChecks,
@@ -764,7 +797,8 @@ def test_postgres_single_flight_restart_and_empty_store_restore(
         PostgresContentStore,
         PostgresMetadataStore,
     )
-    from fundamental_service.persistence_recovery import export_backup, restore_backup
+    from fundamental_service.persistence_recovery import export_backup
+    from recovery_test_support import restore_backup
 
     source_db, target_db = recovery_databases
     c = case(tmp_path)

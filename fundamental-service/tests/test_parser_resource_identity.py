@@ -193,3 +193,1009 @@ def test_resource_change_during_parser_execution_prevents_result_publication(
         )
     assert error.value.code == "PARSER_ACTION_DEPENDENCY_CHANGED"
     assert not owner.index.results and not owner.index.held
+
+
+def resource_action_case(tmp_path, monkeypatch):
+    import fundamental_service.parser_action_identity as identity
+    from fundamental_service.parser_action_contracts import ParserBuildIdentityV1
+    from types import SimpleNamespace
+    import hashlib
+
+    build = ParserBuildIdentityV1(
+        implementation_digest="1" * 64,
+        runtime_digest="2" * 64,
+        output_schema_digest="3" * 64,
+    )
+    monkeypatch.setattr(identity.ParserBuildChecks, "current", lambda self: build)
+    for name in ("taxonomy", "edgar", "xule", "filing"):
+        (tmp_path / name).mkdir(parents=True)
+        (tmp_path / name / "content").write_bytes(b"fixed bytes")
+    rules = tmp_path / "rules.zip"
+    rules.write_bytes(b"fixed rules")
+    profile = case(tmp_path / "case").profile.model_copy(
+        update={
+            "edgar_plugin_dir": tmp_path / "edgar",
+            "xule_plugin_dir": tmp_path / "xule",
+            "dqc_ruleset_path": rules,
+        }
+    )
+    arguments = dict(
+        representation="normalized",
+        delivery_revision="d" * 40,
+        normalization_inputs=("2" * 64,),
+        profile=profile,
+        taxonomy_version="2025",
+        taxonomy_cache_dir=tmp_path / "taxonomy",
+        source_content_hash=hashlib.sha256(b"fixed bytes").hexdigest(),
+        build_checks=identity.ParserBuildChecks(),
+    )
+
+    def request(**changes):
+        return identity.parser_action_input(
+            tmp_path / "filing/content", **{**arguments, **changes}
+        )
+
+    return SimpleNamespace(**locals())
+
+
+def test_runtime_resources_match_across_independent_configuration_consumers(
+    tmp_path, monkeypatch
+):
+    import fundamental_service.fiscal_parser_evidence as evidence
+    import fundamental_service.parser_action_identity as identity
+
+    current = identity.ParserBuildChecks.current
+    c = resource_action_case(tmp_path, monkeypatch)
+    monkeypatch.setattr(identity.ParserBuildChecks, "current", current)
+    configuration = ["publisher boundary"]
+    monkeypatch.setattr(
+        identity, "_immutable_build_configuration", lambda: (configuration[0], ())
+    )
+    files = identity._files
+    monkeypatch.setattr(
+        identity,
+        "_files",
+        lambda path: (("code.py", "1" * 64),)
+        if path == Path(identity.__file__).parent
+        else files(path),
+    )
+    monkeypatch.setattr(identity, "_runtime_identity", lambda **kwargs: "2" * 64)
+    consumers = []
+
+    def checks():
+        consumer = identity.ParserBuildChecks()
+        consumers.append(consumer)
+        return consumer
+
+    monkeypatch.setattr(evidence, "ParserBuildChecks", checks)
+    request = c.request()
+    reads = []
+    for boundary in ("publisher boundary", "reader boundary"):
+        configuration[0] = boundary
+        with identity._ParserResourceOperation(lambda: 60.0) as operation:
+            read = evidence.FiscalParserRuntimeRead()
+            read.observe(
+                request, c.profile, c.arguments["taxonomy_cache_dir"], "d" * 40
+            )
+            read.check_current(c.profile, c.arguments["taxonomy_cache_dir"], "d" * 40)
+            operation.finish()
+        reads.append(read)
+    assert len(consumers) == 2
+    assert all(consumer._configuration is not None for consumer in consumers)
+    assert consumers[0]._configuration != consumers[1]._configuration
+    assert consumers[0]._build == consumers[1]._build == request.build
+    with pytest.raises(identity.IncompleteParserClosure, match="configuration changed"):
+        consumers[0].current()
+    assert reads[0].resources == reads[1].resources
+
+
+def test_candidate_resource_operation_preserves_wire_and_reads_first_and_final_bytes(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    expected = c.request()
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", observed)
+    with _ParserResourceOperation(lambda: 60.0) as owner:
+        assert c.request() == expected
+        assert c.request() == expected
+        assert opened[c.rules] == 1
+        owner.finish()
+        assert opened[c.rules] == 2
+        assert owner._state.high_water_keys == 1
+        assert 0 < owner._state.high_water_bytes <= 2 * 1024 * 1024
+        with pytest.raises(IncompleteParserClosure, match="not current"):
+            c.request()
+
+
+@pytest.mark.parametrize(
+    "mutation", ("same-length", "membership", "logical-file", "symlink")
+)
+def test_candidate_terminal_scan_refuses_changed_consumed_resources(
+    tmp_path, monkeypatch, mutation
+):
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    with pytest.raises((IncompleteParserClosure, OSError)):
+        with _ParserResourceOperation(lambda: 60.0) as owner:
+            first = c.request()
+            if mutation == "same-length":
+                (tmp_path / "taxonomy/content").write_bytes(b"other bytes")
+            elif mutation == "membership":
+                (tmp_path / "taxonomy/added").write_bytes(b"new")
+            elif mutation == "logical-file":
+                c.rules.write_bytes(b"other rules")
+            else:
+                (tmp_path / "taxonomy/content").unlink()
+                (tmp_path / "taxonomy/content").symlink_to(c.rules)
+            assert c.request() == first
+            owner.finish()
+
+
+def test_explicit_current_and_v1_remain_fresh_inside_candidate_operation(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.parser_action_identity import (
+        _ParserResourceOperation,
+        parser_action_resources,
+    )
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    with pytest.raises(IncompleteParserClosure, match="bytes changed"):
+        with _ParserResourceOperation(lambda: 60.0):
+            c.request()
+            c.rules.write_bytes(b"other rules")
+            parser_action_resources(c.profile, tmp_path / "taxonomy")
+    monkeypatch.setattr(c.identity, "_runtime_identity", lambda: "4" * 64)
+    expected = c.request(build_checks=None)
+    with _ParserResourceOperation(lambda: 60.0) as owner:
+        assert c.request(build_checks=None) == expected
+        owner.finish()
+    with pytest.raises(IncompleteParserClosure, match="bytes changed"):
+        with _ParserResourceOperation(lambda: 60.0):
+            c.request(build_checks=None)
+            c.rules.write_bytes(b"newer rules")
+            c.request(build_checks=None)
+
+
+def test_retained_parser_current_reads_fresh_bytes_inside_candidate_operation(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.fiscal_parser_evidence import (
+        ParserActionRuntimeObservation,
+    )
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+    from fundamental_service.serialization import canonical_bytes
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        if args and args[0] == "rb":
+            opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", observed)
+    with pytest.raises(IncompleteParserClosure, match="bytes changed"):
+        with _ParserResourceOperation(lambda: 60.0) as owner:
+            request = c.request()
+            observation = ParserActionRuntimeObservation(
+                request,
+                canonical_bytes(c.profile.model_dump(mode="json")),
+                c.arguments["taxonomy_cache_dir"],
+                c.arguments["delivery_revision"],
+            )
+            current = partial(
+                observation.check_current,
+                c.profile,
+                c.arguments["taxonomy_cache_dir"],
+                c.arguments["delivery_revision"],
+            )
+            current()
+            assert opened[c.rules] == 2
+            assert owner._state.high_water_keys == 1
+            c.rules.write_bytes(b"other rules")
+            assert c.request() == request
+            assert opened[c.rules] == 2
+            current()
+    assert opened[c.rules] == 3
+    assert owner._state.status == "aborted"
+    assert not owner._state.observations
+
+
+def runtime_action_case(tmp_path, monkeypatch):
+    from fundamental_service.fiscal_parser_evidence import FiscalParserRuntimeRead
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    runtime = FiscalParserRuntimeRead()
+    for representation in ("normalized", "archive"):
+        runtime.observe(
+            c.request(representation=representation),
+            c.profile,
+            c.arguments["taxonomy_cache_dir"],
+            c.arguments["delivery_revision"],
+        )
+    return c, runtime
+
+
+def test_runtime_current_preserves_both_requests_with_one_complete_resource_read(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.serialization import canonical_bytes
+
+    c, runtime = runtime_action_case(tmp_path, monkeypatch)
+    requests = tuple(item.request for item in runtime.observations)
+    expected = tuple(canonical_bytes(request) for request in requests)
+    assert tuple(request.representation for request in requests) == (
+        "normalized",
+        "archive",
+    )
+    monkeypatch.setattr(
+        c.identity, "ResourceHashReader", partial(ResourceHashReader, direct=False)
+    )
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        if args and args[0] == "rb":
+            opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", observed)
+    assert (
+        runtime.check_current(
+            c.profile,
+            c.arguments["taxonomy_cache_dir"],
+            c.arguments["delivery_revision"],
+        )
+        is None
+    )
+    assert tuple(canonical_bytes(item.request) for item in runtime.observations) == (
+        expected
+    )
+    assert opened == Counter(
+        {
+            tmp_path / "taxonomy/content": 1,
+            tmp_path / "edgar/content": 1,
+            tmp_path / "xule/content": 1,
+            c.rules: 1,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "change", ("resources", "build", "profile", "root", "delivery", "profile-digest")
+)
+def test_runtime_current_refuses_a_changed_second_expectation(
+    tmp_path, monkeypatch, change
+):
+    from dataclasses import replace
+    from fundamental_service.arelle_parser import ArelleValidationProfileV1
+    from fundamental_service.parser_action_contracts import ParserActionInputV3
+    from fundamental_service.serialization import canonical_bytes
+
+    c, runtime = runtime_action_case(tmp_path, monkeypatch)
+    first, second = runtime.observations
+    request = second.request.model_dump(mode="python")
+    alternate_profile = ArelleValidationProfileV1.model_validate(
+        {**c.profile.model_dump(mode="python"), "profile_id": "other-profile"}
+    )
+    if change == "resources":
+        name, _ = request["resources"][0]
+        request["resources"] = ((name, "9" * 64), *request["resources"][1:])
+    elif change == "build":
+        request["build"]["runtime_digest"] = "9" * 64
+    elif change == "profile":
+        second = replace(
+            second,
+            profile_json=canonical_bytes(alternate_profile.model_dump(mode="json")),
+        )
+    elif change == "root":
+        alternate_root = tmp_path / "other-taxonomy"
+        alternate_root.mkdir()
+        (alternate_root / "content").write_bytes(b"fixed bytes")
+        second = replace(second, taxonomy_cache_dir=alternate_root)
+    elif change == "delivery":
+        second = replace(second, delivery_revision="e" * 40)
+    else:
+        request["profile_digest"] = alternate_profile.digest()
+    runtime.observations[1] = replace(
+        second, request=ParserActionInputV3.model_validate(request)
+    )
+    assert runtime.observations[0] == first
+    with pytest.raises(SnapshotError) as caught:
+        runtime.check_current(
+            c.profile,
+            c.arguments["taxonomy_cache_dir"],
+            c.arguments["delivery_revision"],
+        )
+    assert caught.value.code == "FISCAL_PARSER_ACTION_INVALID"
+
+
+@pytest.mark.parametrize("change", ("bytes", "membership"))
+def test_runtime_current_rechecks_resources_between_calls_in_one_operation(
+    tmp_path, monkeypatch, change
+):
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+
+    with pytest.raises(IncompleteParserClosure, match="bytes changed"):
+        with _ParserResourceOperation(lambda: 60.0) as owner:
+            c, runtime = runtime_action_case(tmp_path, monkeypatch)
+            current = partial(
+                runtime.check_current,
+                c.profile,
+                c.arguments["taxonomy_cache_dir"],
+                c.arguments["delivery_revision"],
+            )
+            assert current() is None
+            target = (
+                tmp_path / "taxonomy" / ("content" if change == "bytes" else "added")
+            )
+            target.write_bytes(b"other bytes")
+            current()
+    assert owner._state.status == "aborted"
+    assert not owner._state.observations
+
+
+def test_runtime_current_refuses_an_empty_consumption(tmp_path, monkeypatch):
+    from fundamental_service.fiscal_parser_evidence import FiscalParserRuntimeRead
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    with pytest.raises(SnapshotError) as caught:
+        FiscalParserRuntimeRead().check_current(
+            c.profile,
+            c.arguments["taxonomy_cache_dir"],
+            c.arguments["delivery_revision"],
+        )
+    assert caught.value.code == "FISCAL_PARSER_ACTION_INVALID"
+
+
+def test_resource_operations_are_fresh_nested_isolated_and_cleanup_on_error(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.parser_action_identity import (
+        _ParserResourceOperation,
+        _RESOURCE_OPERATION,
+    )
+    import asyncio
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    with _ParserResourceOperation(lambda: 60.0) as owner:
+        first = c.request()
+        borrow = _RESOURCE_OPERATION.get()
+        assert not hasattr(borrow, "finish")
+        with _ParserResourceOperation(lambda: 60.0) as nested:
+            assert c.request() == first
+            assert _RESOURCE_OPERATION.get() is not borrow
+            nested.finish()
+        assert _RESOURCE_OPERATION.get() is borrow
+        owner.finish()
+    assert _RESOURCE_OPERATION.get() is None
+    c.rules.write_bytes(b"other rules")
+    with _ParserResourceOperation(lambda: 60.0) as owner:
+        assert c.request() != first
+        owner.finish()
+    with pytest.raises(IncompleteParserClosure, match="did not finish"):
+        with _ParserResourceOperation(lambda: 60.0):
+            c.request()
+    with pytest.raises(asyncio.CancelledError):
+        with _ParserResourceOperation(lambda: 60.0):
+            c.request()
+            raise asyncio.CancelledError()
+    assert _RESOURCE_OPERATION.get() is None
+    assert c.request() != first
+    with pytest.raises(IncompleteParserClosure, match="cannot reopen"):
+        with owner:
+            pass
+
+
+@pytest.mark.parametrize(
+    "identity", ("pid", "thread", "task", "principal", "configuration", "build")
+)
+def test_candidate_resource_borrow_refuses_changed_execution_identity(
+    tmp_path, monkeypatch, identity
+):
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    with pytest.raises(IncompleteParserClosure):
+        with _ParserResourceOperation(lambda: 60.0):
+            c.request()
+            if identity == "pid":
+                monkeypatch.setattr(c.identity.os, "getpid", lambda: -1)
+            elif identity == "thread":
+                monkeypatch.setattr(c.identity, "get_ident", lambda: -1)
+            elif identity == "task":
+                monkeypatch.setattr(c.identity, "current_task", lambda: object())
+            elif identity == "principal":
+                monkeypatch.setattr(c.identity.os, "geteuid", lambda: -1)
+            elif identity == "configuration":
+                c.arguments["build_checks"]._configuration = "changed"
+            else:
+                monkeypatch.setattr(
+                    c.identity.ParserBuildChecks,
+                    "current",
+                    lambda self: c.build.model_copy(
+                        update={"runtime_digest": "9" * 64}
+                    ),
+                )
+            c.request()
+
+
+def test_copied_async_context_cannot_borrow_parent_resource_operation(
+    tmp_path, monkeypatch
+):
+    import asyncio
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+
+    c = resource_action_case(tmp_path, monkeypatch)
+
+    async def child():
+        c.request()
+
+    async def parent():
+        with _ParserResourceOperation(lambda: 60.0) as owner:
+            first = c.request()
+            with pytest.raises(IncompleteParserClosure, match="not current"):
+                await asyncio.create_task(child())
+            assert c.request() == first
+            owner.finish()
+
+    asyncio.run(parent())
+
+
+def test_candidate_resource_finish_preserves_original_deadline_error(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    expired = False
+    error = SnapshotError("REQUEST_DEADLINE_EXCEEDED", "original deadline")
+
+    def budget():
+        if expired:
+            raise error
+        return 60.0
+
+    with pytest.raises(SnapshotError) as caught:
+        with _ParserResourceOperation(budget) as owner:
+            c.request()
+            expired = True
+            owner.finish()
+    assert caught.value is error
+
+
+@pytest.mark.parametrize("bound", ("keys", "bytes"))
+def test_candidate_resource_union_refuses_overflow_without_dropping_keys(
+    tmp_path, monkeypatch, bound
+):
+    from fundamental_service.parser_action_identity import _ParserResourceOperation
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    with pytest.raises(IncompleteParserClosure, match="exceeds its bounds"):
+        with _ParserResourceOperation(lambda: 60.0) as owner:
+            if bound == "keys":
+                for index in range(33):
+                    c.request(
+                        profile=c.profile.model_copy(update={"profile_id": str(index)})
+                    )
+            else:
+                c.request(
+                    profile=c.profile.model_copy(
+                        update={"profile_id": "x" * (2 * 1024 * 1024)}
+                    )
+                )
+    assert owner._state.observations == {}
+
+
+@pytest.fixture
+def readonly_resources(tmp_path, monkeypatch):
+    import fundamental_service.parser_action_identity as identity
+
+    c = resource_action_case(tmp_path, monkeypatch)
+    current = identity.ParserBuildChecks.current
+
+    def attested(checks):
+        checks._configuration = "readonly test image"
+        return current(checks)
+
+    monkeypatch.setattr(identity.ParserBuildChecks, "current", attested)
+    reads = []
+    read = identity._read_parser_action_resources
+
+    def counted(descriptor, **kwargs):
+        reads.append(descriptor)
+        return read(descriptor, **kwargs)
+
+    monkeypatch.setattr(identity, "_read_parser_action_resources", counted)
+    c.identity, c.reads = identity, reads
+    return c
+
+
+def test_readonly_cut_shares_only_until_seal_and_next_cut_reads_again(
+    readonly_resources,
+):
+    c = readonly_resources
+    identity = c.identity
+    expected = c.request()
+    c.reads.clear()
+    parent = identity._RESOURCE_OPERATION.get()
+    with identity._CurrentParserResourceOperation(lambda: 60.0, lambda: None) as owner:
+        for terminal in (False, False, True):
+            before = len(c.reads)
+            with owner.current_cut(terminal=terminal) as completion:
+                assert c.request() == expected
+                assert c.request() == expected
+                assert len(c.reads) == before + 1
+                stale = identity._RESOURCE_OPERATION.get()
+                completion.seal()
+                assert len(c.reads) == before + 2
+                with pytest.raises(IncompleteParserClosure, match="not current"):
+                    stale.observe(
+                        c.profile, c.arguments["taxonomy_cache_dir"], None, reuse=True
+                    )
+            assert identity._RESOURCE_OPERATION.get() is parent
+        assert owner._state.status == "finished"
+    assert owner._state.observations == {}
+
+
+@pytest.mark.parametrize("when", ("seal", "next-cut"))
+def test_readonly_cut_refuses_persistent_changed_bytes(readonly_resources, when):
+    c = readonly_resources
+    with pytest.raises(IncompleteParserClosure, match="bytes changed"):
+        with c.identity._CurrentParserResourceOperation(
+            lambda: 60.0, lambda: None
+        ) as owner:
+            with owner.current_cut(terminal=False) as completion:
+                c.request()
+                if when == "seal":
+                    c.rules.write_bytes(b"other rules")
+                completion.seal()
+            c.rules.write_bytes(b"other rules")
+            with owner.current_cut(terminal=True):
+                c.request()
+    assert c.identity._RESOURCE_OPERATION.get() is None
+    assert owner._state.status == "aborted"
+    assert owner._state.observations == {}
+
+
+def test_readonly_terminal_freshly_opens_and_seals_all_lifetime_anchors(
+    readonly_resources,
+):
+    c = readonly_resources
+    other = c.profile.model_copy(update={"profile_id": "terminal-only"})
+    with c.identity._CurrentParserResourceOperation(
+        lambda: 60.0, lambda: None
+    ) as owner:
+        with owner.current_cut(terminal=False) as completion:
+            c.request()
+            completion.seal()
+        c.reads.clear()
+        with owner.current_cut(terminal=True) as completion:
+            c.request(profile=other)
+            completion.seal()
+        assert Counter(item.profile_json for item in c.reads) == {
+            c.identity.canonical_bytes(c.profile.model_dump(mode="json")): 2,
+            c.identity.canonical_bytes(other.model_dump(mode="json")): 2,
+        }
+        assert owner._state.high_water_keys == 2
+
+
+@pytest.mark.parametrize("missing", ("build", "attestation"))
+def test_readonly_cut_without_proven_immutable_build_keeps_full_reads(
+    readonly_resources, monkeypatch, missing
+):
+    c = readonly_resources
+    if missing == "build":
+
+        def unavailable(checks):
+            raise IncompleteParserClosure("unavailable image")
+
+        monkeypatch.setattr(c.identity.ParserBuildChecks, "current", unavailable)
+    else:
+        build = c.arguments["build_checks"].current()
+        monkeypatch.setattr(
+            c.identity.ParserBuildChecks, "current", lambda checks: build
+        )
+    with c.identity._CurrentParserResourceOperation(
+        lambda: 60.0, lambda: None
+    ) as owner:
+        with owner.current_cut(terminal=True) as completion:
+            first = c.identity.parser_action_resources(
+                c.profile, c.arguments["taxonomy_cache_dir"]
+            )
+            assert (
+                c.identity.parser_action_resources(
+                    c.profile, c.arguments["taxonomy_cache_dir"]
+                )
+                == first
+            )
+            assert len(c.reads) == 2
+            completion.seal()
+            assert len(c.reads) == 3
+
+
+def test_readonly_cut_without_seal_aborts_and_cannot_reopen(readonly_resources):
+    c = readonly_resources
+    with pytest.raises(IncompleteParserClosure, match="did not seal"):
+        with c.identity._CurrentParserResourceOperation(
+            lambda: 60.0, lambda: None
+        ) as owner:
+            with owner.current_cut(terminal=False):
+                c.request()
+    with pytest.raises(IncompleteParserClosure, match="cannot reopen"):
+        owner.__enter__()
+    assert c.identity._RESOURCE_OPERATION.get() is None
+    assert owner._state.observations == {}
+
+
+@pytest.mark.parametrize("bound", ("keys", "bytes"))
+def test_readonly_cuts_keep_cumulative_lifetime_caps(readonly_resources, bound):
+    c = readonly_resources
+    with pytest.raises(IncompleteParserClosure, match="exceeds its bounds"):
+        with c.identity._CurrentParserResourceOperation(
+            lambda: 60.0, lambda: None
+        ) as owner:
+            for index in range(33):
+                profile = c.profile.model_copy(
+                    update={
+                        "profile_id": str(index)
+                        if bound == "keys"
+                        else "x" * (2 * 1024 * 1024)
+                    }
+                )
+                with owner.current_cut(terminal=False) as completion:
+                    c.request(profile=profile)
+                    completion.seal()
+    assert owner._state.high_water_keys == (32 if bound == "keys" else 0)
+    assert owner._state.observations == {}
+    assert c.identity._RESOURCE_OPERATION.get() is None
+
+
+def test_readonly_cut_checks_owner_and_restores_unfinished_legacy_parent(
+    readonly_resources,
+):
+    c = readonly_resources
+    unchanged = True
+
+    def require_owner():
+        if not unchanged:
+            raise SnapshotError("OWNER_CHANGED", "candidate owner changed")
+
+    with c.identity._ParserResourceOperation(lambda: 60.0) as parent:
+        borrow = c.identity._RESOURCE_OPERATION.get()
+        with pytest.raises(SnapshotError, match="candidate owner changed"):
+            with c.identity._CurrentParserResourceOperation(
+                lambda: 60.0, require_owner
+            ) as owner:
+                with owner.current_cut(terminal=True) as completion:
+                    c.request()
+                    unchanged = False
+                    completion.seal()
+        assert c.identity._RESOURCE_OPERATION.get() is borrow
+        assert parent._state.status == "open"
+        c.request()
+        parent.finish()
+    assert c.identity._RESOURCE_OPERATION.get() is None
+
+
+def test_readonly_cut_foreign_async_task_cannot_borrow(readonly_resources):
+    import asyncio
+
+    c = readonly_resources
+
+    async def foreign():
+        with pytest.raises(IncompleteParserClosure, match="not current"):
+            c.request()
+
+    async def run():
+        with c.identity._CurrentParserResourceOperation(
+            lambda: 60.0, lambda: None
+        ) as owner:
+            with owner.current_cut(terminal=True) as completion:
+                c.request()
+                await asyncio.create_task(foreign())
+                completion.seal()
+
+    asyncio.run(run())
+    assert c.identity._RESOURCE_OPERATION.get() is None
+
+
+def test_readonly_cut_seal_failure_preserves_deadline_and_revokes_borrow(
+    readonly_resources,
+):
+    c = readonly_resources
+    expired = False
+
+    def deadline():
+        if expired:
+            raise SnapshotError("REQUEST_DEADLINE_EXCEEDED", "original cut deadline")
+        return 60.0
+
+    with pytest.raises(SnapshotError, match="original cut deadline"):
+        with c.identity._CurrentParserResourceOperation(
+            deadline, lambda: None
+        ) as owner:
+            with owner.current_cut(terminal=True) as completion:
+                c.request()
+                expired = True
+                completion.seal()
+    assert owner._state.status == "aborted"
+    assert owner._state.observations == {}
+    assert c.identity._RESOURCE_OPERATION.get() is None
+
+
+def test_readonly_cut_documents_restored_transient_sampling(readonly_resources):
+    c = readonly_resources
+    original = c.rules.read_bytes()
+    with c.identity._CurrentParserResourceOperation(
+        lambda: 60.0, lambda: None
+    ) as owner:
+        with owner.current_cut(terminal=True) as completion:
+            expected = c.identity.parser_action_resources(
+                c.profile, c.arguments["taxonomy_cache_dir"]
+            )
+            c.rules.write_bytes(b"other rules")
+            assert (
+                c.identity.parser_action_resources(
+                    c.profile, c.arguments["taxonomy_cache_dir"]
+                )
+                == expected
+            )
+            c.rules.write_bytes(original)
+            completion.seal()
+    assert len(c.reads) == 2
+
+
+def test_physical_pass_shares_v18_v31_trees_without_changing_payloads(
+    readonly_resources, monkeypatch
+):
+    from fundamental_service.dqc_rulesets import (
+        DQC_V18_PROFILE_ID,
+        DQC_V18_RULESETS,
+        DqcRulesetBindingV1,
+        DqcRulesetCatalogV1,
+    )
+
+    c = readonly_resources
+    identity = c.identity
+    bindings = []
+    for namespace, (name, digest) in sorted(DQC_V18_RULESETS.items()):
+        path = c.rules.parent / name
+        path.write_bytes(namespace.encode())
+        bindings.append(
+            DqcRulesetBindingV1(taxonomy_namespace=namespace, path=path, sha256=digest)
+        )
+    catalog = DqcRulesetCatalogV1(dqc_version="v18", bindings=tuple(bindings))
+    v18 = c.profile.model_copy(
+        update={
+            "profile_id": DQC_V18_PROFILE_ID,
+            "dqc_version": "v18",
+            "dqc_ruleset_path": bindings[-1].path,
+            "dqc_ruleset_sha256": bindings[-1].sha256,
+            "dqc_ruleset_catalog": catalog,
+        }
+    )
+    v31 = c.profile.model_copy(
+        update={
+            "dqc_ruleset_catalog": DqcRulesetCatalogV1(
+                bindings=(
+                    DqcRulesetBindingV1(
+                        taxonomy_namespace="http://fasb.org/us-gaap/2023",
+                        path=c.rules,
+                        sha256=c.profile.dqc_ruleset_sha256,
+                    ),
+                )
+            )
+        }
+    )
+    profiles = (v18, v31)
+    expected = tuple(
+        identity.parser_action_resources(profile, c.arguments["taxonomy_cache_dir"])
+        for profile in profiles
+    )
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        if args and args[0] == "rb":
+            opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        identity, "ResourceHashReader", partial(ResourceHashReader, direct=False)
+    )
+    monkeypatch.setattr(Path, "open", observed)
+    with identity._CurrentParserResourceOperation(lambda: 60.0, lambda: None) as owner:
+        for terminal in (False, True):
+            opened.clear()
+            with owner.current_cut(terminal=terminal) as completion:
+                actual = tuple(
+                    identity.parser_action_resources(
+                        profile, c.arguments["taxonomy_cache_dir"]
+                    )
+                    for profile in profiles
+                )
+                assert identity.canonical_bytes(
+                    tuple((item.physical, item.logical) for item in actual)
+                ) == identity.canonical_bytes(
+                    tuple((item.physical, item.logical) for item in expected)
+                )
+                assert opened[c.arguments["taxonomy_cache_dir"] / "content"] == 1
+                assert opened[c.profile.edgar_plugin_dir / "content"] == 1
+                assert opened[c.profile.xule_plugin_dir / "content"] == 1
+                assert opened[c.rules] == 2
+                assert opened[bindings[-1].path] == 2
+                opening = completion._physical_pass
+                completion.seal()
+                assert not opening._active and not opening._trees and not opening._files
+                assert opened[c.arguments["taxonomy_cache_dir"] / "content"] == 2
+                assert opened[c.rules] == 4
+                assert opened[bindings[-1].path] == 4
+
+
+def test_physical_pass_terminal_union_reads_unseen_components(
+    readonly_resources, monkeypatch
+):
+    c = readonly_resources
+    identity = c.identity
+    alternate = c.rules.parent / "other-rules.zip"
+    alternate.write_bytes(b"terminal-only bytes")
+    other = c.profile.model_copy(update={"dqc_ruleset_path": alternate})
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        if args and args[0] == "rb":
+            opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        identity, "ResourceHashReader", partial(ResourceHashReader, direct=False)
+    )
+    monkeypatch.setattr(Path, "open", observed)
+    with identity._CurrentParserResourceOperation(lambda: 60.0, lambda: None) as owner:
+        with owner.current_cut(terminal=False) as completion:
+            c.request(profile=other)
+            completion.seal()
+        opened.clear()
+        with owner.current_cut(terminal=True) as completion:
+            c.request()
+            assert opened[alternate] == 0
+            completion.seal()
+        assert opened[alternate] == 2
+        assert opened[c.rules] == 2
+        assert opened[c.arguments["taxonomy_cache_dir"] / "content"] == 2
+
+
+@pytest.mark.parametrize("binding", ("role", "alias", "namespace"))
+def test_physical_pass_does_not_merge_distinct_component_bindings(
+    readonly_resources, monkeypatch, binding
+):
+    from fundamental_service.dqc_rulesets import (
+        DqcRulesetBindingV1,
+        DqcRulesetCatalogV1,
+    )
+
+    c = readonly_resources
+    identity = c.identity
+    root = c.arguments["taxonomy_cache_dir"]
+    first = c.profile
+    second = first
+    other_root = root
+    if binding == "role":
+        second = first.model_copy(update={"edgar_plugin_dir": root})
+    elif binding == "alias":
+        other_root = root / ".." / root.name
+    else:
+
+        def profile(namespace):
+            return first.model_copy(
+                update={
+                    "dqc_ruleset_catalog": DqcRulesetCatalogV1(
+                        bindings=(
+                            DqcRulesetBindingV1(
+                                taxonomy_namespace=namespace,
+                                path=c.rules,
+                                sha256=first.dqc_ruleset_sha256,
+                            ),
+                        )
+                    )
+                }
+            )
+
+        first = profile("http://fasb.org/us-gaap/2023")
+        second = profile("http://fasb.org/us-gaap/2024")
+    opened = []
+    original = identity._resource_digests
+    files = []
+    file_digest = identity._file_digest
+
+    def tree(path):
+        opened.append(path)
+        return original(path)
+
+    def file(path):
+        files.append(path)
+        return file_digest(path)
+
+    monkeypatch.setattr(identity, "_resource_digests", tree)
+    monkeypatch.setattr(identity, "_file_digest", file)
+    with identity._CurrentParserResourceOperation(lambda: 60.0, lambda: None) as owner:
+        with owner.current_cut(terminal=True) as completion:
+            identity.parser_action_resources(first, root)
+            identity.parser_action_resources(second, other_root)
+            if binding == "role":
+                assert opened.count(root) == 2
+            elif binding == "alias":
+                assert root in opened and other_root in opened
+            else:
+                assert files.count(c.rules) == 3
+            completion.seal()
+
+
+def test_physical_pass_reservation_survives_cuts_and_precedes_baseline_insert(
+    readonly_resources,
+):
+    c = readonly_resources
+    identity = c.identity
+    with pytest.raises(IncompleteParserClosure, match="exceeds its bounds"):
+        with identity._CurrentParserResourceOperation(
+            lambda: 60.0, lambda: None
+        ) as owner:
+            with owner.current_cut(terminal=False) as completion:
+                c.request()
+                completion.seal()
+            reserved = owner._state.pass_reserved_bytes
+            assert reserved > 0
+            baseline = owner._state.retained_bytes
+            profile = c.profile.model_copy(update={"profile_id": "new-anchor"})
+            descriptor = owner._state.descriptor(
+                profile, c.arguments["taxonomy_cache_dir"], c.arguments["build_checks"]
+            )
+            resources = owner._state.observations[
+                next(iter(owner._state.observations))
+            ].resources
+            size = len(descriptor.encoded()) + len(
+                identity.canonical_bytes((resources.physical, resources.logical))
+            )
+            owner._state.retained_bytes = 2 * 1024 * 1024 - size
+            with owner.current_cut(terminal=True) as completion:
+                assert owner._state.pass_reserved_bytes == reserved
+                c.request(profile=profile)
+    assert owner._state.high_water_keys == 1
+    assert baseline > 0
+    assert not owner._state.observations and owner._state.pass_reserved_bytes == 0
+
+
+def test_physical_pass_refuses_revoked_handle_and_preserves_primary_error(
+    readonly_resources,
+):
+    c = readonly_resources
+    identity = c.identity
+    error = RuntimeError("original resource consumer failure")
+    with pytest.raises(RuntimeError) as caught:
+        with identity._CurrentParserResourceOperation(
+            lambda: 60.0, lambda: None
+        ) as owner:
+            with owner.current_cut(terminal=True) as completion:
+                c.request()
+                stale = completion._physical_pass
+                descriptor = next(iter(owner._state.observations))
+                raise error
+    assert caught.value is error
+    assert not stale._active and not stale._trees and not stale._files
+    with pytest.raises(IncompleteParserClosure, match="not current"):
+        stale.tree(descriptor, descriptor.trees[0], 0)
+    assert identity._RESOURCE_OPERATION.get() is None

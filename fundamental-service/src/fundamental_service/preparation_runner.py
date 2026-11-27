@@ -522,9 +522,9 @@ class SourcePreparationRunner:
         manifest = self._metadata.get_data_release_manifest(
             resolution.data_release_manifest_digest
         )
-        if manifest is None or manifest.manifest_digest != (
-            resolution.data_release_manifest_digest
-        ):
+        if not isinstance(
+            manifest, DataReleaseManifestV1
+        ) or manifest.manifest_digest != (resolution.data_release_manifest_digest):
             raise ServiceError(
                 "DATA_RELEASE_MANIFEST_MISMATCH",
                 "resolved release manifest is unavailable or changed",
@@ -2351,7 +2351,7 @@ class SourcePreparationRunner:
             )
             market_issues = market.issue_codes
             if not market_issues and (
-                market_manifest is None
+                not isinstance(market_manifest, DataReleaseManifestV1)
                 or any(
                     ref not in market_manifest.artifact_refs
                     for ref in market.release_refs
@@ -2446,9 +2446,9 @@ class SourcePreparationRunner:
             manifest = self._metadata.get_data_release_manifest(
                 resolution.data_release_manifest_digest
             )
-            if manifest is None or not self._matches_source_admissions(
-                manifest, admission_outcomes
-            ):
+            if not isinstance(
+                manifest, DataReleaseManifestV1
+            ) or not self._matches_source_admissions(manifest, admission_outcomes):
                 return self._persist(
                     plan,
                     SourcePreparationEvidenceV1(
