@@ -120,6 +120,7 @@ def bind_fiscal_retained_inputs(
         raise _invalid("retained parser requests differ from actual staged consumption")
     for action in retained_actions:
         files = []
+        retained_file_digests: set[str] = set()
         for name, digest in action.request.files:
             origin: FiscalRetainedInputOriginV1
             inline_normalized = tuple(
@@ -195,6 +196,7 @@ def bind_fiscal_retained_inputs(
                     )
             if hashlib.sha256(raw).hexdigest() != digest:
                 raise _invalid("parser file cannot map to an exact retained origin")
+            retained_file_digests.add(digest)
             files.append(FiscalStagedInputV1(relative_name=name, origin=origin))
         result_refs = tuple(
             ref for ref in action.refs if ref.role == "sec-parser-action-result-v2"
@@ -204,6 +206,7 @@ def bind_fiscal_retained_inputs(
         ):
             raise _invalid("retained parser input action or entrypoint differs")
         available = {item.content_hash for item in outcome.responses} | {
+            *retained_file_digests,
             integrity.normalized_content_hash,
             integrity.parser_input_hash,
             integrity.archive_member_hash,
