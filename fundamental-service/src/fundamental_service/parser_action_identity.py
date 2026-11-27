@@ -490,24 +490,181 @@ def _resource_descriptor(
     )
 
 
-def _read_parser_action_resources(
+_ResourceBinding = tuple[str, Path, Path, Path]
+
+
+def _file_digest(path: Path) -> str:
+    with path.open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def _assemble_resources(
     descriptor: _ResourceDescriptor,
+    tree: Callable[[_ResourceBinding], tuple[str, str]],
+    file: Callable[[_ResourceBinding], str],
 ) -> ParserActionResources:
     resources: list[tuple[str, str]] = []
-    for name, _, directory, _ in descriptor.trees:
-        content, closure = _resource_digests(directory)
+    for binding in descriptor.trees:
+        name = binding[0]
+        content, closure = tree(binding)
         resources.extend(((name, content), (name + "-closure", closure)))
     resource_trees = tuple(resources)
     logical_files = []
-    for role, physical, item, _ in descriptor.files:
-        with item.open("rb") as handle:
-            digest = hashlib.file_digest(handle, "sha256").hexdigest()
-            resources.append((str(physical), digest))
-            logical_files.append((role + ":" + item.name, digest))
+    for binding in descriptor.files:
+        role, physical, item, _ = binding
+        digest = file(binding)
+        resources.append((str(physical), digest))
+        logical_files.append((role + ":" + item.name, digest))
     return ParserActionResources(
         tuple(sorted(dict(resources).items())),
         tuple(sorted((*resource_trees, *logical_files))),
     )
+
+
+def _read_parser_action_resources(
+    descriptor: _ResourceDescriptor,
+    *,
+    physical_pass: _PhysicalResourcePass | None = None,
+    pending_baseline_bytes: int = 0,
+) -> ParserActionResources:
+    if (
+        physical_pass is not None
+        and descriptor.build is not None
+        and descriptor.configuration is not None
+    ):
+        return _assemble_resources(
+            descriptor,
+            lambda binding: physical_pass.tree(
+                descriptor, binding, pending_baseline_bytes
+            ),
+            lambda binding: physical_pass.file(
+                descriptor, binding, pending_baseline_bytes
+            ),
+        )
+    return _assemble_resources(
+        descriptor,
+        lambda binding: _resource_digests(binding[2]),
+        lambda binding: _file_digest(binding[2]),
+    )
+
+
+@dataclass(frozen=True)
+class _PhysicalResourceKey:
+    kind: Literal["tree", "file"]
+    binding: _ResourceBinding
+    build: bytes
+    configuration: str
+
+    def encoded(self) -> tuple[str, tuple[str, ...], str, str]:
+        return (
+            self.kind,
+            tuple(map(str, self.binding)),
+            self.build.decode(),
+            self.configuration,
+        )
+
+
+class _PhysicalResourcePass:
+    def __init__(self, cut: _ParserResourceCut) -> None:
+        self._cut = cut
+        self._nonce = cut._nonce
+        self._active = True
+        self._trees: dict[_PhysicalResourceKey, tuple[str, str]] = {}
+        self._files: dict[_PhysicalResourceKey, str] = {}
+        self._bytes = len(
+            canonical_bytes(
+                ("physical-pass", "cut-reference", "nonce-reference", "trees", "files")
+            )
+        )
+        state = cut._state
+        reserved = max(state.pass_reserved_bytes, self._bytes)
+        if state.retained_bytes + reserved > 2 * 1024 * 1024:
+            raise IncompleteParserClosure(
+                "parser resource operation exceeds its bounds"
+            )
+        state.pass_reserved_bytes = reserved
+        state.high_water_bytes = max(
+            state.high_water_bytes, state.retained_bytes + reserved
+        )
+
+    def check(self) -> None:
+        self._cut.check(self._nonce)
+        if not self._active or self._cut._physical_pass is not self:
+            raise IncompleteParserClosure(
+                "parser physical resource pass is not current"
+            )
+
+    def _key(
+        self,
+        kind: Literal["tree", "file"],
+        descriptor: _ResourceDescriptor,
+        binding: _ResourceBinding,
+    ) -> _PhysicalResourceKey:
+        self.check()
+        if descriptor.build is None or descriptor.configuration is None:
+            raise IncompleteParserClosure(
+                "parser physical resource build is unavailable"
+            )
+        return _PhysicalResourceKey(
+            kind, binding, descriptor.build, descriptor.configuration
+        )
+
+    def _reserve(
+        self,
+        key: _PhysicalResourceKey,
+        value: str | tuple[str, str],
+        pending_baseline_bytes: int,
+    ) -> None:
+        # The index retains a key reference in addition to the key/value entry.
+        size = len(canonical_bytes((key.encoded(), value, ("index", key.encoded()))))
+        state = self._cut._state
+        reserved = max(state.pass_reserved_bytes, self._bytes + size)
+        if state.retained_bytes + reserved + pending_baseline_bytes > 2 * 1024 * 1024:
+            raise IncompleteParserClosure(
+                "parser resource operation exceeds its bounds"
+            )
+        state.pass_reserved_bytes = reserved
+        self._bytes += size
+        state.high_water_bytes = max(
+            state.high_water_bytes, state.retained_bytes + reserved
+        )
+
+    def tree(
+        self,
+        descriptor: _ResourceDescriptor,
+        binding: _ResourceBinding,
+        pending_baseline_bytes: int,
+    ) -> tuple[str, str]:
+        key = self._key("tree", descriptor, binding)
+        result = self._trees.get(key)
+        if result is None:
+            result = _resource_digests(binding[2])
+            self.check()
+            self._reserve(key, result, pending_baseline_bytes)
+            self._trees[key] = result
+        self.check()
+        return result
+
+    def file(
+        self,
+        descriptor: _ResourceDescriptor,
+        binding: _ResourceBinding,
+        pending_baseline_bytes: int,
+    ) -> str:
+        key = self._key("file", descriptor, binding)
+        result = self._files.get(key)
+        if result is None:
+            result = _file_digest(binding[2])
+            self.check()
+            self._reserve(key, result, pending_baseline_bytes)
+            self._files[key] = result
+        self.check()
+        return result
+
+    def close(self) -> None:
+        self._active = False
+        self._trees.clear()
+        self._files.clear()
 
 
 @dataclass(frozen=True)
@@ -555,6 +712,7 @@ class _ParserResourceState:
         self.observations: dict[_ResourceDescriptor, _ResourceObservation] = {}
         self.active_cut: _ParserResourceCut | None = None
         self.retained_bytes = 0
+        self.pass_reserved_bytes = 0
         self.high_water_keys = 0
         self.high_water_bytes = 0
 
@@ -599,6 +757,7 @@ class _ParserResourceState:
         checks: ParserBuildChecks | None,
         *,
         reuse: bool,
+        physical_pass: _PhysicalResourcePass | None = None,
     ) -> ParserActionResources:
         self.check(nonce)
         descriptor = self.descriptor(profile, root, checks)
@@ -606,7 +765,42 @@ class _ParserResourceState:
         if reuse and descriptor.build is not None and previous is not None:
             self.check(nonce)
             return previous.resources
-        resources = _read_parser_action_resources(descriptor)
+        pending = 0
+        if previous is None:
+            descriptor_size = len(descriptor.encoded())
+            if (
+                len(self.observations) >= 32
+                or self.retained_bytes + self.pass_reserved_bytes + descriptor_size
+                > 2 * 1024 * 1024
+            ):
+                raise IncompleteParserClosure(
+                    "parser resource operation exceeds its bounds"
+                )
+            shape = _assemble_resources(
+                descriptor,
+                lambda binding: ("0" * 64, "0" * 64),
+                lambda binding: "0" * 64,
+            )
+            pending = descriptor_size + len(
+                canonical_bytes((shape.physical, shape.logical))
+            )
+            del shape
+            if (
+                self.retained_bytes + self.pass_reserved_bytes + pending
+                > 2 * 1024 * 1024
+            ):
+                raise IncompleteParserClosure(
+                    "parser resource operation exceeds its bounds"
+                )
+        resources = (
+            _read_parser_action_resources(
+                descriptor,
+                physical_pass=physical_pass,
+                pending_baseline_bytes=pending,
+            )
+            if physical_pass is not None
+            else _read_parser_action_resources(descriptor)
+        )
         self.check(nonce)
         if self.descriptor(profile, root, checks) != descriptor:
             raise IncompleteParserClosure("parser resource paths changed")
@@ -619,7 +813,8 @@ class _ParserResourceState:
             )
             if (
                 len(self.observations) >= 32
-                or self.retained_bytes + size > 2 * 1024 * 1024
+                or self.retained_bytes + self.pass_reserved_bytes + size
+                > 2 * 1024 * 1024
             ):
                 raise IncompleteParserClosure(
                     "parser resource operation exceeds its bounds"
@@ -627,11 +822,17 @@ class _ParserResourceState:
             self.observations[descriptor] = _ResourceObservation(resources, checks)
             self.retained_bytes += size
             self.high_water_keys = max(self.high_water_keys, len(self.observations))
-            self.high_water_bytes = max(self.high_water_bytes, self.retained_bytes)
+            self.high_water_bytes = max(
+                self.high_water_bytes, self.retained_bytes + self.pass_reserved_bytes
+            )
         return resources
 
     def recheck(
-        self, descriptor: _ResourceDescriptor, observed: _ResourceObservation
+        self,
+        descriptor: _ResourceDescriptor,
+        observed: _ResourceObservation,
+        *,
+        physical_pass: _PhysicalResourcePass | None = None,
     ) -> None:
         self.check(self.nonce)
         profile = ArelleValidationProfileV1.model_validate_json(descriptor.profile_json)
@@ -642,7 +843,12 @@ class _ParserResourceState:
             != descriptor
         ):
             raise IncompleteParserClosure("parser resource paths changed")
-        if _read_parser_action_resources(descriptor) != observed.resources:
+        resources = (
+            _read_parser_action_resources(descriptor, physical_pass=physical_pass)
+            if physical_pass is not None
+            else _read_parser_action_resources(descriptor)
+        )
+        if resources != observed.resources:
             raise IncompleteParserClosure("parser resource bytes changed")
         self.check(self.nonce)
         if (
@@ -719,8 +925,9 @@ class _CurrentResourceBorrow:
 class _ParserResourceCut(AbstractContextManager["_ParserResourceCut"]):
     """Opening/closing byte samples for one synchronous readonly candidate proof.
 
-    Intermediate helpers borrow only this cut's opening observation. Restored
-    transient changes between samples are not continuous-immutability evidence.
+    Exact physical components share one sample per opening/closing pass across
+    logical descriptors. Restored transients between samples can escape detection;
+    this is not per-descriptor sampling or continuous-immutability evidence.
     """
 
     def __init__(
@@ -734,6 +941,7 @@ class _ParserResourceCut(AbstractContextManager["_ParserResourceCut"]):
         self._terminal = terminal
         self._phase: Literal["new", "open", "sealed", "aborted"] = "new"
         self._observed: set[_ResourceDescriptor] = set()
+        self._physical_pass = _PhysicalResourcePass(self)
         self._token: (
             Token[_ParserResourceBorrow | _CurrentResourceBorrow | None] | None
         ) = None
@@ -776,7 +984,12 @@ class _ParserResourceCut(AbstractContextManager["_ParserResourceCut"]):
             self.check(nonce)
             return self._state.observations[descriptor].resources
         resources = self._state.observe(
-            self._lifetime_nonce, profile, root, checks, reuse=False
+            self._lifetime_nonce,
+            profile,
+            root,
+            checks,
+            reuse=False,
+            physical_pass=self._physical_pass,
         )
         self.check(nonce)
         key = next(key for key in self._state.observations if key == descriptor)
@@ -789,11 +1002,19 @@ class _ParserResourceCut(AbstractContextManager["_ParserResourceCut"]):
             if self._terminal:
                 for descriptor, observed in self._state.observations.items():
                     if descriptor not in self._observed:
-                        self._state.recheck(descriptor, observed)
+                        self._state.recheck(
+                            descriptor, observed, physical_pass=self._physical_pass
+                        )
                         self._observed.add(descriptor)
+            self._physical_pass.close()
+            self._physical_pass = _PhysicalResourcePass(self)
             for descriptor in self._observed:
                 self.check(self._nonce)
-                self._state.recheck(descriptor, self._state.observations[descriptor])
+                self._state.recheck(
+                    descriptor,
+                    self._state.observations[descriptor],
+                    physical_pass=self._physical_pass,
+                )
             self.check(self._nonce)
         except BaseException:
             self._phase = "aborted"
@@ -804,6 +1025,7 @@ class _ParserResourceCut(AbstractContextManager["_ParserResourceCut"]):
             if self._terminal:
                 self._state.status = "finished"
         finally:
+            self._physical_pass.close()
             self._observed.clear()
 
     def __exit__(
@@ -819,6 +1041,7 @@ class _ParserResourceCut(AbstractContextManager["_ParserResourceCut"]):
             if self._token is not None:
                 _RESOURCE_OPERATION.reset(self._token)
                 self._token = None
+            self._physical_pass.close()
             self._state.active_cut = None
             self._observed.clear()
             if exc_type is not None or self._phase != "sealed":
@@ -877,6 +1100,7 @@ class _ParserResourceOperation(AbstractContextManager["_ParserResourceOperation"
                 self._state.status = "aborted"
             self._state.observations.clear()
             self._state.retained_bytes = 0
+            self._state.pass_reserved_bytes = 0
         return False
 
 

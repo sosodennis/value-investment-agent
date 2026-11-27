@@ -714,9 +714,9 @@ def readonly_resources(tmp_path, monkeypatch):
     reads = []
     read = identity._read_parser_action_resources
 
-    def counted(descriptor):
+    def counted(descriptor, **kwargs):
         reads.append(descriptor)
-        return read(descriptor)
+        return read(descriptor, **kwargs)
 
     monkeypatch.setattr(identity, "_read_parser_action_resources", counted)
     c.identity, c.reads = identity, reads
@@ -956,3 +956,246 @@ def test_readonly_cut_documents_restored_transient_sampling(readonly_resources):
             c.rules.write_bytes(original)
             completion.seal()
     assert len(c.reads) == 2
+
+
+def test_physical_pass_shares_v18_v31_trees_without_changing_payloads(
+    readonly_resources, monkeypatch
+):
+    from fundamental_service.dqc_rulesets import (
+        DQC_V18_PROFILE_ID,
+        DQC_V18_RULESETS,
+        DqcRulesetBindingV1,
+        DqcRulesetCatalogV1,
+    )
+
+    c = readonly_resources
+    identity = c.identity
+    bindings = []
+    for namespace, (name, digest) in sorted(DQC_V18_RULESETS.items()):
+        path = c.rules.parent / name
+        path.write_bytes(namespace.encode())
+        bindings.append(
+            DqcRulesetBindingV1(taxonomy_namespace=namespace, path=path, sha256=digest)
+        )
+    catalog = DqcRulesetCatalogV1(dqc_version="v18", bindings=tuple(bindings))
+    v18 = c.profile.model_copy(
+        update={
+            "profile_id": DQC_V18_PROFILE_ID,
+            "dqc_version": "v18",
+            "dqc_ruleset_path": bindings[-1].path,
+            "dqc_ruleset_sha256": bindings[-1].sha256,
+            "dqc_ruleset_catalog": catalog,
+        }
+    )
+    v31 = c.profile.model_copy(
+        update={
+            "dqc_ruleset_catalog": DqcRulesetCatalogV1(
+                bindings=(
+                    DqcRulesetBindingV1(
+                        taxonomy_namespace="http://fasb.org/us-gaap/2023",
+                        path=c.rules,
+                        sha256=c.profile.dqc_ruleset_sha256,
+                    ),
+                )
+            )
+        }
+    )
+    profiles = (v18, v31)
+    expected = tuple(
+        identity.parser_action_resources(profile, c.arguments["taxonomy_cache_dir"])
+        for profile in profiles
+    )
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        if args and args[0] == "rb":
+            opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        identity, "ResourceHashReader", partial(ResourceHashReader, direct=False)
+    )
+    monkeypatch.setattr(Path, "open", observed)
+    with identity._CurrentParserResourceOperation(lambda: 60.0, lambda: None) as owner:
+        for terminal in (False, True):
+            opened.clear()
+            with owner.current_cut(terminal=terminal) as completion:
+                actual = tuple(
+                    identity.parser_action_resources(
+                        profile, c.arguments["taxonomy_cache_dir"]
+                    )
+                    for profile in profiles
+                )
+                assert identity.canonical_bytes(
+                    tuple((item.physical, item.logical) for item in actual)
+                ) == identity.canonical_bytes(
+                    tuple((item.physical, item.logical) for item in expected)
+                )
+                assert opened[c.arguments["taxonomy_cache_dir"] / "content"] == 1
+                assert opened[c.profile.edgar_plugin_dir / "content"] == 1
+                assert opened[c.profile.xule_plugin_dir / "content"] == 1
+                assert opened[c.rules] == 2
+                assert opened[bindings[-1].path] == 2
+                opening = completion._physical_pass
+                completion.seal()
+                assert not opening._active and not opening._trees and not opening._files
+                assert opened[c.arguments["taxonomy_cache_dir"] / "content"] == 2
+                assert opened[c.rules] == 4
+                assert opened[bindings[-1].path] == 4
+
+
+def test_physical_pass_terminal_union_reads_unseen_components(
+    readonly_resources, monkeypatch
+):
+    c = readonly_resources
+    identity = c.identity
+    alternate = c.rules.parent / "other-rules.zip"
+    alternate.write_bytes(b"terminal-only bytes")
+    other = c.profile.model_copy(update={"dqc_ruleset_path": alternate})
+    opened = Counter()
+    original = Path.open
+
+    def observed(path, *args, **kwargs):
+        if args and args[0] == "rb":
+            opened[path] += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        identity, "ResourceHashReader", partial(ResourceHashReader, direct=False)
+    )
+    monkeypatch.setattr(Path, "open", observed)
+    with identity._CurrentParserResourceOperation(lambda: 60.0, lambda: None) as owner:
+        with owner.current_cut(terminal=False) as completion:
+            c.request(profile=other)
+            completion.seal()
+        opened.clear()
+        with owner.current_cut(terminal=True) as completion:
+            c.request()
+            assert opened[alternate] == 0
+            completion.seal()
+        assert opened[alternate] == 2
+        assert opened[c.rules] == 2
+        assert opened[c.arguments["taxonomy_cache_dir"] / "content"] == 2
+
+
+@pytest.mark.parametrize("binding", ("role", "alias", "namespace"))
+def test_physical_pass_does_not_merge_distinct_component_bindings(
+    readonly_resources, monkeypatch, binding
+):
+    from fundamental_service.dqc_rulesets import (
+        DqcRulesetBindingV1,
+        DqcRulesetCatalogV1,
+    )
+
+    c = readonly_resources
+    identity = c.identity
+    root = c.arguments["taxonomy_cache_dir"]
+    first = c.profile
+    second = first
+    other_root = root
+    if binding == "role":
+        second = first.model_copy(update={"edgar_plugin_dir": root})
+    elif binding == "alias":
+        other_root = root / ".." / root.name
+    else:
+
+        def profile(namespace):
+            return first.model_copy(
+                update={
+                    "dqc_ruleset_catalog": DqcRulesetCatalogV1(
+                        bindings=(
+                            DqcRulesetBindingV1(
+                                taxonomy_namespace=namespace,
+                                path=c.rules,
+                                sha256=first.dqc_ruleset_sha256,
+                            ),
+                        )
+                    )
+                }
+            )
+
+        first = profile("http://fasb.org/us-gaap/2023")
+        second = profile("http://fasb.org/us-gaap/2024")
+    opened = []
+    original = identity._resource_digests
+    files = []
+    file_digest = identity._file_digest
+
+    def tree(path):
+        opened.append(path)
+        return original(path)
+
+    def file(path):
+        files.append(path)
+        return file_digest(path)
+
+    monkeypatch.setattr(identity, "_resource_digests", tree)
+    monkeypatch.setattr(identity, "_file_digest", file)
+    with identity._CurrentParserResourceOperation(lambda: 60.0, lambda: None) as owner:
+        with owner.current_cut(terminal=True) as completion:
+            identity.parser_action_resources(first, root)
+            identity.parser_action_resources(second, other_root)
+            if binding == "role":
+                assert opened.count(root) == 2
+            elif binding == "alias":
+                assert root in opened and other_root in opened
+            else:
+                assert files.count(c.rules) == 3
+            completion.seal()
+
+
+def test_physical_pass_reservation_survives_cuts_and_precedes_baseline_insert(
+    readonly_resources,
+):
+    c = readonly_resources
+    identity = c.identity
+    with pytest.raises(IncompleteParserClosure, match="exceeds its bounds"):
+        with identity._CurrentParserResourceOperation(
+            lambda: 60.0, lambda: None
+        ) as owner:
+            with owner.current_cut(terminal=False) as completion:
+                c.request()
+                completion.seal()
+            reserved = owner._state.pass_reserved_bytes
+            assert reserved > 0
+            baseline = owner._state.retained_bytes
+            profile = c.profile.model_copy(update={"profile_id": "new-anchor"})
+            descriptor = owner._state.descriptor(
+                profile, c.arguments["taxonomy_cache_dir"], c.arguments["build_checks"]
+            )
+            resources = owner._state.observations[
+                next(iter(owner._state.observations))
+            ].resources
+            size = len(descriptor.encoded()) + len(
+                identity.canonical_bytes((resources.physical, resources.logical))
+            )
+            owner._state.retained_bytes = 2 * 1024 * 1024 - size
+            with owner.current_cut(terminal=True) as completion:
+                assert owner._state.pass_reserved_bytes == reserved
+                c.request(profile=profile)
+    assert owner._state.high_water_keys == 1
+    assert baseline > 0
+    assert not owner._state.observations and owner._state.pass_reserved_bytes == 0
+
+
+def test_physical_pass_refuses_revoked_handle_and_preserves_primary_error(
+    readonly_resources,
+):
+    c = readonly_resources
+    identity = c.identity
+    error = RuntimeError("original resource consumer failure")
+    with pytest.raises(RuntimeError) as caught:
+        with identity._CurrentParserResourceOperation(
+            lambda: 60.0, lambda: None
+        ) as owner:
+            with owner.current_cut(terminal=True) as completion:
+                c.request()
+                stale = completion._physical_pass
+                descriptor = next(iter(owner._state.observations))
+                raise error
+    assert caught.value is error
+    assert not stale._active and not stale._trees and not stale._files
+    with pytest.raises(IncompleteParserClosure, match="not current"):
+        stale.tree(descriptor, descriptor.trees[0], 0)
+    assert identity._RESOURCE_OPERATION.get() is None
